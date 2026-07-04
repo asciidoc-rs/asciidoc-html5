@@ -40,9 +40,10 @@ jobs:
           #    * test
           #    * ci
           #
-          # NOTE: Conventional Commits also defines a `(scope)` parameter
-          # which can define a sub-area within the project where the change was
-          # made. This project is configured to disallow the use of `scope`.
+          # NOTE: Conventional Commits also defines an optional `(scope)`
+          # parameter naming a sub-area within the project where the change was
+          # made (for example, `feat(html5): ...`). This project permits a
+          # scope but does not require one.
           #
           # `description` is a short human-readable summary of the changes being made.
           #
@@ -87,9 +88,14 @@ jobs:
             exit 0;
           fi
 
+          # Enable `set -e` before installing so a failed `cargo install`
+          # fails this step immediately, instead of surfacing later as a
+          # confusing "commitlint: command not found". The `if ... grep`
+          # exception checks above intentionally run before this point, since
+          # a non-matching grep is an expected non-zero exit.
+          set -e
           echo "Installing commitlint-rs. Please wait 30-40 seconds ..."
           cargo install --quiet commitlint-rs
-          set -e
 
           echo
           echo
