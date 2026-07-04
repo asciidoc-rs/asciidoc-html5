@@ -3,6 +3,7 @@ name = "asciidoc-html5"
 description = "HTML5 renderer for AsciiDoc, compatible with Asciidoctor's html5 backend"
 categories = ["text-processing"]
 keywords = ["asciidoc", "html5", "converter", "renderer"]
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

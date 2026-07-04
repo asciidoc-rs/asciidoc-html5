@@ -1,0 +1,56 @@
+# adoc
+
+A command-line [AsciiDoc](https://asciidoc.org) to HTML5 converter — the `adoc`
+command. Reads AsciiDoc from a file (or standard input) and writes HTML5 that
+aims to be compatible with [Asciidoctor](https://asciidoctor.org)'s default
+`html5` backend.
+
+This is the **binary** crate of the
+[`asciidoc-html5` workspace](https://github.com/asciidoc-rs/asciidoc-html5). It
+is a thin front end over the [`asciidoc-html5`](../html5/) library: read
+AsciiDoc, call `asciidoc_html5::convert`, write HTML5.
+
+## 🚧 Status: placeholder, not ready for use 🚧
+
+**As of July 2026 this tool does not work yet.** The command-line plumbing is in
+place, but the underlying renderer in the
+[`asciidoc-html5`](../html5/) library is unimplemented — so running `adoc`
+against real input will **panic** rather than produce HTML. Nothing here is
+ready for prime-time; the interface and behavior are expected to change without
+notice. Don't install it expecting a working converter yet.
+
+## Intended usage
+
+Once the renderer lands, installing the crate will give you the `adoc` command
+(much as installing ripgrep gives you `rg`):
+
+```sh
+cargo install adoc            # not useful yet — see status above
+```
+
+```sh
+adoc input.adoc               # HTML5 to stdout
+adoc input.adoc -o out.html   # write to a file
+cat input.adoc | adoc         # read from stdin
+```
+
+| Argument            | Description                                              |
+| ------------------- | ------------------------------------------------------- |
+| `input`             | AsciiDoc input file. Omit (or pass `-`) to read stdin.  |
+| `-o`, `--output`    | Write output to this file instead of stdout.            |
+
+To run from a checkout of the workspace:
+
+```sh
+cargo run --bin adoc -- input.adoc -o out.html
+```
+
+## Why this exists
+
+See the [workspace README](../README.md) for the motivation and the projects
+this is meant to enable.
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](../LICENSE-APACHE) or
+[MIT license](../LICENSE-MIT) at your option.
