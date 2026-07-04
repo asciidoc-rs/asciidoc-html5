@@ -1,0 +1,10 @@
+[package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+name = "sdd"
+# Internal spec-coverage tool: never published to crates.io.
+publish = false
+version = "0.1.0"
+
+[dependencies]
+walkdir = "2.5"

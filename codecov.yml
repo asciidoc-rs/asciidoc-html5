@@ -7,8 +7,14 @@ comment:
   layout: "header, diff, flags, components"
 
 ignore:
-  # Vendored Asciidoctor reference material used only for compatibility fixtures.
-  - "ref/**"
+  # Non-normative parts of the AsciiDoc language spec: navigation, examples, and
+  # partials. These carry no rules to verify, so they're excluded from spec
+  # coverage.
+  - "ref/asciidoc-lang/docs/modules/*/nav*.adoc"
+  - "ref/asciidoc-lang/docs/modules/*/examples/**"
+  - "ref/asciidoc-lang/docs/modules/*/partials/**"
+  # Spec-coverage tooling.
+  - "sdd/**"
 
 component_management:
   default_rules:
@@ -25,3 +31,13 @@ component_management:
       name: CLI coverage
       paths:
         - cli/**
+
+    - component_id: spec
+      name: AsciiDoc spec coverage
+      paths:
+        - "ref/asciidoc-lang/**/*.adoc"
+
+    - component_id: asciidoctor
+      name: Asciidoctor test coverage
+      paths:
+        - "ref/asciidoctor/**/*.rb"
