@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Rust dependencies from crates.io — most importantly asciidoc-parser, which
+  # this workspace tracks closely. A bump is committed as `update(deps): ...`,
+  # which release-plz treats as a release-triggering change, so a new
+  # asciidoc-parser release flows through to a new release of these crates.
+  # These bumps only advance the dependency requirement; the workspace's own
+  # version is governed independently by release-plz.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "update"
+      include: "scope"
+
+  # GitHub Actions used by the workflows. Committed as `chore(deps): ...` so CI
+  # maintenance does not trigger a crate release.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
