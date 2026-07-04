@@ -9,4 +9,4 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/asciidoc-rs/asciidoc-html5"
 
 [workspace.dependencies]
-asciidoc-parser = "0.17"
+asciidoc-parser = "0.18"
