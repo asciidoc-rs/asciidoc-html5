@@ -10,4 +10,4 @@ repository.workspace = true
 
 [dependencies]
 asciidoc-html5 = { path = "../html5", version = "=0.1.0" }
-clap.workspace = true
+clap = { version = "4", features = ["derive"] }
