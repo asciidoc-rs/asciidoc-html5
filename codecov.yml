@@ -1,0 +1,27 @@
+coverage:
+  status:
+    project:
+      default: false
+
+comment:
+  layout: "header, diff, flags, components"
+
+ignore:
+  # Vendored Asciidoctor reference material used only for compatibility fixtures.
+  - "ref/**"
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+
+  individual_components:
+    - component_id: html5
+      name: HTML5 renderer coverage
+      paths:
+        - html5/**
+
+    - component_id: cli
+      name: CLI coverage
+      paths:
+        - cli/**

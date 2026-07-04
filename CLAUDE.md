@@ -23,7 +23,9 @@ true`. Bump versions and dependency versions in the root `Cargo.toml`.
 
 - **Commits:** use [Conventional Commits](https://www.conventionalcommits.org)
   (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`). Keep the
-  subject imperative and scoped, e.g. `feat(html5): render section headings`.
+  subject imperative and scoped, start the description with a capital letter,
+  and omit the trailing period — CI enforces this on PR titles. For example,
+  `feat(html5): Render section headings`.
 - **Edition:** Rust 2021. **License:** `MIT OR Apache-2.0` (dual, matching
   `asciidoc-parser`).
 - **Compatibility target:** the renderer aims for output compatible with
