@@ -1,0 +1,125 @@
+= Install Using Ruby Packaging
+
+Using Ruby packaging entails making use of commands provided by Ruby (`gem` and `bundle`) to install gems.
+A gem is a packaged Ruby application or library, often retrieved from {url-rubygems}[RubyGems.org^].
+
+The benefit of using Ruby packaging to install Asciidoctor is that it's universal.
+Provided you have configured Ruby correctly, Ruby packaging works the same way across all Ruby runtimes and operating systems.
+This page explains how to use Ruby packaging to install Asciidoctor from the *asciidoctor* gem.
+
+WARNING: Unless you're running in a container (Docker, podman, OCI), _never_ install gems using `gem install` as the root user.
+Doing so will almost certainly interfere with, and possibly corrupt, the Ruby installation on your system.
+We strongly advise you to use <<Bundler>> to manage your gems within a project (or an RVM gemset to scope the install to your user/home directory).
+The `gem install` instructions are provided for when you're running in a container or when your using RVM (ideally with a gemset).
+
+== Configure Ruby packaging
+
+If you're using Linux, the best way to ensure Ruby is configured to use Ruby packaging is to install Ruby using a Ruby version manager.
+We recommend that you set up {url-rvm}[RVM^] and use it to install Ruby in your home directory (i.e., user space).
+Once that is done, you can safely use the `gem` or `bundle` commands to install or update the Asciidoctor gem, or any other gem for that matter.
+When using Ruby managed by RVM, gems are installed in a location isolated from the system (so you don't need root/administrator access).
+
+If you're using Windows, you can install Ruby using Chocolatey or the RubyInstaller.
+You will not be able to use RVM if you are using Windows.
+
+If you're using macOS, you can install Asciidoctor directly using Homebrew, though using RVM is also an option.
+
+[#gem-install]
+== gem install
+
+Once you've installed Ruby (and have activated it using `rvm use {ruby-version}` if you're using RVM), open a terminal and type:
+
+ $ gem install asciidoctor
+
+include::partial$success.adoc[]
+
+[#pre-release]
+=== Install a prerelease version
+
+To install a prerelease version of Asciidoctor (e.g., a release candidate), include the `--pre` option when running the `gem install` command:
+
+ $ gem install asciidoctor --pre
+
+The `--pre` option will select the prerelease version of Asciidoctor instead of the latest stable version.
+Note that it's possible that the prerelease version is older than the latest stable version if no recent prerelease version is available.
+
+== Bundler
+
+Bundler creates a virtual environment that scopes the installation of gems to the current project.
+Here's how you can use it to install and run Asciidoctor.
+
+. Create a Gemfile in the root folder of your project (or the current directory):
+
+ $ bundle init
+
+. Add the `asciidoctor` gem to the bottom of your Gemfile as follows:
++
+[,ruby,subs=attributes+]
+----
+gem 'asciidoctor'
+# or specify the version explicitly
+# gem 'asciidoctor', '{release-version}'
+----
+
+. Save the Gemfile
+. Open a terminal and install the gem using:
+
+ $ bundle
+
+To upgrade the gem, specify the new version in the Gemfile and run `bundle` again.
+Using `bundle update` (without specifying a gem) is *not* recommended as it will also update other gems, which may not be the desired result.
+
+IMPORTANT: Once you install using Bundler, you must run any executables provided by the gems (e.g., `asciidoctor`) from the directory where [.path]_Gemfile_ is located and also prefix the executable name with `bundle exec` (e.g., `bundle exec asciidoctor`).
+The `bundle exec` prefix tells Ruby to use the gems defined in the [.path]_Gemfile_.
+
+If you want to understand more about Bundler and `bundle exec` and when to use them, see the article https://www.ombulabs.com/blog/ruby/learning/understanding-bundler.html[Understanding Bundler^].
+
+[#gem-update]
+== Upgrade using gem update
+
+[CAUTION]
+====
+You're advised against using the `gem update` command to update a gem managed by the package manager.
+Doing so puts the system into an inconsistent state as the package manager can no longer track the files (which get installed under [.path]_/usr/local_).
+Simply put, system gems should only be updated by the package manager.
+
+If you want to use a version of Asciidoctor that is newer than what is installed by the package manager, you should use {url-rvm}[RVM^] to install Ruby in your home directory (i.e., user space).
+Then, you can safely use the `gem` command to install or update the Asciidoctor gem.
+When using RVM, gems are installed in a location isolated from the system.
+====
+
+You can upgrade Asciidoctor using the gem `update` command:
+
+ $ gem update asciidoctor
+
+[TIP]
+====
+If you accidentally use `gem install` instead of `gem update`, then you'll end up with both versions installed.
+To remove the older version, use the following `gem` command:
+
+ $ gem cleanup asciidoctor
+====
+
+[#gem-uninstall]
+== Uninstall using gem uninstall
+
+You can uninstall Asciidoctor using the gem `uninstall` command:
+
+ $ gem uninstall -x asciidoctor
+
+The `-x` option silences the confirmation to remove the `asciidoctor` executable, instead removing it automatically.
+In other words, it enables a complete uninstall.
+
+If you have multiple versions of Asciidoctor installed, you will be prompted to specify which version you want to uninstall.
+
+[.output]
+....
+Select gem to uninstall:
+ 1. asciidoctor-2.0.15
+ 2. asciidoctor-2.0.16
+ 3. All versions
+>
+....
+
+You can uninstall a specific version, or all versions.
+Type one of the numbers at the prompt (`>`) and press kbd:[Enter].

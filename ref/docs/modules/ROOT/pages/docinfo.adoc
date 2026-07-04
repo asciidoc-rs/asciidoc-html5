@@ -1,0 +1,4 @@
+= Docinfo Files
+:page-location: asciidoc:docinfo:index.adoc
+
+Relocated to xref:{page-location}[].

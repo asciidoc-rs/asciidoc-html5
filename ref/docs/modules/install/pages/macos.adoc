@@ -1,0 +1,59 @@
+= Install on macOS
+:url-homebrew: https://brew.sh
+:url-macports: https://www.macports.org
+:url-install-macports: https://www.macports.org/install.php
+:url-asciidoctor-port: https://ports.macports.org/port/asciidoctor/
+
+== Homebrew
+
+=== Install
+
+You can use {url-homebrew}[Homebrew^], the macOS package manager, to install Asciidoctor.
+If you don't have Homebrew on your computer, complete the {url-homebrew}[installation instructions^] first.
+
+Once Homebrew is installed, you're ready to install the `asciidoctor` gem.
+Open a terminal and type:
+
+ $ brew install asciidoctor
+
+Homebrew installs the `asciidoctor` gem into an exclusive prefix that's independent of system gems.
+
+include::partial$success.adoc[]
+
+=== Upgrade
+
+To upgrade the gem, open a terminal and type:
+
+ $ brew update
+ $ brew upgrade asciidoctor
+
+=== Uninstall
+
+To uninstall the gem, open a terminal and type:
+
+ $ brew uninstall asciidoctor
+
+== MacPorts
+
+You can also use {url-macports}[MacPorts^], another package manager for macOS, to install Asciidoctor.
+If you don't have MacPorts on your computer, complete the {url-install-macports}[installation instructions^] first.
+
+Once MacPorts is installed, you're ready to install the `asciidoctor` gem via the {url-asciidoctor-port}[Asciidoctor port^].
+Open a terminal and type:
+
+ $ sudo port install asciidoctor
+
+include::partial$success.adoc[]
+
+=== Upgrade
+
+To upgrade the gem, open a terminal and type:
+
+ $ sudo port selfupdate
+ $ sudo port upgrade asciidoctor
+
+=== Uninstall
+
+To uninstall the gem, open a terminal and type:
+
+ $ sudo port uninstall asciidoctor
