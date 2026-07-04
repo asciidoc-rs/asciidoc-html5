@@ -95,7 +95,9 @@ jobs:
           # a non-matching grep is an expected non-zero exit.
           set -e
           echo "Installing commitlint-rs. Please wait 30-40 seconds ..."
-          cargo install --quiet commitlint-rs
+          # Pin the version so a breaking upstream release can't silently
+          # change how PR titles are validated. Bump this deliberately.
+          cargo install --quiet --version 0.2.4 commitlint-rs
 
           echo
           echo
