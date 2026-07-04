@@ -38,3 +38,12 @@ License**, Copyright (C) 2012-present Dan Allen, Sarah White, Ryan Waldron, and
 the individual contributors to Asciidoctor. See
 [`ref/asciidoctor/README.md`](ref/asciidoctor/README.md) and
 [`ref/asciidoctor/LICENSE`](ref/asciidoctor/LICENSE) for details.
+
+[`ref/asciidoc-lang/`](ref/asciidoc-lang) contains a pinned snapshot of the
+documentation site from the [AsciiDoc Language](https://gitlab.eclipse.org/eclipse/asciidoc-lang/asciidoc-lang)
+project (the Eclipse Foundation's official AsciiDoc language description), kept
+here as the spec to develop and measure coverage against. That documentation is
+licensed **CC-BY-4.0** and the project as a whole under **EPL-2.0**, separate
+from this repository's dual license. See
+[`ref/asciidoc-lang/README.md`](ref/asciidoc-lang/README.md) and
+[`ref/asciidoc-lang/docs/LICENSE`](ref/asciidoc-lang/docs/LICENSE) for details.
