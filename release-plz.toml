@@ -1,0 +1,70 @@
+# Configuration for release-plz — https://release-plz.dev/docs/config
+#
+# Lock-step workspace releases
+# ----------------------------
+# The two crates in this workspace (`asciidoc-html5` and `adoc`) are released
+# together and always share the same version number. This is achieved with:
+#
+#   * a shared `version_group` on both packages, so release-plz assigns them the
+#     same (highest) next version whenever a release happens; and
+#   * an exact (`=`) dependency from the `adoc` CLI on `asciidoc-html5` (declared
+#     in cli/Cargo.toml). Because the requirement is exact, every library release
+#     bumps the CLI's manifest too, so the CLI is re-released in lock-step and
+#     always requires the matching library version.
+#
+# The crate versions here are independent of `asciidoc-parser`: dependency bumps
+# (managed by Dependabot) advance the dependency requirement, not this workspace's
+# version, which is governed solely by the shared `version_group` below.
+
+[changelog]
+body = """
+
+## [{{ version | trim_start_matches(pat="v") }}]{%- if release_link -%}({{ release_link }}){% endif %}
+_{{ timestamp | date(format="%d %B %Y") }}_
+{% for group, commits in commits | group_by(attribute="group") -%}
+{%- if group != "chore" %}
+### {{ group | upper_first }}
+
+{% for commit in commits -%}
+{%- if commit.scope and commit.scope != package -%}
+* *({{commit.scope}})* {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}{%- if commit.links %} ({% for link in commit.links %}[{{link.text}}]({{link.href}}) {% endfor -%}){% endif %}
+{% else -%}
+* {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | upper_first }}
+{% endif -%}
+{%- endfor %}
+
+{%- endif %}
+
+{%- endfor -%}
+"""
+
+commit_parsers = [
+  { message = "^feat", group = "added" },
+  { message = "^changed", group = "changed" },
+  { message = "^deprecated", group = "deprecated" },
+  { message = "^fix", group = "fixed" },
+  { message = "^security", group = "security" },
+  { message = "^chore", group = "chore" },
+  { message = "^update", group = "updated dependencies" },
+  { message = "^doc", group = "documented" },
+  { message = "^.*", group = "other" },
+]
+
+[workspace]
+# Refresh transitive dependencies (e.g. asciidoc-parser) at release time.
+dependencies_update = true
+# Label applied to the automatically opened release PR.
+pr_labels = ["release"]
+# Use the Release-PR flow: publish only when the release PR is merged to main.
+release_always = false
+# Commit types that trigger a release. `update` covers Dependabot bumps, so a
+# new asciidoc-parser release flows through to a new release of these crates.
+release_commits = "^(feat|fix|update|doc)[(:]"
+
+[[package]]
+name = "asciidoc-html5"
+version_group = "asciidoc-html5"
+
+[[package]]
+name = "adoc"
+version_group = "asciidoc-html5"

@@ -9,5 +9,5 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-asciidoc-html5 = { path = "../html5", version = "0.1.0" }
-clap.workspace = true
+asciidoc-html5 = { path = "../html5", version = "=0.1.0" }
+clap = { version = "4", features = ["derive"] }
