@@ -36,9 +36,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 # before; commits with no version attached (the "unreleased" set) render nothing.
 # This complements the header override above: together they keep an
 # `## [Unreleased]` entry out of the changelog entirely.
+#
+# Blank-line spacing: the version heading is preceded by exactly ONE blank line in
+# the rendered file. git-cliff writes the header (the disclaimer above) followed by
+# a newline, then this body. A single leading newline here (`{%- if version %}`
+# directly before `## [`) therefore yields one blank line between the disclaimer
+# and the first version. The previous template had a second, empty line here, which
+# rendered *two* blank lines at the top of the file — the extra line this config
+# change removes.
+#
+# On subsequent releases release-plz prepends the new section via `compose_changelog`
+# (see release_plz_core): it splits the existing file at its header — a boundary that
+# includes the blank line before the first `## [` heading — and reassembles
+# `header + new-section + old-body`. With a single leading newline the new section ends
+# `…* commit\n` and the old body resumes at `\n## [prev]`, giving exactly one blank line
+# between versions. Keeping this at one newline is what holds that spacing at a single
+# blank line across every future release PR.
 body = """
 {%- if version %}
-
 ## [{{ version | trim_start_matches(pat="v") }}]{%- if release_link -%}({{ release_link }}){% endif %}
 _{{ timestamp | date(format="%d %B %Y") }}_
 {% for group, commits in commits | group_by(attribute="group") -%}
