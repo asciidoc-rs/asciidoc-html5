@@ -17,10 +17,25 @@
 # version, which is governed solely by the shared `version_group` below.
 
 [changelog]
+# Custom header, identical to release-plz's default Keep a Changelog header
+# except that the trailing `## [Unreleased]` line is removed. That line lives in
+# the *default header* (not the body), so overriding only `body` cannot suppress
+# it — release-plz keeps emitting it verbatim into every generated changelog,
+# leaving an empty `## [Unreleased]` section in the release PR. Dropping it here
+# is what actually keeps that section out of the file.
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)."""
+
 # The whole body is guarded by `{% if version %}`. release-plz always passes the
 # computed next version when it prepares a release, so a real release renders as
-# before; commits with no version attached (the "unreleased" set) render nothing,
-# which keeps an `## [Unreleased]` entry out of the changelog entirely.
+# before; commits with no version attached (the "unreleased" set) render nothing.
+# This complements the header override above: together they keep an
+# `## [Unreleased]` entry out of the changelog entirely.
 body = """
 {%- if version %}
 
