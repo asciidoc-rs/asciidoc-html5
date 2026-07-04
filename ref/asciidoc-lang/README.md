@@ -7,10 +7,11 @@ can be developed against — and measure its coverage of — the official AsciiD
 language description.
 
 These files are **not** built, run, or otherwise compiled by the crates in this
-repository. They are a static, pinned copy kept purely for reference during
-spec-driven development. This project does not attempt to track upstream changes
-with any git subtree/submodule machinery; the copy is pinned to the commit
-below.
+repository. They are a static, pinned copy kept purely for reference and for the
+spec-coverage tooling in [`../../sdd`](../../sdd). (The `track_file!` markers in
+`html5/src/tests` refer to the `.adoc` pages under `docs/modules` below.) This
+project does not attempt to track upstream changes with any git
+subtree/submodule machinery; the copy is pinned to the commit below.
 
 This snapshot mirrors the one vendored by
 [`asciidoc-parser`](https://github.com/asciidoc-rs/asciidoc-parser), pinned to
@@ -44,6 +45,9 @@ revisit importing them later.
    that revision.
 3. Update the **Pinned commit**, **Commit date**, and **Commit summary** rows in
    the table above to the new upstream commit.
+4. Review and adjust the `track_file!("ref/asciidoc-lang/docs/...")` markers in
+   `html5/src/tests` for any pages that were added, removed, or renamed, then
+   regenerate spec coverage with `cd sdd && cargo run`.
 
 ## License
 
