@@ -1,5 +1,10 @@
 # asciidoc-html5
 
+[![CI](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml/badge.svg)](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml)
+[![asciidoc-html5 on crates.io](https://img.shields.io/crates/v/asciidoc-html5.svg?label=asciidoc-html5)](https://crates.io/crates/asciidoc-html5)
+[![adoc on crates.io](https://img.shields.io/crates/v/adoc.svg?label=adoc)](https://crates.io/crates/adoc)
+[![Codecov](https://codecov.io/gh/asciidoc-rs/asciidoc-html5/graph/badge.svg)](https://codecov.io/gh/asciidoc-rs/asciidoc-html5)
+
 A Rust HTML5 renderer for [AsciiDoc](https://asciidoc.org), built on the [`asciidoc-parser`](https://crates.io/crates/asciidoc-parser) crate and aiming for output compatible with [Asciidoctor](https://asciidoctor.org)'s default `html5` backend. The workspace ships a lean [`asciidoc-html5`](html5/) library — with no CLI dependencies, so other tools can embed it — and the [`adoc`](cli/) command-line front end: running `cargo install adoc` gives you the `adoc` command (much as installing ripgrep gives you `rg`), letting you convert an AsciiDoc file to HTML5 with `adoc input.adoc -o output.html`.
 
 ## Status of this project
