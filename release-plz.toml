@@ -17,7 +17,12 @@
 # version, which is governed solely by the shared `version_group` below.
 
 [changelog]
+# The whole body is guarded by `{% if version %}`. release-plz always passes the
+# computed next version when it prepares a release, so a real release renders as
+# before; commits with no version attached (the "unreleased" set) render nothing,
+# which keeps an `## [Unreleased]` entry out of the changelog entirely.
 body = """
+{%- if version %}
 
 ## [{{ version | trim_start_matches(pat="v") }}]{%- if release_link -%}({{ release_link }}){% endif %}
 _{{ timestamp | date(format="%d %B %Y") }}_
@@ -36,6 +41,7 @@ _{{ timestamp | date(format="%d %B %Y") }}_
 {%- endif %}
 
 {%- endfor -%}
+{%- endif %}
 """
 
 commit_parsers = [
@@ -61,10 +67,24 @@ release_always = false
 # new asciidoc-parser release flows through to a new release of these crates.
 release_commits = "^(feat|fix|update|doc)[(:]"
 
+# Unified workspace changelog
+# ----------------------------
+# The two crates release in lock-step (same version, same timestamp), so a single
+# changelog at the repo root serves the whole project. The library owns that file
+# and pulls in the CLI's commits via `changelog_include`; the CLI keeps no separate
+# changelog of its own. Per-crate attribution is preserved by the `*(scope)*`
+# rendering in the [changelog] template above.
 [[package]]
 name = "asciidoc-html5"
 version_group = "asciidoc-html5"
+# Root CHANGELOG.md, shared by the whole workspace.
+changelog_path = "CHANGELOG.md"
+# Fold the CLI's commits into this changelog.
+changelog_include = ["adoc"]
 
 [[package]]
 name = "adoc"
 version_group = "asciidoc-html5"
+# The CLI's changes are recorded in the shared root changelog, so it keeps no
+# changelog file of its own.
+changelog_update = false
