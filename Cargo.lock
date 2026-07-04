@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adoc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "asciidoc-html5",
  "clap",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "asciidoc-html5"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "asciidoc-parser",
 ]
