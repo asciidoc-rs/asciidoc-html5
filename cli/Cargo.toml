@@ -3,6 +3,7 @@ name = "adoc"
 description = "Command-line AsciiDoc to HTML5 converter (the `adoc` command)"
 categories = ["command-line-utilities", "text-processing"]
 keywords = ["asciidoc", "html5", "cli", "converter"]
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
