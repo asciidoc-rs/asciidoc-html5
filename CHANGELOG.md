@@ -10,4 +10,4 @@ _04 July 2026_
 
 ### Added
 
-* Scaffold two-crate Cargo workspace for AsciiDoc HTML5 rendering
+* Initial placeholder projects for HTML5 renderer and CLI wrapper
