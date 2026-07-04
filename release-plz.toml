@@ -67,10 +67,24 @@ release_always = false
 # new asciidoc-parser release flows through to a new release of these crates.
 release_commits = "^(feat|fix|update|doc)[(:]"
 
+# Unified workspace changelog
+# ----------------------------
+# The two crates release in lock-step (same version, same timestamp), so a single
+# changelog at the repo root serves the whole project. The library owns that file
+# and pulls in the CLI's commits via `changelog_include`; the CLI keeps no separate
+# changelog of its own. Per-crate attribution is preserved by the `*(scope)*`
+# rendering in the [changelog] template above.
 [[package]]
 name = "asciidoc-html5"
 version_group = "asciidoc-html5"
+# Root CHANGELOG.md, shared by the whole workspace.
+changelog_path = "CHANGELOG.md"
+# Fold the CLI's commits into this changelog.
+changelog_include = ["adoc"]
 
 [[package]]
 name = "adoc"
 version_group = "asciidoc-html5"
+# The CLI's changes are recorded in the shared root changelog, so it keeps no
+# changelog file of its own.
+changelog_update = false
