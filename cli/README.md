@@ -1,5 +1,9 @@
 # adoc
 
+[![CI](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml/badge.svg)](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/crates/v/adoc.svg)](https://crates.io/crates/adoc)
+[![Codecov](https://codecov.io/gh/asciidoc-rs/asciidoc-html5/graph/badge.svg)](https://codecov.io/gh/asciidoc-rs/asciidoc-html5)
+
 A command-line [AsciiDoc](https://asciidoc.org) to HTML5 converter — the `adoc`
 command. Reads AsciiDoc from a file (or standard input) and writes HTML5 that
 aims to be compatible with [Asciidoctor](https://asciidoctor.org)'s default

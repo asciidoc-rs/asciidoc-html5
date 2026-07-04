@@ -1,5 +1,10 @@
 # asciidoc-html5
 
+[![CI](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml/badge.svg)](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml)
+[![Latest Version](https://img.shields.io/crates/v/asciidoc-html5.svg)](https://crates.io/crates/asciidoc-html5)
+[![docs.rs](https://img.shields.io/docsrs/asciidoc-html5)](https://docs.rs/asciidoc-html5/)
+[![Codecov](https://codecov.io/gh/asciidoc-rs/asciidoc-html5/graph/badge.svg)](https://codecov.io/gh/asciidoc-rs/asciidoc-html5)
+
 A Rust HTML5 renderer for [AsciiDoc](https://asciidoc.org), built on the
 [`asciidoc-parser`](https://crates.io/crates/asciidoc-parser) crate and aiming
 for output compatible with [Asciidoctor](https://asciidoctor.org)'s default
