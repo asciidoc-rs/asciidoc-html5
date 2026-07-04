@@ -32,9 +32,16 @@ jobs:
 
       - name: Clean up stale release-plz branches
         run: |
-          git --no-pager branch --remote |\
+          # Keep the newest release-plz branch and delete any older ones.
+          # `grep` exits non-zero when there are no such branches — the common
+          # case on the first runs and right after a release PR is merged — so
+          # `|| true` stops that from failing the step under `set -o pipefail`.
+          # The delete runs outside this pipeline so real push errors still surface.
+          stale=$(git --no-pager branch --remote |\
             grep 'origin/release-plz-' |\
             sort -r |\
             tail -n +2 |\
-            sed 's/origin\///' |\
-            xargs -I {} git push origin --delete {}
+            sed 's/origin\///' || true)
+          if [ -n "$stale" ]; then
+            echo "$stale" | xargs -I {} git push origin --delete {}
+          fi
