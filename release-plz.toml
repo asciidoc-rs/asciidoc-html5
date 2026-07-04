@@ -17,7 +17,12 @@
 # version, which is governed solely by the shared `version_group` below.
 
 [changelog]
+# The whole body is guarded by `{% if version %}`. release-plz always passes the
+# computed next version when it prepares a release, so a real release renders as
+# before; commits with no version attached (the "unreleased" set) render nothing,
+# which keeps an `## [Unreleased]` entry out of the changelog entirely.
 body = """
+{%- if version %}
 
 ## [{{ version | trim_start_matches(pat="v") }}]{%- if release_link -%}({{ release_link }}){% endif %}
 _{{ timestamp | date(format="%d %B %Y") }}_
@@ -36,6 +41,7 @@ _{{ timestamp | date(format="%d %B %Y") }}_
 {%- endif %}
 
 {%- endfor -%}
+{%- endif %}
 """
 
 commit_parsers = [
