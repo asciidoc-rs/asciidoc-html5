@@ -1,13 +1,14 @@
 [package]
-name = "asciidoc-html5"
-description = "HTML5 renderer for AsciiDoc, compatible with Asciidoctor's html5 backend"
 categories = ["text-processing"]
-keywords = ["asciidoc", "html5", "converter", "renderer"]
-readme = "README.md"
-version.workspace = true
+description = "HTML5 renderer for AsciiDoc, compatible with Asciidoctor's html5 backend"
 edition.workspace = true
+keywords = ["asciidoc", "html5", "converter", "renderer"]
 license.workspace = true
+name = "asciidoc-html5"
+readme = "README.md"
 repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 asciidoc-parser.workspace = true

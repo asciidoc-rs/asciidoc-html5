@@ -1,13 +1,14 @@
 [package]
-name = "adoc"
-description = "Command-line AsciiDoc to HTML5 converter (the `adoc` command)"
 categories = ["command-line-utilities", "text-processing"]
-keywords = ["asciidoc", "html5", "cli", "converter"]
-readme = "README.md"
-version.workspace = true
+description = "Command-line AsciiDoc to HTML5 converter (the `adoc` command)"
 edition.workspace = true
+keywords = ["asciidoc", "html5", "cli", "converter"]
 license.workspace = true
+name = "adoc"
+readme = "README.md"
 repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
 
 [dependencies]
 asciidoc-html5 = { path = "../html5", version = "=0.1.1" }
