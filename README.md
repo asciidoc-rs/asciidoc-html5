@@ -22,16 +22,19 @@ For now I’m focused on driving the rendering library to being complete enough 
 
 Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
 
-### License for Asciidoctor reference materials
+### License for reference materials
 
 This dual license applies to the `asciidoc-html5` and `adoc` crates and to
-everything in this repository **except** the [`ref/`](ref) folder.
+everything in this repository **except** the [`ref/`](ref) folder, which holds
+verbatim, pinned copies of upstream materials kept as references for
+spec-driven development. Each subfolder of `ref/` carries its own upstream
+license, distinct from this repository's `MIT OR Apache-2.0` dual license.
 
-The `ref/` folder contains a verbatim copy of documentation and test materials
-from the [Asciidoctor](https://asciidoctor.org) project, taken at the `v2.0.26`
-release tag and kept as a reference for spec-driven development. Those materials
-are the work of the Asciidoctor authors and remain under Asciidoctor's own
-license — the **MIT License**, Copyright (C) 2012-present Dan Allen, Sarah
-White, Ryan Waldron, and the individual contributors to Asciidoctor. They are
-**not** covered by the `MIT OR Apache-2.0` dual license above. See
-[`ref/README.md`](ref/README.md) and [`ref/LICENSE`](ref/LICENSE) for details.
+[`ref/asciidoctor/`](ref/asciidoctor) contains a verbatim copy of documentation
+and test materials from the [Asciidoctor](https://asciidoctor.org) project,
+taken at the `v2.0.26` release tag. Those materials are the work of the
+Asciidoctor authors and remain under Asciidoctor's own license — the **MIT
+License**, Copyright (C) 2012-present Dan Allen, Sarah White, Ryan Waldron, and
+the individual contributors to Asciidoctor. See
+[`ref/asciidoctor/README.md`](ref/asciidoctor/README.md) and
+[`ref/asciidoctor/LICENSE`](ref/asciidoctor/LICENSE) for details.
