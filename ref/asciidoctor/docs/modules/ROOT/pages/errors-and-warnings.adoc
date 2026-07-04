@@ -1,0 +1,258 @@
+= Errors and Warnings
+
+All application messages (i.e., debug, info, warning, error, or fatal) emitted by Asciidoctor are written to the logger.
+By default, only warning, error, and fatal messages are logged.
+When using the CLI, the logger routes messages to the console via stderr (i.e., standard error).
+
+== Notification types
+
+DEBUG::
+Debug messages provide insight into what the software is doing and can be useful for tracking down problems or unexpected behavior.
+Currently, Asciidoctor does not log any messages at this level.
+However, extensions may do so.
+
+<<info,INFO>>::
+Info messages do not stop conversion, but they indicate possible problems, and the output may not be what you were expecting.
+
+<<warning,WARN>> (WARNING)::
+Warnings do not stop conversion, but they indicate likely problems, and the output probably won't be what you were expecting.
+In the CLI output, Asciidoctor labels these messages as `WARNING` rather than `WARN`.
+
+<<error,ERROR>>::
+Errors do not stop conversion, but the output document will almost certainly be wrong.
+
+<<fatal,FATAL>> (FAILED)::
+Failures are fatal; no output document will be produced.
+If the `--trace` CLI option is specified, the message may be accompanied by a stacktrace.
+In the CLI output, Asciidoctor labels these messages as `FAILED` rather than `FATAL`.
+
+The messages listed in the following sections may contain some of the following representative placeholders:
+
+<docname>::
+Represents the basename of the source file being processed (e.g., `sample.adoc`).
+
+<file>::
+Represents a path to the input file or other referenced file.
+
+<uri>::
+Represents a URI (i.e., URL) being referenced.
+
+<x> or <y>::
+Placeholders for other contextual information in the message.
+
+[#debug]
+== Debug messages
+
+[cols=2*]
+|===
+|Message |Troubleshooting
+
+|unknown style for <y> block: <x>
+|The processor could not find an extension registered for the <y> block with the custom style <x>.
+It's not required to register an extension for a custom block, so this message is merely informational.
+If the extension is not registered, the processor will fall back to the default semantics of the block.
+The block will be rendered as though the custom style is not present.
+
+|unknown name for block macro: <x>
+|The processor could not find an extension registered for the block macro named <x>.
+It's not required to register an extension for a custom block macro, so this message is merely informational.
+If the extension is not registered, the processor will leave the block macro unprocessed (treat it as paragraph text).
+
+|unknown style for paragraph: <x>
+|The processor could not find an extension registered for the paragraph with the custom style <x>.
+It's not required to register an extension for a custom paragraph, so this message is merely informational.
+If the extension is not registered, the processor will fall back to the default semantics of the paragraph.
+The paragraph will be rendered as though the custom style is not present.
+|===
+
+[#info]
+== Info messages
+
+[cols=2*]
+|===
+|Message |Troubleshooting
+
+|possible invalid reference: <x>
+|The processor could not validate the internal reference named <x>.
+This message doesn't definitively indicate a missing reference.
+Rather, it indicates the reference (i.e., anchor) is not in a location where the reference can be validated.
+|===
+
+[#warning]
+== Warning messages
+
+[cols=2*]
+|===
+|Message |Troubleshooting
+
+|abstract block cannot be used in a document without a title when doctype is book. Excluding block content.
+|Invalid book document structure.
+
+|cannot retrieve contents of <x> at URI: <uri> (allow-uri-read attribute not enabled)
+|Reading from a URI is only allowed if the allow-uri-read attribute is set from the CLI or API.
+
+|could not retrieve contents of <x> at URI: <uri>
+|Web address not found.
+
+|could not retrieve image data from URI: <uri>
+|Web address not found.
+Only occurs with `allow-uri-read` and `data-uri`.
+Check the URI.
+
+|dropping line containing reference to missing attribute: <x>
+|An attribute cannot be resolved and the `attribute-missing` attribute is set to `drop-line`.
+
+|file does not exist or cannot be read: <file>
+|You specified a stylesheet (`-a stylesheet=<file>`) but <file> does not exist or is not readable.
+
+|gem 'concurrent-ruby' is not installed. This gem is recommended when registering custom converters.
+|You have registered a custom converter, and you have not installed the concurrent-ruby gem.
+
+|gem 'concurrent-ruby' is not installed. This gem is recommended when using custom backend templates.
+|You are using custom templates (`-T <template_dir>`), but you have not installed the concurrent-ruby gem.
+
+|image to embed not found or not readable: <file>
+|You used `:data-uri:` but the file could not be found.
+
+|include file not readable: <file>
+|You do not have permission to access the file.
+
+|input path <file> is a <x>, not a file
+|The path is not a file (perhaps it is a socket or a block device).
+
+|optional gem 'asciimath' is not installed. Functionality disabled.
+|asciimath is a required library when converting AsciiMath expressions in AsciiDoc to DocBook.
+
+|optional gem 'rouge' is not installed. Functionality disabled.
+|Rouge is used for source code highlighting when `source-highlighter` is set to `rouge`.
+
+|skipping reference to missing attribute: <x>
+|An attribute cannot be resolved and the `attribute-missing` attribute is set to `skip`.
+
+|tables must have at least one body row
+|
+
+|tag '<x>' not found in include file: <file>
+|You tried to include by tagged region, but the included document does not have that tag.
+
+|<docname>: id assigned to <type> already in use: <id>
+|<id> is a duplicate ID, meaning it has already been assigned to a node of <type> (e.g., section, block, anchor).
+If you don't see the problem in <docname>, check that the duplicate ID isn't coming from a file which is being included.
+
+|<docname> callout list item index: expected <x> got <y>
+|Callouts are expected to be in numerical order, just like any ordered list.
+
+|<docname> include <x> not readable: <y>
+|If <y> is a file, do you have read permissions for it?
+If it is a URI and `-a allow-uri-read` is set, does it exist?
+
+|<docname> include file not found: <file>
+|Probably a typo or missing file.
+If not, make sure you understand the search process.
+
+|<docname> invalid empty <x> detected in style attribute
+|The first positional attribute in the block attributes could not be parsed.
+
+|<docname> invalid style for <x> block: <y>
+|You have added a custom style to a block, but you haven't registered a custom block extension to handle it.
+
+|<docname> invalid style for paragraph: <x>
+|You have a line `[<name-of-style>]` before a paragraph, but `name-of-style` isn't a recognized built-in style.
+
+|<docname> list item index: expected <x>, got <y>
+|You gave explicit numbers on an ordered list, but they were not sequential.
+Asciidoctor renumbers them for you, and gives this warning.
+
+|<docname> multiple ids detected in style attribute
+|Multiple IDs cannot be specified in the block style (e.g., `[#cat#dog]`).
+
+|<docname> no callouts refer to list item <x>
+|The callout is missing or not recognized.
+In source listings, is the callout the last thing on the line?
+
+|<docname> section title out of sequence
+|Invalid document structure.
+Check section levels.
+|===
+
+[#error]
+== Error messages
+
+[cols=2*]
+|===
+|Message |Troubleshooting
+
+|input file <file> missing or cannot be read
+|Check that the file exists and that the filename is not misspelled.
+
+|include file has illegal reference to ancestor of jail; recovering automatically
+|The safe mode is restricting access to an include file outside of the base directory.
+
+|input file and output file cannot be the same: <file>
+|Choose a different output directory or filename.
+
+|partintro block can only be used when doctype is book and it\'s a child of a part section. Excluding block content.
+|Invalid book document structure.
+
+|unmatched macro: endif::<x>[]
+|`endif::[]` with no unclosed preceding `ifdef::<x>[]`.
+
+|<docname> dropping cell because it exceeds specified number of columns
+// The extra cells are dropped, but this message is not produced ???
+|
+
+|<docname> illegal block content outside of partintro block
+|Invalid book document structure.
+
+|<docname> invalid part, must have at least one section (e.g., chapter, appendix, etc.)
+|Invalid book document structure.
+
+|<docname> malformed manpage title
+|Document does not conform to the structure required by the declared manpage doctype.
+
+|<docname> malformed name section body
+|Document does not conform to the structure required by the declared manpage doctype.
+
+|<docname> maximum include depth of 64 exceeded
+|Does your file include itself, directly or indirectly?
+
+|<docname> mismatched macro: endif::<x>[], expected endif::<y>[]
+|ifdef/endif blocks must be strictly nested.
+
+|<docname> name section expected
+|Document does not conform to the structure required by the declared manpage doctype.
+
+|<docname> name section title must be at level 1
+|Document does not conform to the structure required by the declared manpage doctype.
+
+|<docname> only book doctypes can contain level 0 sections
+|Illegal use of a level-0 section when doctype is not book.
+
+|<docname> table missing leading separator, recovering automatically
+|Check for missing cell separator characters at the start of the line.
+|===
+
+[#fatal]
+== Fatal messages
+
+[cols=2*]
+|===
+|Message |Troubleshooting
+
+|missing converter for backend '<x>'. Processing aborted.
+|You used -b with an invalid or missing backend.
+
+//|Failed to load AsciiDoc document - undefined method `convert' for nil:NilClass
+//|
+
+|'tilt' could not be loaded
+|You must have the tilt gem installed (`gem install tilt`) to use custom templates.
+|===
+
+////
+API only
+
+|ERROR
+|IOError, %(target directory does not exist: #{to_dir})
+|API, the mkdirs option is not set, and the target directory does not already exist.
+////

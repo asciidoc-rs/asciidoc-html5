@@ -1,0 +1,72 @@
+= Process AsciiDoc Using the CLI
+
+////
+command-line-usage.adoc
+Command line usage quick start for Asciidoctor
+included in the install-toolchain and user-manual documents
+////
+
+When the Asciidoctor gem is installed successfully, the Asciidoctor command line interface (CLI) named `asciidoctor` will be available on your PATH.
+
+== Version and runtime
+
+To confirm that the CLI is available, execute the following command in your terminal application:
+
+ $ asciidoctor --version
+
+Alternately, you can shorten the `--version` CLI option flag to `-v`:
+
+ $ asciidoctor -v
+
+If this command completes successfully, information about Asciidoctor and the runtime environment will be printed to the standard output of your terminal:
+
+[subs=attributes+]
+ Asciidoctor {release-version} [https://asciidoctor.org]
+ Runtime Environment ({ruby-description}) (lc:UTF-8 fs:UTF-8 in:UTF-8 ex:UTF-8)
+
+The runtime environment information varies based on the version of Ruby you're using and the encoding settings of your operating system.
+
+== Convert an AsciiDoc file
+
+To invoke Asciidoctor from the CLI and convert an `.adoc` file, execute:
+
+ $ asciidoctor <asciidoc-file>
+
+This will use the built-in defaults for options and create a new file in the same directory as the input file, with the same base name, but with the `.html` extension.
+
+The Asciidoctor CLI accepts numerous options that control the behavior of the processor, from setting additional attributes (`-a`) to where the output file is written (`-o`).
+Most options have both a longhand (e.g., `--out-file`) and shorthand form (e.g., `-o`).
+The shorthand form is used throughout this documentation.
+Once you're familiar with the options, the shorthand form is preferred and most common since it requires a lot less typing.
+
+xref:man1/asciidoctor.adoc#options[CLI Options] describes the available options and parameters for the Asciidoctor CLI.
+
+== Help topics
+
+The `--help` option provides self-describing documentation for the `asciidoctor` command, grouped by topic.
+If you don't specify a topic, the `--help` option prints the usage statement for the `asciidoctor` command:
+
+ $ asciidoctor --help
+
+Alternately, you can shorten the `--help` CLI option flag to `-h`:
+
+ $ asciidoctor -h
+
+You can generate the full documentation (i.e., man page) for the `asciidoctor` command by passing the `manpage` topic to the `--help` option.
+You can pipe that output to the `man` pager to view it:
+
+ $ asciidoctor --help manpage | man -l -
+
+You can also find the man page for the `asciidoctor` command rendered as HTML in this documentation, which you can view in a browser instead.
+See xref:man1/asciidoctor.adoc[asciidoctor(1)].
+
+You can print an AsciiDoc syntax crib sheet by passing the `syntax` topic to the `--help` option.
+
+ $ asciidoctor --help syntax
+
+The crib sheet itself is composed in AsciiDoc.
+You can convert it to HTML by piping the output back into the `asciidoctor` command.
+
+ $ asciidoctor --help syntax | asciidoctor -o syntax.html -
+
+Navigate to the [.path]_syntax.html_ file in your browser to see what the examples in the crib sheet look like when converted to HTML.

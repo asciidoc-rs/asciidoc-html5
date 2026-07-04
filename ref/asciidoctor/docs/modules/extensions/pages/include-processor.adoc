@@ -1,0 +1,48 @@
+= Include Processor Extension Example
+:navtitle: Include Processor
+
+Purpose::
+Include a file from a URI.
+
+TIP: Asciidoctor supports including content from a URI out of the box if you set the `allow-uri-read` attribute (not available if the safe mode is `secure`).
+
+== sample-with-uri-include.adoc
+
+[source,asciidoc]
+....
+:source-highlighter: coderay
+
+.Gemfile
+[,ruby]
+----
+\include::https://cdn.jsdelivr.net/gh/asciidoctor/asciidoctor/Gemfile[]
+----
+....
+
+== UriIncludeProcessor
+
+[,ruby]
+----
+class UriIncludeProcessor < Asciidoctor::Extensions::IncludeProcessor
+  def handles? target
+    target.start_with? 'https://', 'https://'
+  end
+
+  def process doc, reader, target, attributes
+    content = (::OpenURI.open_uri target).readlines
+    reader.push_include content, target, target, 1, attributes
+    reader
+  end
+end
+----
+
+== Usage
+
+[,ruby]
+----
+Asciidoctor::Extensions.register do
+  include_processor UriIncludeProcessor
+end
+
+Asciidoctor.convert_file 'sample-with-uri-include.adoc', safe: :safe
+----

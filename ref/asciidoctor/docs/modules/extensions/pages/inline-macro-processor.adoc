@@ -1,0 +1,93 @@
+= Inline Macro Processor Extension Example
+:navtitle: Inline Macro Processor
+
+Purpose::
+Create an inline macro named `man` that links to another man page.
+
+== sample-with-man-link.adoc
+
+[,asciidoc]
+----
+See man:gittutorial[7] to get started.
+----
+
+== ManpageInlineMacro
+
+[,ruby]
+----
+class ManInlineMacro < Asciidoctor::Extensions::InlineMacroProcessor
+  use_dsl
+
+  named :man
+  name_positional_attributes 'volnum'
+
+  def process parent, target, attrs
+    doc = parent.document
+    text = manname = target
+    suffix = (volnum = attrs['volnum']) ? %((#{volnum})) : ''
+    if doc.basebackend? 'html'
+      target = %(#{manname}#{doc.outfilesuffix})
+      doc.register :links, target
+      node = create_anchor parent, text, type: :link, target: target
+    elsif doc.backend == 'manpage' 
+      node = create_inline parent, :quoted, manname, type: :strong
+    else
+      node = create_inline parent, :quoted, manname
+    end
+    create_inline parent, :quoted, %(#{node.convert}#{suffix})
+  end
+end
+----
+
+== Usage
+
+[,ruby]
+----
+Asciidoctor::Extensions.register do
+  inline_macro ManInlineMacro
+end
+
+Asciidoctor.convert_file 'sample-with-man-link.adoc', safe: :safe
+----
+
+== Tips & Techniques
+
+=== Apply substitutions
+
+By the time an inline macro is processed, most substitutions have already been applied (since macros is one of the last substitutions).
+In order to get the processor to apply substitutions to the text of the Inline node returned by the extension, you must specify those extensions on the node instance itself.
+
+You can specify substitutions to apply to the text of the node using the `subs` attribute.
+This attribute accepts a symbol, an array of symbols, or a comma-separated string.
+
+Let's say that we want normal substitutions to be applied to the text.
+Here's how that can be done:
+
+[,ruby]
+----
+create_inline_pass parent, '*https://example.org[Learn more]*',
+  attributes: { 'subs' => :normal }
+----
+
+This inline passthrough node will produce a link that has link text with strong emphasis (i.e., bold).
+
+You can also specify the substitutions as a string, which is parsed just like the value of the subs attribute on a block.
+
+[,ruby]
+----
+create_inline_pass parent, '*https://example.org[Learn more]*',
+  attributes: { 'subs' => 'quotes,macros' }
+----
+
+You can specify whichever substitutions you want applied, and in what order.
+
+Instead of creating an inline passthrough node, you can also create a span of formatted text with additional substitutions applied.
+
+[,ruby]
+----
+create_inline parent, :quoted, 'https://asciidoctor.org is _awesome_!',
+  attributes: { 'subs' => :quotes }
+----
+
+The `:quoted` primary type represents a span of formatted text.
+In this case, we don't need to apply the `macros` substitution since links have not yet been converted.
