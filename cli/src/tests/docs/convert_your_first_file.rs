@@ -7,10 +7,10 @@ track_file!("docs/modules/ROOT/pages/convert-your-first-file.adoc");
 // This crate's "Convert Your First File" walkthrough, tracked from the CLI. Its
 // prose is descriptive documentation and so non-normative, but the `adoc`
 // invocations it shows are verified here: converting a file derives the
-// `<name>.html` output name (see `converts_and_derives_output_file`), and `-o -`
-// redirects the HTML to standard output (see `writes_to_stdout_with_dash`). The
-// `asciidoc-html5` crate verifies the conversion via `convert_file`; the sdd
-// tool merges the two crates' coverage of the page.
+// `<name>.html` output name (see `converts_and_derives_output_file`), and `-o
+// -` redirects the HTML to standard output (see `writes_to_stdout_with_dash`).
+// The `asciidoc-html5` crate verifies the conversion via `convert_file`; the
+// sdd tool merges the two crates' coverage of the page.
 
 non_normative!(
     r#"

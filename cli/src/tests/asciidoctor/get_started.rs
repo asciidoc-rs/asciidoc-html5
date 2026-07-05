@@ -10,9 +10,10 @@ track_file!("ref/asciidoctor/docs/modules/get-started/pages/index.adoc");
 // rendering rule to verify, so it is non-normative here. The testable part is
 // the CLI workflow: `asciidoctor my-document.adoc` converts the file and writes
 // its output to _my-document.html_, a name derived from the input. This crate's
-// `adoc` command mirrors that derivation (see `converts_and_derives_output_file`).
-// The `asciidoc-html5` crate verifies the conversion via `convert_file`, and the
-// sdd tool merges the two crates' coverage.
+// `adoc` command mirrors that derivation (see
+// `converts_and_derives_output_file`). The `asciidoc-html5` crate verifies the
+// conversion via `convert_file`, and the sdd tool merges the two crates'
+// coverage.
 
 non_normative!(
     r#"

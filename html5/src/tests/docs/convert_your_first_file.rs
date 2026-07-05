@@ -7,10 +7,11 @@ track_file!("docs/modules/ROOT/pages/convert-your-first-file.adoc");
 // This crate's "Convert Your First File" walkthrough. It is descriptive
 // documentation of the `adoc` CLI workflow, so its prose is tracked as
 // non-normative. The one thing this library verifies is the conversion the
-// walkthrough performs — `adoc my-document.adoc` renders the file to a complete,
-// standalone HTML5 document — exercised through the closest library API,
-// `convert_file` (see `converts_a_file_to_html5`). The `adoc` crate verifies the
-// CLI's output-file derivation and its `-o -` form; the sdd tool merges the two.
+// walkthrough performs — `adoc my-document.adoc` renders the file to a
+// complete, standalone HTML5 document — exercised through the closest library
+// API, `convert_file` (see `converts_a_file_to_html5`). The `adoc` crate
+// verifies the CLI's output-file derivation and its `-o -` form; the sdd tool
+// merges the two.
 
 non_normative!(
     r#"

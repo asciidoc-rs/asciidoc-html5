@@ -7,13 +7,13 @@ track_file!("ref/asciidoctor/docs/modules/get-started/pages/index.adoc");
 // Asciidoctor's "Convert Your First File" tutorial. It walks a reader through
 // running the `asciidoctor` CLI on a document and finding the derived HTML
 // output. Almost all of it is CLI tutorial prose — installing Asciidoctor, an
-// included example document, a screenshot, and the embedded default stylesheet —
-// none of which describes a library rule this crate can verify, so it is
+// included example document, a screenshot, and the embedded default stylesheet
+// — none of which describes a library rule this crate can verify, so it is
 // non-normative here. The one thing with a counterpart in this crate is the
 // conversion itself: `asciidoctor my-document.adoc` produces a complete HTML5
 // document. This crate verifies that against its closest available API,
-// `convert_file` (see `converts_a_file_to_html5`); the `adoc` crate verifies the
-// CLI's output-file derivation, and the sdd tool merges the two.
+// `convert_file` (see `converts_a_file_to_html5`); the `adoc` crate verifies
+// the CLI's output-file derivation, and the sdd tool merges the two.
 
 non_normative!(
     r#"
