@@ -55,15 +55,16 @@ jobs:
       - name: Remove test code from coverage reports
         uses: scouten/uncover-tests@v1
 
-      # Tokens aren't available for PRs originating from forks,
-      # so we don't attempt to upload code coverage in that case.
+      # Tokens aren't available for PRs originating from forks, so we upload
+      # coverage only for same-repo PRs (and non-PR events). We gate on the head
+      # repo rather than author_association: the latter misclassifies
+      # automation-authored same-repo PRs as CONTRIBUTOR and wrongly skips their
+      # uploads. Dependabot pushes its branches to this repo, so it is covered
+      # by the same-repo check too.
       - name: Upload code coverage results
         if: |
           github.event_name != 'pull_request' ||
-          github.event.pull_request.author_association == 'OWNER' ||
-          github.event.pull_request.author_association == 'COLLABORATOR' ||
-          github.event.pull_request.author_association == 'MEMBER' ||
-          github.event.pull_request.user.login == 'dependabot[bot]'
+          github.event.pull_request.head.repo.full_name == github.repository
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
