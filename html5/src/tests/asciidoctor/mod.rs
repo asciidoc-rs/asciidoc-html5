@@ -3,7 +3,10 @@
 //!
 //! Asciidoctor's `html5` backend is this renderer's compatibility oracle, so
 //! its documentation is a spec source the `sdd` tool measures coverage against.
-//! Pages that describe rather than specify — carrying no rule for a test to
-//! verify — are tracked as non-normative in their entirety.
+//! Overview pages carry little that is testable here: where a page shows an
+//! invocation with a counterpart in this crate, an ordinary test verifies that
+//! closest available API, and the rest — prose that describes rather than
+//! specifies — is tracked as non-normative.
 
+mod index;
 mod whats_new;

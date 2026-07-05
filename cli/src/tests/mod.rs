@@ -6,4 +6,5 @@
 
 mod sdd;
 
+mod asciidoctor;
 mod docs;
