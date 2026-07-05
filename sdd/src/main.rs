@@ -111,10 +111,10 @@ fn collect_files(root: &str, extension: &str) -> Vec<DirEntry> {
 }
 
 // Combine coverage recorded for the same spec file by more than one test file.
-// The two sequences reproduce the same spec file line for line, so we align them
-// by position and treat a line as covered if *any* contributing test verifies it
-// (logical OR of the per-line "verified" flags). If one sequence is shorter, the
-// remaining entries from the longer one are kept as-is.
+// The two sequences reproduce the same spec file line for line, so we align
+// them by position and treat a line as covered if *any* contributing test
+// verifies it (logical OR of the per-line "verified" flags). If one sequence is
+// shorter, the remaining entries from the longer one are kept as-is.
 fn merge_coverage(a: &[(String, bool)], b: &[(String, bool)]) -> Vec<(String, bool)> {
     let mut merged = Vec::with_capacity(a.len().max(b.len()));
 
