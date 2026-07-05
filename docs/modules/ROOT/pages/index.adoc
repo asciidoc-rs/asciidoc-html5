@@ -1,27 +1,79 @@
 = AsciiDoc HTML5
+:navtitle: Introduction
+:description: A brief introduction to asciidoc-html5, the Rust HTML5 renderer for AsciiDoc, and how it relates to AsciiDoc and Asciidoctor.
 
-`asciidoc-html5` is a Rust HTML5 renderer for
-https://asciidoc.org[AsciiDoc], built on the
-https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] crate and aiming
-for output compatible with https://asciidoctor.org[Asciidoctor]'s default
-`html5` backend.
+`asciidoc-html5` is a Rust library and command-line tool that renders
+https://asciidoc.org[AsciiDoc] into HTML5. It builds on the
+https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] crate and aims for
+output compatible with https://asciidoctor.org[Asciidoctor]'s default `html5`
+backend.
 
 [NOTE]
 ====
-This documentation is a placeholder. It exists so that content can be
-previewed locally with https://antora.org[Antora] while the real
-documentation suite is written. In time these pages will become part of a
-larger `asciidoc.rs` site.
+This page is descriptive documentation, not a specification: its content is
+non-normative. The normative rules this renderer follows come from the AsciiDoc
+language and from Asciidoctor, whose `html5` backend is the compatibility oracle
+for this crate.
 ====
 
-== Building this site locally
+== What is asciidoc-html5?
 
-You need https://nodejs.org[Node.js] installed. From the repository root:
+`asciidoc-html5` is a native Rust processor that parses AsciiDoc into a document
+model and converts it to HTML5. Parsing is handled by the `asciidoc-parser`
+crate; this project walks the parsed document and assembles the block-level HTML
+structure that Asciidoctor's `html5` backend produces.
 
-[source,sh]
+The project ships two components:
+
+`asciidoc-html5`:: the renderer library, which other Rust tools can embed to
+convert AsciiDoc to HTML5 as one step of a larger pipeline.
+
+`adoc`:: a thin command-line front end over the library that reads AsciiDoc and
+writes HTML5.
+
+Unlike Asciidoctor, which is written in Ruby, `asciidoc-html5` is written in
+Rust and needs no Ruby, JVM, or JavaScript runtime.
+
+== Basic usage
+
+`asciidoc-html5` provides two interfaces for converting AsciiDoc documents: a
+CLI named `adoc` and a Rust API in the `asciidoc_html5` crate. The following
+table gives you an idea of how to use these interfaces.
+
+|===
+^|CLI ^|API
+
+a|
+ $ adoc document.adoc
+
+a|
+[,rust]
 ----
-npm install
-npm run docs
+let html =
+    asciidoc_html5::convert_file("document.adoc")?;
 ----
 
-Then open `build/site/index.html` in your browser.
+|Reads `document.adoc` and writes the rendered HTML5 to standard output.
+|Reads `document.adoc` and returns the rendered HTML5 as a `String`.
+|===
+
+In the simplest case, you give an AsciiDoc document to `asciidoc-html5` and it
+gives you back a complete HTML5 document you can publish. To render AsciiDoc you
+already hold in memory, pass it to `asciidoc_html5::convert` instead of reading
+from a file.
+
+== Relationship to AsciiDoc and Asciidoctor
+
+AsciiDoc is the language; `asciidoc-html5` is one of its processors.
+
+You compose documents using the AsciiDoc language, a concise text-based writing
+format. AsciiDoc is not itself a publishing format, so a processor is needed to
+convert the source into something you can publish. `asciidoc-html5` is such a
+processor: it reads AsciiDoc source and converts it to HTML5.
+
+Asciidoctor is the reference implementation of the AsciiDoc language. This crate
+treats Asciidoctor's default `html5` backend as its compatibility target, so
+that a given document renders the same whether it is processed by Asciidoctor or
+by `asciidoc-html5`. Where the two differ, Asciidoctor is treated as correct
+unless the difference is a documented limitation of this crate or of
+`asciidoc-parser`.
