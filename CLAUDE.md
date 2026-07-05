@@ -50,5 +50,8 @@ cargo run --bin adoc -- input.adoc -o out.html
 cat input.adoc | cargo run --bin adoc         # read from stdin
 ```
 
-> Note: the library converter is currently a `todo!()` stub, so running the CLI
-> against real input will panic until the renderer is implemented.
+> Note: the renderer is at an early **baseline** — it renders the document
+> skeleton, header, paragraphs, sections, the preamble, verbatim blocks, and
+> thematic breaks; other constructs emit a visible `<!-- unsupported … -->`
+> comment for now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the
+> design and roadmap.

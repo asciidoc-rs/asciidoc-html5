@@ -1,0 +1,399 @@
+//! The block-structure walker that turns a parsed [`Document`] into HTML5.
+//!
+//! # How the walk works
+//!
+//! The parser applies *inline* substitutions eagerly: by the time we hold a
+//! [`Document`], every block's content and title is already an
+//! Asciidoctor-compatible HTML *fragment* (with `<strong>`, `<a href>`, escaped
+//! special characters, and so on). This crate therefore never parses inline
+//! markup itself — its whole job is to wrap those fragments in the block-level
+//! scaffolding (the `<div class="…">` structure) that Asciidoctor's `html5`
+//! backend emits, in document order.
+//!
+//! [`Renderer`] holds the output buffer and exposes one method per structural
+//! concern. [`Renderer::block`] is the dispatch point: it matches on the
+//! [`Block`] variant (and, for delimited blocks, on
+//! [`IsBlock::resolved_context`]) and delegates. Compound blocks recurse back
+//! into [`Renderer::blocks`] over their [`IsBlock::nested_blocks`], so the same
+//! machinery handles arbitrary nesting.
+//!
+//! This is a *baseline*: the constructs wired up below (the document skeleton,
+//! header, paragraphs, sections, the preamble, verbatim blocks, and thematic
+//! breaks) exercise every mechanism the full renderer needs. Everything else
+//! falls through [`Renderer::unsupported`], which emits a visible HTML comment
+//! rather than guessing — so output stays well-formed and coverage gaps are
+//! obvious. Adding a construct means adding one arm and one `render_*` method.
+
+use std::slice::Iter;
+
+use asciidoc_parser::{
+    blocks::{Block, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
+    document::Header,
+    Document,
+};
+
+use crate::html::{class_attribute, id_attribute};
+
+/// Renders a parsed [`Document`] to a standalone HTML5 document string.
+pub(crate) fn render_document(document: &Document<'_>) -> String {
+    let mut renderer = Renderer { out: String::new() };
+    renderer.document(document);
+    renderer.out
+}
+
+/// Accumulates HTML as the document tree is walked.
+struct Renderer {
+    out: String,
+}
+
+impl Renderer {
+    /// Appends a line of markup followed by a newline, matching Asciidoctor's
+    /// convention of one element per line with no indentation.
+    fn line(&mut self, s: &str) {
+        self.out.push_str(s);
+        self.out.push('\n');
+    }
+
+    /// Emits the complete standalone document: the `<head>` preamble, the
+    /// `<div id="header">`, the `<div id="content">` body, and the footer.
+    fn document(&mut self, document: &Document<'_>) {
+        // NOTE: `lang`, the doctype (which drives `<body class>`), and the
+        // footer's "Last updated" timestamp all come from document attributes
+        // that a bare `&Document` does not currently surface (see
+        // ARCHITECTURE.md, "Parser API gaps"). Until that lands we use
+        // Asciidoctor's defaults: `lang=en`, the `article` doctype.
+        let doctitle = document.doctitle();
+
+        self.line("<!DOCTYPE html>");
+        self.line("<html lang=\"en\">");
+        self.line("<head>");
+        self.line("<meta charset=\"UTF-8\">");
+        self.line("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">");
+        self.line("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        self.line(&format!(
+            "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
+            env!("CARGO_PKG_VERSION")
+        ));
+        // The <title> is the plain-text doctitle. The parser's `doctitle()` has
+        // had header substitutions applied (special characters escaped), which
+        // is what we want inside <title>.
+        if let Some(title) = doctitle {
+            self.line(&format!("<title>{title}</title>"));
+        }
+        self.line("</head>");
+        self.line("<body class=\"article\">");
+
+        self.header(document);
+
+        self.line("<div id=\"content\">");
+        self.blocks(document.nested_blocks());
+        self.line("</div>");
+
+        // The footer wrapper is always emitted; the "Last updated …" text is
+        // deferred until a docdatetime attribute is reachable from `Document`.
+        self.line("<div id=\"footer\">");
+        self.line("<div id=\"footer-text\">");
+        self.line("</div>");
+        self.line("</div>");
+
+        self.line("</body>");
+        self.line("</html>");
+    }
+
+    /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
+    /// the author and revision details block.
+    fn header(&mut self, document: &Document<'_>) {
+        let header: &Header<'_> = document.header();
+        // A standalone document shows its doctitle as the header `<h1>` by
+        // default; only `notitle`/`noheader` suppress it. We can't yet read
+        // those attributes from a bare `Document` (see ARCHITECTURE.md), and
+        // `Document::show_doctitle()` bakes in the *embedded* default (hidden),
+        // so it is not the right signal here — we gate on the title's presence.
+        let has_title = document.doctitle().is_some();
+        let author_line = header.author_line();
+        let revision_line = header.revision_line();
+
+        if !has_title && author_line.is_none() && revision_line.is_none() {
+            return;
+        }
+
+        self.line("<div id=\"header\">");
+
+        if has_title {
+            if let Some(title) = document.doctitle() {
+                self.line(&format!("<h1>{title}</h1>"));
+            }
+        }
+
+        let has_details =
+            author_line.is_some_and(|a| a.authors().len() > 0) || revision_line.is_some();
+        if has_details {
+            self.line("<div class=\"details\">");
+
+            if let Some(author_line) = author_line {
+                for (index, author) in author_line.authors().enumerate() {
+                    let suffix = if index == 0 {
+                        String::new()
+                    } else {
+                        (index + 1).to_string()
+                    };
+                    self.line(&format!(
+                        "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
+                        author.name()
+                    ));
+                    if let Some(email) = author.email() {
+                        self.line(&format!(
+                            "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
+                        ));
+                    }
+                }
+            }
+
+            if let Some(revision) = revision_line {
+                if let Some(revnumber) = revision.revnumber() {
+                    // Asciidoctor prints "version <n>" and appends a comma when
+                    // a revision date follows.
+                    let comma = if revision.revdate().is_empty() {
+                        ""
+                    } else {
+                        ","
+                    };
+                    self.line(&format!(
+                        "<span id=\"revnumber\">version {revnumber}{comma}</span>"
+                    ));
+                }
+                if !revision.revdate().is_empty() {
+                    self.line(&format!(
+                        "<span id=\"revdate\">{}</span>",
+                        revision.revdate()
+                    ));
+                }
+                if let Some(revremark) = revision.revremark() {
+                    self.line(&format!("<br><span id=\"revremark\">{revremark}</span>"));
+                }
+            }
+
+            self.line("</div>");
+        }
+
+        self.line("</div>");
+    }
+
+    /// Walks a sequence of sibling blocks in document order.
+    fn blocks<'src>(&mut self, blocks: Iter<'src, Block<'src>>) {
+        for block in blocks {
+            self.block(block);
+        }
+    }
+
+    /// The dispatch point: routes one block to the matching renderer.
+    fn block<'src>(&mut self, block: &'src Block<'src>) {
+        match block {
+            Block::Simple(simple) => match simple.style() {
+                SimpleBlockStyle::Paragraph => self.paragraph(block),
+                SimpleBlockStyle::Listing | SimpleBlockStyle::Source => {
+                    self.verbatim(block, "listingblock")
+                }
+                SimpleBlockStyle::Literal => self.verbatim(block, "literalblock"),
+            },
+            Block::Section(section) => self.section(block, section),
+            Block::Preamble(_) => self.preamble(block),
+            Block::Break(_) => self.thematic_break(),
+            Block::RawDelimited(_) => match block.resolved_context().as_ref() {
+                "listing" => self.verbatim(block, "listingblock"),
+                "literal" => self.verbatim(block, "literalblock"),
+                other => self.unsupported(other),
+            },
+            // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
+            other => self.unsupported(&other.resolved_context()),
+        }
+    }
+
+    /// `<div class="paragraph"><p>…</p></div>`, with an optional title and
+    /// author roles on the wrapper.
+    fn paragraph<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "paragraph");
+        self.block_title(block);
+        let content = block.rendered_content().unwrap_or_default();
+        self.line(&format!("<p>{content}</p>"));
+        self.line("</div>");
+    }
+
+    /// `<div class="listingblock|literalblock"><div
+    /// class="content"><pre>…</pre></div></div>`.
+    ///
+    /// Verbatim content keeps its literal line breaks, so it is emitted inside
+    /// the `<pre>` without added newlines around the text.
+    fn verbatim<'src>(&mut self, block: &'src Block<'src>, wrapper_class: &str) {
+        self.open_block_wrapper(block, wrapper_class);
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+        let content = block.rendered_content().unwrap_or_default();
+        self.line(&format!("<pre>{content}</pre>"));
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// A section: `<div class="sectN"><hM id>title</hM>…</div>`. Level-1
+    /// sections wrap their body in `<div class="sectionbody">`; deeper levels
+    /// place children directly after the heading. Discrete headings render as a
+    /// bare heading with no wrapper.
+    fn section<'src>(&mut self, block: &'src Block<'src>, section: &'src SectionBlock<'src>) {
+        let level = section.level();
+        let heading_level = (level + 1).min(6);
+        // `Block::id()` does not surface a section's auto-generated id; the
+        // `SectionBlock` override does (falling back to the synthesized `_id`).
+        let id = section.id();
+        let title = section.section_title();
+
+        if section.section_type() == SectionType::Discrete {
+            self.line(&format!(
+                "<h{heading_level}{}>{title}</h{heading_level}>",
+                id_attribute(id)
+            ));
+            return;
+        }
+
+        self.line(&format!(
+            "<div{}>",
+            class_attribute(&format!("sect{level}"), &block.roles())
+        ));
+        self.line(&format!(
+            "<h{heading_level}{}>{title}</h{heading_level}>",
+            id_attribute(id)
+        ));
+
+        if level == 1 {
+            self.line("<div class=\"sectionbody\">");
+            self.blocks(section.nested_blocks());
+            self.line("</div>");
+        } else {
+            self.blocks(section.nested_blocks());
+        }
+
+        self.line("</div>");
+    }
+
+    /// The preamble: content between the doctitle and the first section,
+    /// wrapped as `<div id="preamble"><div
+    /// class="sectionbody">…</div></div>`.
+    fn preamble<'src>(&mut self, block: &'src Block<'src>) {
+        self.line("<div id=\"preamble\">");
+        self.line("<div class=\"sectionbody\">");
+        self.blocks(block.nested_blocks());
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// A thematic break: `<hr>`.
+    fn thematic_break(&mut self) {
+        self.line("<hr>");
+    }
+
+    /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
+    fn open_block_wrapper<'src>(&mut self, block: &'src Block<'src>, base_class: &str) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(base_class, &block.roles())
+        ));
+    }
+
+    /// Emits the block's `<div class="title">…</div>`, if it has a title. The
+    /// title text has already had substitutions applied by the parser.
+    fn block_title<'src>(&mut self, block: &'src Block<'src>) {
+        if let Some(title) = block.title() {
+            self.line(&format!("<div class=\"title\">{title}</div>"));
+        }
+    }
+
+    /// Emits a visible placeholder for a construct the baseline does not yet
+    /// handle, keeping the output well-formed while making the gap obvious.
+    fn unsupported(&mut self, context: &str) {
+        self.line(&format!(
+            "<!-- asciidoc-html5: unsupported block context '{context}' -->"
+        ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::convert;
+
+    /// Extracts the body of the `<div id="content">…</div>` wrapper so tests
+    /// can assert on block structure without repeating the document
+    /// skeleton.
+    fn content(html: &str) -> String {
+        let start = html.find("<div id=\"content\">").expect("content div")
+            + "<div id=\"content\">\n".len();
+        let end = html[start..]
+            .find("<div id=\"footer\">")
+            .expect("footer div")
+            + start;
+        html[start..end].trim_end().to_string()
+    }
+
+    #[test]
+    fn document_skeleton() {
+        let html = convert("= Title\n\nHi.");
+        assert!(html.starts_with("<!DOCTYPE html>\n<html lang=\"en\">\n"));
+        assert!(html.contains("<meta charset=\"UTF-8\">"));
+        assert!(html.contains("<title>Title</title>"));
+        assert!(html.contains("<body class=\"article\">"));
+        assert!(html.contains("<div id=\"header\">\n<h1>Title</h1>\n</div>"));
+        assert!(html.trim_end().ends_with("</body>\n</html>"));
+    }
+
+    #[test]
+    fn paragraph_carries_parser_inline_html() {
+        // The parser renders inline markup; the block renderer only wraps it.
+        let html = convert("A _quiet_ *storm*.");
+        assert!(html.contains(
+            "<div class=\"paragraph\">\n<p>A <em>quiet</em> <strong>storm</strong>.</p>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn nested_sections_map_to_sect_levels() {
+        let html = convert("= Doc\n\n== One\n\nx\n\n=== Two\n\ny");
+        let body = content(&html);
+        assert!(body.contains(
+            "<div class=\"sect1\">\n<h2 id=\"_one\">One</h2>\n<div class=\"sectionbody\">"
+        ));
+        assert!(body.contains("<div class=\"sect2\">\n<h3 id=\"_two\">Two</h3>"));
+    }
+
+    #[test]
+    fn preamble_is_wrapped() {
+        let html = convert("= Doc\n\nIntro.\n\n== Section\n\nBody.");
+        let body = content(&html);
+        assert!(body.starts_with("<div id=\"preamble\">\n<div class=\"sectionbody\">"));
+    }
+
+    #[test]
+    fn verbatim_content_stays_escaped() {
+        let html = convert("[listing]\n<html> & co");
+        assert!(html.contains(
+            "<div class=\"listingblock\">\n<div class=\"content\">\n<pre>&lt;html&gt; &amp; co</pre>"
+        ));
+    }
+
+    #[test]
+    fn thematic_break_renders_hr() {
+        let html = convert("before\n\n'''\n\nafter");
+        assert!(content(&html).contains("<hr>"));
+    }
+
+    #[test]
+    fn unsupported_block_leaves_a_marker() {
+        let html = convert("* one\n* two");
+        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    }
+
+    #[test]
+    fn block_title_and_roles_appear_on_wrapper() {
+        let html = convert(".A caption\n[.lead]\nParagraph text.");
+        assert!(html.contains("<div class=\"paragraph lead\">"));
+        assert!(html.contains("<div class=\"title\">A caption</div>"));
+    }
+}
