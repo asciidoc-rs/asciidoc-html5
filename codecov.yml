@@ -7,12 +7,6 @@ comment:
   layout: "header, diff, flags, components"
 
 ignore:
-  # Non-normative parts of the AsciiDoc language spec: navigation, examples, and
-  # partials. These carry no rules to verify, so they're excluded from spec
-  # coverage.
-  - "ref/asciidoc-lang/docs/modules/*/nav*.adoc"
-  - "ref/asciidoc-lang/docs/modules/*/examples/**"
-  - "ref/asciidoc-lang/docs/modules/*/partials/**"
   # Spec-coverage tooling.
   - "sdd/**"
 
@@ -34,8 +28,11 @@ component_management:
 
     - component_id: spec
       name: AsciiDoc spec coverage
+      # Only the normative page content of each module. Navigation, examples,
+      # and partials are non-normative and are not emitted into the coverage
+      # report (see sdd/src/main.rs).
       paths:
-        - "ref/asciidoc-lang/**/*.adoc"
+        - "ref/asciidoc-lang/docs/modules/**/pages/**/*.adoc"
 
     - component_id: asciidoctor
       name: Asciidoctor test coverage
