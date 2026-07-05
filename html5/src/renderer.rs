@@ -152,11 +152,16 @@ impl Renderer {
                     } else {
                         (index + 1).to_string()
                     };
+                    // Author name and email arrive unsubstituted from the
+                    // parser (unlike the revision fields, which are already
+                    // escaped), so we escape them ourselves before placing them
+                    // in text and in the `mailto:` href.
                     self.line(&format!(
                         "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        author.name()
+                        escape_attribute(author.name())
                     ));
                     if let Some(email) = author.email() {
+                        let email = escape_attribute(email);
                         self.line(&format!(
                             "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
                         ));
@@ -264,9 +269,12 @@ impl Renderer {
         let title = section.section_title();
 
         if section.section_type() == SectionType::Discrete {
+            // Asciidoctor renders a discrete heading as a bare `<hN>` carrying
+            // the `discrete` class plus any roles, e.g. `class="discrete role"`.
             self.line(&format!(
-                "<h{heading_level}{}>{title}</h{heading_level}>",
-                id_attribute(id)
+                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                id_attribute(id),
+                class_attribute("discrete", &block.roles())
             ));
             return;
         }
@@ -343,10 +351,11 @@ mod tests {
     fn content(html: &str) -> String {
         let start = html.find("<div id=\"content\">").expect("content div")
             + "<div id=\"content\">\n".len();
+        // Fall back to the end of the string when there is no footer (e.g. a
+        // `:nofooter:` document), so this helper never panics.
         let end = html[start..]
             .find("<div id=\"footer\">")
-            .expect("footer div")
-            + start;
+            .map_or(html.len(), |offset| start + offset);
         html[start..end].trim_end().to_string()
     }
 
@@ -448,5 +457,31 @@ mod tests {
     fn nofooter_suppresses_the_footer() {
         let html = convert("= Doc\n:nofooter:\n\nBody.");
         assert!(!html.contains("<div id=\"footer\">"));
+    }
+
+    #[test]
+    fn author_name_and_email_are_escaped() {
+        // The parser hands these back unsubstituted, so the renderer must escape
+        // them itself — otherwise a `"` would break out of the `href`.
+        let html = convert("= Doc\nBen & Jerry <a\"b@example.com>\n\nBody.");
+        assert!(html.contains("<span id=\"author\" class=\"author\">Ben &amp; Jerry</span>"));
+        assert!(html.contains(
+            "<span id=\"email\" class=\"email\"><a href=\"mailto:a&quot;b@example.com\">a&quot;b@example.com</a></span>"
+        ));
+    }
+
+    #[test]
+    fn discrete_heading_carries_discrete_class_and_roles() {
+        let html = convert("= Doc\n\n[.independent]\n[discrete]\n== Free Heading");
+        assert!(content(&html)
+            .contains("<h2 id=\"_free_heading\" class=\"discrete independent\">Free Heading</h2>"));
+    }
+
+    #[test]
+    fn content_helper_tolerates_a_missing_footer() {
+        // Exercises the `content()` fallback: a `:nofooter:` document has no
+        // footer div for the helper to anchor its end on.
+        let body = content(&convert("= Doc\n:nofooter:\n\nBody."));
+        assert!(body.contains("<div class=\"paragraph\">\n<p>Body.</p>\n</div>"));
     }
 }

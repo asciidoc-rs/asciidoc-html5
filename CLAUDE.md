@@ -32,6 +32,11 @@ true`. Bump versions and dependency versions in the root `Cargo.toml`.
   `asciidoc-parser`).
 - **Compatibility target:** the renderer aims for output compatible with
   Asciidoctor's default `html5` backend.
+- **Output parity is measured against Asciidoctor 2.0.26** (the version pinned
+  in [`ref/asciidoctor`](ref/asciidoctor)). Its output is the definitive oracle:
+  when this crate's output differs, treat Asciidoctor as correct and match it —
+  unless the divergence is explicitly documented as a known limitation of this
+  crate or of `asciidoc-parser`.
 
 ## Before every commit
 
