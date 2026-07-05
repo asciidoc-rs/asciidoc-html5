@@ -18,12 +18,25 @@
 //! println!("{html}");
 //! ```
 //!
+//! To convert an AsciiDoc file on disk, use [`convert_file`]:
+//!
+//! ```no_run
+//! let html = asciidoc_html5::convert_file("document.adoc")?;
+//! println!("{html}");
+//! # Ok::<(), std::io::Error>(())
+//! ```
+//!
 //! [Asciidoctor]: https://asciidoctor.org
+
+use std::{fs, io, path::Path};
 
 use asciidoc_parser::{Document, Parser};
 
 mod html;
 mod renderer;
+
+#[cfg(test)]
+mod tests;
 
 /// Parses `source` as AsciiDoc and renders it to a complete HTML5 document.
 ///
@@ -36,6 +49,31 @@ mod renderer;
 pub fn convert(source: &str) -> String {
     let document = Parser::default().parse(source);
     convert_document(&document)
+}
+
+/// Reads the AsciiDoc file at `path` and renders it to a complete HTML5
+/// document.
+///
+/// This is the file-based counterpart to [`convert`]: it reads `path` as UTF-8
+/// and hands the contents to [`convert`]. It is the simplest way to turn an
+/// AsciiDoc file on disk into a full HTML5 document, mirroring Asciidoctor's
+/// `convert_file`.
+///
+/// # Errors
+///
+/// Returns the [`io::Error`] from reading `path` — for example, when the file
+/// does not exist or does not contain valid UTF-8.
+///
+/// # Examples
+///
+/// ```no_run
+/// let html = asciidoc_html5::convert_file("document.adoc")?;
+/// println!("{html}");
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn convert_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
+    let source = fs::read_to_string(path)?;
+    Ok(convert(&source))
 }
 
 /// Renders an already-parsed [`Document`] to a complete HTML5 document.

@@ -36,6 +36,8 @@ println!("{html}");
 
 - `convert(source: &str) -> String` — parse AsciiDoc source with a default
   parser and render it to a complete HTML5 document.
+- `convert_file(path) -> io::Result<String>` — read an AsciiDoc file from disk
+  and render it, the file-based counterpart to `convert`.
 - `convert_document(document: &Document) -> String` — render an already-parsed
   `Document`, for callers that want to inspect or transform it first.
 
