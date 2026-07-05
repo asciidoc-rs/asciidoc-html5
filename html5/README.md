@@ -45,6 +45,9 @@ The plan is byte-for-byte parity with Asciidoctor's `html5` backend for the
 constructs that are supported, filled in incrementally. See the crate-level
 documentation for the running list of what the renderer aims to emit.
 
+This crate renders HTML5 only. Asciidoctor's other backends are out of scope;
+in particular, **DocBook support is not planned.**
+
 ## Why this exists
 
 See the [workspace README](../README.md) for the motivation and the projects
