@@ -354,8 +354,8 @@ jobs:
 
       # The `sdd` tool reads the spec markers in each crate's test module and the
       # spec sources under `ref` (the AsciiDoc language description and the
-      # Asciidoctor reference tests), emitting a Codecov-compatible report. Until
-      # tests carry spec markers, this is zero coverage.
+      # Asciidoctor reference tests) plus this crate's own documentation pages
+      # under `docs`, emitting a Codecov-compatible report.
       - name: Generate spec coverage
         run: cd sdd && cargo run > spec-coverage.json
 
