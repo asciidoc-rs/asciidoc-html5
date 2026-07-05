@@ -103,7 +103,7 @@ Asciidoctor derives the name of the output file from the name of the input docum
 
     assert!(stdout.is_empty(), "adoc wrote to stdout on success");
     // The output landed in the derived `.html` file, not anywhere else.
-    assert_eq!(derived, path.with_extension("html"));
+    assert!(derived.exists(), "adoc did not create the derived output file");
     let html = std::fs::read_to_string(&derived).expect("read derived output file");
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&derived);
