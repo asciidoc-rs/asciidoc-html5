@@ -1,0 +1,27 @@
+= AsciiDoc HTML5
+
+`asciidoc-html5` is a Rust HTML5 renderer for
+https://asciidoc.org[AsciiDoc], built on the
+https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] crate and aiming
+for output compatible with https://asciidoctor.org[Asciidoctor]'s default
+`html5` backend.
+
+[NOTE]
+====
+This documentation is a placeholder. It exists so that content can be
+previewed locally with https://antora.org[Antora] while the real
+documentation suite is written. In time these pages will become part of a
+larger `asciidoc.rs` site.
+====
+
+== Building this site locally
+
+You need https://nodejs.org[Node.js] installed. From the repository root:
+
+[source,sh]
+----
+npm install
+npm run docs
+----
+
+Then open `build/site/index.html` in your browser.
