@@ -1,8 +1,6 @@
-use std::fs;
+use clap::Parser as _;
 
-use asciidoc_parser::Parser;
-
-use crate::{convert, convert_document, convert_file, tests::sdd::*};
+use crate::{run, tests::sdd::*, Cli};
 
 track_file!("docs/modules/ROOT/pages/index.adoc");
 
@@ -56,44 +54,44 @@ table gives you an idea of how to use these interfaces.
 ^|CLI ^|API
 
 a|
- $ adoc document.adoc
-
-a|
 "#
 );
 
-// The API cell of the "Basic usage" table: the file-based `convert_file`.
+// The CLI cell of the "Basic usage" table: `adoc document.adoc`.
 #[test]
-fn basic_usage_convert_file_renders_a_file() {
+fn basic_usage_converts_a_document_file() {
     verifies!(
         r#"
+ $ adoc document.adoc
+"#
+    );
+
+    // Drive the exact command shown on the page — `adoc document.adoc` — and
+    // check that a complete HTML5 document is written to standard output.
+    let source = "= Hello\n\nWorld.";
+    let path = std::env::temp_dir().join(format!("adoc-introduction-{}.adoc", std::process::id()));
+    std::fs::write(&path, source).expect("write temp input");
+
+    let cli = Cli::parse_from(["adoc", path.to_str().expect("temp path is UTF-8")]);
+    let mut stdout = Vec::new();
+    run(&cli, &mut stdout).expect("adoc converts the file");
+    let _ = std::fs::remove_file(&path);
+
+    let html = String::from_utf8(stdout).expect("stdout is UTF-8");
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(html.contains("<title>Hello</title>"));
+    assert!(html.contains("<p>World.</p>"));
+}
+
+non_normative!(
+    r#"
+
+a|
 [,rust]
 ----
 let html =
     asciidoc_html5::convert_file("document.adoc")?;
 ----
-"#
-    );
-
-    // `convert_file` reads the document from disk and renders it exactly as
-    // `convert` would.
-    let source = "= Hello\n\nWorld.";
-    let path = std::env::temp_dir().join(format!(
-        "asciidoc-html5-introduction-convert-file-{}.adoc",
-        std::process::id()
-    ));
-    fs::write(&path, source).expect("write temp input");
-
-    let html = convert_file(&path).expect("convert_file reads and renders");
-    let _ = fs::remove_file(&path);
-
-    assert_eq!(html, convert(source));
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
-}
-
-non_normative!(
-    r#"
 
 |Reads `document.adoc` and writes the rendered HTML5 to standard output.
 |Reads `document.adoc` and returns the rendered HTML5 as a `String`.
@@ -104,7 +102,31 @@ gives you back a complete HTML5 document you can publish.
 
 Pass `--help` to the CLI to see every option:
 
+"#
+);
+
+// The `adoc --help` invocation shown under "Basic usage".
+#[test]
+fn help_lists_usage_examples() {
+    verifies!(
+        r#"
  $ adoc --help
+"#
+    );
+
+    // `adoc --help` renders the long help. clap reports a help request as a
+    // `DisplayHelp` "error" whose message is the rendered help text, which must
+    // carry the usage examples wired up on the command.
+    let err = Cli::try_parse_from(["adoc", "--help"]).expect_err("--help displays help");
+    assert_eq!(err.kind(), clap::error::ErrorKind::DisplayHelp);
+
+    let help = err.to_string();
+    assert!(help.contains("Examples:"));
+    assert!(help.contains("adoc document.adoc"));
+}
+
+non_normative!(
+    r#"
 
 == API examples
 
@@ -115,64 +137,19 @@ Each returns a complete, standalone HTML5 document.
 
 Convert AsciiDoc held in memory with `convert`:
 
-"#
-);
-
-// The first "API examples" listing: `convert` on in-memory AsciiDoc.
-#[test]
-fn convert_renders_in_memory_asciidoc() {
-    verifies!(
-        r#"
 [,rust]
 ----
 let html = asciidoc_html5::convert("= Hello\n\nWorld.");
 ----
-"#
-    );
-
-    // `convert` renders in-memory AsciiDoc to a complete HTML5 document.
-    let html = convert("= Hello\n\nWorld.");
-
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
-    assert!(html.contains("<div class=\"paragraph\">\n<p>World.</p>\n</div>"));
-    assert!(html.trim_end().ends_with("</body>\n</html>"));
-}
-
-non_normative!(
-    r#"
 
 If you already hold a parsed document — for example, to inspect or transform it
 first — render it with `convert_document`:
 
-"#
-);
-
-// The second "API examples" listing: `convert_document` on a parsed document.
-#[test]
-fn convert_document_renders_a_parsed_document() {
-    verifies!(
-        r#"
 [,rust]
 ----
 let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
 let html = asciidoc_html5::convert_document(&doc);
 ----
-"#
-    );
-
-    // `convert_document` renders a document that was parsed separately, giving
-    // the same result as `convert` of the same source.
-    let source = "= Hello\n\nWorld.";
-    let doc = Parser::default().parse(source);
-    let html = convert_document(&doc);
-
-    assert_eq!(html, convert(source));
-    assert!(html.contains("<title>Hello</title>"));
-}
-
-non_normative!(
-    r#"
 
 == Relationship to AsciiDoc and Asciidoctor
 

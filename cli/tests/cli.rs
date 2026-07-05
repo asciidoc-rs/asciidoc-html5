@@ -32,6 +32,26 @@ fn converts_a_file_and_writes_html_to_stdout() {
     assert!(html.contains("<p>World.</p>"));
 }
 
+/// Runs `adoc --help` and checks the enriched help lists the usage examples.
+#[test]
+fn help_shows_usage_examples() {
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("--help")
+        .output()
+        .expect("run the adoc binary");
+
+    assert!(
+        output.status.success(),
+        "adoc --help exited with {}",
+        output.status
+    );
+
+    let help = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    assert!(help.contains("Examples:"));
+    assert!(help.contains("adoc document.adoc -o out.html"));
+    assert!(help.contains("read from standard input") || help.contains("standard input"));
+}
+
 /// Runs `adoc <input> -o <output>` and checks the HTML5 lands in the file.
 #[test]
 fn writes_html_to_the_output_file() {
