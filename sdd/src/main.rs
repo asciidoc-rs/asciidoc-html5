@@ -36,7 +36,13 @@ fn main() {
         for entry in collect_files(root, ".rs") {
             let path = entry.path();
             if let Some((spec_path, cov)) = parse_rs_file(path) {
-                spec_coverage.insert(spec_path, cov);
+                // The same spec file may be tracked from more than one test file
+                // (for example, covered from both workspace crates). Merge rather
+                // than overwrite, so no crate's coverage is silently dropped.
+                spec_coverage
+                    .entry(spec_path)
+                    .and_modify(|existing| *existing = merge_coverage(existing, &cov))
+                    .or_insert(cov);
             }
         }
     }
@@ -48,7 +54,9 @@ fn main() {
         spec_files.extend(collect_files(root, extension));
     }
 
-    let last_index = spec_files.len() - 1;
+    // `saturating_sub` guards the empty case (e.g. `ref/` not present): the loop
+    // below then simply doesn't run, emitting a valid empty coverage object.
+    let last_index = spec_files.len().saturating_sub(1);
 
     for (count, entry) in spec_files.into_iter().enumerate() {
         let path = entry.path().to_str().unwrap().trim_start_matches("../");
@@ -100,6 +108,27 @@ fn collect_files(root: &str, extension: &str) -> Vec<DirEntry> {
             }
         })
         .collect()
+}
+
+// Combine coverage recorded for the same spec file by more than one test file.
+// The two sequences reproduce the same spec file line for line, so we align them
+// by position and treat a line as covered if *any* contributing test verifies it
+// (logical OR of the per-line "verified" flags). If one sequence is shorter, the
+// remaining entries from the longer one are kept as-is.
+fn merge_coverage(a: &[(String, bool)], b: &[(String, bool)]) -> Vec<(String, bool)> {
+    let mut merged = Vec::with_capacity(a.len().max(b.len()));
+
+    for i in 0..a.len().max(b.len()) {
+        match (a.get(i), b.get(i)) {
+            (Some((line, verified_a)), Some((_, verified_b))) => {
+                merged.push((line.clone(), *verified_a || *verified_b));
+            }
+            (Some(entry), None) | (None, Some(entry)) => merged.push(entry.clone()),
+            (None, None) => unreachable!(),
+        }
+    }
+
+    merged
 }
 
 fn parse_rs_file(path: &Path) -> Option<(String, Vec<(String, bool)>)> {
