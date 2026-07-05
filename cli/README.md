@@ -43,6 +43,9 @@ cat input.adoc | adoc         # read from stdin
 | `input`             | AsciiDoc input file. Omit (or pass `-`) to read stdin.  |
 | `-o`, `--output`    | Write output to this file instead of stdout.            |
 
+Run `adoc -h` for a short summary or `adoc --help` for the full description,
+including per-argument details and usage examples.
+
 To run from a checkout of the workspace:
 
 ```sh

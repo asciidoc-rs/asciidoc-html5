@@ -24,16 +24,17 @@ const TEST_ROOTS: &[&str] = &["../html5/src/tests", "../cli/src/tests"];
 // Spec sources whose lines we measure coverage against, as `(root, extension,
 // within)` triples: the normative documentation prose (`.adoc`) of both the
 // AsciiDoc language description and Asciidoctor, plus the Asciidoctor reference
-// test suite (`.rb`) this renderer is validated against.
+// test suite (`.rb`) this renderer is validated against. This crate's own
+// documentation pages (`../docs`) are included too, so that everything the
+// docs advertise is either tracked as non-normative or verified by a test.
 //
 // `within`, when `Some`, restricts a source to files whose path contains that
-// segment. For the documentation sources we measure only the normative page
-// content under each module's `pages/` directory; navigation, examples, and
-// partials are non-normative and carry no rules to verify, so they're excluded
-// here rather than relying on downstream Codecov `ignore` globs. The
-// Asciidoctor `.rb` source is scoped to `test/` for the same reason: the only
-// other `.rb` files live under `docs/.../examples/` and are non-normative
-// example scripts.
+// segment. For the documentation sources we measure only the page content under
+// each module's `pages/` directory; navigation, examples, and partials carry no
+// rules to verify, so they're excluded here rather than relying on downstream
+// Codecov `ignore` globs. The Asciidoctor `.rb` source is scoped to `test/` for
+// the same reason: the only other `.rb` files live under `docs/.../examples/`
+// and are non-normative example scripts.
 const SPEC_SOURCES: &[(&str, &str, Option<&str>)] = &[
     (
         "../ref/asciidoc-lang/docs/modules",
@@ -42,6 +43,7 @@ const SPEC_SOURCES: &[(&str, &str, Option<&str>)] = &[
     ),
     ("../ref/asciidoctor/docs/modules", ".adoc", Some("/pages/")),
     ("../ref/asciidoctor/test", ".rb", None),
+    ("../docs/modules", ".adoc", Some("/pages/")),
 ];
 
 fn main() {

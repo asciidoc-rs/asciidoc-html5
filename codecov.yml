@@ -43,3 +43,12 @@ component_management:
       paths:
         - "ref/asciidoctor/docs/modules/**/pages/**/*.adoc"
         - "ref/asciidoctor/test/**/*.rb"
+
+    - component_id: crate-docs
+      name: Crate documentation coverage
+      # This crate's own Antora documentation pages. As with the reference
+      # sources, only the page content is measured; navigation and partials are
+      # excluded by the sdd tool (see sdd/src/main.rs). These pages are
+      # descriptive and are tracked as non-normative.
+      paths:
+        - "docs/modules/**/pages/**/*.adoc"
