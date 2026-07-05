@@ -30,9 +30,10 @@ const TEST_ROOTS: &[&str] = &["../html5/src/tests", "../cli/src/tests"];
 // segment. For the documentation sources we measure only the normative page
 // content under each module's `pages/` directory; navigation, examples, and
 // partials are non-normative and carry no rules to verify, so they're excluded
-// here rather than relying on downstream Codecov `ignore` globs. The Asciidoctor
-// `.rb` source is scoped to `test/` for the same reason: the only other `.rb`
-// files live under `docs/.../examples/` and are non-normative example scripts.
+// here rather than relying on downstream Codecov `ignore` globs. The
+// Asciidoctor `.rb` source is scoped to `test/` for the same reason: the only
+// other `.rb` files live under `docs/.../examples/` and are non-normative
+// example scripts.
 const SPEC_SOURCES: &[(&str, &str, Option<&str>)] = &[
     (
         "../ref/asciidoc-lang/docs/modules",
