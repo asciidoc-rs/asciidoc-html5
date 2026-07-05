@@ -9,6 +9,9 @@ command. Reads AsciiDoc from a file (or standard input) and writes HTML5 that
 aims to be compatible with [Asciidoctor](https://asciidoctor.org)'s default
 `html5` backend.
 
+`adoc` produces HTML5 only. Asciidoctor's other backends are out of scope; in
+particular, **DocBook support is not planned.**
+
 This is the **binary** crate of the
 [`asciidoc-html5` workspace](https://github.com/asciidoc-rs/asciidoc-html5). It
 is a thin front end over the [`asciidoc-html5`](../html5/) library: read

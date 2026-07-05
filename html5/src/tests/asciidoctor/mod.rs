@@ -8,5 +8,6 @@
 //! closest available API, and the rest — prose that describes rather than
 //! specifies — is tracked as non-normative.
 
+mod docbook_backend;
 mod index;
 mod whats_new;

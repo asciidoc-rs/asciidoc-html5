@@ -11,6 +11,8 @@ A Rust HTML5 renderer for [AsciiDoc](https://asciidoc.org), built on the [`ascii
 
 As of July 2026, this project is in its infancy and should not be expected to be meaningfully useful. I am building this based on [`asciidoc-parser`](https://github.com/asciidoc-rs/asciidoc-parser), which is largely feature-complete. 
 
+This project targets HTML5 output only. Asciidoctor's other backends are out of scope; in particular, **DocBook support is not planned.** If you need to generate DocBook from AsciiDoc, use [Asciidoctor](https://asciidoctor.org) itself.
+
 ## Why do this?
 
 Most of all this is a fun project that exercises different architectural and project design skills from my [day job](https://opensource.contentauthenticity.org). As part of that work, I write [technical standards for the Creator Assertions Working Group](https://cawg.io/specs/) in Asciidoc and [Antora](https://antora.org).
