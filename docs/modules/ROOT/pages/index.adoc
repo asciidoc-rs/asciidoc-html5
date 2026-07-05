@@ -10,8 +10,10 @@ backend.
 
 [NOTE]
 ====
-This page is descriptive documentation, not a specification: its content is
-non-normative. The normative rules this renderer follows come from the AsciiDoc
+The descriptions on this page are non-normative documentation. The command-line
+and API invocations it shows, on the other hand, are normative: they are
+verified against the implementation, so the documented behavior is guaranteed.
+The rules governing the AsciiDoc the renderer accepts come from the AsciiDoc
 language and from Asciidoctor, whose `html5` backend is the compatibility oracle
 for this crate.
 ====
@@ -58,9 +60,34 @@ let html =
 |===
 
 In the simplest case, you give an AsciiDoc document to `asciidoc-html5` and it
-gives you back a complete HTML5 document you can publish. To render AsciiDoc you
-already hold in memory, pass it to `asciidoc_html5::convert` instead of reading
-from a file.
+gives you back a complete HTML5 document you can publish.
+
+Pass `--help` to the CLI to see every option:
+
+ $ adoc --help
+
+== API examples
+
+The Rust API exposes three entry points. The file-based `convert_file` shown
+above is the most common. The other two are `convert`, for AsciiDoc you already
+hold in memory, and `convert_document`, for a document you have already parsed.
+Each returns a complete, standalone HTML5 document.
+
+Convert AsciiDoc held in memory with `convert`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert("= Hello\n\nWorld.");
+----
+
+If you already hold a parsed document — for example, to inspect or transform it
+first — render it with `convert_document`:
+
+[,rust]
+----
+let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
+let html = asciidoc_html5::convert_document(&doc);
+----
 
 == Relationship to AsciiDoc and Asciidoctor
 
