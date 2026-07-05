@@ -19,10 +19,11 @@
 //!
 //! This is a *baseline*: the constructs wired up below (the document skeleton,
 //! header, paragraphs, sections, the preamble, verbatim blocks, and thematic
-//! breaks) exercise every mechanism the full renderer needs. Everything else
-//! falls through [`Renderer::unsupported`], which emits a visible HTML comment
-//! rather than guessing — so output stays well-formed and coverage gaps are
-//! obvious. Adding a construct means adding one arm and one `render_*` method.
+//! and page breaks) exercise every mechanism the full renderer needs.
+//! Everything else falls through [`Renderer::unsupported`], which emits a
+//! visible HTML comment rather than guessing — so output stays well-formed and
+//! coverage gaps are obvious. Adding a construct means adding one arm and one
+//! `render_*` method.
 
 use std::slice::Iter;
 

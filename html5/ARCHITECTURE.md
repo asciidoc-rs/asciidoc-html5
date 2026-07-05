@@ -69,7 +69,7 @@ render_document(&Document) -> String
               ├── Simple  → paragraph() | verbatim()
               ├── Section → section()   → recurses via blocks(nested_blocks())
               ├── Preamble→ preamble()  → recurses
-              ├── Break   → thematic_break()
+              ├── Break   → break_block()
               ├── RawDelimited → verbatim() (by resolved_context)
               └── _       → unsupported()  (visible HTML comment)
 ```
@@ -121,7 +121,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ⬜ |
-| `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ⬜ |
+| `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |
 | `Block::DocumentAttribute` | `attribute` | *(no output; updates attribute state)* | ⬜ |
 
 Every wrapper additionally carries the block's `id` and roles when present (see
@@ -218,10 +218,11 @@ doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
 ## Roadmap
 
 1. **Baseline (done):** skeleton, header, paragraphs, sections, preamble,
-   verbatim blocks, thematic breaks, the dispatch/recursion machinery, and the
-   attribute-driven skeleton (`lang`, `doctype`, `notitle`/`noheader`/`nofooter`).
+   verbatim blocks, thematic and page breaks, the dispatch/recursion machinery,
+   and the attribute-driven skeleton (`lang`, `doctype`,
+   `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** lists (un/ordered/description/callout), the delimited
-   example/sidebar/open blocks, admonitions, quotes/verses, images, page breaks.
+   example/sidebar/open blocks, admonitions, quotes/verses, images.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`), the full
    `<body class>` (TOC classes), TOC, footnotes, the default stylesheet.

@@ -59,6 +59,6 @@ cat input.adoc | cargo run --bin adoc         # read from stdin
 
 > Note: the renderer is at an early **baseline** — it renders the document
 > skeleton, header, paragraphs, sections, the preamble, verbatim blocks, and
-> thematic breaks; other constructs emit a visible `<!-- unsupported … -->`
+> thematic and page breaks; other constructs emit a visible `<!-- unsupported … -->`
 > comment for now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the
 > design and roadmap.

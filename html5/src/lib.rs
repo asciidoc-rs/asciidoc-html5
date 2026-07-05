@@ -64,11 +64,11 @@ pub fn convert(source: &str) -> String {
 ///
 /// This is an early baseline. It renders the document skeleton, the header, and
 /// paragraphs, sections, the preamble, verbatim (listing/literal) blocks, and
-/// thematic breaks. Constructs that are not yet wired up (lists, tables,
-/// admonitions, quotes, images, and the delimited example/sidebar/open blocks)
-/// emit a visible `<!-- asciidoc-html5: unsupported … -->` comment so the
-/// output stays well-formed and the gaps are easy to see. The aim, as coverage
-/// grows, is parity with Asciidoctor's `html5` backend.
+/// thematic and page breaks. Constructs that are not yet wired up (lists,
+/// tables, admonitions, quotes, images, and the delimited example/sidebar/open
+/// blocks) emit a visible `<!-- asciidoc-html5: unsupported … -->` comment so
+/// the output stays well-formed and the gaps are easy to see. The aim, as
+/// coverage grows, is parity with Asciidoctor's `html5` backend.
 ///
 /// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
