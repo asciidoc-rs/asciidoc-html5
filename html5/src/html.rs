@@ -57,3 +57,34 @@ pub(crate) fn class_attribute(base: &str, roles: &[&str]) -> String {
 
     format!(" class=\"{classes}\"")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{class_attribute, escape_attribute, id_attribute};
+
+    #[test]
+    fn escape_attribute_escapes_markup_characters() {
+        assert_eq!(
+            escape_attribute("a & b < c > d \" e"),
+            "a &amp; b &lt; c &gt; d &quot; e"
+        );
+        assert_eq!(escape_attribute("plain"), "plain");
+    }
+
+    #[test]
+    fn id_attribute_formats_present_and_absent() {
+        assert_eq!(id_attribute(Some("goals")), " id=\"goals\"");
+        assert_eq!(id_attribute(None), "");
+    }
+
+    #[test]
+    fn class_attribute_combines_base_and_roles() {
+        assert_eq!(class_attribute("paragraph", &[]), " class=\"paragraph\"");
+        assert_eq!(
+            class_attribute("paragraph", &["lead", "big"]),
+            " class=\"paragraph lead big\""
+        );
+        assert_eq!(class_attribute("", &["only"]), " class=\"only\"");
+        assert_eq!(class_attribute("", &[]), "");
+    }
+}

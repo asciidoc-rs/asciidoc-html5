@@ -27,7 +27,7 @@
 use std::slice::Iter;
 
 use asciidoc_parser::{
-    blocks::{Block, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
+    blocks::{Block, Break, BreakType, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
     document::{Header, InterpretedValue},
     Document,
 };
@@ -124,20 +124,20 @@ impl Renderer {
         // A standalone document shows its doctitle as the header `<h1>` by
         // default; the `notitle` attribute suppresses it. (`noheader`, which
         // drops the whole header, is handled by the caller.)
-        let has_title = document.doctitle().is_some() && !document.is_attribute_set("notitle");
+        let title = document
+            .doctitle()
+            .filter(|_| !document.is_attribute_set("notitle"));
         let author_line = header.author_line();
         let revision_line = header.revision_line();
 
-        if !has_title && author_line.is_none() && revision_line.is_none() {
+        if title.is_none() && author_line.is_none() && revision_line.is_none() {
             return;
         }
 
         self.line("<div id=\"header\">");
 
-        if has_title {
-            if let Some(title) = document.doctitle() {
-                self.line(&format!("<h1>{title}</h1>"));
-            }
+        if let Some(title) = title {
+            self.line(&format!("<h1>{title}</h1>"));
         }
 
         let has_details =
@@ -218,7 +218,7 @@ impl Renderer {
             },
             Block::Section(section) => self.section(block, section),
             Block::Preamble(_) => self.preamble(block),
-            Block::Break(_) => self.thematic_break(),
+            Block::Break(brk) => self.break_block(brk),
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
@@ -310,9 +310,13 @@ impl Renderer {
         self.line("</div>");
     }
 
-    /// A thematic break: `<hr>`.
-    fn thematic_break(&mut self) {
-        self.line("<hr>");
+    /// A break: `<hr>` for a thematic break, or Asciidoctor's page-break
+    /// `<div>` for a page break.
+    fn break_block(&mut self, brk: &Break<'_>) {
+        match brk.type_() {
+            BreakType::Thematic => self.line("<hr>"),
+            BreakType::Page => self.line("<div style=\"page-break-after: always;\"></div>"),
+        }
     }
 
     /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
@@ -483,5 +487,65 @@ mod tests {
         // footer div for the helper to anchor its end on.
         let body = content(&convert("= Doc\n:nofooter:\n\nBody."));
         assert!(body.contains("<div class=\"paragraph\">\n<p>Body.</p>\n</div>"));
+    }
+
+    #[test]
+    fn multiple_authors_are_numbered() {
+        // The first author has no email; the second does. Only the second
+        // carries a numbered suffix.
+        let html = convert("= Doc\nJane Doe; John Roe <john@y.com>\n\nBody.");
+        assert!(html.contains("<span id=\"author\" class=\"author\">Jane Doe</span>"));
+        assert!(html.contains("<span id=\"author2\" class=\"author\">John Roe</span>"));
+        assert!(html.contains(
+            "<span id=\"email2\" class=\"email\"><a href=\"mailto:john@y.com\">john@y.com</a></span>"
+        ));
+        assert!(!html.contains("id=\"email\""));
+    }
+
+    #[test]
+    fn revision_line_renders_number_date_and_remark() {
+        let html = convert("= Doc\nJane Doe\nv2.0, 2026-01-01: Initial\n\nBody.");
+        assert!(html.contains("<span id=\"revnumber\">version 2.0,</span>"));
+        assert!(html.contains("<span id=\"revdate\">2026-01-01</span>"));
+        assert!(html.contains("<br><span id=\"revremark\">Initial</span>"));
+    }
+
+    #[test]
+    fn revision_number_without_date_omits_the_comma_and_date() {
+        let html = convert("= Doc\nJane Doe\nv2.0\n\nBody.");
+        assert!(html.contains("<span id=\"revnumber\">version 2.0</span>"));
+        assert!(!html.contains("id=\"revdate\""));
+    }
+
+    #[test]
+    fn literal_style_paragraph_renders_a_literalblock() {
+        let html = convert("[literal]\n<lit> & co");
+        assert!(html.contains(
+            "<div class=\"literalblock\">\n<div class=\"content\">\n<pre>&lt;lit&gt; &amp; co</pre>"
+        ));
+    }
+
+    #[test]
+    fn delimited_listing_and_literal_blocks_render() {
+        let listing = convert("----\ncode &<\n----");
+        assert!(listing.contains(
+            "<div class=\"listingblock\">\n<div class=\"content\">\n<pre>code &amp;&lt;</pre>"
+        ));
+        let literal = convert("....\nlit &<\n....");
+        assert!(literal.contains(
+            "<div class=\"literalblock\">\n<div class=\"content\">\n<pre>lit &amp;&lt;</pre>"
+        ));
+    }
+
+    #[test]
+    fn delimited_passthrough_is_unsupported_for_now() {
+        let html = convert("++++\nraw\n++++");
+        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
+    }
+
+    #[test]
+    fn page_break_renders_a_page_break_div() {
+        let html = convert("before\n\n<<<\n\nafter");
+        assert!(content(&html).contains("<div style=\"page-break-after: always;\"></div>"));
     }
 }
