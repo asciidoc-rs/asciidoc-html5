@@ -26,10 +26,17 @@ true`. Bump versions and dependency versions in the root `Cargo.toml`.
   subject imperative and scoped, start the description with a capital letter,
   and omit the trailing period — CI enforces this on PR titles. For example,
   `feat(html5): Render section headings`.
+- **Comments:** put a blank line before a code comment (unless it is the first
+  line of its block), so the comment visually attaches to the code it precedes.
 - **Edition:** Rust 2021. **License:** `MIT OR Apache-2.0` (dual, matching
   `asciidoc-parser`).
 - **Compatibility target:** the renderer aims for output compatible with
   Asciidoctor's default `html5` backend.
+- **Output parity is measured against Asciidoctor 2.0.26** (the version pinned
+  in [`ref/asciidoctor`](ref/asciidoctor)). Its output is the definitive oracle:
+  when this crate's output differs, treat Asciidoctor as correct and match it —
+  unless the divergence is explicitly documented as a known limitation of this
+  crate or of `asciidoc-parser`.
 
 ## Before every commit
 
@@ -50,5 +57,8 @@ cargo run --bin adoc -- input.adoc -o out.html
 cat input.adoc | cargo run --bin adoc         # read from stdin
 ```
 
-> Note: the library converter is currently a `todo!()` stub, so running the CLI
-> against real input will panic until the renderer is implemented.
+> Note: the renderer is at an early **baseline** — it renders the document
+> skeleton, header, paragraphs, sections, the preamble, verbatim blocks, and
+> thematic and page breaks; other constructs emit a visible `<!-- unsupported … -->`
+> comment for now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the
+> design and roadmap.

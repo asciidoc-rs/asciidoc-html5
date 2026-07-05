@@ -22,6 +22,9 @@
 
 use asciidoc_parser::{Document, Parser};
 
+mod html;
+mod renderer;
+
 /// Parses `source` as AsciiDoc and renders it to a complete HTML5 document.
 ///
 /// This is the convenience entry point for callers that start from raw
@@ -42,28 +45,34 @@ pub fn convert(source: &str) -> String {
 /// generator metadata, and a `<body>` whose structure mirrors Asciidoctor's
 /// default `html5` backend.
 ///
-/// Intended behavior, to be filled in as the renderer is built out:
+/// The renderer walks the document in block order, wrapping the HTML fragments
+/// the parser has already produced (see the note on inline substitution below)
+/// in Asciidoctor's block-level scaffolding. The traversal is described in
+/// `src/renderer.rs` and in `ARCHITECTURE.md`.
 ///
-/// - Emit the same DOCTYPE, `lang`, and `<meta charset>` preamble Asciidoctor
-///   emits, along with the `<title>` drawn from the document header.
-/// - Render the document header as Asciidoctor does: a `<div id="header">`
-///   containing the `<h1>` title plus author, revision, and (when enabled)
-///   table-of-contents markup.
-/// - Walk the document's blocks in order, mapping each AsciiDoc block
-///   (paragraphs, sections, lists, delimited blocks, tables, admonitions,
-///   images, listings, and so on) to the corresponding Asciidoctor HTML shape,
-///   including the customary `id`, `class`, and role attributes.
-/// - Apply inline substitutions (quotes, replacements, macros, cross
-///   references, attribute references) so that inline formatting matches the
-///   parser's substitution model.
-/// - Close with the `<div id="footer">` and generator note that Asciidoctor
-///   appends, then the closing `</body></html>`.
+/// # Inline substitution is the parser's job
 ///
-/// The aim throughout is byte-for-byte parity with Asciidoctor's `html5`
-/// backend for the constructs that are supported.
+/// `asciidoc-parser` applies inline substitutions (quotes, replacements,
+/// macros, cross references, attribute references) *eagerly*, at parse time,
+/// through its default HTML [`InlineSubstitutionRenderer`]. Every block's
+/// [`rendered_content`] and [`title`] is therefore already an
+/// Asciidoctor-compatible inline HTML fragment. This crate does not
+/// re-implement inline formatting; it only assembles block structure around
+/// those fragments.
+///
+/// # Baseline coverage
+///
+/// This is an early baseline. It renders the document skeleton, the header, and
+/// paragraphs, sections, the preamble, verbatim (listing/literal) blocks, and
+/// thematic and page breaks. Constructs that are not yet wired up (lists,
+/// tables, admonitions, quotes, images, and the delimited example/sidebar/open
+/// blocks) emit a visible `<!-- asciidoc-html5: unsupported … -->` comment so
+/// the output stays well-formed and the gaps are easy to see. The aim, as
+/// coverage grows, is parity with Asciidoctor's `html5` backend.
+///
+/// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
+/// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
+/// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    // The renderer is not implemented yet. Silence the unused-parameter lint
-    // until the real conversion logic lands.
-    let _ = document;
-    todo!("render the parsed AsciiDoc document to Asciidoctor-compatible HTML5")
+    renderer::render_document(document)
 }
