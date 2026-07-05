@@ -177,16 +177,20 @@ revremark">`, matching the shapes asserted in
   preserved and no added surrounding whitespace, so the rendered text is
   byte-faithful.
 
-## Document attributes (a known limitation)
+## Document attributes
 
 Several skeleton decisions depend on document attributes — `lang`, `doctype`
 (→ `<body class>`), `sectnums`, `icons`, `source-highlighter`, `nofooter`,
-`notitle`/`noheader`, `docdatetime` (the footer's "Last updated" text). These are
-readable from the **`Parser`** (`Parser::attribute_value`) but **not** from a
-bare **`Document`**, which is what `convert_document` receives. Until the parser
-exposes document-level attribute access on `Document` (see below), the baseline
-uses Asciidoctor's defaults (`lang=en`, `article` doctype) and defers the footer
-timestamp. This is the top item in "Parser API gaps".
+`notitle`/`noheader`, `docdatetime` (the footer's "Last updated" text). As of
+`asciidoc-parser` 0.19 these are readable directly from a `Document` via
+[`Document::attribute_value`] / [`Document::has_attribute`] /
+[`Document::is_attribute_set`], so `convert_document(&Document)` is fully
+self-contained. The baseline reads `lang` and `doctype` from those accessors
+(defaulting to Asciidoctor's `en` / `article`) and gates the header, the doctitle
+`<h1>`, and the footer on `noheader` / `notitle` / `nofooter`. Two skeleton
+details remain deliberately deferred: the footer's "Last updated" text needs a
+caller-supplied `docdatetime`, and `<body class>` currently carries just the bare
+doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
 
 ## Cross references, footnotes, TOC (future)
 
@@ -214,61 +218,54 @@ timestamp. This is the top item in "Parser API gaps".
 ## Roadmap
 
 1. **Baseline (done):** skeleton, header, paragraphs, sections, preamble,
-   verbatim blocks, thematic breaks, and the dispatch/recursion machinery.
+   verbatim blocks, thematic breaks, the dispatch/recursion machinery, and the
+   attribute-driven skeleton (`lang`, `doctype`, `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** lists (un/ordered/description/callout), the delimited
    example/sidebar/open blocks, admonitions, quotes/verses, images, page breaks.
 3. **Tables** (their own content model).
-4. **Document chrome:** doctype/`lang`/body classes from attributes, footer
-   "Last updated", TOC, footnotes, the default stylesheet.
+4. **Document chrome:** footer "Last updated" (`docdatetime`), the full
+   `<body class>` (TOC classes), TOC, footnotes, the default stylesheet.
 5. **Parity hardening:** fixture-based diff tests against Asciidoctor output.
 
-## Parser API gaps (proposed upstream issues)
+## Parser API history (resolved in 0.19)
 
-Working through the baseline surfaced several places where the renderer reaches
-past what `asciidoc-parser` 0.18 comfortably exposes. These are filed upstream as
+Working through the baseline surfaced several places where the renderer reached
+past what `asciidoc-parser` 0.18 exposed. These were filed as
 [asciidoc-parser#620](https://github.com/asciidoc-rs/asciidoc-parser/issues/620)
-(items 1–2, the primary blocker) and
+(attribute access) and
 [asciidoc-parser#621](https://github.com/asciidoc-rs/asciidoc-parser/issues/621)
-(items 3–7, ergonomics):
+(ergonomics), and **all landed in `asciidoc-parser` 0.19**, which this crate now
+depends on:
 
-1. **Document-level attribute access.** `convert_document(&Document)` cannot read
-   resolved document attributes (`lang`, `doctype`, `sectnums`, `icons`,
-   `source-highlighter`, `nofooter`, `notitle`/`noheader`, `docdatetime`, …);
-   `attribute_value`/`is_attribute_set`/`has_attribute` live only on `Parser`.
-   Proposal: mirror those accessors on `Document` (the resolved attribute state
-   is already retained for header/toc resolution). *This is the biggest blocker
-   for a `Document`-based renderer.*
-2. **Standalone title visibility.** `Document::show_doctitle()` bakes in the
-   *embedded* default (hidden unless `showtitle`), so it returns `false` for an
-   ordinary standalone document that should show its `<h1>`. Proposal: expose the
-   raw `noheader`/`notitle` state (falls out of #1), or add a
-   context-aware/standalone accessor, and document the distinction.
-3. **Built-in context vocabulary.** Block dispatch is stringly-typed via
-   `resolved_context()`, but the canonical set of built-in context strings is
-   only in the `pub(crate)` `is_built_in_context`. Proposal: expose the
-   vocabulary (public constants or a `BuiltInContext` enum) so downstreams don't
-   hardcode it.
-4. **Section id on `Block`.** `Block::id()` deliberately omits a section's
-   auto-generated id; you must match `Block::Section(s)` and call `s.id()`. This
-   is a footgun. Proposal: either surface it through `Block::id()` or document
-   the asymmetry prominently.
-5. **Compound-block type accessors.** `CompoundDelimitedBlock` and `Preamble`
-   expose nothing beyond the trait, so example-vs-sidebar-vs-open is distinguished
-   only by string matching. Proposal: a small enum accessor.
-6. **Ordered-list start value.** `ListBlock` exposes `type_()` and
-   `marker_style()` but not an explicit numeric `start`, needed for
-   `<ol start="…">`. Proposal: expose the resolved start.
-7. **Catalog enumeration.** `Catalog` offers point lookups but its `ids()` /
-   `entries()` iterators are commented out, so a multi-document pipeline can't
-   enumerate all anchors/sections without re-walking the tree. Proposal: expose
-   read-only iterators.
+1. **Document-level attribute access** — [`Document::attribute_value`] /
+   [`Document::has_attribute`] / [`Document::is_attribute_set`] make
+   `convert_document(&Document)` self-contained (`lang`, `doctype`,
+   `notitle`/`noheader`/`nofooter`, `sectnums`, …). `Document::show_doctitle()`,
+   which baked in the embedded default, was removed in favor of reading the raw
+   `notitle`/`noheader` state.
+2. **Built-in context vocabulary** — the [`BuiltInContext`] enum (with `ALL` /
+   `from_str` / `as_str`) replaces string-matching against the private
+   `is_built_in_context`.
+3. **Section id on `Block`** — [`IsBlock::id`] now delegates to the `SectionBlock`
+   (and `MediaBlock`) override, so `block.id()` returns a section's
+   auto-generated id.
+4. **Compound-block type accessor** — `CompoundDelimitedBlock::context_kind()`
+   returns a typed `CompoundDelimitedContext` (Example / Open / Sidebar).
+5. **Ordered-list start value** — `ListBlock::start() -> Option<i64>` for
+   `<ol start="…">`.
+6. **Catalog enumeration** — `Catalog::ids()` / `Catalog::entries()` expose
+   read-only iterators for building a multi-document cross-reference index.
 
 [`convert`]: crate::convert
 [`convert_document`]: crate::convert_document
 [`Document`]: asciidoc_parser::Document
+[`Document::attribute_value`]: asciidoc_parser::Document::attribute_value
+[`Document::has_attribute`]: asciidoc_parser::Document::has_attribute
+[`Document::is_attribute_set`]: asciidoc_parser::Document::is_attribute_set
 [`Document::resolve_references`]: asciidoc_parser::Document::resolve_references
 [`Parser`]: asciidoc_parser::Parser
 [`Block`]: asciidoc_parser::blocks::Block
+[`BuiltInContext`]: asciidoc_parser::blocks::BuiltInContext
 [`ContentModel`]: asciidoc_parser::blocks::ContentModel
 [`IsBlock::id`]: asciidoc_parser::blocks::IsBlock::id
 [`IsBlock::roles`]: asciidoc_parser::blocks::IsBlock::roles

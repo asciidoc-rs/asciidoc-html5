@@ -28,11 +28,20 @@ use std::slice::Iter;
 
 use asciidoc_parser::{
     blocks::{Block, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
-    document::Header,
+    document::{Header, InterpretedValue},
     Document,
 };
 
-use crate::html::{class_attribute, id_attribute};
+use crate::html::{class_attribute, escape_attribute, id_attribute};
+
+/// Reads a document attribute as an explicit string value, if it has one.
+/// `Set`/`Unset`/absent all yield `None` (use `is_attribute_set` for booleans).
+fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
+    match document.attribute_value(name) {
+        InterpretedValue::Value(value) => Some(value),
+        InterpretedValue::Set | InterpretedValue::Unset => None,
+    }
+}
 
 /// Renders a parsed [`Document`] to a standalone HTML5 document string.
 pub(crate) fn render_document(document: &Document<'_>) -> String {
@@ -57,15 +66,16 @@ impl Renderer {
     /// Emits the complete standalone document: the `<head>` preamble, the
     /// `<div id="header">`, the `<div id="content">` body, and the footer.
     fn document(&mut self, document: &Document<'_>) {
-        // NOTE: `lang`, the doctype (which drives `<body class>`), and the
-        // footer's "Last updated" timestamp all come from document attributes
-        // that a bare `&Document` does not currently surface (see
-        // ARCHITECTURE.md, "Parser API gaps"). Until that lands we use
-        // Asciidoctor's defaults: `lang=en`, the `article` doctype.
+        // `lang` and the doctype (which drives `<body class>`) come from
+        // resolved document attributes, defaulting to Asciidoctor's `en` /
+        // `article`. The footer's "Last updated" timestamp still needs a
+        // docdatetime the caller supplies, so it stays deferred.
         let doctitle = document.doctitle();
+        let lang = attribute_str(document, "lang").unwrap_or_else(|| "en".to_string());
+        let doctype = attribute_str(document, "doctype").unwrap_or_else(|| "article".to_string());
 
         self.line("<!DOCTYPE html>");
-        self.line("<html lang=\"en\">");
+        self.line(&format!("<html lang=\"{}\">", escape_attribute(&lang)));
         self.line("<head>");
         self.line("<meta charset=\"UTF-8\">");
         self.line("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">");
@@ -81,20 +91,25 @@ impl Renderer {
             self.line(&format!("<title>{title}</title>"));
         }
         self.line("</head>");
-        self.line("<body class=\"article\">");
+        self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
 
-        self.header(document);
+        // The header is suppressed by `noheader`.
+        if !document.is_attribute_set("noheader") {
+            self.header(document);
+        }
 
         self.line("<div id=\"content\">");
         self.blocks(document.nested_blocks());
         self.line("</div>");
 
-        // The footer wrapper is always emitted; the "Last updated …" text is
-        // deferred until a docdatetime attribute is reachable from `Document`.
-        self.line("<div id=\"footer\">");
-        self.line("<div id=\"footer-text\">");
-        self.line("</div>");
-        self.line("</div>");
+        // The footer is suppressed by `nofooter`. The "Last updated …" text is
+        // deferred until a docdatetime attribute is threaded in by the caller.
+        if !document.is_attribute_set("nofooter") {
+            self.line("<div id=\"footer\">");
+            self.line("<div id=\"footer-text\">");
+            self.line("</div>");
+            self.line("</div>");
+        }
 
         self.line("</body>");
         self.line("</html>");
@@ -105,11 +120,9 @@ impl Renderer {
     fn header(&mut self, document: &Document<'_>) {
         let header: &Header<'_> = document.header();
         // A standalone document shows its doctitle as the header `<h1>` by
-        // default; only `notitle`/`noheader` suppress it. We can't yet read
-        // those attributes from a bare `Document` (see ARCHITECTURE.md), and
-        // `Document::show_doctitle()` bakes in the *embedded* default (hidden),
-        // so it is not the right signal here — we gate on the title's presence.
-        let has_title = document.doctitle().is_some();
+        // default; the `notitle` attribute suppresses it. (`noheader`, which
+        // drops the whole header, is handled by the caller.)
+        let has_title = document.doctitle().is_some() && !document.is_attribute_set("notitle");
         let author_line = header.author_line();
         let revision_line = header.revision_line();
 
@@ -241,9 +254,9 @@ impl Renderer {
     fn section<'src>(&mut self, block: &'src Block<'src>, section: &'src SectionBlock<'src>) {
         let level = section.level();
         let heading_level = (level + 1).min(6);
-        // `Block::id()` does not surface a section's auto-generated id; the
-        // `SectionBlock` override does (falling back to the synthesized `_id`).
-        let id = section.id();
+        // `Block::id()` now surfaces a section's auto-generated id (it delegates
+        // to the `SectionBlock` override), so the block-level accessor is enough.
+        let id = block.id();
         let title = section.section_title();
 
         if section.section_type() == SectionType::Discrete {
@@ -395,5 +408,40 @@ mod tests {
         let html = convert(".A caption\n[.lead]\nParagraph text.");
         assert!(html.contains("<div class=\"paragraph lead\">"));
         assert!(html.contains("<div class=\"title\">A caption</div>"));
+    }
+
+    // The following exercise the document-attribute-driven skeleton, reading
+    // resolved attributes straight off the `Document` (asciidoc-parser#620).
+
+    #[test]
+    fn lang_attribute_drives_html_lang() {
+        let html = convert("= Doc\n:lang: de\n\nBody.");
+        assert!(html.contains("<html lang=\"de\">"));
+    }
+
+    #[test]
+    fn doctype_drives_body_class() {
+        let html = convert("= Doc\n:doctype: book\n\nBody.");
+        assert!(html.contains("<body class=\"book\">"));
+    }
+
+    #[test]
+    fn notitle_suppresses_the_header_h1() {
+        let html = convert("= Doc\n:notitle:\n\nBody.");
+        assert!(!html.contains("<h1>"));
+        // The title still populates <head>.
+        assert!(html.contains("<title>Doc</title>"));
+    }
+
+    #[test]
+    fn noheader_suppresses_the_header() {
+        let html = convert("= Doc\n:noheader:\n\nBody.");
+        assert!(!html.contains("<div id=\"header\">"));
+    }
+
+    #[test]
+    fn nofooter_suppresses_the_footer() {
+        let html = convert("= Doc\n:nofooter:\n\nBody.");
+        assert!(!html.contains("<div id=\"footer\">"));
     }
 }
