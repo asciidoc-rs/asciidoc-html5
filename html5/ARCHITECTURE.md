@@ -225,8 +225,11 @@ timestamp. This is the top item in "Parser API gaps".
 ## Parser API gaps (proposed upstream issues)
 
 Working through the baseline surfaced several places where the renderer reaches
-past what `asciidoc-parser` 0.18 comfortably exposes. These are candidates for
-issues on [`asciidoc-parser`](https://github.com/asciidoc-rs/asciidoc-parser):
+past what `asciidoc-parser` 0.18 comfortably exposes. These are filed upstream as
+[asciidoc-parser#620](https://github.com/asciidoc-rs/asciidoc-parser/issues/620)
+(items 1–2, the primary blocker) and
+[asciidoc-parser#621](https://github.com/asciidoc-rs/asciidoc-parser/issues/621)
+(items 3–7, ergonomics):
 
 1. **Document-level attribute access.** `convert_document(&Document)` cannot read
    resolved document attributes (`lang`, `doctype`, `sectnums`, `icons`,
