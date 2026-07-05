@@ -66,20 +66,25 @@ a|
 
     // Drive the closest equivalent of `asciidoctor document.adoc`: hand the
     // `adoc` CLI a document file and confirm it writes a complete HTML5 document
-    // to standard output.
+    // to a file whose name it derives from the input (as `asciidoctor` does).
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "adoc-asciidoctor-index-{}.adoc",
         std::process::id()
     ));
+    let derived = path.with_extension("html");
     std::fs::write(&path, source).expect("write temp input");
 
     let cli = Cli::parse_from(["adoc", path.to_str().expect("temp path is UTF-8")]);
     let mut stdout = Vec::new();
     run(&cli, &mut stdout).expect("adoc converts the file");
-    let _ = std::fs::remove_file(&path);
 
-    let html = String::from_utf8(stdout).expect("stdout is UTF-8");
+    // On success adoc prints nothing; the HTML lands in the derived file.
+    assert!(stdout.is_empty(), "adoc wrote to stdout on success");
+    let html = std::fs::read_to_string(&derived).expect("read derived output file");
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&derived);
+
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>Hello</title>"));
     assert!(html.contains("<p>World.</p>"));

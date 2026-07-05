@@ -80,27 +80,32 @@ let html =
 "#
     );
 
-    // The CLI output description: writes the HTML to standard output.
+    // The CLI output description: writes the HTML to the derived output file.
     verifies!(
         r#"
 
-|Reads `document.adoc` and writes the rendered HTML5 to standard output.
+|Reads `document.adoc` and writes the rendered HTML5 to _document.html_.
 "#
     );
 
     // Drive the exact command shown on the page — `adoc document.adoc` — and
-    // check that a complete HTML5 document is written to standard output, as the
-    // CLI column of the table describes.
+    // check that a complete HTML5 document is written to the derived output file
+    // (input name with its extension swapped for `.html`), as the CLI column of
+    // the table describes.
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!("adoc-introduction-{}.adoc", std::process::id()));
+    let derived = path.with_extension("html");
     std::fs::write(&path, source).expect("write temp input");
 
     let cli = Cli::parse_from(["adoc", path.to_str().expect("temp path is UTF-8")]);
     let mut stdout = Vec::new();
     run(&cli, &mut stdout).expect("adoc converts the file");
-    let _ = std::fs::remove_file(&path);
 
-    let html = String::from_utf8(stdout).expect("stdout is UTF-8");
+    assert!(stdout.is_empty(), "adoc wrote to stdout on success");
+    let html = std::fs::read_to_string(&derived).expect("read derived output file");
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&derived);
+
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>Hello</title>"));
     assert!(html.contains("<p>World.</p>"));
