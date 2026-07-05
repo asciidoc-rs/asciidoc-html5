@@ -94,7 +94,7 @@ let html =
     non_normative!(
         r#"
 
-|Reads `document.adoc` and writes the rendered HTML5 to standard output.
+|Reads `document.adoc` and writes the rendered HTML5 to _document.html_.
 "#
     );
 

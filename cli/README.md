@@ -36,15 +36,16 @@ cargo install adoc            # not useful yet — see status above
 ```
 
 ```sh
-adoc input.adoc               # HTML5 to stdout
-adoc input.adoc -o out.html   # write to a file
-cat input.adoc | adoc         # read from stdin
+adoc input.adoc               # writes input.html (name derived from input)
+adoc input.adoc -o out.html   # write to a named file
+adoc input.adoc -o -          # write HTML5 to stdout
+cat input.adoc | adoc         # read from stdin, write to stdout
 ```
 
-| Argument            | Description                                              |
-| ------------------- | ------------------------------------------------------- |
-| `input`             | AsciiDoc input file. Omit (or pass `-`) to read stdin.  |
-| `-o`, `--output`    | Write output to this file instead of stdout.            |
+| Argument            | Description                                                  |
+| ------------------- | ----------------------------------------------------------- |
+| `input`             | AsciiDoc input file. Omit (or pass `-`) to read stdin.      |
+| `-o`, `--output`    | Output file (`-` for stdout). Default: derived from input.  |
 
 Run `adoc -h` for a short summary or `adoc --help` for the full description,
 including per-argument details and usage examples.

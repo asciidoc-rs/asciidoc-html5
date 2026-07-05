@@ -4,4 +4,5 @@
 //! their content is tracked as non-normative. The behavior a page advertises
 //! is verified by ordinary tests in the same module.
 
+mod convert_your_first_file;
 mod index;

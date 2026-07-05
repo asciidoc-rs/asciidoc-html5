@@ -3,9 +3,9 @@
 // AsciiDoc and convert it into a groff-formatted man page, and onward to
 // PostScript or PDF via the `man` command. groff man pages are a different
 // output format entirely, produced by a different converter; this crate renders
-// HTML5 only and man page support is not planned (see the workspace README). The
-// page therefore states no rule for this renderer to satisfy, so the whole page
-// is tracked as non-normative. See `sdd/README.md`.
+// HTML5 only and man page support is not planned (see the workspace README).
+// The page therefore states no rule for this renderer to satisfy, so the whole
+// page is tracked as non-normative. See `sdd/README.md`.
 
 use crate::tests::sdd::*;
 

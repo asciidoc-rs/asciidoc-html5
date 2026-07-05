@@ -9,6 +9,7 @@
 //! specifies — is tracked as non-normative.
 
 mod docbook_backend;
+mod get_started;
 mod index;
 mod manpage_backend;
 mod whats_new;

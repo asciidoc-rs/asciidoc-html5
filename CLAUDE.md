@@ -52,9 +52,10 @@ cargo test --workspace --all-features
 ## Running the CLI
 
 ```sh
-cargo run --bin adoc -- input.adoc            # HTML5 to stdout
-cargo run --bin adoc -- input.adoc -o out.html
-cat input.adoc | cargo run --bin adoc         # read from stdin
+cargo run --bin adoc -- input.adoc            # writes input.html (derived name)
+cargo run --bin adoc -- input.adoc -o out.html # write to a named file
+cargo run --bin adoc -- input.adoc -o -        # write HTML5 to stdout
+cat input.adoc | cargo run --bin adoc          # read from stdin, write to stdout
 ```
 
 > Note: the renderer is at an early **baseline** — it renders the document
@@ -62,3 +63,37 @@ cat input.adoc | cargo run --bin adoc         # read from stdin
 > thematic and page breaks; other constructs emit a visible `<!-- unsupported … -->`
 > comment for now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the
 > design and roadmap.
+
+## Porting an Asciidoctor doc page ("page port")
+
+A recurring workflow: take one Asciidoctor reference page under
+`ref/asciidoctor/docs/modules/<module>/pages/<page>.adoc` and bring it into this
+project. **Refer to it as a "page port" (e.g. "page port the get-started page").**
+The steps, in order:
+
+1. **Implement** whatever the page requires so this project actually delivers the
+   documented behavior, matching Asciidoctor (the parity oracle — see
+   *Conventions*). If the page centers on behavior we deliberately diverge from,
+   confirm the direction before changing it, and update any page/test the change
+   invalidates.
+2. **Cover the reference page** with SDD markers. Add a test module tracking the
+   page (`track_file!("ref/asciidoctor/.../<page>.adoc")`) under the crate(s) that
+   can verify it — `html5/src/tests/asciidoctor/` for library/API behavior and/or
+   `cli/src/tests/asciidoctor/` for CLI behavior. Mark descriptive prose
+   `non_normative!` and wrap each verifiable claim in a `#[test]` with a
+   `verifies!` block that drives the closest available behavior. When a page is
+   tracked from *both* crates, each must reproduce the **entire page, line for
+   line (blank lines included)**, differing only in which spans are `verifies!` vs
+   `non_normative!` — the `sdd` tool merges the two by position, so any dropped or
+   added line misaligns the merge.
+3. **Write the docs page** under `docs/modules/ROOT/pages/<page>.adoc`, adapted to
+   this project (`adoc` / the `asciidoc_html5` API), using only constructs the
+   renderer supports so its shown output is accurate, and calling out known
+   limitations. Add it to `docs/modules/ROOT/nav.adoc`.
+4. **Cover the new docs page** the same way (both crates, `non_normative!` prose +
+   `verifies!` invocations, full-page reproduction).
+5. **Verify:** `cargo fmt --all`, `cargo clippy --workspace --all-targets
+   --all-features -- -D warnings`, `cargo test --workspace --all-features`, and
+   `(cd sdd && cargo run)` — confirm the new pages show the intended `verifies!`
+   lines and no unintended `0` (uncovered) lines.
+6. **Open a draft PR** with a Conventional-Commit title (unless asked otherwise).
