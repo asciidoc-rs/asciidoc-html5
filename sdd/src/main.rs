@@ -22,21 +22,25 @@ use walkdir::{DirEntry, WalkDir};
 const TEST_ROOTS: &[&str] = &["../html5/src/tests", "../cli/src/tests"];
 
 // Spec sources whose lines we measure coverage against, as `(root, extension,
-// within)` triples: the AsciiDoc language description (`.adoc`) and the
-// Asciidoctor reference test suite (`.rb`) this renderer is validated against.
+// within)` triples: the normative documentation prose (`.adoc`) of both the
+// AsciiDoc language description and Asciidoctor, plus the Asciidoctor reference
+// test suite (`.rb`) this renderer is validated against.
 //
 // `within`, when `Some`, restricts a source to files whose path contains that
-// segment. For the AsciiDoc language description we measure only the normative
-// page content under each module's `pages/` directory; navigation, examples,
-// and partials are non-normative and carry no rules to verify, so they're
-// excluded here rather than relying on downstream Codecov `ignore` globs.
+// segment. For the documentation sources we measure only the normative page
+// content under each module's `pages/` directory; navigation, examples, and
+// partials are non-normative and carry no rules to verify, so they're excluded
+// here rather than relying on downstream Codecov `ignore` globs. The Asciidoctor
+// `.rb` source is scoped to `test/` for the same reason: the only other `.rb`
+// files live under `docs/.../examples/` and are non-normative example scripts.
 const SPEC_SOURCES: &[(&str, &str, Option<&str>)] = &[
     (
         "../ref/asciidoc-lang/docs/modules",
         ".adoc",
         Some("/pages/"),
     ),
-    ("../ref/asciidoctor", ".rb", None),
+    ("../ref/asciidoctor/docs/modules", ".adoc", Some("/pages/")),
+    ("../ref/asciidoctor/test", ".rb", None),
 ];
 
 fn main() {

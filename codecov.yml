@@ -35,6 +35,11 @@ component_management:
         - "ref/asciidoc-lang/docs/modules/**/pages/**/*.adoc"
 
     - component_id: asciidoctor
-      name: Asciidoctor test coverage
+      name: Asciidoctor reference coverage
+      # The normative page content of each documentation module, plus the
+      # Asciidoctor reference test suite. Navigation, examples, and partials are
+      # non-normative and are not emitted into the coverage report (see
+      # sdd/src/main.rs).
       paths:
-        - "ref/asciidoctor/**/*.rb"
+        - "ref/asciidoctor/docs/modules/**/pages/**/*.adoc"
+        - "ref/asciidoctor/test/**/*.rb"
