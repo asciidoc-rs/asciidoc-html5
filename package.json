@@ -1,0 +1,13 @@
+{
+  "name": "asciidoc-html5-docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Antora documentation site for asciidoc-html5 (local preview).",
+  "scripts": {
+    "docs": "antora --fetch antora-playbook-local.yml"
+  },
+  "devDependencies": {
+    "@antora/cli": "3.1.4",
+    "@antora/site-generator": "3.1.4"
+  }
+}

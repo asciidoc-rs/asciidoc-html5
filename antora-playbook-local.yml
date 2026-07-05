@@ -1,0 +1,27 @@
+# Use this playbook to build and preview the documentation locally.
+#
+#   npm install
+#   npm run docs
+#
+# then open build/site/index.html in a browser.
+#
+# It sources content from the local working tree (branches: HEAD) so you can
+# preview uncommitted changes. A separate, published playbook that aggregates
+# this component into the larger asciidoc.rs site will be added later.
+
+site:
+  title: AsciiDoc HTML5
+  start_page: html5::index.adoc
+
+content:
+  sources:
+    - url: .
+      branches: HEAD
+      start_path: docs
+
+# Uses the stock Antora default UI. The project's own look and feel will be
+# introduced later.
+ui:
+  bundle:
+    url: https://gitlab.com/antora/antora-ui-default/-/jobs/artifacts/HEAD/raw/build/ui-bundle.zip?job=bundle-stable
+    snapshot: true
