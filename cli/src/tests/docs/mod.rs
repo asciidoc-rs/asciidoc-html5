@@ -6,4 +6,4 @@
 //! `asciidoc-html5` verifies the API invocations. The sdd tool merges the two
 //! crates' coverage of the page.
 
-mod introduction;
+mod index;
