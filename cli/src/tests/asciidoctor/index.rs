@@ -7,8 +7,8 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/index.adoc");
 // Asciidoctor's introduction page, tracked from the CLI crate. Almost all of it
 // is overview prose about the Ruby Asciidoctor project (its packaging,
 // ecosystem, and JVM/JavaScript platforms) with no rendering rule to verify, so
-// it is non-normative here. The exception is the CLI column of the "Basic usage"
-// table, whose closest available counterpart is the `adoc` command
+// it is non-normative here. The exception is the CLI column of the "Basic
+// usage" table, whose closest available counterpart is the `adoc` command
 // (see `basic_usage_via_adoc`). The `asciidoc-html5` crate verifies the API
 // column, and the sdd tool merges the two crates' coverage.
 
