@@ -46,7 +46,7 @@ constructs that are supported, filled in incrementally. See the crate-level
 documentation for the running list of what the renderer aims to emit.
 
 This crate renders HTML5 only. Asciidoctor's other backends are out of scope;
-in particular, **DocBook support is not planned.**
+in particular, **DocBook and man page output are not planned.**
 
 ## Why this exists
 

@@ -10,4 +10,5 @@
 
 mod docbook_backend;
 mod index;
+mod manpage_backend;
 mod whats_new;
