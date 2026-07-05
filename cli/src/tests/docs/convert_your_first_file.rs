@@ -177,9 +177,10 @@ non_normative!(
 ====
 Asciidoctor embeds its default stylesheet in the HTML output, so the page is
 styled without any external files. This renderer does not embed a stylesheet
-yet, so the converted document is currently unstyled. Styling is on the
-xref:index.adoc[roadmap]; until then, the output carries the same structure
-Asciidoctor produces but no default theme.
+yet, so the converted document is currently unstyled: the output carries the
+same structure Asciidoctor produces but no default theme. Embedding the default
+stylesheet is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/27[issue #27].
 ====
 "#
 );
