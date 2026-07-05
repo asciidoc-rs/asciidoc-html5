@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli", "html5"]
+members = ["cli", "html5", "sdd"]
 resolver = "2"
 
 [workspace.package]

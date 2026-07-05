@@ -118,3 +118,10 @@ version_group = "asciidoc-html5"
 # The CLI's changes are recorded in the shared root changelog, so it keeps no
 # changelog file of its own.
 changelog_update = false
+
+# The `sdd` spec-coverage tool is an internal, unpublished helper. Keep it out
+# of both crates.io publishing and the release/versioning flow entirely.
+[[package]]
+name = "sdd"
+publish = false
+release = false

@@ -328,3 +328,50 @@ jobs:
 
       - name: Run cargo-udeps
         run: cargo +nightly udeps --all-targets --all-features
+
+  spec-coverage:
+    name: Generate spec coverage
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.author_association == 'OWNER' ||
+      github.event.pull_request.author_association == 'COLLABORATOR' ||
+      github.event.pull_request.author_association == 'MEMBER' ||
+      github.event.pull_request.user.login == 'dependabot[bot]' ||
+      contains(github.event.pull_request.labels.*.name, 'safe to test')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # The `sdd` tool reads the spec markers in each crate's test module and the
+      # spec sources under `ref` (the AsciiDoc language description and the
+      # Asciidoctor reference tests), emitting a Codecov-compatible report. Until
+      # tests carry spec markers, this is zero coverage.
+      - name: Generate spec coverage
+        run: cd sdd && cargo run > spec-coverage.json
+
+      # Tokens aren't available for PRs originating from forks,
+      # so we don't attempt to upload spec coverage in that case.
+      - name: Upload spec coverage results
+        if: |
+          github.event_name != 'pull_request' ||
+          github.event.pull_request.author_association == 'OWNER' ||
+          github.event.pull_request.author_association == 'COLLABORATOR' ||
+          github.event.pull_request.author_association == 'MEMBER' ||
+          github.event.pull_request.user.login == 'dependabot[bot]'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: "sdd/spec-coverage.json"
+          disable_search: true
+          name: Spec coverage
+          fail_ci_if_error: true
+          verbose: true
