@@ -84,6 +84,7 @@ impl Renderer {
             "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
             env!("CARGO_PKG_VERSION")
         ));
+
         // The <title> is the plain-text doctitle. The parser's `doctitle()` has
         // had header substitutions applied (special characters escaped), which
         // is what we want inside <title>.
@@ -119,6 +120,7 @@ impl Renderer {
     /// the author and revision details block.
     fn header(&mut self, document: &Document<'_>) {
         let header: &Header<'_> = document.header();
+
         // A standalone document shows its doctitle as the header `<h1>` by
         // default; the `notitle` attribute suppresses it. (`noheader`, which
         // drops the whole header, is handled by the caller.)
@@ -217,6 +219,7 @@ impl Renderer {
                 "literal" => self.verbatim(block, "literalblock"),
                 other => self.unsupported(other),
             },
+
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
         }
@@ -254,6 +257,7 @@ impl Renderer {
     fn section<'src>(&mut self, block: &'src Block<'src>, section: &'src SectionBlock<'src>) {
         let level = section.level();
         let heading_level = (level + 1).min(6);
+
         // `Block::id()` now surfaces a section's auto-generated id (it delegates
         // to the `SectionBlock` override), so the block-level accessor is enough.
         let id = block.id();
@@ -429,6 +433,7 @@ mod tests {
     fn notitle_suppresses_the_header_h1() {
         let html = convert("= Doc\n:notitle:\n\nBody.");
         assert!(!html.contains("<h1>"));
+
         // The title still populates <head>.
         assert!(html.contains("<title>Doc</title>"));
     }

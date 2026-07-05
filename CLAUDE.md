@@ -26,6 +26,8 @@ true`. Bump versions and dependency versions in the root `Cargo.toml`.
   subject imperative and scoped, start the description with a capital letter,
   and omit the trailing period — CI enforces this on PR titles. For example,
   `feat(html5): Render section headings`.
+- **Comments:** put a blank line before a code comment (unless it is the first
+  line of its block), so the comment visually attaches to the code it precedes.
 - **Edition:** Rust 2021. **License:** `MIT OR Apache-2.0` (dual, matching
   `asciidoc-parser`).
 - **Compatibility target:** the renderer aims for output compatible with
