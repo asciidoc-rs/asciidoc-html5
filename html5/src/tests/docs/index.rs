@@ -141,16 +141,17 @@ above is the most common. The other two are `convert`, for AsciiDoc you already
 hold in memory, and `convert_document`, for a document you have already parsed.
 Each returns a complete, standalone HTML5 document.
 
-Convert AsciiDoc held in memory with `convert`:
-
 "#
 );
 
-// The first "API examples" listing: `convert` on in-memory AsciiDoc.
+// The first "API examples" entry: the sentence introducing `convert` and
+// its listing.
 #[test]
 fn convert_renders_in_memory_asciidoc() {
     verifies!(
         r#"
+Convert AsciiDoc held in memory with `convert`:
+
 [,rust]
 ----
 let html = asciidoc_html5::convert("= Hello\n\nWorld.");
@@ -170,17 +171,18 @@ let html = asciidoc_html5::convert("= Hello\n\nWorld.");
 non_normative!(
     r#"
 
-If you already hold a parsed document — for example, to inspect or transform it
-first — render it with `convert_document`:
-
 "#
 );
 
-// The second "API examples" listing: `convert_document` on a parsed document.
+// The second "API examples" entry: the sentence introducing
+// `convert_document` and its listing.
 #[test]
 fn convert_document_renders_a_parsed_document() {
     verifies!(
         r#"
+If you already hold a parsed document — for example, to inspect or transform it
+first — render it with `convert_document`:
+
 [,rust]
 ----
 let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
