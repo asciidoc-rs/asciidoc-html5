@@ -46,6 +46,17 @@ writes HTML5.
 Unlike Asciidoctor, which is written in Ruby, `asciidoc-html5` is written in
 Rust and needs no Ruby, JVM, or JavaScript runtime.
 
+"#
+);
+
+// The "Basic usage" section, verified from the API side. The CLI column is
+// verified by the `adoc` crate; the sdd tool merges the two.
+#[test]
+fn basic_usage() {
+    // Section framing: two interfaces, and the promise that the simplest
+    // case yields a complete, publishable HTML5 document.
+    verifies!(
+        r#"
 == Basic usage
 
 `asciidoc-html5` provides two interfaces for converting AsciiDoc documents: a
@@ -55,18 +66,22 @@ table gives you an idea of how to use these interfaces.
 |===
 ^|CLI ^|API
 
+"#
+    );
+
+    // The CLI column of the table (verified by the `adoc` crate).
+    non_normative!(
+        r#"
 a|
  $ adoc document.adoc
 
-a|
 "#
-);
+    );
 
-// The API cell of the "Basic usage" table: the file-based `convert_file`.
-#[test]
-fn basic_usage_convert_file_renders_a_file() {
+    // The API column of the table: the file-based `convert_file`.
     verifies!(
         r#"
+a|
 [,rust]
 ----
 let html =
@@ -75,33 +90,46 @@ let html =
 "#
     );
 
-    // `convert_file` reads the document from disk and renders it exactly as
-    // `convert` would.
-    let source = "= Hello\n\nWorld.";
-    let path = std::env::temp_dir().join(format!(
-        "asciidoc-html5-introduction-convert-file-{}.adoc",
-        std::process::id()
-    ));
-    fs::write(&path, source).expect("write temp input");
-
-    let html = convert_file(&path).expect("convert_file reads and renders");
-    let _ = fs::remove_file(&path);
-
-    assert_eq!(html, convert(source));
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
-}
-
-non_normative!(
-    r#"
+    // The CLI output description (verified by the `adoc` crate).
+    non_normative!(
+        r#"
 
 |Reads `document.adoc` and writes the rendered HTML5 to standard output.
+"#
+    );
+
+    // The API output description and the simplest-case promise.
+    verifies!(
+        r#"
 |Reads `document.adoc` and returns the rendered HTML5 as a `String`.
 |===
 
 In the simplest case, you give an AsciiDoc document to `asciidoc-html5` and it
 gives you back a complete HTML5 document you can publish.
 
+"#
+    );
+
+    // The simplest case: `convert_file` reads the document from disk and returns
+    // a complete, standalone HTML5 document — the same result the in-memory
+    // `convert` entry point produces for the same source.
+    let source = "= Hello\n\nWorld.";
+    let path = std::env::temp_dir().join(format!(
+        "asciidoc-html5-introduction-basic-usage-{}.adoc",
+        std::process::id()
+    ));
+    fs::write(&path, source).expect("write temp input");
+    let html = convert_file(&path).expect("convert_file reads and renders");
+    let _ = fs::remove_file(&path);
+
+    assert_eq!(html, convert(source));
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(html.contains("<title>Hello</title>"));
+    assert!(html.trim_end().ends_with("</body>\n</html>"));
+}
+
+non_normative!(
+    r#"
 Pass `--help` to the CLI to see every option:
 
  $ adoc --help

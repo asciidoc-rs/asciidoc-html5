@@ -53,21 +53,44 @@ table gives you an idea of how to use these interfaces.
 |===
 ^|CLI ^|API
 
-a|
 "#
 );
 
-// The CLI cell of the "Basic usage" table: `adoc document.adoc`.
+// The "Basic usage" section, verified from the CLI side.
 #[test]
 fn basic_usage_converts_a_document_file() {
+    // The CLI column of the table: `adoc document.adoc`.
     verifies!(
         r#"
+a|
  $ adoc document.adoc
+
+"#
+    );
+
+    // The API column of the table (verified by the `asciidoc-html5` crate).
+    non_normative!(
+        r#"
+a|
+[,rust]
+----
+let html =
+    asciidoc_html5::convert_file("document.adoc")?;
+----
+"#
+    );
+
+    // The CLI output description: writes the HTML to standard output.
+    verifies!(
+        r#"
+
+|Reads `document.adoc` and writes the rendered HTML5 to standard output.
 "#
     );
 
     // Drive the exact command shown on the page — `adoc document.adoc` — and
-    // check that a complete HTML5 document is written to standard output.
+    // check that a complete HTML5 document is written to standard output, as the
+    // CLI column of the table describes.
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!("adoc-introduction-{}.adoc", std::process::id()));
     std::fs::write(&path, source).expect("write temp input");
@@ -85,22 +108,11 @@ fn basic_usage_converts_a_document_file() {
 
 non_normative!(
     r#"
-
-a|
-[,rust]
-----
-let html =
-    asciidoc_html5::convert_file("document.adoc")?;
-----
-
-|Reads `document.adoc` and writes the rendered HTML5 to standard output.
 |Reads `document.adoc` and returns the rendered HTML5 as a `String`.
 |===
 
 In the simplest case, you give an AsciiDoc document to `asciidoc-html5` and it
 gives you back a complete HTML5 document you can publish.
-
-Pass `--help` to the CLI to see every option:
 
 "#
 );
@@ -110,6 +122,8 @@ Pass `--help` to the CLI to see every option:
 fn help_lists_usage_examples() {
     verifies!(
         r#"
+Pass `--help` to the CLI to see every option:
+
  $ adoc --help
 "#
     );
