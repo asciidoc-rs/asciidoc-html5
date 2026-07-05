@@ -21,12 +21,22 @@ use walkdir::{DirEntry, WalkDir};
 // coverage until tests with spec markers are added.
 const TEST_ROOTS: &[&str] = &["../html5/src/tests", "../cli/src/tests"];
 
-// Spec sources whose lines we measure coverage against, as `(root, extension)`
-// pairs: the AsciiDoc language description (`.adoc`) and the Asciidoctor
-// reference test suite (`.rb`) this renderer is validated against.
-const SPEC_SOURCES: &[(&str, &str)] = &[
-    ("../ref/asciidoc-lang/docs/modules", ".adoc"),
-    ("../ref/asciidoctor", ".rb"),
+// Spec sources whose lines we measure coverage against, as `(root, extension,
+// within)` triples: the AsciiDoc language description (`.adoc`) and the
+// Asciidoctor reference test suite (`.rb`) this renderer is validated against.
+//
+// `within`, when `Some`, restricts a source to files whose path contains that
+// segment. For the AsciiDoc language description we measure only the normative
+// page content under each module's `pages/` directory; navigation, examples,
+// and partials are non-normative and carry no rules to verify, so they're
+// excluded here rather than relying on downstream Codecov `ignore` globs.
+const SPEC_SOURCES: &[(&str, &str, Option<&str>)] = &[
+    (
+        "../ref/asciidoc-lang/docs/modules",
+        ".adoc",
+        Some("/pages/"),
+    ),
+    ("../ref/asciidoctor", ".rb", None),
 ];
 
 fn main() {
@@ -50,8 +60,17 @@ fn main() {
     println!("{{\n    \"coverage\": {{");
 
     let mut spec_files: Vec<DirEntry> = vec![];
-    for (root, extension) in SPEC_SOURCES {
-        spec_files.extend(collect_files(root, extension));
+    for (root, extension, within) in SPEC_SOURCES {
+        for entry in collect_files(root, extension) {
+            // Skip files outside the source's required path segment (e.g. keep
+            // only `pages/` content for the AsciiDoc language description).
+            if let Some(segment) = within
+                && !entry.path().to_str().unwrap().contains(segment)
+            {
+                continue;
+            }
+            spec_files.push(entry);
+        }
     }
 
     // `saturating_sub` guards the empty case (e.g. `ref/` not present): the loop
