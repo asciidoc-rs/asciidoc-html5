@@ -102,7 +102,7 @@ Asciidoctor derives the name of the output file from the name of the input docum
     run(&cli, &mut stdout).expect("adoc converts the file");
 
     assert!(stdout.is_empty(), "adoc wrote to stdout on success");
-    // The output landed in the derived `.html` file, not anywhere else.
+    // The output landed in the derived `.html` file.
     assert!(
         derived.exists(),
         "adoc did not create the derived output file"
