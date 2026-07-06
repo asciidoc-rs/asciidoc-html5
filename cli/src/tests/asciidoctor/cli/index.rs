@@ -30,10 +30,10 @@ When the Asciidoctor gem is installed successfully, the Asciidoctor command line
 
 // The "Version and runtime" section: `asciidoctor --version`, and its `-v`
 // shorthand, print the processor version. `adoc` mirrors this with `--version`;
-// its short form follows the Rust/clap convention `-V` rather than Asciidoctor's
-// `-v`, so this test drives `-V` as the closest available behavior. The Ruby
-// runtime-environment banner that follows has no counterpart in this native
-// binary and is tracked as non-normative below.
+// its short form follows the Rust/clap convention `-V` rather than
+// Asciidoctor's `-v`, so this test drives `-V` as the closest available
+// behavior. The Ruby runtime-environment banner that follows has no counterpart
+// in this native binary and is tracked as non-normative below.
 #[test]
 fn version_flag_prints_the_version() {
     verifies!(
@@ -135,8 +135,8 @@ xref:man1/asciidoctor.adoc#options[CLI Options] describes the available options 
 
 // The "Help topics" section: `asciidoctor --help`, and its `-h` shorthand,
 // print the usage statement. `adoc --help` and `adoc -h` do the same. The topic
-// grouping, and the `manpage` and `syntax` topics, are Asciidoctor features this
-// native binary does not provide, so they are tracked as non-normative.
+// grouping, and the `manpage` and `syntax` topics, are Asciidoctor features
+// this native binary does not provide, so they are tracked as non-normative.
 #[test]
 fn help_flag_prints_the_usage_statement() {
     verifies!(
