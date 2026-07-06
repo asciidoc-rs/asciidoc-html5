@@ -13,4 +13,5 @@ mod docbook_backend;
 mod get_started;
 mod index;
 mod manpage_backend;
+mod tooling;
 mod whats_new;
