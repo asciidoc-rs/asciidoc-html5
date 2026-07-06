@@ -15,6 +15,12 @@ non_normative!(
 = Process AsciiDoc Using the API
 :navtitle: Using the API
 :description: How to convert and render AsciiDoc with the asciidoc_html5 Rust API, including the load and convert steps and the library's entry points.
+// docs.rs equivalent of Asciidoctor's `url-api` attribute, used for the API
+// reference link under Next steps. It resolves to the crate's latest rendered
+// API docs; pinning it to the released crate version (as Asciidoctor pins its
+// `{release-version}`) is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/32.
+:url-api: https://docs.rs/asciidoc-html5
 
 The `asciidoc-html5` library exposes a small Rust API for converting AsciiDoc to
 HTML5, both in one call and by rendering a document you have already parsed. Add
@@ -167,5 +173,6 @@ through the three entry points above; it always returns the rendered HTML as a
 
 * xref:ROOT:convert-your-first-file.adoc[Convert your first file with the CLI]
 * xref:ROOT:index.adoc[Introduction and API examples]
+* {url-api}[API reference on docs.rs^]
 "#
 );
