@@ -2,7 +2,7 @@ use clap::Parser as _;
 
 use crate::{run, tests::sdd::*, Cli};
 
-track_file!("docs/modules/ROOT/pages/generate-html.adoc");
+track_file!("docs/modules/generate-html/pages/index.adoc");
 
 // This crate's "Generate HTML" page, tracked from the CLI. Its prose is
 // descriptive documentation and so non-normative, but the `adoc` invocations it
@@ -263,7 +263,7 @@ let html = asciidoc_html5::convert_file("my-document.adoc")?;
 
 `convert`, for AsciiDoc you already hold in memory, and `convert_document`, for
 a document you have already parsed, return the same complete HTML5 document. See
-the xref:index.adoc[introduction] for those forms.
+the xref:ROOT:index.adoc[introduction] for those forms.
 
 == XHTML is not supported
 

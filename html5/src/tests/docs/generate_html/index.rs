@@ -2,7 +2,7 @@ use std::fs;
 
 use crate::{convert, convert_file, tests::sdd::*};
 
-track_file!("docs/modules/ROOT/pages/generate-html.adoc");
+track_file!("docs/modules/generate-html/pages/index.adoc");
 
 // This crate's "Generate HTML" page. It documents that HTML5 is the only output
 // `asciidoc-html5` produces and walks through converting a document with `adoc`
@@ -186,7 +186,7 @@ non_normative!(
     r#"
 `convert`, for AsciiDoc you already hold in memory, and `convert_document`, for
 a document you have already parsed, return the same complete HTML5 document. See
-the xref:index.adoc[introduction] for those forms.
+the xref:ROOT:index.adoc[introduction] for those forms.
 
 == XHTML is not supported
 
