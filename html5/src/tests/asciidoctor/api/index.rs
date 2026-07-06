@@ -89,6 +89,7 @@ fn steps_together_or_separately() {
 You can use the API to perform these two steps together (like the CLI) using `convert` and `convert_file`, or separately using `load` and `load_file` followed by calling `#convert` on the document object.
 The API can load and convert AsciiDoc files (`load_file` and `convert_file`) or strings (`load` and `convert`).
 The <<API entrypoints>> section introduces these methods in more detail.
+
 "#
     );
 
@@ -120,7 +121,6 @@ The <<API entrypoints>> section introduces these methods in more detail.
 
 non_normative!(
     r#"
-
 The API is the main way to interface with Asciidoctor in an application or integration library.
 By using the API, you avoid having to invoke Asciidoctor using a subprocess.
 You'll find that it also gives you a lot more control over the processing than what the CLI affords.
@@ -182,6 +182,7 @@ There are four main entrypoints in the Asciidoctor API:
 `Asciidoctor.load_file`:: parses the contents of the AsciiDoc source file (down to the block level) into an `Asciidoctor::Document` object
 `Asciidoctor.convert`:: parses and converts the AsciiDoc source to the output format determined by the specified backend
 `Asciidoctor.convert_file`:: parses and converts the contents of the AsciiDoc source file to the output format determined by the specified backend
+
 "#
     );
 
@@ -212,7 +213,6 @@ There are four main entrypoints in the Asciidoctor API:
 
 non_normative!(
     r#"
-
 If you're processing a file, you'd typically use a method that ends with `_file`.
 Otherwise, you'd use its complement, which accepts a String, an array of Strings, or an IO object.
 

@@ -78,6 +78,7 @@ let html = asciidoc_html5::convert_document(&doc);
 ----
 
 Both paths produce the same HTML5 for the same source.
+
 "#
     );
 
@@ -98,7 +99,6 @@ Both paths produce the same HTML5 for the same source.
 
 non_normative!(
     r#"
-
 == API entry points
 
 The library provides three entry points. Each returns a complete, standalone
@@ -119,6 +119,7 @@ fn entry_points() {
 to HTML5, returning the HTML as a `String`.
 `asciidoc_html5::convert_document`:: renders an already-parsed
 `asciidoc_parser::Document` to HTML5.
+
 "#
     );
 
@@ -147,7 +148,6 @@ to HTML5, returning the HTML as a `String`.
 
 non_normative!(
     r#"
-
 Use `convert_file` when your source is a file on disk and `convert` when you
 already hold it in memory. Reach for `convert_document` when you have parsed the
 document separately -- for example, to analyze it before rendering.
