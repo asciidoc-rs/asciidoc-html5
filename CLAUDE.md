@@ -44,10 +44,15 @@ Run these from the workspace root and make sure they pass — CI enforces all
 three:
 
 ```sh
-cargo fmt --all
+cargo +nightly fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
+
+Format with **nightly** rustfmt: `rustfmt.toml` turns on unstable options
+(`wrap_comments`, `imports_granularity`, …) that stable rustfmt silently
+ignores, and CI enforces format with `cargo +nightly fmt --all -- --check`. Run
+`rustup toolchain add nightly` once if you don't have it.
 
 ## Running the CLI
 
