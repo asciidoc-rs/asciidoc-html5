@@ -46,7 +46,9 @@ constructs that are supported, filled in incrementally. See the crate-level
 documentation for the running list of what the renderer aims to emit.
 
 This crate renders HTML5 only. Asciidoctor's other backends are out of scope;
-in particular, **DocBook and man page output are not planned.**
+in particular, **DocBook and man page output are not planned**, and the renderer
+emits HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5`
+backends) is not supported.**
 
 ## Why this exists
 

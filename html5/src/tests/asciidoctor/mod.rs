@@ -11,6 +11,7 @@
 mod api;
 mod docbook_backend;
 mod get_started;
+mod html_backend;
 mod index;
 mod manpage_backend;
 mod whats_new;
