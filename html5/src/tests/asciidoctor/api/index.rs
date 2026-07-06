@@ -20,6 +20,12 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/index.adoc");
 // unlike the shared introduction and get-started pages — it is tracked only
 // from this crate.
 
+// The reproduced page below introduces the Asciidoctor doc attribute `url-api`
+// (`:url-api: {url-api-gems}/asciidoctor/...`) and uses it to link to the Ruby
+// API docs. `url-api` and the site-wide `url-api-gems` point at RubyGems-hosted
+// Ruby API docs, so they will need Rust/docs.rs equivalents when this material
+// is adapted for our own docs. See
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/32.
 non_normative!(
     r#"
 = Process AsciiDoc Using the API
@@ -118,6 +124,9 @@ The <<API entrypoints>> section introduces these methods in more detail.
     assert!(together.contains("<title>Hello</title>"));
 }
 
+// `{url-api}` is used again in the reproduced text below (the "public APIs in
+// Asciidoctor" link); see the note on the first block and issue #32
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/32).
 non_normative!(
     r#"
 
@@ -210,6 +219,9 @@ There are four main entrypoints in the Asciidoctor API:
     assert_eq!(from_file, html);
 }
 
+// `{url-api}` is used once more in the reproduced text below (the "Ruby API
+// docs" link under Next steps); see the note on the first block and issue #32
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/32).
 non_normative!(
     r#"
 
