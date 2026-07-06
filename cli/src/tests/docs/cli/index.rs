@@ -4,9 +4,10 @@ use crate::{run, tests::sdd::*, Cli};
 
 track_file!("docs/modules/cli/pages/index.adoc");
 
-// This crate's "Process AsciiDoc Using the CLI" page. Its prose is descriptive
-// documentation, tracked as non-normative; the `adoc` invocations it shows are
-// verified by the tests below, which drive the command end to end.
+// This crate's "Process AsciiDoc Using the CLI" page. Descriptive prose is
+// tracked as non-normative; the section headings, the `adoc` invocations, and
+// the claims the page makes about their behavior are verified by the tests
+// below, which drive the command end to end.
 
 non_normative!(
     r#"
@@ -28,54 +29,24 @@ documented behavior is guaranteed.
 "#
 );
 
-// The version invocations: `adoc --version`, its short form `-V`, and the
-// `adoc <version>` line both print.
+// The version invocations: `adoc --version` and its short form `-V` both print
+// `adoc <version>` to standard output.
 #[test]
 fn checks_the_version() {
     verifies!(
         r#"
 == Check the version
 
-"#
-    );
-
-    non_normative!(
-        r#"
 To confirm that the CLI is available, run:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc --version
 
-"#
-    );
-
-    non_normative!(
-        r#"
 You can shorten the `--version` flag to `-V`:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc -V
 
-"#
-    );
-
-    non_normative!(
-        r#"
 Either form prints the version of `adoc` to standard output:
 
-"#
-    );
-
-    verifies!(
-        r#"
  adoc <version>
 
 "#
@@ -110,29 +81,19 @@ fn converts_a_file() {
         r#"
 == Convert an AsciiDoc file
 
-"#
-    );
-
-    non_normative!(
-        r#"
 To convert an `.adoc` file, pass its name to `adoc`:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc document.adoc
 
-"#
-    );
-
-    non_normative!(
-        r#"
 With the built-in defaults and no output option, `adoc` writes a new file in the
 same directory as the input, with the same base name but the `.html` extension,
 so this command produces [.path]_document.html_.
 
+"#
+    );
+
+    non_normative!(
+        r#"
 To choose the output file yourself, pass `-o` (longhand `--output`); pass `-o -`
 to write the HTML5 to standard output instead:
 
@@ -182,41 +143,21 @@ to write the HTML5 to standard output instead:
     let _ = std::fs::remove_file(&out);
 }
 
-// The help invocations: `adoc --help` and its short form `-h` both print the
-// usage statement.
+// The help invocations: `adoc --help` prints the usage statement, and its short
+// form `-h` prints a shorter summary.
 #[test]
 fn prints_help() {
     verifies!(
         r#"
 == Get help
 
-"#
-    );
-
-    non_normative!(
-        r#"
 The `--help` option prints the usage statement for the `adoc` command, including
 its options and a few examples:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc --help
 
-"#
-    );
-
-    non_normative!(
-        r#"
 You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc -h
 
 "#
@@ -241,7 +182,7 @@ the `-v` used by `asciidoctor`.
 
     // clap surfaces a help request as a `DisplayHelp` "error" carrying the
     // rendered help. Both the long `--help` and short `-h` include the usage
-    // statement for the `adoc` command.
+    // statement for the `adoc` command, and `-h` is the shorter of the two.
     let long = Cli::try_parse_from(["adoc", "--help"]).expect_err("--help displays help");
     assert_eq!(long.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(long.to_string().contains("Usage: adoc"));
@@ -249,4 +190,8 @@ the `-v` used by `asciidoctor`.
     let short = Cli::try_parse_from(["adoc", "-h"]).expect_err("-h displays help");
     assert_eq!(short.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(short.to_string().contains("Usage: adoc"));
+    assert!(
+        short.to_string().len() < long.to_string().len(),
+        "-h summary should be shorter than --help"
+    );
 }
