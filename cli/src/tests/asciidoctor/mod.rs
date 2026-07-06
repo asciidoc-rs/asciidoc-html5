@@ -7,5 +7,6 @@
 //! `asciidoc-html5` verifies the API-level conversion. The sdd tool merges the
 //! two crates' coverage of each page.
 
+mod cli;
 mod get_started;
 mod index;

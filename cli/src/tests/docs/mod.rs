@@ -6,5 +6,6 @@
 //! command-line invocations they show, while `asciidoc-html5` verifies the API
 //! invocations. The sdd tool merges the two crates' coverage of each page.
 
+mod cli;
 mod convert_your_first_file;
 mod index;

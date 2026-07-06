@@ -44,10 +44,15 @@ Run these from the workspace root and make sure they pass — CI enforces all
 three:
 
 ```sh
-cargo fmt --all
+cargo +nightly fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
+
+Format with **nightly** rustfmt: `rustfmt.toml` turns on unstable options
+(`wrap_comments`, `imports_granularity`, …) that stable rustfmt silently
+ignores, and CI enforces format with `cargo +nightly fmt --all -- --check`. Run
+`rustup toolchain add nightly` once if you don't have it.
 
 ## Running the CLI
 
@@ -85,7 +90,10 @@ The steps, in order:
    tracked from *both* crates, each must reproduce the **entire page, line for
    line (blank lines included)**, differing only in which spans are `verifies!` vs
    `non_normative!` — the `sdd` tool merges the two by position, so any dropped or
-   added line misaligns the merge.
+   added line misaligns the merge. **Bind blank lines to the text above them:** a
+   marker block starts on its first line of content (no leading blank line) and
+   carries the blank line that follows its content as a trailing blank, so each
+   boundary blank belongs to the block it *follows*, not the one it precedes.
 3. **Write the docs page** under `docs/modules/ROOT/pages/<page>.adoc`, adapted to
    this project (`adoc` / the `asciidoc_html5` API), using only constructs the
    renderer supports so its shown output is accurate, and calling out known
