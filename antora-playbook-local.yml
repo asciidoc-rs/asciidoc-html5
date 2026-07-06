@@ -19,6 +19,13 @@ content:
       branches: HEAD
       start_path: docs
 
+# Enable the default UI's previous/next page navigation links (rendered at the
+# bottom of each page), matching the Asciidoctor documentation site. The links
+# are derived from the navigation order in each module's nav.adoc.
+asciidoc:
+  attributes:
+    page-pagination: ''
+
 # Uses the stock Antora default UI. The project's own look and feel will be
 # introduced later.
 ui:
