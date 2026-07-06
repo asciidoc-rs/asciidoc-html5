@@ -54,7 +54,8 @@ rendering the resulting document with `convert_document`.
 );
 
 // The load/convert steps: `convert` runs both together, and parsing followed by
-// `convert_document` runs them separately. Both paths agree for the same source.
+// `convert_document` runs them separately. Both paths agree for the same
+// source.
 #[test]
 fn steps_together_and_separately() {
     verifies!(

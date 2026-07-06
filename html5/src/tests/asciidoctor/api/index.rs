@@ -8,16 +8,17 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/index.adoc");
 
 // Asciidoctor's "Process AsciiDoc Using the API" page. It documents the Ruby
 // `Asciidoctor` API — its purpose, how to `require` it, and its four Ruby
-// entrypoints (`load`, `load_file`, `convert`, `convert_file`). Most of the page
-// is Ruby-specific prose (the gem, `require`, `Asciidoctor::VERSION`, the Hash
-// vs. shorthand attribute forms, safe modes) with no counterpart in this crate,
-// so it is non-normative here. Two claims do have counterparts: that the API can
-// run the load and convert steps together or separately, and that its entrypoints
-// parse a string or file into a document model and convert it. This crate
-// verifies those against its own API — `convert`/`convert_file` for the combined
-// path and `asciidoc_parser`'s `Parser` (load) plus `convert_document` (convert)
-// for the separate path. The page is purely about the API, so — unlike the shared
-// introduction and get-started pages — it is tracked only from this crate.
+// entrypoints (`load`, `load_file`, `convert`, `convert_file`). Most of the
+// page is Ruby-specific prose (the gem, `require`, `Asciidoctor::VERSION`, the
+// Hash vs. shorthand attribute forms, safe modes) with no counterpart in this
+// crate, so it is non-normative here. Two claims do have counterparts: that the
+// API can run the load and convert steps together or separately, and that its
+// entrypoints parse a string or file into a document model and convert it. This
+// crate verifies those against its own API — `convert`/`convert_file` for the
+// combined path and `asciidoc_parser`'s `Parser` (load) plus `convert_document`
+// (convert) for the separate path. The page is purely about the API, so —
+// unlike the shared introduction and get-started pages — it is tracked only
+// from this crate.
 
 non_normative!(
     r#"
@@ -168,9 +169,9 @@ From there, you can either convert the document model to an output format, or yo
 
 // The four Ruby entrypoints. `load`/`load_file` parse source or a file into an
 // `Asciidoctor::Document`; this crate's load step is `asciidoc_parser`'s
-// `Parser`, which yields a `Document`. `convert`/`convert_file` parse and convert
-// a string or file to the output format — HTML5 here, the only backend this
-// crate provides.
+// `Parser`, which yields a `Document`. `convert`/`convert_file` parse and
+// convert a string or file to the output format — HTML5 here, the only backend
+// this crate provides.
 #[test]
 fn four_entrypoints() {
     verifies!(
