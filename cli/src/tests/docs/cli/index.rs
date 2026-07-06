@@ -2,7 +2,7 @@ use clap::Parser as _;
 
 use crate::{run, tests::sdd::*, Cli};
 
-track_file!("docs/modules/ROOT/pages/cli.adoc");
+track_file!("docs/modules/cli/pages/index.adoc");
 
 // This crate's "Process AsciiDoc Using the CLI" page. Its prose is descriptive
 // documentation, tracked as non-normative; the `adoc` invocations it shows are
