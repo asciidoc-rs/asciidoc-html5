@@ -25,10 +25,6 @@ shows are normative: they are verified against the implementation, so the
 documented behavior is guaranteed.
 ====
 
-== Check the version
-
-To confirm that the CLI is available, run:
-
 "#
 );
 
@@ -36,6 +32,20 @@ To confirm that the CLI is available, run:
 // `adoc <version>` line both print.
 #[test]
 fn checks_the_version() {
+    verifies!(
+        r#"
+== Check the version
+
+"#
+    );
+
+    non_normative!(
+        r#"
+To confirm that the CLI is available, run:
+
+"#
+    );
+
     verifies!(
         r#"
  $ adoc --version
@@ -92,19 +102,24 @@ runtime-environment line.
     assert_eq!(short.to_string(), long.to_string());
 }
 
-non_normative!(
-    r#"
-== Convert an AsciiDoc file
-
-To convert an `.adoc` file, pass its name to `adoc`:
-
-"#
-);
-
 // The conversion invocations: `adoc document.adoc` derives the output name, and
 // `adoc document.adoc -o out.html` writes to the named file instead.
 #[test]
 fn converts_a_file() {
+    verifies!(
+        r#"
+== Convert an AsciiDoc file
+
+"#
+    );
+
+    non_normative!(
+        r#"
+To convert an `.adoc` file, pass its name to `adoc`:
+
+"#
+    );
+
     verifies!(
         r#"
  $ adoc document.adoc
@@ -167,20 +182,25 @@ to write the HTML5 to standard output instead:
     let _ = std::fs::remove_file(&out);
 }
 
-non_normative!(
-    r#"
-== Get help
-
-The `--help` option prints the usage statement for the `adoc` command, including
-its options and a few examples:
-
-"#
-);
-
 // The help invocations: `adoc --help` and its short form `-h` both print the
 // usage statement.
 #[test]
 fn prints_help() {
+    verifies!(
+        r#"
+== Get help
+
+"#
+    );
+
+    non_normative!(
+        r#"
+The `--help` option prints the usage statement for the `adoc` command, including
+its options and a few examples:
+
+"#
+    );
+
     verifies!(
         r#"
  $ adoc --help
