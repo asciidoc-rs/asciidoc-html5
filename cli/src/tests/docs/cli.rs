@@ -28,6 +28,7 @@ documented behavior is guaranteed.
 == Check the version
 
 To confirm that the CLI is available, run:
+
 "#
 );
 
@@ -37,45 +38,45 @@ To confirm that the CLI is available, run:
 fn checks_the_version() {
     verifies!(
         r#"
-
  $ adoc --version
+
 "#
     );
 
     non_normative!(
         r#"
-
 You can shorten the `--version` flag to `-V`:
+
 "#
     );
 
     verifies!(
         r#"
-
  $ adoc -V
+
 "#
     );
 
     non_normative!(
         r#"
-
 Either form prints the version of `adoc` to standard output:
+
 "#
     );
 
     verifies!(
         r#"
-
  adoc <version>
+
 "#
     );
 
     non_normative!(
         r#"
-
 Unlike `asciidoctor`, `adoc` is a native binary with no Ruby, JVM, or JavaScript
 runtime, so it prints only its own version -- there is no separate
 runtime-environment line.
+
 "#
     );
 
@@ -93,10 +94,10 @@ runtime-environment line.
 
 non_normative!(
     r#"
-
 == Convert an AsciiDoc file
 
 To convert an `.adoc` file, pass its name to `adoc`:
+
 "#
 );
 
@@ -106,27 +107,27 @@ To convert an `.adoc` file, pass its name to `adoc`:
 fn converts_a_file() {
     verifies!(
         r#"
-
  $ adoc document.adoc
+
 "#
     );
 
     non_normative!(
         r#"
-
 With the built-in defaults and no output option, `adoc` writes a new file in the
 same directory as the input, with the same base name but the `.html` extension,
 so this command produces [.path]_document.html_.
 
 To choose the output file yourself, pass `-o` (longhand `--output`); pass `-o -`
 to write the HTML5 to standard output instead:
+
 "#
     );
 
     verifies!(
         r#"
-
  $ adoc document.adoc -o out.html
+
 "#
     );
 
@@ -168,11 +169,11 @@ to write the HTML5 to standard output instead:
 
 non_normative!(
     r#"
-
 == Get help
 
 The `--help` option prints the usage statement for the `adoc` command, including
 its options and a few examples:
+
 "#
 );
 
@@ -182,28 +183,27 @@ its options and a few examples:
 fn prints_help() {
     verifies!(
         r#"
-
  $ adoc --help
+
 "#
     );
 
     non_normative!(
         r#"
-
 You can shorten the `--help` flag to `-h`, which prints a shorter summary:
+
 "#
     );
 
     verifies!(
         r#"
-
  $ adoc -h
+
 "#
     );
 
     non_normative!(
         r#"
-
 [NOTE]
 .Known limitations
 ====

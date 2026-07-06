@@ -24,6 +24,7 @@ included in the install-toolchain and user-manual documents
 ////
 
 When the Asciidoctor gem is installed successfully, the Asciidoctor command line interface (CLI) named `asciidoctor` will be available on your PATH.
+
 "#
 );
 
@@ -37,7 +38,6 @@ When the Asciidoctor gem is installed successfully, the Asciidoctor command line
 fn version_flag_prints_the_version() {
     verifies!(
         r#"
-
 == Version and runtime
 
 To confirm that the CLI is available, execute the following command in your terminal application:
@@ -47,12 +47,12 @@ To confirm that the CLI is available, execute the following command in your term
 Alternately, you can shorten the `--version` CLI option flag to `-v`:
 
  $ asciidoctor -v
+
 "#
     );
 
     non_normative!(
         r#"
-
 If this command completes successfully, information about Asciidoctor and the runtime environment will be printed to the standard output of your terminal:
 
 [subs=attributes+]
@@ -60,6 +60,7 @@ If this command completes successfully, information about Asciidoctor and the ru
  Runtime Environment ({ruby-description}) (lc:UTF-8 fs:UTF-8 in:UTF-8 ex:UTF-8)
 
 The runtime environment information varies based on the version of Ruby you're using and the encoding settings of your operating system.
+
 "#
     );
 
@@ -83,7 +84,6 @@ The runtime environment information varies based on the version of Ruby you're u
 fn converts_a_file_and_derives_the_output() {
     verifies!(
         r#"
-
 == Convert an AsciiDoc file
 
 To invoke Asciidoctor from the CLI and convert an `.adoc` file, execute:
@@ -91,18 +91,19 @@ To invoke Asciidoctor from the CLI and convert an `.adoc` file, execute:
  $ asciidoctor <asciidoc-file>
 
 This will use the built-in defaults for options and create a new file in the same directory as the input file, with the same base name, but with the `.html` extension.
+
 "#
     );
 
     non_normative!(
         r#"
-
 The Asciidoctor CLI accepts numerous options that control the behavior of the processor, from setting additional attributes (`-a`) to where the output file is written (`-o`).
 Most options have both a longhand (e.g., `--out-file`) and shorthand form (e.g., `-o`).
 The shorthand form is used throughout this documentation.
 Once you're familiar with the options, the shorthand form is preferred and most common since it requires a lot less typing.
 
 xref:man1/asciidoctor.adoc#options[CLI Options] describes the available options and parameters for the Asciidoctor CLI.
+
 "#
     );
 
@@ -140,14 +141,13 @@ xref:man1/asciidoctor.adoc#options[CLI Options] describes the available options 
 fn help_flag_prints_the_usage_statement() {
     verifies!(
         r#"
-
 == Help topics
+
 "#
     );
 
     non_normative!(
         r#"
-
 The `--help` option provides self-describing documentation for the `asciidoctor` command, grouped by topic.
 "#
     );
@@ -161,12 +161,12 @@ If you don't specify a topic, the `--help` option prints the usage statement for
 Alternately, you can shorten the `--help` CLI option flag to `-h`:
 
  $ asciidoctor -h
+
 "#
     );
 
     non_normative!(
         r#"
-
 You can generate the full documentation (i.e., man page) for the `asciidoctor` command by passing the `manpage` topic to the `--help` option.
 You can pipe that output to the `man` pager to view it:
 
