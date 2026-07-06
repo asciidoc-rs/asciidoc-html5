@@ -47,8 +47,10 @@ pipeline rather than shelling out to a separate process.
 Converting AsciiDoc happens in two steps:
 
 load:: The AsciiDoc source is parsed into a document model -- an in-memory tree of
-the document's elements. `asciidoc-html5` relies on `asciidoc-parser` for this
-step, which returns an `asciidoc_parser::Document`.
+the document's elements. `asciidoc-html5` relies on
+https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] for this step,
+which returns an
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`].
 
 convert:: The document model is rendered to a complete HTML5 document.
 
