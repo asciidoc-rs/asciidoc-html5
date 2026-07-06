@@ -200,8 +200,6 @@ The document's text, titles, and link are styled by the default Asciidoctor styl
 As a result, you could save [.path]_my-document.html_ to any computer and it will look the same.
 --
 
-. If you want to preview the HTML in the terminal, you can use this command instead:
-
 "#
 );
 
@@ -212,6 +210,8 @@ As a result, you could save [.path]_my-document.html_ to any computer and it wil
 fn previews_html_on_stdout() {
     verifies!(
         r#"
+. If you want to preview the HTML in the terminal, you can use this command instead:
+
  $ asciidoctor my-document.adoc -o - | w3m - -T text/html
 
 "#
