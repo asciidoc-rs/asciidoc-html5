@@ -172,15 +172,15 @@ Asciidoctor derives the name of the output document from the name of the input d
     let mut stdout = Vec::new();
     run(&cli, &mut stdout).expect("adoc converts the file");
 
-    assert!(stdout.is_empty(), "adoc wrote to stdout on success");
-    assert!(
-        derived.exists(),
-        "adoc did not create the derived output file"
-    );
-    let html = std::fs::read_to_string(&derived).expect("read derived output file");
+    // Snapshot the results and clean up before asserting, so a failing
+    // assertion doesn't leak the temp files.
+    let wrote_derived = derived.exists();
+    let html = std::fs::read_to_string(&derived).unwrap_or_default();
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&derived);
 
+    assert!(stdout.is_empty(), "adoc wrote to stdout on success");
+    assert!(wrote_derived, "adoc did not create the derived output file");
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>Hello</title>"));
     assert!(html.trim_end().ends_with("</body>\n</html>"));
