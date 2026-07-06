@@ -108,15 +108,6 @@ include::example$my-document.adoc[tags=title;body]
 
 . Make sure to save the file with the _.adoc_ file extension.
 
-=== Convert an AsciiDoc document to HTML
-
-To convert [.path]_my-document.adoc_ to HTML from the command line:
-
-. Open a terminal.
-. Switch to the directory that contains the [.path]_my-document.adoc_ document
-. Call the Asciidoctor processor with the `asciidoctor` command, followed by the name of the document.
-+
---
 "#
 );
 
@@ -126,9 +117,19 @@ To convert [.path]_my-document.adoc_ to HTML from the command line:
 // test drives end to end.
 #[test]
 fn converts_and_derives_output_file() {
-    // Run the command. Nothing is printed on success.
+    // The "Convert an AsciiDoc document to HTML" section and the command that
+    // carries it out. Nothing is printed on success.
     verifies!(
         r#"
+=== Convert an AsciiDoc document to HTML
+
+To convert [.path]_my-document.adoc_ to HTML from the command line:
+
+. Open a terminal.
+. Switch to the directory that contains the [.path]_my-document.adoc_ document
+. Call the Asciidoctor processor with the `asciidoctor` command, followed by the name of the document.
++
+--
  $ asciidoctor my-document.adoc
 
 "#
