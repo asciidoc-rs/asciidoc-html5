@@ -211,8 +211,10 @@ The `adoc` command covers a small part of the `asciidoctor` CLI. It does not yet
 accept the many attribute (`-a`) and behavior options that `asciidoctor`
 provides, and its `--help` output is a single usage statement rather than the
 topic-grouped help of `asciidoctor`; the `manpage` and `syntax` help topics are
-not available. The short form of `--version` is `-V`, following the Rust
-convention, rather than the `-v` used by `asciidoctor`.
+not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
+tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
+The short form of `--version` is `-V`, following the Rust convention, rather than
+the `-v` used by `asciidoctor`.
 ====
 "#
     );

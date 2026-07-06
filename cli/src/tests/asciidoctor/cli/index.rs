@@ -165,6 +165,7 @@ Alternately, you can shorten the `--help` CLI option flag to `-h`:
 "#
     );
 
+    // TODO (https://github.com/asciidoc-rs/asciidoc-html5/issues/31): Implement the `--help syntax` topic so `adoc` prints an AsciiDoc syntax crib sheet, then promote its lines below from non_normative! to verifies!.
     non_normative!(
         r#"
 You can generate the full documentation (i.e., man page) for the `asciidoctor` command by passing the `manpage` topic to the `--help` option.
