@@ -89,19 +89,9 @@ With the built-in defaults and no output option, `adoc` writes a new file in the
 same directory as the input, with the same base name but the `.html` extension,
 so this command produces [.path]_document.html_.
 
-"#
-    );
-
-    non_normative!(
-        r#"
 To choose the output file yourself, pass `-o` (longhand `--output`); pass `-o -`
 to write the HTML5 to standard output instead:
 
-"#
-    );
-
-    verifies!(
-        r#"
  $ adoc document.adoc -o out.html
 
 "#
@@ -135,8 +125,23 @@ to write the HTML5 to standard output instead:
     run(&cli, &mut stdout).expect("adoc converts to the named output file");
 
     assert!(stdout.is_empty(), "adoc wrote to stdout with -o set");
+    assert!(
+        out.exists(),
+        "-o did not create the output file at the designated path"
+    );
     let out_html = std::fs::read_to_string(&out).expect("read -o output file");
     assert_eq!(out_html, html);
+
+    // `-o -` writes the HTML5 to standard output instead of a file.
+    let cli = Cli::parse_from([
+        "adoc",
+        path.to_str().expect("temp path is UTF-8"),
+        "-o",
+        "-",
+    ]);
+    let mut stdout = Vec::new();
+    run(&cli, &mut stdout).expect("adoc writes to stdout with -o -");
+    assert_eq!(String::from_utf8(stdout).expect("stdout is UTF-8"), html);
 
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&derived);
