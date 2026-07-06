@@ -1,0 +1,71 @@
+= Process AsciiDoc Using the CLI
+:navtitle: Use the CLI
+:description: How to check the version of adoc, convert a file, and print help from the command line.
+
+Once `asciidoc-html5` is installed, the command line interface (CLI) named
+`adoc` is available on your PATH. This page shows how to confirm the version,
+convert a file, and reach the built-in help.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Check the version
+
+To confirm that the CLI is available, run:
+
+ $ adoc --version
+
+You can shorten the `--version` flag to `-V`:
+
+ $ adoc -V
+
+Either form prints the version of `adoc` to standard output:
+
+ adoc <version>
+
+Unlike `asciidoctor`, `adoc` is a native binary with no Ruby, JVM, or JavaScript
+runtime, so it prints only its own version -- there is no separate
+runtime-environment line.
+
+== Convert an AsciiDoc file
+
+To convert an `.adoc` file, pass its name to `adoc`:
+
+ $ adoc document.adoc
+
+With the built-in defaults and no output option, `adoc` writes a new file in the
+same directory as the input, with the same base name but the `.html` extension,
+so this command produces [.path]_document.html_.
+
+To choose the output file yourself, pass `-o` (longhand `--output`); pass `-o -`
+to write the HTML5 to standard output instead:
+
+ $ adoc document.adoc -o out.html
+
+== Get help
+
+The `--help` option prints the usage statement for the `adoc` command, including
+its options and a few examples:
+
+ $ adoc --help
+
+You can shorten the `--help` flag to `-h`, which prints a shorter summary:
+
+ $ adoc -h
+
+[NOTE]
+.Known limitations
+====
+The `adoc` command covers a small part of the `asciidoctor` CLI. It does not yet
+accept the many attribute (`-a`) and behavior options that `asciidoctor`
+provides, and its `--help` output is a single usage statement rather than the
+topic-grouped help of `asciidoctor`; the `manpage` and `syntax` help topics are
+not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
+tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
+The short form of `--version` is `-V`, following the Rust convention, rather than
+the `-v` used by `asciidoctor`.
+====
