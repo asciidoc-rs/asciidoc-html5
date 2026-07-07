@@ -259,6 +259,8 @@ stylesheet features are not available:
 * *Custom stylesheets.* Setting `stylesheet` to your own CSS file has no effect:
 the library converts a string to a string and cannot read an external file.
 Explicitly unsetting the stylesheet (`:stylesheet!:`) does drop the default one.
+Supporting custom stylesheets is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
 "#
     );
 
