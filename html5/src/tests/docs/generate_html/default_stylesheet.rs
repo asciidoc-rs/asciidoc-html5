@@ -168,6 +168,15 @@ You are then responsible for placing _asciidoctor.css_ next to the output so the
 browser can find it. Unlike Asciidoctor, `asciidoc-html5` does not write that
 file for you (there is no `copycss` step); it only produces the HTML.
 
+[NOTE]
+====
+Asciidoctor's API links to the stylesheet by default (instead of embedding it)
+because of its default _safe mode_. `asciidoc-html5` has no safe mode: it always
+embeds the default stylesheet unless you ask for `linkcss`. Modeling safe mode is
+tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/37[issue #37].
+====
+
 "#
 );
 

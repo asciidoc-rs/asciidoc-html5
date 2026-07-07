@@ -271,6 +271,11 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
     assert!(!html.contains("<style>"));
 }
 
+// The API's "links by default instead of embedding" behavior is a consequence
+// of Asciidoctor's default safe mode (`secure`). This crate has no safe-mode
+// concept — `convert` always embeds — so this span is non-normative. Modeling
+// safe mode (and this embed-vs-link distinction) is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/37.
 non_normative!(
     r#"
 When using the API, Asciidoctor already links to the stylesheet by default instead of embedding it (due to the default safe mode).
