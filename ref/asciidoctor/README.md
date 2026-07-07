@@ -15,12 +15,20 @@ release tag:
 - Source: <https://github.com/asciidoctor/asciidoctor/tree/v2.0.26>
 - Commit: `0b99b39c9df884d4aec13bba45f03cdbab505769`
 
-The following folders were copied, unmodified:
+The following were copied, unmodified:
 
-| Folder in this repo | Origin in `asciidoctor/asciidoctor` |
-| ------------------- | ----------------------------------- |
-| [`docs/`](docs)     | [`docs/`](https://github.com/asciidoctor/asciidoctor/tree/v2.0.26/docs) — the Antora documentation site for Asciidoctor |
-| [`test/`](test)     | [`test/`](https://github.com/asciidoctor/asciidoctor/tree/v2.0.26/test) — the Ruby test suite (Minitest) and its fixtures |
+| Path in this repo | Origin in `asciidoctor/asciidoctor` |
+| ----------------- | ----------------------------------- |
+| [`docs/`](docs)   | [`docs/`](https://github.com/asciidoctor/asciidoctor/tree/v2.0.26/docs) — the Antora documentation site for Asciidoctor |
+| [`test/`](test)   | [`test/`](https://github.com/asciidoctor/asciidoctor/tree/v2.0.26/test) — the Ruby test suite (Minitest) and its fixtures |
+| [`data/stylesheets/asciidoctor-default.css`](data/stylesheets/asciidoctor-default.css) | [`data/stylesheets/asciidoctor-default.css`](https://github.com/asciidoctor/asciidoctor/blob/v2.0.26/data/stylesheets/asciidoctor-default.css) — the compiled default stylesheet Asciidoctor embeds in standalone HTML output |
+
+Only the single `asciidoctor-default.css` file was copied from `data/`, not the
+rest of that folder. It is the exact stylesheet Asciidoctor's `html5` backend
+embeds in a standalone document (Asciidoctor reads it via
+`Stylesheets#primary_stylesheet_data` and writes it out publicly as
+`asciidoctor.css`), so it is the oracle for this renderer's own embedded copy in
+[`html5/assets/`](../../html5/assets/asciidoctor-default.css).
 
 These files are **not** built, run, or otherwise used by the `asciidoc-html5`
 crates. They are included purely as a snapshot for reference. This project does

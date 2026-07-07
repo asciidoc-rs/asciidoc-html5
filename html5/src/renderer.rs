@@ -35,6 +35,19 @@ use asciidoc_parser::{
 
 use crate::html::{class_attribute, escape_attribute, id_attribute};
 
+/// Asciidoctor's compiled default stylesheet, embedded verbatim. This is a copy
+/// of `ref/asciidoctor/data/stylesheets/asciidoctor-default.css` (Asciidoctor
+/// v2.0.26) — the exact CSS Asciidoctor's `html5` backend inlines into a
+/// standalone document via `Stylesheets#primary_stylesheet_data`. It carries
+/// its own MIT license header; a drift-guard test keeps this copy identical to
+/// the reference one.
+const DEFAULT_STYLESHEET: &str = include_str!("../assets/asciidoctor-default.css");
+
+/// The `family` query string Asciidoctor uses for its Google Fonts `<link>`
+/// when the `webfonts` attribute carries no explicit value: Open Sans for
+/// headings, Noto Serif for body text, Droid Sans Mono for monospaced text.
+const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
+
 /// Reads a document attribute as an explicit string value, if it has one.
 /// `Set`/`Unset`/absent all yield `None` (use `is_attribute_set` for booleans).
 fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
@@ -92,6 +105,13 @@ impl Renderer {
         if let Some(title) = doctitle {
             self.line(&format!("<title>{title}</title>"));
         }
+
+        // Asciidoctor embeds its default stylesheet (and the web-font link it
+        // relies on) into the `<head>` of a standalone document, right after
+        // the `<title>`. This renderer always produces standalone output, so it
+        // does the same unless the document opts out.
+        self.stylesheet(document);
+
         self.line("</head>");
         self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
 
@@ -198,6 +218,69 @@ impl Renderer {
         }
 
         self.line("</div>");
+    }
+
+    /// Emits the default-stylesheet portion of the `<head>`: the Google Fonts
+    /// `<link>` and either an inline `<style>` (the default) or, under
+    /// `linkcss`, a `<link>` to `./asciidoctor.css`.
+    ///
+    /// This mirrors Asciidoctor's `html5` backend, which only emits this block
+    /// when the `stylesheet` attribute selects the default stylesheet — that
+    /// is, when it is absent, set with no value, empty, or `DEFAULT`
+    /// (Asciidoctor's `DEFAULT_STYLESHEET_KEYS`). Explicitly unsetting it
+    /// (`:stylesheet!:`) drops the block entirely, and a custom `stylesheet`
+    /// value is a documented limitation: this crate cannot read an external
+    /// stylesheet file, so it emits nothing rather than guessing.
+    fn stylesheet(&mut self, document: &Document<'_>) {
+        match document.attribute_value("stylesheet") {
+            // Explicitly unset (`:stylesheet!:`): no stylesheet at all.
+            InterpretedValue::Unset if document.has_attribute("stylesheet") => return,
+            // A custom stylesheet file — unsupported (see docs); emit nothing.
+            InterpretedValue::Value(ref value) if !value.is_empty() && value != "DEFAULT" => return,
+            // Absent, `Set`, empty, or `DEFAULT`: the default stylesheet.
+            _ => {}
+        }
+
+        self.webfonts_link(document);
+
+        if document.is_attribute_set("linkcss") {
+            // Asciidoctor writes the stylesheet out under the public name
+            // `asciidoctor.css`, normalized to a relative web path.
+            self.line("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">");
+        } else {
+            // The template is `<style>\n{data}\n</style>`, where `data` is the
+            // stylesheet with a single trailing newline chomped, so no blank
+            // line separates the CSS from the closing tag.
+            self.line("<style>");
+            self.line(
+                DEFAULT_STYLESHEET
+                    .strip_suffix('\n')
+                    .unwrap_or(DEFAULT_STYLESHEET),
+            );
+            self.line("</style>");
+        }
+    }
+
+    /// Emits the `<link rel="stylesheet">` that loads the web fonts the default
+    /// stylesheet prefers, unless the `webfonts` attribute has been explicitly
+    /// unset (`:webfonts!:`). A non-empty `webfonts` value replaces the default
+    /// font family; an empty value (or a bare `:webfonts:`) keeps the default.
+    fn webfonts_link(&mut self, document: &Document<'_>) {
+        // Present but unset means the user opted out of web fonts.
+        if document.has_attribute("webfonts") && !document.is_attribute_set("webfonts") {
+            return;
+        }
+
+        let family = match document.attribute_value("webfonts") {
+            InterpretedValue::Value(value) if !value.is_empty() => value,
+            _ => DEFAULT_WEBFONTS.to_string(),
+        };
+
+        // The family is placed into the URL verbatim, exactly as Asciidoctor
+        // does (the default value is already percent-encoded, e.g. `%7C`).
+        self.line(&format!(
+            "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family={family}\">"
+        ));
     }
 
     /// Walks a sequence of sibling blocks in document order.
@@ -548,5 +631,78 @@ mod tests {
     fn page_break_renders_a_page_break_div() {
         let html = convert("before\n\n<<<\n\nafter");
         assert!(content(&html).contains("<div style=\"page-break-after: always;\"></div>"));
+    }
+
+    // The default `<head>` embeds Asciidoctor's default stylesheet and links
+    // the web fonts it relies on, in that order, right after the `<title>`.
+
+    #[test]
+    fn default_head_links_web_fonts_then_embeds_the_stylesheet() {
+        let html = convert("= Doc\n\nBody.");
+
+        // The web-font link comes first, carrying the default font family.
+        assert!(html.contains(
+            "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700\">"
+        ));
+
+        // Then the stylesheet is embedded inline. The CSS opens with its
+        // license banner and ends flush against `</style>` (no blank line).
+        assert!(html.contains(
+            "<style>\n/*! Asciidoctor default stylesheet | MIT License | https://asciidoctor.org */"
+        ));
+        assert!(html.contains("{padding:0}}\n</style>"));
+
+        // Ordering: the font link precedes the `<style>`, and both sit inside
+        // the head, after the title.
+        let title = html.find("<title>").expect("title");
+        let fonts = html.find("fonts.googleapis.com").expect("web fonts link");
+        let style = html.find("<style>").expect("style");
+        let head_end = html.find("</head>").expect("head end");
+        assert!(title < fonts && fonts < style && style < head_end);
+    }
+
+    #[test]
+    fn webfonts_unset_drops_the_font_link_but_keeps_the_stylesheet() {
+        let html = convert("= Doc\n:webfonts!:\n\nBody.");
+        // No emitted web-font `<link>`. (The embedded CSS mentions Google Fonts
+        // in a commented-out `@import`, so match on the `<link>` tag itself.)
+        assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+        assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
+    }
+
+    #[test]
+    fn webfonts_value_overrides_the_font_family() {
+        let html = convert("= Doc\n:webfonts: Ubuntu+Mono:400\n\nBody.");
+        assert!(html.contains(
+            "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=Ubuntu+Mono:400\">"
+        ));
+        // The default-family `<link>` is gone (the CSS comment still names the
+        // default fonts, so match on the emitted `<link>` tag).
+        assert!(!html.contains(
+            "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=Open+Sans"
+        ));
+    }
+
+    #[test]
+    fn linkcss_links_the_stylesheet_instead_of_embedding_it() {
+        let html = convert("= Doc\n:linkcss:\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+        assert!(!html.contains("<style>"));
+        // The web-font link is still emitted alongside the linked stylesheet.
+        assert!(html.contains("fonts.googleapis.com"));
+    }
+
+    #[test]
+    fn stylesheet_unset_drops_the_whole_stylesheet_block() {
+        let html = convert("= Doc\n:stylesheet!:\n\nBody.");
+        assert!(!html.contains("<style>"));
+        assert!(!html.contains("fonts.googleapis.com"));
+        assert!(!html.contains("asciidoctor.css"));
+    }
+
+    #[test]
+    fn default_stylesheet_value_still_embeds_the_default() {
+        let html = convert("= Doc\n:stylesheet: DEFAULT\n\nBody.");
+        assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
     }
 }

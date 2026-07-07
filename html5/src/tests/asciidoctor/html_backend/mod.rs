@@ -6,4 +6,5 @@
 //! counterpart in this crate's API, an ordinary test verifies it; the rest is
 //! tracked as non-normative. The module grows a page per topic.
 
+mod default_stylesheet;
 mod index;

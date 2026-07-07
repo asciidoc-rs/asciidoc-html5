@@ -1,4 +1,5 @@
 * xref:index.adoc[Introduction]
 * xref:convert-your-first-file.adoc[Convert Your First File]
 * xref:generate-html:index.adoc[Generate HTML]
+** xref:generate-html:default-stylesheet.adoc[Default Stylesheet]
 * xref:cli:index.adoc[Use the CLI]
