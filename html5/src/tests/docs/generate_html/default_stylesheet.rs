@@ -166,7 +166,9 @@ non_normative!(
     r#"
 You are then responsible for placing _asciidoctor.css_ next to the output so the
 browser can find it. Unlike Asciidoctor, `asciidoc-html5` does not write that
-file for you (there is no `copycss` step); it only produces the HTML.
+file for you (there is no `copycss` step, tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39]); it only
+produces the HTML.
 
 [NOTE]
 ====
@@ -201,7 +203,9 @@ Hello.
 ----
 
 The `adoc` command has no options for setting attributes, so control the web
-fonts (and the other attributes on this page) from the document header.
+fonts (and the other attributes on this page) from the document header. Passing
+attributes from outside the document is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/38[issue #38].
 
 "#
     );
