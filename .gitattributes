@@ -1,8 +1,8 @@
-# Normalize line endings to LF in the working tree on every platform (including
-# Windows), so builds and tests see the same bytes everywhere.
-* text=auto eol=lf
-
 # The vendored Asciidoctor stylesheet is embedded verbatim via `include_str!`
-# and compared byte-for-byte against Asciidoctor's LF output. Keep it LF on all
-# platforms — a CRLF checkout would embed `\r\n` and diverge from Asciidoctor.
-*.css text eol=lf
+# and compared byte-for-byte against Asciidoctor's LF output, so it must stay LF
+# on every platform — a CRLF checkout (e.g. Windows `core.autocrlf`) would embed
+# `\r\n` and diverge from Asciidoctor. The `ref/` copy is pinned too so the
+# drift-guard test (which reads it back) sees the same bytes. Everything else is
+# left to each contributor's git defaults.
+html5/assets/asciidoctor-default.css text eol=lf
+ref/asciidoctor/data/stylesheets/asciidoctor-default.css text eol=lf
