@@ -346,6 +346,11 @@ You would set the `webfonts` attribute as follows:
 "#
     );
 
+    // The page sets `webfonts` from the CLI (`-a webfonts=...`), but this crate
+    // has no way to pass attributes from outside the source, so we splice the
+    // attribute into the document header instead. Real attribute passing (API
+    // and CLI) is tracked in
+    // https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
     let webfonts =
         "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CUbuntu+Mono:400";
     let html = convert(&format!("= Doc\n:webfonts: {webfonts}\n\nBody."));
