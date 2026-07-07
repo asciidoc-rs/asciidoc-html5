@@ -10,7 +10,9 @@ aims to be compatible with [Asciidoctor](https://asciidoctor.org)'s default
 `html5` backend.
 
 `adoc` produces HTML5 only. Asciidoctor's other backends are out of scope; in
-particular, **DocBook and man page output are not planned.**
+particular, **DocBook and man page output are not planned**, and `adoc` emits
+HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5` backends)
+is not supported.**
 
 This is the **binary** crate of the
 [`asciidoc-html5` workspace](https://github.com/asciidoc-rs/asciidoc-html5). It

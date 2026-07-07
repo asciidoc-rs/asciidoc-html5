@@ -1,0 +1,118 @@
+= Generate HTML from AsciiDoc
+:navtitle: Generate HTML
+:description: How asciidoc-html5 converts AsciiDoc to HTML5, the only output format it produces.
+
+HTML5 is the only output format `asciidoc-html5` produces.
+Whether you use the `adoc` command or the Rust API, converting an AsciiDoc
+document gives you back a complete, standalone HTML5 document.
+This page explains how to generate that HTML5 and how the renderer relates to
+Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` and API
+invocations it shows are normative: they are verified against the
+implementation, so the documented behavior is guaranteed.
+====
+
+== Backend and converter
+
+Asciidoctor selects an output format through a _backend_, and its default
+backend, `html5`, produces HTML5. `asciidoc-html5` has no backend switch,
+because HTML5 is the only format it produces. That output corresponds to
+Asciidoctor's `html5` backend and aims to be compatible with it.
+
+[horizontal]
+Output format:: HTML5
+Output file extension:: _.html_
+Compatibility target:: Asciidoctor's default `html5` backend
+
+[NOTE]
+.Known limitation
+====
+Asciidoctor embeds its default stylesheet in the HTML output, so the page is
+styled without any external files. This renderer does not embed a stylesheet
+yet, so the converted document is currently unstyled: the output carries the
+same structure Asciidoctor produces but no default theme. Embedding the default
+stylesheet is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/27[issue #27].
+====
+
+== Generate HTML5
+
+In this section, we'll create a sample document, then convert it with `adoc`.
+
+=== Create and save an AsciiDoc document
+
+. To follow along, copy the contents of the example into a new plain text file,
+or use your own AsciiDoc document.
++
+.my-document.adoc
+[,asciidoc]
+----
+= The Dangers of Wolpertingers
+
+Don't worry about gumberoos or splintercats.
+Something far more fearsome plagues the days, nights, and inbetweens.
+Wolpertingers.
+
+== Origins
+
+Wolpertingers are ravenous beasts.
+----
+
+. Make sure to save the file with the _.adoc_ file extension.
+
+=== Convert the document to HTML5
+
+To convert [.path]_my-document.adoc_ to HTML5 from the command line:
+
+. Open a terminal and switch (`cd`) into the directory that contains the
+document.
+. Call `adoc` with the file name of the document.
++
+--
+ $ adoc my-document.adoc
+
+Since HTML5 is the only output `adoc` produces, you don't need to select a
+converter.
+--
+
+. `adoc` prints nothing to the terminal on success. Type `ls` to list the
+directory.
++
+--
+ $ ls
+ my-document.adoc  my-document.html
+
+You should see a new file named [.path]_my-document.html_. `adoc` derives the
+output file name from the input, replacing the _.adoc_ extension with _.html_.
+--
+
+. Open [.path]_my-document.html_ in your web browser. The converted document is
+a complete, standalone HTML5 document you can publish.
+
+To preview the HTML5 in the terminal instead of writing a file, pass `-o -` to
+write to standard output and pipe it into a terminal browser:
+
+ $ adoc my-document.adoc -o - | w3m -T text/html
+
+== Generate the HTML5 from the API
+
+The Rust API produces the same HTML5. Convert a file on disk with `convert_file`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert_file("my-document.adoc")?;
+----
+
+`convert`, for AsciiDoc you already hold in memory, and `convert_document`, for
+a document you have already parsed, return the same complete HTML5 document. See
+the xref:ROOT:index.adoc[introduction] for those forms.
+
+== XHTML is not supported
+
+Asciidoctor can emit the XML variant of HTML, called XHTML, through its `xhtml`
+and `xhtml5` backends. `asciidoc-html5` does not support XHTML: it emits HTML5
+syntax only, and there is no option to switch it to XHTML. If you need XHTML
+output, use https://asciidoctor.org[Asciidoctor] itself.

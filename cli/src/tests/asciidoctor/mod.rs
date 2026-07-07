@@ -9,4 +9,5 @@
 
 mod cli;
 mod get_started;
+mod html_backend;
 mod index;
