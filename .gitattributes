@@ -1,0 +1,8 @@
+# Normalize line endings to LF in the working tree on every platform (including
+# Windows), so builds and tests see the same bytes everywhere.
+* text=auto eol=lf
+
+# The vendored Asciidoctor stylesheet is embedded verbatim via `include_str!`
+# and compared byte-for-byte against Asciidoctor's LF output. Keep it LF on all
+# platforms — a CRLF checkout would embed `\r\n` and diverge from Asciidoctor.
+*.css text eol=lf
