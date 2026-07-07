@@ -17,12 +17,14 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/index.adoc");
 //
 // The rest is non-normative here. The "Backend and converter" facts (the
 // converter class, the backend registration) are Asciidoctor internals with no
-// counterpart in this crate; the Google Fonts warning concerns the default
-// stylesheet this crate does not embed yet; and the screenshot and CLI-only
-// steps are verified from the `adoc` crate instead. The "Generate XHTML"
-// section (and the sentence introducing it) is tracked as non-normative by
-// deliberate project decision: this crate emits HTML5 syntax only and does not
-// support Asciidoctor's `xhtml`/`xhtml5` backends (see the workspace README).
+// counterpart in this crate; the Google Fonts warning is descriptive prose
+// about GDPR (the default stylesheet and its web-font link, which this crate
+// now embeds, are covered by the default-stylesheet page); and the screenshot
+// and CLI-only steps are verified from the `adoc` crate instead. The "Generate
+// XHTML" section (and the sentence introducing it) is tracked as non-normative
+// by deliberate project decision: this crate emits HTML5 syntax only and does
+// not support Asciidoctor's `xhtml`/`xhtml5` backends (see the workspace
+// README).
 
 non_normative!(
     r#"

@@ -28,14 +28,11 @@ Output file extension:: _.html_
 Compatibility target:: Asciidoctor's default `html5` backend
 
 [NOTE]
-.Known limitation
 ====
-Asciidoctor embeds its default stylesheet in the HTML output, so the page is
-styled without any external files. This renderer does not embed a stylesheet
-yet, so the converted document is currently unstyled: the output carries the
-same structure Asciidoctor produces but no default theme. Embedding the default
-stylesheet is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/27[issue #27].
+Like Asciidoctor, `asciidoc-html5` embeds its
+xref:default-stylesheet.adoc[default stylesheet] into the standalone HTML5 it
+generates, so the converted document is styled without any external files. It
+also adds the `<link>` that loads the web fonts the stylesheet prefers.
 ====
 
 == Generate HTML5
