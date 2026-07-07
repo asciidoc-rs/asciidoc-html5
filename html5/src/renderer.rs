@@ -276,8 +276,15 @@ impl Renderer {
             _ => DEFAULT_WEBFONTS.to_string(),
         };
 
-        // The family is placed into the URL verbatim, exactly as Asciidoctor
-        // does (the default value is already percent-encoded, e.g. `%7C`).
+        // The value reaches us with AsciiDoc's specialchars substitution already
+        // applied by the parser, so `&`, `<`, and `>` are escaped — matching
+        // Asciidoctor, which then emits the value as-is. That leaves a literal
+        // `"` free to break out of the `href` (a header-set `webfonts` value
+        // could otherwise inject attributes onto the `<link>`), so we escape the
+        // one remaining special character. This is a no-op for the default and
+        // any real font query, which contain no `"`, so output stays
+        // byte-identical to Asciidoctor for every valid value.
+        let family = family.replace('"', "&quot;");
         self.line(&format!(
             "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family={family}\">"
         ));
@@ -681,6 +688,18 @@ mod tests {
         assert!(!html.contains(
             "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=Open+Sans"
         ));
+    }
+
+    #[test]
+    fn webfonts_value_double_quote_cannot_break_out_of_the_href() {
+        // The parser escapes `&`/`<`/`>` in the value, but not `"`. An
+        // unescaped `"` would close the `href` and let a header-set value inject
+        // attributes onto the `<link>`; we escape it so the value stays inside.
+        let html = convert("= Doc\n:webfonts: x\" onmouseover=\"y\n\nBody.");
+        assert!(html.contains(
+            "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=x&quot; onmouseover=&quot;y\">"
+        ));
+        assert!(!html.contains("family=x\" onmouseover"));
     }
 
     #[test]
