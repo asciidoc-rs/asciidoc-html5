@@ -277,9 +277,11 @@ https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
 
 non_normative!(
     r#"
-* *docinfo.* Injecting auxiliary styles through a docinfo file is not supported.
+* *docinfo.* Injecting auxiliary styles through a docinfo file is not supported,
+tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40[issue #40].
 * *copycss.* The library never writes files, so with `linkcss` you must supply
-_asciidoctor.css_ yourself.
+_asciidoctor.css_ yourself; writing it out is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
 
 To pin down exactly which markup the renderer supports today, see the
 xref:ROOT:index.adoc[introduction].
