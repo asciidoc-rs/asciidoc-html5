@@ -15,15 +15,19 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 //
 // This page is tracked from the library crate only: every verifiable claim is
 // about the HTML `<head>` that `asciidoc_html5::convert` emits, and the `adoc`
-// binary exposes no stylesheet, `linkcss`, or `-a` options of its own, so it
-// adds no independent claim to verify.
+// binary exposes no stylesheet, `linkcss`, or `-a` options of its own (passing
+// attributes into the API and CLI is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/38), so it adds no
+// independent claim to verify.
 //
-// The rest is non-normative here. The docinfo-based customizations, the
-// `@import`/custom-stylesheet "extend" recipe, the Ruby API safe-mode
-// discussion, the `copycss` file copy, and the external Asciidoctor Skins
-// themes are features this crate does not implement (it converts a string to a
-// string and embeds only the default stylesheet), so they carry no rule to
-// verify.
+// The rest is non-normative here — features this crate does not implement (it
+// converts a string to a string and embeds only the default stylesheet), each
+// carrying no rule to verify:
+// - the `@import`/custom-stylesheet "extend" recipe (custom stylesheets are
+//   tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/36);
+// - the Ruby API safe-mode discussion (safe mode is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/37);
+// - the `copycss` file copy (tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39);
+// - the docinfo-based customizations and the external Asciidoctor Skins themes.
 
 // The renderer embeds `html5/assets/asciidoctor-default.css`; the definitive
 // copy is the Asciidoctor stylesheet vendored under `ref/`. Guard against the
@@ -254,7 +258,8 @@ image::default-stylesheet.png[]
 // of embedding it. This crate emits the same `<link>` to `./asciidoctor.css` in
 // place of the inline `<style>`. (The companion `copycss`, which copies the
 // stylesheet file into the output directory, is a file-system side effect this
-// string-to-string library does not perform.)
+// string-to-string library does not perform; it is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/39.)
 #[test]
 fn linkcss_links_the_stylesheet_instead_of_embedding_it() {
     verifies!(
