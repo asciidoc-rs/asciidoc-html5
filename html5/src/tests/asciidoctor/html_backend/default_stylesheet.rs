@@ -271,6 +271,10 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
 "#
     );
 
+    // The page sets `linkcss` from the CLI (`-a linkcss`); with no way to pass
+    // attributes from outside the source, we set it in the document header
+    // instead. Real attribute passing (API and CLI) is tracked in
+    // https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
     let html = convert("= Doc\n:linkcss:\n\nBody.");
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
     assert!(!html.contains("<style>"));
@@ -316,6 +320,10 @@ You can disable this link by unsetting the `webfonts` document attribute from th
 "#
     );
 
+    // The page shows `-a webfonts!` on the CLI; we unset it in the document
+    // header (one of the routes the text names) since attributes can't be
+    // passed from outside the source. Real attribute passing (API and CLI) is
+    // tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
     let html = convert("= Doc\n:webfonts!:\n\nBody.");
     // No emitted web-font <link> (the embedded CSS names Google Fonts only in a
     // commented-out @import, so match on the <link> tag itself).
