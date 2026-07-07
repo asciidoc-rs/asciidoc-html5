@@ -386,6 +386,15 @@ There are at least two ways to customize the default stylesheet.
 One way is to add auxiliary styles using docinfo.
 Another way is to create a custom stylesheet, but import the default stylesheet as a starting point.
 
+"#
+);
+
+// docinfo injects auxiliary content (e.g. a `<style>` block) into fixed
+// positions of the generated HTML, such as the bottom of the `<head>`. This
+// crate has no docinfo support; supporting docinfo files is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/40.
+non_normative!(
+    r#"
 [#customize-docinfo]
 === Auxiliary styles with docinfo
 
