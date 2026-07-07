@@ -27,7 +27,8 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 //   tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/36);
 // - the Ruby API safe-mode discussion (safe mode is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/37);
 // - the `copycss` file copy (tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39);
-// - the docinfo-based customizations and the external Asciidoctor Skins themes.
+// - the docinfo-based customizations (docinfo is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40);
+// - the external Asciidoctor Skins themes (out of scope; third-party).
 
 // The renderer embeds `html5/assets/asciidoctor-default.css`; the definitive
 // copy is the Asciidoctor stylesheet vendored under `ref/`. Guard against the
