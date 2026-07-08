@@ -12,6 +12,7 @@ use std::{
     process::ExitCode,
 };
 
+use asciidoc_html5::Options;
 use clap::Parser;
 
 /// Convert an AsciiDoc document to HTML5.
@@ -58,6 +59,21 @@ write to standard output instead. When the input is read from standard input, \
 there is no name to derive from, so adoc writes to standard output."
     )]
     output: Option<PathBuf>,
+
+    /// Set a document attribute (`name`, `name=value`, or `name!` to unset)
+    #[arg(
+        short = 'a',
+        long = "attribute",
+        value_name = "NAME[=VALUE]",
+        long_help = "Set a document attribute from outside the document, the way \
+Asciidoctor's -a option does.\n\n\
+Give `name` to set an attribute, `name=value` to set it to a value, or `name!` \
+(equivalently `!name`) to unset it. By default the value supplied here overrides any assignment of the \
+same name inside the document. Append `@` (for example `name=value@`) to make it \
+a soft default instead, which a document assignment of the same name overrides.\n\n\
+Repeat -a to set several attributes."
+    )]
+    attribute: Vec<String>,
 }
 
 fn main() -> ExitCode {
@@ -80,13 +96,96 @@ fn main() -> ExitCode {
 /// standard-output writer in as a parameter keeps the conversion pipeline
 /// testable without spawning the binary.
 fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
+    let options = build_options(&cli.attribute)?;
+
     let source = read_input(cli.input.as_deref())?;
 
-    let html = asciidoc_html5::convert(&source);
+    let html = asciidoc_html5::convert_with(&source, &options);
 
     match output_target(cli) {
         OutputTarget::File(path) => fs::write(path, html),
         OutputTarget::Stdout => stdout.write_all(html.as_bytes()),
+    }
+}
+
+/// Builds the conversion [`Options`] from the raw `-a`/`--attribute` specs,
+/// parsing each with [`apply_attribute_spec`].
+fn build_options(specs: &[String]) -> io::Result<Options> {
+    let mut options = Options::new();
+    for spec in specs {
+        options = apply_attribute_spec(options, spec)?;
+    }
+    Ok(options)
+}
+
+/// Parses one `-a` attribute spec and records it in `options`, mirroring
+/// Asciidoctor's `-a` syntax:
+///
+/// - `name` sets the attribute; `name=value` sets it to a value; `name!` (or
+///   `!name`) unsets it.
+/// - A trailing `@` makes the assignment a soft default that a document
+///   assignment of the same name overrides; without it, the value overrides the
+///   document.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when the spec has no
+/// attribute name (for example, an empty string or a bare `!`).
+fn apply_attribute_spec(options: Options, spec: &str) -> io::Result<Options> {
+    // A trailing `@` marks a soft default the document may override; strip it
+    // first so it does not become part of a value or name.
+    let (body, soft) = match spec.strip_suffix('@') {
+        Some(rest) => (rest, true),
+        None => (spec, false),
+    };
+
+    // Split off a `=value` first, matching Asciidoctor: the key is everything
+    // before the first `=` (a name cannot contain `=`), the value everything
+    // after. A bare spec has no value.
+    let (key, value) = match body.split_once('=') {
+        Some((key, value)) => (key, Some(value)),
+        None => (body, None),
+    };
+
+    // A `!` on either end of the key unsets the attribute and takes precedence
+    // over any `=value` (which Asciidoctor discards). Otherwise a `=value`
+    // assigns the value, and a bare key sets the attribute.
+    let options = if let Some(name) = key.strip_prefix('!').or_else(|| key.strip_suffix('!')) {
+        let name = validate_name(name, spec)?;
+        if soft {
+            options.unset_default(name)
+        } else {
+            options.unset(name)
+        }
+    } else if let Some(value) = value {
+        let name = validate_name(key, spec)?;
+        if soft {
+            options.attribute_default(name, value)
+        } else {
+            options.attribute(name, value)
+        }
+    } else {
+        let name = validate_name(key, spec)?;
+        if soft {
+            options.set_default(name)
+        } else {
+            options.set(name)
+        }
+    };
+
+    Ok(options)
+}
+
+/// Returns `name` if it is a non-empty attribute name, or an
+/// [`io::ErrorKind::InvalidInput`] error naming the offending `spec` otherwise.
+fn validate_name<'a>(name: &'a str, spec: &str) -> io::Result<&'a str> {
+    if name.is_empty() {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid attribute '{spec}': missing attribute name"),
+        ))
+    } else {
+        Ok(name)
     }
 }
 

@@ -177,3 +177,166 @@ fn reports_failure_when_input_cannot_be_read() {
         "error should be prefixed with `adoc:`, got: {stderr}"
     );
 }
+
+/// Runs `adoc` on `source` from standard input with the given extra arguments,
+/// returning the exit status, standard output, and standard error. Used by the
+/// `-a`/`--attribute` tests, which need only vary the arguments and the source.
+fn run_adoc(args: &[&str], source: &str) -> (std::process::ExitStatus, String, String) {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the adoc binary");
+
+    // `adoc` validates its arguments before it reads standard input, so an
+    // invalid invocation (see `empty_attribute_name_is_rejected`) can exit
+    // before consuming the source, breaking the pipe mid-write. That is
+    // expected here; the meaningful assertions are on the exit status and the
+    // captured output. Any other write error is a genuine failure. Drop stdin
+    // afterward so the child sees EOF (otherwise `wait_with_output` deadlocks).
+    let mut stdin = child.stdin.take().expect("child stdin is piped");
+    if let Err(err) = stdin.write_all(source.as_bytes()) {
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write to child stdin: {err}"
+        );
+    }
+    drop(stdin);
+
+    let output = child.wait_with_output().expect("wait for the adoc binary");
+    (
+        output.status,
+        String::from_utf8(output.stdout).expect("stdout is UTF-8"),
+        String::from_utf8(output.stderr).expect("stderr is UTF-8"),
+    )
+}
+
+/// `-a name=value` supplies a document attribute and, being an override, wins
+/// over an assignment of the same name in the document header.
+#[test]
+fn attribute_override_beats_the_document_header() {
+    let source = "= Doc\n:webfonts: from-header\n\nBody.";
+    let (status, html, _) = run_adoc(&["-a", "webfonts=from-cli", "-o", "-"], source);
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(html.contains(
+        "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=from-cli\">"
+    ));
+}
+
+/// `-a name=value@` is a soft default, so a document-header assignment of the
+/// same name wins over it.
+#[test]
+fn soft_attribute_yields_to_the_document_header() {
+    let source = "= Doc\n:webfonts: from-header\n\nBody.";
+    let (status, html, _) = run_adoc(&["-a", "webfonts=from-cli@", "-o", "-"], source);
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(html.contains(
+        "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=from-header\">"
+    ));
+}
+
+/// `-a name!` unsets an attribute; here it drops the web-font `<link>`.
+#[test]
+fn attribute_unset_drops_the_web_font_link() {
+    let (status, html, _) = run_adoc(&["-a", "webfonts!", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+    // The default stylesheet is still embedded.
+    assert!(html.contains("<style>"));
+}
+
+/// The leading-bang form `-a !name` unsets an attribute too, matching
+/// Asciidoctor's alternative to the trailing `name!`.
+#[test]
+fn attribute_leading_bang_unsets() {
+    let (status, html, _) = run_adoc(&["-a", "!webfonts", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+    // The default stylesheet is still embedded.
+    assert!(html.contains("<style>"));
+}
+
+/// A `!` on either end of the key unsets the attribute and discards any
+/// `=value`, matching Asciidoctor: `-a name!=value` and `-a !name=value` both
+/// unset `name` rather than assigning the value.
+#[test]
+fn bang_key_unsets_and_discards_value() {
+    for spec in ["webfonts!=X:400", "!webfonts=X:400"] {
+        let (status, html, _) = run_adoc(&["-a", spec, "-o", "-"], "= Doc\n\nBody.");
+
+        assert!(status.success(), "adoc exited with {status} for -a {spec}");
+        assert!(
+            !html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"),
+            "-a {spec} should unset webfonts and drop the font link"
+        );
+        // The discarded value must not leak through as a font family.
+        assert!(
+            !html.contains("family=X:400"),
+            "-a {spec} must discard the value"
+        );
+    }
+}
+
+/// `-a linkcss` links the stylesheet instead of embedding it.
+#[test]
+fn attribute_set_links_the_stylesheet() {
+    let (status, html, _) = run_adoc(&["-a", "linkcss", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+    assert!(!html.contains("<style>"));
+}
+
+/// The soft-toggle forms `-a name@` (set) and `-a name!@` (unset) apply when
+/// the document is silent but yield to a document assignment of the same name.
+#[test]
+fn soft_toggle_attributes_yield_to_the_document() {
+    // `-a linkcss@` softly sets `linkcss`: with the document silent, the
+    // stylesheet is linked...
+    let (status, linked, _) = run_adoc(&["-a", "linkcss@", "-o", "-"], "= Doc\n\nBody.");
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+
+    // ...but the document can turn it back off, so the stylesheet is embedded.
+    let (_, relinked, _) = run_adoc(&["-a", "linkcss@", "-o", "-"], "= Doc\n:linkcss!:\n\nBody.");
+    assert!(!relinked.contains("./asciidoctor.css"));
+    assert!(relinked.contains("<style>"));
+
+    // `-a webfonts!@` softly unsets `webfonts`: with the document silent, the
+    // web-font link is gone...
+    let (_, unfonted, _) = run_adoc(&["-a", "webfonts!@", "-o", "-"], "= Doc\n\nBody.");
+    assert!(!unfonted.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
+    // ...but a document assignment of `webfonts` wins.
+    let (_, refonted, _) = run_adoc(
+        &["-a", "webfonts!@", "-o", "-"],
+        "= Doc\n:webfonts: X:400\n\nBody.",
+    );
+    assert!(refonted.contains(
+        "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=X:400\">"
+    ));
+}
+
+/// A `-a` spec with no attribute name is rejected with a nonzero exit status
+/// and an `adoc:`-prefixed error.
+#[test]
+fn empty_attribute_name_is_rejected() {
+    let (status, stdout, stderr) = run_adoc(&["-a", "=value", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(
+        !status.success(),
+        "adoc should reject an empty attribute name"
+    );
+    assert!(stdout.is_empty(), "adoc wrote to stdout on failure");
+    assert!(
+        stderr.contains("adoc:") && stderr.contains("attribute name"),
+        "error should explain the missing attribute name, got: {stderr}"
+    );
+}

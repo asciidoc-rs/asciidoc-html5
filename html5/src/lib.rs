@@ -33,7 +33,10 @@ use std::{fs, io, path::Path};
 use asciidoc_parser::{Document, Parser};
 
 mod html;
+mod options;
 mod renderer;
+
+pub use options::Options;
 
 #[cfg(test)]
 mod tests;
@@ -45,9 +48,34 @@ mod tests;
 /// the resulting [`Document`] to [`convert_document`].
 ///
 /// For callers that already hold a parsed [`Document`] (for example, to inspect
-/// or transform it first), call [`convert_document`] directly.
+/// or transform it first), call [`convert_document`] directly. To supply
+/// document attributes from outside the source (Asciidoctor's `-a name=value`),
+/// use [`convert_with`].
 pub fn convert(source: &str) -> String {
-    let document = Parser::default().parse(source);
+    convert_with(source, &Options::default())
+}
+
+/// Parses `source` as AsciiDoc and renders it to a complete HTML5 document,
+/// seeding the parser with the document attributes carried by `options`.
+///
+/// This is the attribute-aware counterpart to [`convert`]: the attributes in
+/// `options` are the equivalent of Asciidoctor's `-a name=value` CLI option and
+/// the `:attributes` API option, supplying (and, for overrides, locking) values
+/// from outside the document source. See [`Options`] for override vs. soft-set
+/// precedence.
+///
+/// # Examples
+///
+/// ```
+/// use asciidoc_html5::{convert_with, Options};
+///
+/// let opts = Options::new().set("linkcss");
+/// let html = convert_with("= Doc\n\nBody.", &opts);
+/// assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+/// ```
+pub fn convert_with(source: &str, options: &Options) -> String {
+    let mut parser = options.apply(Parser::default());
+    let document = parser.parse(source);
     convert_document(&document)
 }
 
@@ -72,8 +100,24 @@ pub fn convert(source: &str) -> String {
 /// # Ok::<(), std::io::Error>(())
 /// ```
 pub fn convert_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
+    convert_file_with(path, &Options::default())
+}
+
+/// Reads the AsciiDoc file at `path` and renders it to a complete HTML5
+/// document, seeding the parser with the document attributes carried by
+/// `options`.
+///
+/// This is the attribute-aware counterpart to [`convert_file`], the file-based
+/// counterpart to [`convert_with`]. See [`Options`] for the attributes it
+/// accepts and their override vs. soft-set precedence.
+///
+/// # Errors
+///
+/// Returns the [`io::Error`] from reading `path` — for example, when the file
+/// does not exist or does not contain valid UTF-8.
+pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<String> {
     let source = fs::read_to_string(path)?;
-    Ok(convert(&source))
+    Ok(convert_with(&source, options))
 }
 
 /// Renders an already-parsed [`Document`] to a complete HTML5 document.

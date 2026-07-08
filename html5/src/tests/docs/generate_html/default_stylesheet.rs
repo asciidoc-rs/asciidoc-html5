@@ -1,4 +1,4 @@
-use crate::{convert, tests::sdd::*};
+use crate::{convert, convert_with, tests::sdd::*, Options};
 
 track_file!("docs/modules/generate-html/pages/default-stylesheet.adoc");
 
@@ -202,17 +202,31 @@ generic font families it names (for example, `sans-serif`):
 Hello.
 ----
 
-The `adoc` command has no options for setting attributes, so control the web
-fonts (and the other attributes on this page) from the document header. Passing
-attributes from outside the document is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/38[issue #38].
+You can set these attributes from the document header, as shown above, or supply
+them from outside the document -- with `adoc -a webfonts!` on the command line,
+or `Options::unset("webfonts")` through the xref:api:index.adoc[API]. An
+attribute supplied from outside overrides a document-header assignment of the
+same name by default.
 
 "#
     );
 
+    // From the document header.
     let html = convert("= My Document\n:webfonts!:\n\nHello.");
     assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
     assert!(html.contains("<style>"));
+
+    // From outside the document, via the API the `adoc -a` option feeds into.
+    let external = convert_with("= My Document\n\nHello.", &Options::new().unset("webfonts"));
+    assert!(!external.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
+    // An external attribute overrides a document-header assignment of the same
+    // name: unsetting `webfonts` from outside wins over a header value.
+    let overridden = convert_with(
+        "= My Document\n:webfonts: from-header\n\nHello.",
+        &Options::new().unset("webfonts"),
+    );
+    assert!(!overridden.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
 }
 
 // A `webfonts` value becomes the `family` query string parameter in the

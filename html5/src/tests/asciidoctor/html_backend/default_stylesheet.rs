@@ -1,4 +1,4 @@
-use crate::{convert, tests::sdd::*};
+use crate::{convert, convert_with, tests::sdd::*, Options};
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.adoc");
 
@@ -14,11 +14,12 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 // `id`/`role` addressability claims against the block wrapper this crate emits.
 //
 // This page is tracked from the library crate only: every verifiable claim is
-// about the HTML `<head>` that `asciidoc_html5::convert` emits, and the `adoc`
-// binary exposes no stylesheet, `linkcss`, or `-a` options of its own (passing
-// attributes into the API and CLI is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/38), so it adds no
-// independent claim to verify.
+// about the HTML `<head>` that `asciidoc_html5::convert` (or `convert_with`)
+// emits. Where the page drives behavior with a CLI `-a` attribute, we supply
+// the same attribute through `Options`; the `adoc` binary's `-a` option is a
+// thin forwarder onto that API and is covered by the CLI crate's own tests, so
+// tracking this page from the CLI crate too would only duplicate the full-page
+// reproduction with no independent claim to verify.
 //
 // The rest is non-normative here — features this crate does not implement (it
 // converts a string to a string and embeds only the default stylesheet), each
@@ -272,11 +273,10 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
 "#
     );
 
-    // The page sets `linkcss` from the CLI (`-a linkcss`); with no way to pass
-    // attributes from outside the source, we set it in the document header
-    // instead. Real attribute passing (API and CLI) is tracked in
-    // https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
-    let html = convert("= Doc\n:linkcss:\n\nBody.");
+    // The page sets `linkcss` from the CLI (`-a linkcss`); we supply it the same
+    // way — as an external attribute — through `Options::set`, the API the
+    // `adoc -a` option feeds into.
+    let html = convert_with("= Doc\n\nBody.", &Options::new().set("linkcss"));
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
     assert!(!html.contains("<style>"));
 }
@@ -321,11 +321,10 @@ You can disable this link by unsetting the `webfonts` document attribute from th
 "#
     );
 
-    // The page shows `-a webfonts!` on the CLI; we unset it in the document
-    // header (one of the routes the text names) since attributes can't be
-    // passed from outside the source. Real attribute passing (API and CLI) is
-    // tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
-    let html = convert("= Doc\n:webfonts!:\n\nBody.");
+    // The page shows `-a webfonts!` on the CLI; we unset it the same way — as an
+    // external attribute — through `Options::unset`, the API the `adoc -a`
+    // option feeds into.
+    let html = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
     // No emitted web-font <link> (the embedded CSS names Google Fonts only in a
     // commented-out @import, so match on the <link> tag itself).
     assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
@@ -360,14 +359,15 @@ You would set the `webfonts` attribute as follows:
 "#
     );
 
-    // The page sets `webfonts` from the CLI (`-a webfonts=...`), but this crate
-    // has no way to pass attributes from outside the source, so we splice the
-    // attribute into the document header instead. Real attribute passing (API
-    // and CLI) is tracked in
-    // https://github.com/asciidoc-rs/asciidoc-html5/issues/38.
+    // The page sets `webfonts` from the CLI (`-a webfonts=...`); we supply it the
+    // same way — as an external attribute — through `Options::attribute`, the API
+    // the `adoc -a` option feeds into.
     let webfonts =
         "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CUbuntu+Mono:400";
-    let html = convert(&format!("= Doc\n:webfonts: {webfonts}\n\nBody."));
+    let html = convert_with(
+        "= Doc\n\nBody.",
+        &Options::new().attribute("webfonts", webfonts),
+    );
     assert!(html.contains(&format!(
         "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family={webfonts}\">"
     )));

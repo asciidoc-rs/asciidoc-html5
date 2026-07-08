@@ -78,15 +78,37 @@ Use `convert_file` when your source is a file on disk and `convert` when you
 already hold it in memory. Reach for `convert_document` when you have parsed the
 document separately -- for example, to analyze it before rendering.
 
+== Supplying document attributes
+
+To set a document attribute from outside the source -- the way Asciidoctor's
+`-a name=value` option does -- build an `Options` and convert with `convert_with`
+(the attribute-aware counterpart of `convert`, with `convert_file_with` for a
+file on disk):
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+let html = convert_with("= Doc\n\nBody.", &opts);
+assert!(html.contains("family=Ubuntu+Mono:400"));
+----
+
+By default an attribute supplied this way _overrides_ the document: it wins over
+an assignment of the same name in the document header. Use `attribute_default`
+(Asciidoctor's soft-set `name=value@`) to treat your value as a fallback the
+document can override instead. The `set` and `unset` methods turn an attribute on
+or off, matching Asciidoctor's `name` and `name!`.
+
 [NOTE]
 .Known limitation
 ====
 Asciidoctor's Ruby API converts to several backends (HTML5, DocBook, man pages,
-and more) and can register extensions, pass processing options, and write output
-directly to a file. `asciidoc-html5` currently offers only HTML5 conversion
-through the three entry points above; it always returns the rendered HTML as a
-`String` and accepts no options. Writing the output to a file is the job of the
-`adoc` CLI.
+and more) and can register extensions and write output directly to a file.
+`asciidoc-html5` currently offers only HTML5 conversion, returning the rendered
+HTML as a `String`; apart from the document attributes shown above, it accepts no
+processing options and supports no extensions. Writing the output to a file is
+the job of the `adoc` CLI.
 ====
 
 == Next steps

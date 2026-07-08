@@ -99,10 +99,11 @@ generic font families it names (for example, `sans-serif`):
 Hello.
 ----
 
-The `adoc` command has no options for setting attributes, so control the web
-fonts (and the other attributes on this page) from the document header. Passing
-attributes from outside the document is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/38[issue #38].
+You can set these attributes from the document header, as shown above, or supply
+them from outside the document -- with `adoc -a webfonts!` on the command line,
+or `Options::unset("webfonts")` through the xref:api:index.adoc[API]. An
+attribute supplied from outside overrides a document-header assignment of the
+same name by default.
 
 Alternatively, set `webfonts` to a value to change which fonts are loaded. The
 value becomes the `family` query string parameter in the font-loader URL. For

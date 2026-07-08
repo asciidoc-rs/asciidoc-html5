@@ -46,6 +46,18 @@ to write the HTML5 to standard output instead:
 
  $ adoc document.adoc -o out.html
 
+== Set document attributes
+
+Pass `-a` (longhand `--attribute`) to set a document attribute from the command
+line, the way `asciidoctor -a` does. Give `name` to set an attribute, `name=value`
+to set it to a value, or `name!` to unset it. Repeat `-a` to set more than one:
+
+ $ adoc -a linkcss -a webfonts! document.adoc
+
+By default the value you pass overrides any assignment of the same name inside
+the document. Append `@` (for example `-a webfonts=Ubuntu+Mono:400@`) to make it
+a soft default that a document assignment of the same name overrides instead.
+
 == Get help
 
 The `--help` option prints the usage statement for the `adoc` command, including
@@ -60,11 +72,11 @@ You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 [NOTE]
 .Known limitations
 ====
-The `adoc` command covers a small part of the `asciidoctor` CLI. It does not yet
-accept the many attribute (`-a`) and behavior options that `asciidoctor`
-provides, and its `--help` output is a single usage statement rather than the
-topic-grouped help of `asciidoctor`; the `manpage` and `syntax` help topics are
-not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
+The `adoc` command covers a small part of the `asciidoctor` CLI. Beyond the
+`-a`/`--attribute` option shown above, it does not yet accept the many behavior
+options that `asciidoctor` provides, and its `--help` output is a single usage
+statement rather than the topic-grouped help of `asciidoctor`; the `manpage` and
+`syntax` help topics are not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
 tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
 The short form of `--version` is `-V`, following the Rust convention, rather than
 the `-v` used by `asciidoctor`.
