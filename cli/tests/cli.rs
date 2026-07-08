@@ -190,12 +190,21 @@ fn run_adoc(args: &[&str], source: &str) -> (std::process::ExitStatus, String, S
         .spawn()
         .expect("spawn the adoc binary");
 
-    child
-        .stdin
-        .take()
-        .expect("child stdin is piped")
-        .write_all(source.as_bytes())
-        .expect("write to child stdin");
+    // `adoc` validates its arguments before it reads standard input, so an
+    // invalid invocation (see `empty_attribute_name_is_rejected`) can exit
+    // before consuming the source, breaking the pipe mid-write. That is
+    // expected here; the meaningful assertions are on the exit status and the
+    // captured output. Any other write error is a genuine failure. Drop stdin
+    // afterward so the child sees EOF (otherwise `wait_with_output` deadlocks).
+    let mut stdin = child.stdin.take().expect("child stdin is piped");
+    if let Err(err) = stdin.write_all(source.as_bytes()) {
+        assert_eq!(
+            err.kind(),
+            std::io::ErrorKind::BrokenPipe,
+            "write to child stdin: {err}"
+        );
+    }
+    drop(stdin);
 
     let output = child.wait_with_output().expect("wait for the adoc binary");
     (
