@@ -251,6 +251,18 @@ fn attribute_unset_drops_the_web_font_link() {
     assert!(html.contains("<style>"));
 }
 
+/// The leading-bang form `-a !name` unsets an attribute too, matching
+/// Asciidoctor's alternative to the trailing `name!`.
+#[test]
+fn attribute_leading_bang_unsets() {
+    let (status, html, _) = run_adoc(&["-a", "!webfonts", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+    // The default stylesheet is still embedded.
+    assert!(html.contains("<style>"));
+}
+
 /// `-a linkcss` links the stylesheet instead of embedding it.
 #[test]
 fn attribute_set_links_the_stylesheet() {

@@ -68,7 +68,7 @@ there is no name to derive from, so adoc writes to standard output."
         long_help = "Set a document attribute from outside the document, the way \
 Asciidoctor's -a option does.\n\n\
 Give `name` to set an attribute, `name=value` to set it to a value, or `name!` \
-to unset it. By default the value supplied here overrides any assignment of the \
+(equivalently `!name`) to unset it. By default the value supplied here overrides any assignment of the \
 same name inside the document. Append `@` (for example `name=value@`) to make it \
 a soft default instead, which a document assignment of the same name overrides.\n\n\
 Repeat -a to set several attributes."
