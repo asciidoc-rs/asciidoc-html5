@@ -148,6 +148,70 @@ to write the HTML5 to standard output instead:
     let _ = std::fs::remove_file(&out);
 }
 
+// The attribute invocations: `-a` sets a document attribute (`name`,
+// `name=value`, or `name!`), overriding the document by default, with a
+// trailing `@` making it a soft default the document overrides instead.
+#[test]
+fn sets_document_attributes() {
+    verifies!(
+        r#"
+== Set document attributes
+
+Pass `-a` (longhand `--attribute`) to set a document attribute from the command
+line, the way `asciidoctor -a` does. Give `name` to set an attribute, `name=value`
+to set it to a value, or `name!` to unset it. Repeat `-a` to set more than one:
+
+ $ adoc -a linkcss -a webfonts! document.adoc
+
+By default the value you pass overrides any assignment of the same name inside
+the document. Append `@` (for example `-a webfonts=Ubuntu+Mono:400@`) to make it
+a soft default that a document assignment of the same name overrides instead.
+
+"#
+    );
+
+    // Converts `source` through the CLI with the given extra arguments, writing
+    // to stdout via `-o -`, and returns the captured HTML5.
+    fn adoc(args: &[&str], source: &str) -> String {
+        let path =
+            std::env::temp_dir().join(format!("adoc-docs-cli-attr-{}.adoc", std::process::id()));
+        std::fs::write(&path, source).expect("write temp input");
+
+        let mut argv = vec!["adoc"];
+        argv.extend_from_slice(args);
+        argv.extend(["-o", "-", path.to_str().expect("temp path is UTF-8")]);
+
+        let cli = Cli::parse_from(argv);
+        let mut stdout = Vec::new();
+        run(&cli, &mut stdout).expect("adoc converts with attributes");
+        let _ = std::fs::remove_file(&path);
+        String::from_utf8(stdout).expect("stdout is UTF-8")
+    }
+
+    // `-a linkcss -a webfonts!` sets one attribute and unsets another: the
+    // stylesheet is linked rather than embedded, and the web-font link is gone.
+    let html = adoc(&["-a", "linkcss", "-a", "webfonts!"], "= Doc\n\nBody.");
+    assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+    assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
+    // `-a name=value` overrides a document-header assignment of the same name.
+    let header = "= Doc\n:webfonts: from-header\n\nBody.";
+    let overridden = adoc(&["-a", "webfonts=from-cli"], header);
+    assert!(overridden.contains("family=from-cli"));
+    assert!(!overridden.contains("family=from-header"));
+
+    // The exact soft-default example the page cites,
+    // `-a webfonts=Ubuntu+Mono:400@`: its value applies when the document does
+    // not assign `webfonts` itself...
+    let silent = adoc(&["-a", "webfonts=Ubuntu+Mono:400@"], "= Doc\n\nBody.");
+    assert!(silent.contains("family=Ubuntu+Mono:400"));
+
+    // ...but a document-header assignment of the same name overrides it.
+    let softened = adoc(&["-a", "webfonts=Ubuntu+Mono:400@"], header);
+    assert!(softened.contains("family=from-header"));
+    assert!(!softened.contains("family=Ubuntu+Mono:400"));
+}
+
 // The help invocations: `adoc --help` prints the usage statement, and its short
 // form `-h` prints a shorter summary.
 #[test]
@@ -173,11 +237,11 @@ You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 [NOTE]
 .Known limitations
 ====
-The `adoc` command covers a small part of the `asciidoctor` CLI. It does not yet
-accept the many attribute (`-a`) and behavior options that `asciidoctor`
-provides, and its `--help` output is a single usage statement rather than the
-topic-grouped help of `asciidoctor`; the `manpage` and `syntax` help topics are
-not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
+The `adoc` command covers a small part of the `asciidoctor` CLI. Beyond the
+`-a`/`--attribute` option shown above, it does not yet accept the many behavior
+options that `asciidoctor` provides, and its `--help` output is a single usage
+statement rather than the topic-grouped help of `asciidoctor`; the `manpage` and
+`syntax` help topics are not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
 tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
 The short form of `--version` is `-V`, following the Rust convention, rather than
 the `-v` used by `asciidoctor`.

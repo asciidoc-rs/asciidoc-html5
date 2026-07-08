@@ -1,6 +1,6 @@
 use asciidoc_parser::Parser;
 
-use crate::{convert, convert_document, convert_file, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, convert_with, tests::sdd::*, Options};
 
 track_file!("docs/modules/api/pages/index.adoc");
 
@@ -160,15 +160,78 @@ Use `convert_file` when your source is a file on disk and `convert` when you
 already hold it in memory. Reach for `convert_document` when you have parsed the
 document separately -- for example, to analyze it before rendering.
 
+== Supplying document attributes
+
+To set a document attribute from outside the source -- the way Asciidoctor's
+`-a name=value` option does -- build an `Options` and convert with `convert_with`
+(the attribute-aware counterpart of `convert`, with `convert_file_with` for a
+file on disk):
+
+"#
+);
+
+// Supplying document attributes: `convert_with` with an `Options` seeds an
+// attribute from outside the source. By default it overrides a document-header
+// assignment of the same name; `attribute_default` is the soft-set form the
+// document can override; `set`/`unset` toggle an attribute on or off.
+#[test]
+fn supplying_document_attributes() {
+    verifies!(
+        r#"
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+let html = convert_with("= Doc\n\nBody.", &opts);
+assert!(html.contains("family=Ubuntu+Mono:400"));
+----
+
+By default an attribute supplied this way _overrides_ the document: it wins over
+an assignment of the same name in the document header. Use `attribute_default`
+(Asciidoctor's soft-set `name=value@`) to treat your value as a fallback the
+document can override instead. The `set` and `unset` methods turn an attribute on
+or off, matching Asciidoctor's `name` and `name!`.
+
+"#
+    );
+
+    // The exact example from the page.
+    let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+    let html = convert_with("= Doc\n\nBody.", &opts);
+    assert!(html.contains("family=Ubuntu+Mono:400"));
+
+    // An override wins over a document-header assignment of the same name.
+    let header = "= Doc\n:webfonts: from-header\n\nBody.";
+    let overridden = convert_with(header, &Options::new().attribute("webfonts", "from-api"));
+    assert!(overridden.contains("family=from-api"));
+    assert!(!overridden.contains("family=from-header"));
+
+    // A soft-set default yields to the document-header assignment instead.
+    let softened = convert_with(
+        header,
+        &Options::new().attribute_default("webfonts", "from-api"),
+    );
+    assert!(softened.contains("family=from-header"));
+
+    // `set` turns an attribute on, `unset` turns it off.
+    let linked = convert_with("= Doc\n\nBody.", &Options::new().set("linkcss"));
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+    let unfonted = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
+    assert!(!unfonted.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+}
+
+non_normative!(
+    r#"
 [NOTE]
 .Known limitation
 ====
 Asciidoctor's Ruby API converts to several backends (HTML5, DocBook, man pages,
-and more) and can register extensions, pass processing options, and write output
-directly to a file. `asciidoc-html5` currently offers only HTML5 conversion
-through the three entry points above; it always returns the rendered HTML as a
-`String` and accepts no options. Writing the output to a file is the job of the
-`adoc` CLI.
+and more) and can register extensions and write output directly to a file.
+`asciidoc-html5` currently offers only HTML5 conversion, returning the rendered
+HTML as a `String`; apart from the document attributes shown above, it accepts no
+processing options and supports no extensions. Writing the output to a file is
+the job of the `adoc` CLI.
 ====
 
 == Next steps
