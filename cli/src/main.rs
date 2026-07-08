@@ -139,24 +139,33 @@ fn apply_attribute_spec(options: Options, spec: &str) -> io::Result<Options> {
         None => (spec, false),
     };
 
-    // `name=value` assigns a value (the name cannot contain `=`, so split on the
-    // first one). A bare `name`, `name!`, or `!name` toggles the attribute.
-    let options = if let Some((name, value)) = body.split_once('=') {
-        let name = validate_name(name.strip_suffix('!').unwrap_or(name), spec)?;
-        if soft {
-            options.attribute_default(name, value)
-        } else {
-            options.attribute(name, value)
-        }
-    } else if let Some(name) = body.strip_prefix('!').or_else(|| body.strip_suffix('!')) {
+    // Split off a `=value` first, matching Asciidoctor: the key is everything
+    // before the first `=` (a name cannot contain `=`), the value everything
+    // after. A bare spec has no value.
+    let (key, value) = match body.split_once('=') {
+        Some((key, value)) => (key, Some(value)),
+        None => (body, None),
+    };
+
+    // A `!` on either end of the key unsets the attribute and takes precedence
+    // over any `=value` (which Asciidoctor discards). Otherwise a `=value`
+    // assigns the value, and a bare key sets the attribute.
+    let options = if let Some(name) = key.strip_prefix('!').or_else(|| key.strip_suffix('!')) {
         let name = validate_name(name, spec)?;
         if soft {
             options.unset_default(name)
         } else {
             options.unset(name)
         }
+    } else if let Some(value) = value {
+        let name = validate_name(key, spec)?;
+        if soft {
+            options.attribute_default(name, value)
+        } else {
+            options.attribute(name, value)
+        }
     } else {
-        let name = validate_name(body, spec)?;
+        let name = validate_name(key, spec)?;
         if soft {
             options.set_default(name)
         } else {

@@ -263,6 +263,27 @@ fn attribute_leading_bang_unsets() {
     assert!(html.contains("<style>"));
 }
 
+/// A `!` on either end of the key unsets the attribute and discards any
+/// `=value`, matching Asciidoctor: `-a name!=value` and `-a !name=value` both
+/// unset `name` rather than assigning the value.
+#[test]
+fn bang_key_unsets_and_discards_value() {
+    for spec in ["webfonts!=X:400", "!webfonts=X:400"] {
+        let (status, html, _) = run_adoc(&["-a", spec, "-o", "-"], "= Doc\n\nBody.");
+
+        assert!(status.success(), "adoc exited with {status} for -a {spec}");
+        assert!(
+            !html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"),
+            "-a {spec} should unset webfonts and drop the font link"
+        );
+        // The discarded value must not leak through as a font family.
+        assert!(
+            !html.contains("family=X:400"),
+            "-a {spec} must discard the value"
+        );
+    }
+}
+
 /// `-a linkcss` links the stylesheet instead of embedding it.
 #[test]
 fn attribute_set_links_the_stylesheet() {
