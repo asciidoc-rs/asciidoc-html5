@@ -261,6 +261,36 @@ fn attribute_set_links_the_stylesheet() {
     assert!(!html.contains("<style>"));
 }
 
+/// The soft-toggle forms `-a name@` (set) and `-a name!@` (unset) apply when
+/// the document is silent but yield to a document assignment of the same name.
+#[test]
+fn soft_toggle_attributes_yield_to_the_document() {
+    // `-a linkcss@` softly sets `linkcss`: with the document silent, the
+    // stylesheet is linked...
+    let (status, linked, _) = run_adoc(&["-a", "linkcss@", "-o", "-"], "= Doc\n\nBody.");
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+
+    // ...but the document can turn it back off, so the stylesheet is embedded.
+    let (_, relinked, _) = run_adoc(&["-a", "linkcss@", "-o", "-"], "= Doc\n:linkcss!:\n\nBody.");
+    assert!(!relinked.contains("./asciidoctor.css"));
+    assert!(relinked.contains("<style>"));
+
+    // `-a webfonts!@` softly unsets `webfonts`: with the document silent, the
+    // web-font link is gone...
+    let (_, unfonted, _) = run_adoc(&["-a", "webfonts!@", "-o", "-"], "= Doc\n\nBody.");
+    assert!(!unfonted.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
+    // ...but a document assignment of `webfonts` wins.
+    let (_, refonted, _) = run_adoc(
+        &["-a", "webfonts!@", "-o", "-"],
+        "= Doc\n:webfonts: X:400\n\nBody.",
+    );
+    assert!(refonted.contains(
+        "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=X:400\">"
+    ));
+}
+
 /// A `-a` spec with no attribute name is rejected with a nonzero exit status
 /// and an `adoc:`-prefixed error.
 #[test]

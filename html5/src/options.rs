@@ -322,4 +322,37 @@ mod tests {
         let html = convert_with("= Doc\n\nBody.", &Options::new().set("webfonts"));
         assert!(html.contains(&font_link(DEFAULT_FAMILY)));
     }
+
+    // A soft-set (`set_default`) turns an attribute on when the document is
+    // silent, but yields to a document assignment of the same name.
+    #[test]
+    fn set_default_is_soft() {
+        // Applies when the document does not touch `linkcss`.
+        let applied = convert_with("= Doc\n\nBody.", &Options::new().set_default("linkcss"));
+        assert!(applied.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+
+        // Yields to the document, which turns `linkcss` back off.
+        let overridden = convert_with(
+            "= Doc\n:linkcss!:\n\nBody.",
+            &Options::new().set_default("linkcss"),
+        );
+        assert!(!overridden.contains("./asciidoctor.css"));
+        assert!(overridden.contains("<style>"));
+    }
+
+    // A soft-unset (`unset_default`) turns an attribute off when the document is
+    // silent, but yields to a document assignment of the same name.
+    #[test]
+    fn unset_default_is_soft() {
+        // Applies when the document does not touch `webfonts`.
+        let applied = convert_with("= Doc\n\nBody.", &Options::new().unset_default("webfonts"));
+        assert!(!applied.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
+        // Yields to the document, which assigns `webfonts` a value.
+        let overridden = convert_with(
+            "= Doc\n:webfonts: X:400\n\nBody.",
+            &Options::new().unset_default("webfonts"),
+        );
+        assert!(overridden.contains(&font_link("X:400")));
+    }
 }
