@@ -93,9 +93,14 @@ Its integer value is `1`.
     );
 }
 
-// The restrictions SERVER places on document-set attributes
-// (source-highlighter, doctype, docinfo, backend, docdir) are not modeled by
-// this renderer.
+// The restrictions SERVER places on document-set attributes are not modeled by
+// this renderer yet; each is tracked for later implementation:
+// source-highlighter (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), backend
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), docdir
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), docfile
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and docinfo
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/40).
 non_normative!(
     r#"
 [#server]
