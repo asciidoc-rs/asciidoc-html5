@@ -293,8 +293,8 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
 
 // The API links the default stylesheet by default because its default safe mode
 // is `secure`; a safe mode of server or lower embeds it instead. This crate now
-// models safe mode (issue #37), so both halves are verifiable. The `copycss`
-// file copy this crate does not perform (tracked in
+// models safe mode, so both halves are verifiable. The `copycss` file copy this
+// crate does not perform (tracked in
 // https://github.com/asciidoc-rs/asciidoc-html5/issues/39) and the Ruby snippet
 // stay non-normative.
 #[test]
