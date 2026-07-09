@@ -318,6 +318,7 @@ mod tests {
     fn unset_turns_an_attribute_off() {
         let html = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
         assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
         // The default stylesheet is still present — linked, under the default
         // (Secure) safe mode.
         assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));

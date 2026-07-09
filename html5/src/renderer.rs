@@ -724,6 +724,7 @@ mod tests {
         let html = convert("= Doc\n\nBody.");
         assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
         assert!(!html.contains("<style>"));
+
         // The web-font link is still emitted alongside the linked stylesheet.
         assert!(html.contains("fonts.googleapis.com"));
     }

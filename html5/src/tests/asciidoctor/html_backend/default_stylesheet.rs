@@ -374,9 +374,11 @@ You can disable this link by unsetting the `webfonts` document attribute from th
         "= Doc\n\nBody.",
         &Options::new().unset("webfonts").safe_mode(SafeMode::Unsafe),
     );
+
     // No emitted web-font <link> (the embedded CSS names Google Fonts only in a
     // commented-out @import, so match on the <link> tag itself).
     assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
+
     // The default stylesheet is still embedded.
     assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
 }
