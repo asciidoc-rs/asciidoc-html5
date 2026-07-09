@@ -85,10 +85,10 @@ mode, it embeds the stylesheet inline:
 ----
 use asciidoc_html5::{convert, convert_with, Options, SafeMode};
 
-// secure (the API default) links the stylesheet.
+// Secure (the API default) links the stylesheet.
 assert!(convert("= Doc\n\nBody.").contains("./asciidoctor.css"));
 
-// a lower mode embeds it inline.
+// A lower mode embeds it inline.
 let html = convert_with("= Doc\n\nBody.", &Options::new().safe_mode(SafeMode::Server));
 assert!(html.contains("<style>"));
 ----
@@ -96,10 +96,10 @@ assert!(html.contains("<style>"));
 "#
     );
 
-    // secure (the API default) links the stylesheet.
+    // Secure (the API default) links the stylesheet.
     assert!(convert("= Doc\n\nBody.").contains("./asciidoctor.css"));
 
-    // a lower mode embeds it inline.
+    // A lower mode embeds it inline.
     let html = convert_with(
         "= Doc\n\nBody.",
         &Options::new().safe_mode(SafeMode::Server),
