@@ -136,11 +136,21 @@ Its integer value is `10`.
     .contains("<style>"));
 }
 
-// Most of SECURE's restrictions — icons, include directives, URI reads, backend
-// locking, `docinfo`, `data-uri`, SVG modes, `docdir`/`docfile`, source
-// highlighting — are not surfaced by this renderer. The one observable here is
-// that it "prevents access to stylesheets," which is why SECURE links rather
-// than embeds; that is verified in the next test.
+// Most of SECURE's restrictions are not surfaced by this renderer yet, each
+// tracked for later implementation: icons
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
+// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), backend
+// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), `docinfo`
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/40), `docdir`
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), `docfile`
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and source
+// highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+// Include directives and URI reads are already gated by asciidoc-parser's safe
+// mode, which this crate now sets (see #37). The one restriction observable
+// here is that SECURE "prevents access to stylesheets," which is why it links
+// the stylesheet rather than embedding it — verified in the next test (custom
+// stylesheets are https://github.com/asciidoc-rs/asciidoc-html5/issues/36).
 non_normative!(
     r#"
 [#secure]
