@@ -324,6 +324,60 @@ fn soft_toggle_attributes_yield_to_the_document() {
     ));
 }
 
+/// When the output file cannot be written (its parent directory does not
+/// exist), adoc fails with a nonzero exit status and an `adoc:`-prefixed error,
+/// writing nothing to standard output.
+#[test]
+fn reports_failure_when_output_cannot_be_written() {
+    let input =
+        std::env::temp_dir().join(format!("adoc-cli-badout-in-{}.adoc", std::process::id()));
+    // A destination inside a directory that does not exist, so the write fails.
+    let unwritable = std::env::temp_dir()
+        .join(format!("adoc-cli-missing-dir-{}", std::process::id()))
+        .join("out.html");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write temp input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg(&unwritable)
+        .output()
+        .expect("run the adoc binary");
+    let _ = fs::remove_file(&input);
+
+    assert!(
+        !output.status.success(),
+        "adoc should fail when the output cannot be written, but exited with {}",
+        output.status
+    );
+    assert!(output.stdout.is_empty(), "adoc wrote to stdout on failure");
+
+    let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+    assert!(
+        stderr.contains("adoc:"),
+        "error should be prefixed with `adoc:`, got: {stderr}"
+    );
+}
+
+/// An unrecognized `-S`/`--safe-mode` value is rejected with a nonzero exit
+/// status and an `adoc:`-prefixed error naming the offending mode.
+#[test]
+fn invalid_safe_mode_is_rejected() {
+    let (status, stdout, stderr) = run_adoc(&["-S", "bogus", "-o", "-"], "= Doc\n\nBody.");
+
+    assert!(
+        !status.success(),
+        "adoc should reject an unrecognized safe mode"
+    );
+    assert!(stdout.is_empty(), "adoc wrote to stdout on failure");
+    assert!(
+        stderr.contains("adoc:")
+            && stderr.contains("invalid safe mode")
+            && stderr.contains("bogus"),
+        "error should name the invalid safe mode, got: {stderr}"
+    );
+}
+
 /// A `-a` spec with no attribute name is rejected with a nonzero exit status
 /// and an `adoc:`-prefixed error.
 #[test]
