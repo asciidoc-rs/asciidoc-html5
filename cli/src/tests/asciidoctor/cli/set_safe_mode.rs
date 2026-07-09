@@ -11,8 +11,10 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/set-safe-mode.adoc");
 // claim drives `adoc`'s own option parsing (`Cli` + `resolve_safe_mode`), and
 // the default/secure cases are confirmed end to end through `run`.
 //
-// The hidden `-B`/`--base-dir` note and the `asciidoctor-safe` command alias
-// have no counterpart in `adoc`, so those are non-normative.
+// The hidden `-B`/`--base-dir` note (tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/44) and the
+// `asciidoctor-safe` command alias have no counterpart in `adoc`, so those are
+// non-normative.
 
 /// Resolves the safe mode `adoc` would use for the given command-line
 /// arguments, exercising the full `Cli` parse plus [`resolve_safe_mode`].
@@ -121,7 +123,8 @@ Provided for compatibility with the python AsciiDoc `safe` command.
 }
 
 // The hidden `-B`/`--base-dir` note (a base-directory chroot `adoc` does not
-// provide) and the closing cross-references carry no rule to verify here.
+// provide, tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/44)
+// and the closing cross-references carry no rule to verify here.
 non_normative!(
     r#"
 ////
