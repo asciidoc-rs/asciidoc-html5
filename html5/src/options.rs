@@ -1,10 +1,23 @@
-//! Externally-supplied document attributes for a conversion.
+//! Per-conversion options: externally-supplied document attributes and the
+//! [safe mode].
 //!
-//! [`Options`] carries a set of document attributes to seed into a conversion
-//! from *outside* the document source — the equivalent of Asciidoctor's
-//! `-a name=value` CLI option and the `:attributes` API option. It is the
-//! parameter accepted by the `_with` conversion entry points ([`convert_with`]
-//! and [`convert_file_with`]).
+//! [`Options`] carries the settings applied to a conversion from *outside* the
+//! document source: a set of document attributes (the equivalent of
+//! Asciidoctor's `-a name=value` CLI option and the `:attributes` API option)
+//! and the [`SafeMode`] under which the document is processed (Asciidoctor's
+//! `:safe` option). It is the parameter accepted by the `_with` conversion
+//! entry points ([`convert_with`] and [`convert_file_with`]).
+//!
+//! # Safe mode
+//!
+//! The safe mode governs security-sensitive rendering. Following Asciidoctor,
+//! it also decides whether the default stylesheet is *linked* or *embedded*:
+//! under [`SafeMode::Secure`] (the default here, matching Asciidoctor's API)
+//! the converter links to `./asciidoctor.css` unless the caller sets `linkcss`
+//! explicitly; under a lower mode it embeds the stylesheet inline. See
+//! [`Options::safe_mode`].
+//!
+//! [safe mode]: SafeMode
 //!
 //! # Override vs. default (soft) precedence
 //!
@@ -34,18 +47,20 @@
 //! [`convert_with`]: crate::convert_with
 //! [`convert_file_with`]: crate::convert_file_with
 
-use asciidoc_parser::{parser::ModificationContext, Parser};
+use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
 
-/// A set of document attributes to supply to a conversion from outside the
-/// document source.
+/// The options to supply to a conversion from outside the document source: a
+/// set of document attributes and the [safe mode](SafeMode).
 ///
 /// `Options` is a builder: start from [`Options::new`] (or
-/// [`Options::default`]) and chain one call per attribute. Each call records a
-/// directive; the directives are applied in order when the options are handed
-/// to a `_with` conversion entry point, so a later call for the same attribute
-/// name supersedes an earlier one.
+/// [`Options::default`]) and chain one call per attribute, plus an optional
+/// [`safe_mode`](Self::safe_mode). Each attribute call records a directive; the
+/// directives are applied in order when the options are handed to a `_with`
+/// conversion entry point, so a later call for the same attribute name
+/// supersedes an earlier one.
 ///
-/// See the [module documentation](self) for override vs. default precedence.
+/// See the [module documentation](self) for override vs. default precedence and
+/// how the safe mode gates stylesheet embedding.
 ///
 /// # Examples
 ///
@@ -60,6 +75,10 @@ use asciidoc_parser::{parser::ModificationContext, Parser};
 pub struct Options {
     /// The attribute directives, in the order they were added.
     attributes: Vec<Directive>,
+
+    /// The safe mode to process the document under. `None` defaults to
+    /// [`SafeMode::Secure`], matching Asciidoctor's API default.
+    safe_mode: Option<SafeMode>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -114,10 +133,34 @@ impl Precedence {
 }
 
 impl Options {
-    /// Creates an empty set of options — no attributes supplied. Converting
-    /// with it is equivalent to calling [`convert`](crate::convert).
+    /// Creates an empty set of options — no attributes supplied and the default
+    /// safe mode. Converting with it is equivalent to calling
+    /// [`convert`](crate::convert).
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Sets the [`SafeMode`] the document is processed under.
+    ///
+    /// This is Asciidoctor's `:safe` option. When left unset, conversion uses
+    /// [`SafeMode::Secure`], the most conservative mode and Asciidoctor's API
+    /// default. Following Asciidoctor, `Secure` links the default stylesheet
+    /// (to `./asciidoctor.css`) instead of embedding it, unless the caller sets
+    /// `linkcss` explicitly; lower modes embed it inline.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_with, Options, SafeMode};
+    ///
+    /// // A mode below `Secure` embeds the default stylesheet inline.
+    /// let opts = Options::new().safe_mode(SafeMode::Server);
+    /// let html = convert_with("= Doc\n\nBody.", &opts);
+    /// assert!(html.contains("<style>"));
+    /// ```
+    pub fn safe_mode(mut self, safe: SafeMode) -> Self {
+        self.safe_mode = Some(safe);
+        self
     }
 
     /// Overrides the attribute `name` with an explicit string `value`.
@@ -192,10 +235,16 @@ impl Options {
         });
     }
 
-    /// Seeds `parser` with the recorded attribute directives, returning the
-    /// parser ready to parse. Directives are applied in order, so a later one
-    /// for the same name wins.
+    /// Seeds `parser` with the safe mode and the recorded attribute directives,
+    /// returning the parser ready to parse. Directives are applied in order, so
+    /// a later one for the same name wins.
     pub(crate) fn apply(&self, mut parser: Parser) -> Parser {
+        // The safe mode is established first. `with_safe_mode` also populates
+        // the `safe-mode-*` intrinsic attributes, which a bare `Parser` does
+        // not set on its own.
+        let mode = self.safe_mode.unwrap_or(SafeMode::Secure);
+        parser = parser.with_safe_mode(mode);
+
         for directive in &self.attributes {
             let context = directive.precedence.modification_context();
             parser = match &directive.action {
@@ -208,13 +257,31 @@ impl Options {
                 }
             };
         }
+
+        // Matching Asciidoctor: in `Secure` (or greater), `linkcss` defaults on
+        // — the converter links the stylesheet instead of embedding it — unless
+        // the caller supplied `linkcss` from the API/CLI. Seeding it as an
+        // override (`ApiOnly`) also locks it, so a document `:linkcss!:` cannot
+        // turn embedding back on, again matching Asciidoctor.
+        if mode >= SafeMode::Secure && !self.mentions("linkcss") {
+            parser =
+                parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
+        }
+
         parser
+    }
+
+    /// Whether any recorded directive names `name` (already lowercased). Used
+    /// to decide whether the caller has taken control of an attribute that
+    /// the safe mode would otherwise default.
+    fn mentions(&self, name: &str) -> bool {
+        self.attributes.iter().any(|d| d.name == name)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{convert, convert_with, Options};
+    use crate::{convert, convert_with, Options, SafeMode};
 
     // The default web-font family, present when `webfonts` is set with no value.
     const DEFAULT_FAMILY: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
@@ -251,8 +318,10 @@ mod tests {
     fn unset_turns_an_attribute_off() {
         let html = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
         assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
-        // The default stylesheet is still embedded.
-        assert!(html.contains("<style>"));
+
+        // The default stylesheet is still present — linked, under the default
+        // (Secure) safe mode.
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
     }
 
     // An override (`-a name=value`) wins over a document-header assignment of
@@ -354,5 +423,46 @@ mod tests {
             &Options::new().unset_default("webfonts"),
         );
         assert!(overridden.contains(&font_link("X:400")));
+    }
+
+    // The default safe mode is `Secure` (matching Asciidoctor's API), which
+    // links the default stylesheet instead of embedding it.
+    #[test]
+    fn secure_is_the_default_and_links_the_stylesheet() {
+        let html = convert("= Doc\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+        assert!(!html.contains("<style>"));
+    }
+
+    // A safe mode below `Secure` embeds the default stylesheet inline, the way
+    // the `adoc` CLI (which defaults to `Unsafe`) does.
+    #[test]
+    fn a_lower_safe_mode_embeds_the_stylesheet() {
+        for mode in [SafeMode::Unsafe, SafeMode::Safe, SafeMode::Server] {
+            let html = convert_with("= Doc\n\nBody.", &Options::new().safe_mode(mode));
+            assert!(html.contains("<style>"), "{mode:?} should embed");
+            assert!(
+                !html.contains("./asciidoctor.css"),
+                "{mode:?} should not link"
+            );
+        }
+    }
+
+    // Under `Secure`, `linkcss` is locked on: a document `:linkcss!:` cannot
+    // turn embedding back on (parity with Asciidoctor's api_test).
+    #[test]
+    fn secure_locks_linkcss_against_the_document() {
+        let html = convert_with("= Doc\n:linkcss!:\n\nBody.", &Options::new());
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+        assert!(!html.contains("<style>"));
+    }
+
+    // An API-level `linkcss` unset wins over the `Secure` default, so the
+    // stylesheet is embedded even under `Secure`.
+    #[test]
+    fn an_api_linkcss_unset_beats_the_secure_default() {
+        let html = convert_with("= Doc\n\nBody.", &Options::new().unset("linkcss"));
+        assert!(html.contains("<style>"));
+        assert!(!html.contains("./asciidoctor.css"));
     }
 }

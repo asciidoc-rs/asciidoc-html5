@@ -7,3 +7,4 @@
 //! tracked as non-normative.
 
 mod index;
+mod set_safe_mode;

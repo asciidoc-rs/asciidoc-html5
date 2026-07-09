@@ -192,6 +192,29 @@ details remain deliberately deferred: the footer's "Last updated" text needs a
 caller-supplied `docdatetime`, and `<body class>` currently carries just the bare
 doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
 
+## Safe mode and the default stylesheet
+
+The [safe mode](https://docs.asciidoctor.org/asciidoc/latest/safe-modes/) is a
+conversion setting rather than a block construct, but it reaches the renderer
+through document attributes, so it fits the same self-contained model. `Options`
+carries the `SafeMode` (defaulting to `Secure`, Asciidoctor's API default) and,
+in `Options::apply`, seeds it onto the parser with `Parser::with_safe_mode` —
+which also populates the `safe-mode-level` / `safe-mode-name` / `safe-mode-<name>`
+intrinsic attributes a document can reference. The `adoc` CLI overrides the
+default to `Unsafe` (Asciidoctor's CLI default), exposed as `-S`/`--safe-mode`.
+
+The safe mode's one rendered effect today is whether the default stylesheet is
+*linked* (`<link href="./asciidoctor.css">`) or *embedded* (`<style>…`). Matching
+Asciidoctor's `document.rb`, `Options::apply` force-sets `linkcss` (locked, via
+`ModificationContext::ApiOnly`) under `Secure` unless the caller supplied
+`linkcss` themselves — so a document `:linkcss!:` cannot re-enable embedding under
+`Secure`, but an API-level `linkcss` unset can. The renderer's `links_stylesheet`
+then decides from the resolved state: an explicit `linkcss` wins either way, and
+otherwise a `safe-mode-level` of `Secure` (20) or greater links. Keying the
+render-time default off `safe-mode-level` keeps `convert_document(&Document)`
+consistent with `convert` even for a document parsed by a bare `Parser` (whose
+built-in attributes already default to `Secure`).
+
 ## Cross references, footnotes, TOC (future)
 
 - **Cross references** are resolved by `Parser::parse` for single documents; the

@@ -1,0 +1,40 @@
+= Set the Safe Mode Using the API
+:navtitle: Set Safe Mode
+:description: How to choose the safe mode when converting with the asciidoc_html5 API.
+
+When you convert with the `asciidoc_html5` API, the default
+xref:ROOT:safe-modes.adoc[safe mode] is `secure`. Change it with
+`Options::safe_mode`, then convert with `convert_with` or `convert_file_with`.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The API invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Set the safe mode
+
+`Options::safe_mode` takes a `SafeMode` value -- `SafeMode::Unsafe`,
+`SafeMode::Safe`, `SafeMode::Server`, or `SafeMode::Secure` -- and applies to
+every `_with` entry point:
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options, SafeMode};
+
+let opts = Options::new().safe_mode(SafeMode::Server);
+let html = convert_with("= Doc\n\nBody.", &opts);
+assert!(html.contains("<style>"));
+----
+
+Leaving the safe mode unset keeps the default, `secure`, which links the default
+stylesheet instead of embedding it:
+
+[,rust]
+----
+let html = asciidoc_html5::convert("= Doc\n\nBody.");
+assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+----
+
+You can also set the xref:cli:set-safe-mode.adoc[safe mode from the CLI].

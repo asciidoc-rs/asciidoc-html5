@@ -1,0 +1,31 @@
+= Set the Safe Mode Using the CLI
+:navtitle: Set Safe Mode
+:description: How to choose the safe mode when converting with the adoc command.
+
+When you run the `adoc` command, the default xref:ROOT:safe-modes.adoc[safe mode]
+is `unsafe`. Choose a different mode with `-S`/`--safe-mode`, or the `--safe`
+shorthand.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Assign the safe mode
+
+`-S`, `--safe-mode=SAFE_MODE`::
+Set the safe mode to `unsafe`, `safe`, `server`, or `secure` (case-insensitive).
+For example, `secure` links the default stylesheet instead of embedding it:
++
+ $ adoc -S secure document.adoc
+
+`--safe`::
+Shorthand that sets the safe mode to `safe`. Cannot be combined with
+`--safe-mode`.
+
+With no safe-mode option, `adoc` runs `unsafe`, which embeds the default
+stylesheet.
+
+You can also set the xref:api:set-safe-mode.adoc[safe mode from the API].

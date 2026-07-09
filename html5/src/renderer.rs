@@ -30,7 +30,7 @@ use std::slice::Iter;
 use asciidoc_parser::{
     blocks::{Block, Break, BreakType, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
     document::{Header, InterpretedValue},
-    Document,
+    Document, SafeMode,
 };
 
 use crate::html::{class_attribute, escape_attribute, id_attribute};
@@ -55,6 +55,36 @@ fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
     }
+}
+
+/// Whether the default stylesheet should be *linked* (to `./asciidoctor.css`)
+/// rather than *embedded* inline.
+///
+/// Following Asciidoctor, the decision keys off `linkcss` and the safe mode:
+///
+/// - An explicit `linkcss` (set by the document, or seeded and locked by the
+///   API under a `Secure` safe mode) links.
+/// - An explicit `linkcss!` (unset) embeds, even under `Secure`.
+/// - Otherwise, a safe mode of `Secure` or greater links by default and a lower
+///   mode embeds. The `_with` entry points seed and lock this at parse time via
+///   [`Options`](crate::Options); keying off the safe mode here means
+///   [`convert_document`](crate::convert_document) on a document parsed under
+///   `Secure` links it too, so the two paths stay consistent.
+fn links_stylesheet(document: &Document<'_>) -> bool {
+    if document.is_attribute_set("linkcss") {
+        return true;
+    }
+
+    // Present but not set means an explicit `linkcss!` (unset): embed.
+    if document.has_attribute("linkcss") {
+        return false;
+    }
+
+    // Unmentioned: link under `Secure` (level 20) or greater, else embed. The
+    // `safe-mode-level` intrinsic attribute is populated by the parser for every
+    // document (its built-in default is `Secure`).
+    matches!(attribute_str(document, "safe-mode-level"), Some(level)
+        if level.parse::<u32>().is_ok_and(|n| n >= SafeMode::Secure as u32))
 }
 
 /// Renders a parsed [`Document`] to a standalone HTML5 document string.
@@ -243,7 +273,7 @@ impl Renderer {
 
         self.webfonts_link(document);
 
-        if document.is_attribute_set("linkcss") {
+        if links_stylesheet(document) {
             // Asciidoctor writes the stylesheet out under the public name
             // `asciidoctor.css`, normalized to a relative web path.
             self.line("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">");
@@ -438,7 +468,15 @@ impl Renderer {
 
 #[cfg(test)]
 mod tests {
-    use crate::convert;
+    use crate::{convert, convert_with, Options, SafeMode};
+
+    /// Converts `source` under a safe mode below `Secure`, so the default
+    /// stylesheet is embedded inline (`<style>`) rather than linked. The
+    /// default (`Secure`) mode links it; these tests exercise the embed
+    /// branch, which is the `adoc` CLI's default behavior.
+    fn embed(source: &str) -> String {
+        convert_with(source, &Options::new().safe_mode(SafeMode::Unsafe))
+    }
 
     /// Extracts the body of the `<div id="content">…</div>` wrapper so tests
     /// can assert on block structure without repeating the document
@@ -640,12 +678,14 @@ mod tests {
         assert!(content(&html).contains("<div style=\"page-break-after: always;\"></div>"));
     }
 
-    // The default `<head>` embeds Asciidoctor's default stylesheet and links
-    // the web fonts it relies on, in that order, right after the `<title>`.
+    // Under a safe mode below `Secure`, the `<head>` embeds Asciidoctor's
+    // default stylesheet and links the web fonts it relies on, in that order,
+    // right after the `<title>`. (The default `Secure` mode links the
+    // stylesheet instead; see `secure_default_links_the_stylesheet`.)
 
     #[test]
-    fn default_head_links_web_fonts_then_embeds_the_stylesheet() {
-        let html = convert("= Doc\n\nBody.");
+    fn head_links_web_fonts_then_embeds_the_stylesheet() {
+        let html = embed("= Doc\n\nBody.");
 
         // The web-font link comes first, carrying the default font family.
         assert!(html.contains(
@@ -670,11 +710,23 @@ mod tests {
 
     #[test]
     fn webfonts_unset_drops_the_font_link_but_keeps_the_stylesheet() {
-        let html = convert("= Doc\n:webfonts!:\n\nBody.");
+        let html = embed("= Doc\n:webfonts!:\n\nBody.");
         // No emitted web-font `<link>`. (The embedded CSS mentions Google Fonts
         // in a commented-out `@import`, so match on the `<link>` tag itself.)
         assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
         assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
+    }
+
+    // Under the default (`Secure`) safe mode, the head links the stylesheet to
+    // `./asciidoctor.css` rather than embedding it, matching Asciidoctor's API.
+    #[test]
+    fn secure_default_links_the_stylesheet() {
+        let html = convert("= Doc\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+        assert!(!html.contains("<style>"));
+
+        // The web-font link is still emitted alongside the linked stylesheet.
+        assert!(html.contains("fonts.googleapis.com"));
     }
 
     #[test]
@@ -721,7 +773,7 @@ mod tests {
 
     #[test]
     fn default_stylesheet_value_still_embeds_the_default() {
-        let html = convert("= Doc\n:stylesheet: DEFAULT\n\nBody.");
+        let html = embed("= Doc\n:stylesheet: DEFAULT\n\nBody.");
         assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
     }
 }

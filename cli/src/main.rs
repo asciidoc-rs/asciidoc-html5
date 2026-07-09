@@ -12,7 +12,7 @@ use std::{
     process::ExitCode,
 };
 
-use asciidoc_html5::Options;
+use asciidoc_html5::{Options, SafeMode};
 use clap::Parser;
 
 /// Convert an AsciiDoc document to HTML5.
@@ -74,6 +74,31 @@ a soft default instead, which a document assignment of the same name overrides.\
 Repeat -a to set several attributes."
     )]
     attribute: Vec<String>,
+
+    /// Set the safe mode: unsafe, safe, server, or secure (default: unsafe)
+    #[arg(
+        short = 'S',
+        long = "safe-mode",
+        value_name = "SAFE_MODE",
+        long_help = "Set the safe mode level, the way Asciidoctor's -S option does.\n\n\
+The safe mode controls how far a document may reach outside itself, and (as in \
+Asciidoctor) whether the default stylesheet is embedded or linked. Accepts \
+`unsafe`, `safe`, `server`, or `secure` (case-insensitive).\n\n\
+When omitted, adoc runs in `unsafe` mode — the Asciidoctor CLI default — which \
+embeds the default stylesheet. The `secure` mode links it instead. See also \
+--safe."
+    )]
+    safe_mode: Option<String>,
+
+    /// Set the safe mode to safe (compatibility shorthand for --safe-mode=safe)
+    #[arg(
+        long = "safe",
+        conflicts_with = "safe_mode",
+        long_help = "Set the safe mode level to `safe`.\n\n\
+Provided for compatibility with the Python AsciiDoc `safe` command, and \
+equivalent to --safe-mode=safe. Cannot be combined with --safe-mode."
+    )]
+    safe: bool,
 }
 
 fn main() -> ExitCode {
@@ -96,7 +121,7 @@ fn main() -> ExitCode {
 /// standard-output writer in as a parameter keeps the conversion pipeline
 /// testable without spawning the binary.
 fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
-    let options = build_options(&cli.attribute)?;
+    let options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
 
     let source = read_input(cli.input.as_deref())?;
 
@@ -105,6 +130,46 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     match output_target(cli) {
         OutputTarget::File(path) => fs::write(path, html),
         OutputTarget::Stdout => stdout.write_all(html.as_bytes()),
+    }
+}
+
+/// Resolves the [`SafeMode`] to convert under from the CLI's safe-mode options.
+///
+/// `--safe-mode=MODE` names the mode explicitly; the compatibility flag
+/// `--safe` selects [`SafeMode::Safe`]. With neither, `adoc` defaults to
+/// [`SafeMode::Unsafe`], matching the Asciidoctor CLI (which embeds the default
+/// stylesheet rather than linking it).
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `--safe-mode` names an
+/// unrecognized mode.
+fn resolve_safe_mode(cli: &Cli) -> io::Result<SafeMode> {
+    if let Some(name) = &cli.safe_mode {
+        return parse_safe_mode(name);
+    }
+    if cli.safe {
+        return Ok(SafeMode::Safe);
+    }
+    Ok(SafeMode::Unsafe)
+}
+
+/// Parses a safe-mode name (case-insensitive) into a [`SafeMode`].
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `name` is not one of
+/// `unsafe`, `safe`, `server`, or `secure`.
+fn parse_safe_mode(name: &str) -> io::Result<SafeMode> {
+    match name.to_lowercase().as_str() {
+        "unsafe" => Ok(SafeMode::Unsafe),
+        "safe" => Ok(SafeMode::Safe),
+        "server" => Ok(SafeMode::Server),
+        "secure" => Ok(SafeMode::Secure),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid safe mode '{name}': expected unsafe, safe, server, or secure"),
+        )),
     }
 }
 

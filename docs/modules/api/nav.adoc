@@ -1,1 +1,2 @@
 * xref:index.adoc[Using the API]
+** xref:set-safe-mode.adoc[Set Safe Mode]

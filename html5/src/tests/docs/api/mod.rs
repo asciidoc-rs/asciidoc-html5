@@ -6,3 +6,4 @@
 //! tests in the same module.
 
 mod index;
+mod set_safe_mode;
