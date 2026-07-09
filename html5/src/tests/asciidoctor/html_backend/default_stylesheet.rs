@@ -1,17 +1,18 @@
-use crate::{convert, convert_with, tests::sdd::*, Options};
+use crate::{convert, convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.adoc");
 
 // Asciidoctor's "Default Stylesheet" page. It documents the stylesheet that the
-// `html5` backend embeds into a standalone document, the web-font `<link>` it
-// relies on, and the attributes that control both. This crate produces the same
-// standalone `<head>`, so its behavior is what we verify here: that a converted
-// document embeds the default stylesheet, links the Google web fonts, and
-// honors `linkcss`, `:webfonts!:`, and a custom `webfonts` value. We also
-// verify the page's concrete "why a stylesheet is required" claims by checking
-// that the companion CSS classes it names (built-in roles, list markers, table
-// borders, TOC position) are present in the embedded stylesheet, and the
-// `id`/`role` addressability claims against the block wrapper this crate emits.
+// `html5` backend embeds into (or links from) a standalone document, the
+// web-font `<link>` it relies on, and the attributes that control both. This
+// crate produces the same standalone `<head>`, so its behavior is what we
+// verify here: that a converted document carries the default stylesheet, links
+// the Google web fonts, and honors `linkcss`, the safe mode's embed-vs-link
+// default, `:webfonts!:`, and a custom `webfonts` value. We also verify the
+// page's concrete "why a stylesheet is required" claims by checking that the
+// companion CSS classes it names (built-in roles, list markers, table borders,
+// TOC position) are present in the embedded stylesheet, and the `id`/`role`
+// addressability claims against the block wrapper this crate emits.
 //
 // This page is tracked from the library crate only: every verifiable claim is
 // about the HTML `<head>` that `asciidoc_html5::convert` (or `convert_with`)
@@ -26,7 +27,6 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 // carrying no rule to verify:
 // - the `@import`/custom-stylesheet "extend" recipe (custom stylesheets are
 //   tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/36);
-// - the Ruby API safe-mode discussion (safe mode is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/37);
 // - the `copycss` file copy (tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39);
 // - the docinfo-based customizations (docinfo is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40);
 // - the external Asciidoctor Skins themes (out of scope; third-party).
@@ -48,6 +48,15 @@ fn embedded_stylesheet_matches_the_reference_copy() {
             "html5/assets/asciidoctor-default.css has drifted from the vendored ref/ copy"
         );
     }
+}
+
+/// Converts `source` under a safe mode below `Secure`, so the default
+/// stylesheet is embedded inline (`<style>`) rather than linked. The default
+/// (`Secure`) mode links it — the behavior asserted separately below — but the
+/// stylesheet *content* is the same either way, so the CSS-content claims below
+/// exercise the embed branch to read it back.
+fn embed(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Unsafe))
 }
 
 /// The embedded default stylesheet, as it appears inside the `<style>` element
@@ -99,7 +108,7 @@ To satisfy the expectations of a built-in role, a stylesheet is required.
 "#
     );
 
-    let css = embedded_stylesheet(&convert("= Doc\n\nBody."));
+    let css = embedded_stylesheet(&embed("= Doc\n\nBody."));
     assert!(css.contains(".text-center{text-align:center!important}"));
 }
 
@@ -126,7 +135,7 @@ Rather, it's something that the stylesheet provides.
 "#
     );
 
-    let css = embedded_stylesheet(&convert("= Doc\n\nBody."));
+    let css = embedded_stylesheet(&embed("= Doc\n\nBody."));
     assert!(css.contains("loweralpha{list-style-type:lower-alpha}"));
 }
 
@@ -141,7 +150,7 @@ The default stylesheet also applies *borders and shading to table cells* to supp
 "#
     );
 
-    let css = embedded_stylesheet(&convert("= Doc\n\nBody."));
+    let css = embedded_stylesheet(&embed("= Doc\n\nBody."));
     assert!(css.contains("grid-all"));
 }
 
@@ -159,7 +168,7 @@ It's the stylesheet that handles that task.
 "#
     );
 
-    let css = embedded_stylesheet(&convert("= Doc\n\nBody."));
+    let css = embedded_stylesheet(&embed("= Doc\n\nBody."));
     assert!(css.contains("toc2"));
 }
 
@@ -201,7 +210,7 @@ Loading and preferring these web fonts ensures everyone sees the same result.
 "#
     );
 
-    let html = convert("= Doc\n\nBody.");
+    let html = embed("= Doc\n\nBody.");
 
     // The converter adds a Google Fonts <link> naming all three families.
     assert!(html.contains(
@@ -222,9 +231,10 @@ non_normative!(
 "#
 );
 
-// The headline behavior: generating standalone HTML embeds the default
-// stylesheet into the `<head>` with no extra effort. This crate does the same —
-// `convert` inlines the stylesheet as a `<style>` element inside the head.
+// The headline behavior: generating standalone HTML applies the default
+// stylesheet into the `<head>` with no extra effort. Like the `asciidoctor`
+// command (which runs unsafe), this crate embeds the stylesheet as a `<style>`
+// element under a safe mode below `Secure`.
 #[test]
 fn generating_html_embeds_the_default_stylesheet_in_the_head() {
     verifies!(
@@ -239,7 +249,7 @@ Since no stylesheet is specified, Asciidoctor uses the default stylesheet (which
 "#
     );
 
-    let html = convert("= Doc\n\nBody.");
+    let html = embed("= Doc\n\nBody.");
     let head = &html[..html.find("</head>").expect("head")];
     assert!(head.contains(
         "<style>\n/*! Asciidoctor default stylesheet | MIT License | https://asciidoctor.org */"
@@ -281,20 +291,54 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
     assert!(!html.contains("<style>"));
 }
 
-// The API's "links by default instead of embedding" behavior is a consequence
-// of Asciidoctor's default safe mode (`secure`). This crate has no safe-mode
-// concept — `convert` always embeds — so this span is non-normative. Modeling
-// safe mode (and this embed-vs-link distinction) is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/37.
-non_normative!(
-    r#"
+// The API links the default stylesheet by default because its default safe mode
+// is `secure`; a safe mode of server or lower embeds it instead. This crate now
+// models safe mode (issue #37), so both halves are verifiable. The `copycss`
+// file copy this crate does not perform (tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/39) and the Ruby snippet
+// stay non-normative.
+#[test]
+fn the_api_links_by_default_and_a_lower_safe_mode_embeds() {
+    verifies!(
+        r#"
 When using the API, Asciidoctor already links to the stylesheet by default instead of embedding it (due to the default safe mode).
+"#
+    );
+
+    // The default safe mode (`Secure`, matching Asciidoctor's API) links the
+    // default stylesheet rather than embedding it.
+    let linked = convert("= Doc\n\nBody.");
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
+    assert!(!linked.contains("<style>"));
+
+    non_normative!(
+        r#"
 However, Asciidoctor does not copy the stylesheet to the output directory.
 You would have to put it there yourself.
 Otherwise, the browser will not be able to find the stylesheet.
 
+"#
+    );
+
+    verifies!(
+        r#"
 To solve this problem, set the safe mode to server or lower (e.g., server, safe, or unsafe) and Asciidoctor will embed the default stylesheet, like when using the `asciidoctor` command.
 
+"#
+    );
+
+    // A safe mode of server or lower embeds the stylesheet inline instead.
+    for mode in [SafeMode::Server, SafeMode::Safe, SafeMode::Unsafe] {
+        let embedded = convert_with("= Doc\n\nBody.", &Options::new().safe_mode(mode));
+        assert!(embedded.contains("<style>"), "{mode:?} should embed");
+        assert!(
+            !embedded.contains("./asciidoctor.css"),
+            "{mode:?} should not link"
+        );
+    }
+
+    non_normative!(
+        r#"
 [,ruby]
 ----
 require 'asciidoctor'
@@ -305,7 +349,8 @@ Asciidoctor.convert_file 'document.adoc', safe: :safe
 == Disable or modify the web fonts
 
 "#
-);
+    );
+}
 
 // Unsetting `webfonts` drops the Google Fonts `<link>` while keeping the
 // default stylesheet. This crate honors `:webfonts!:` the same way.
@@ -323,8 +368,12 @@ You can disable this link by unsetting the `webfonts` document attribute from th
 
     // The page shows `-a webfonts!` on the CLI; we unset it the same way — as an
     // external attribute — through `Options::unset`, the API the `adoc -a`
-    // option feeds into.
-    let html = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
+    // option feeds into. Under an embedding safe mode so the stylesheet stays
+    // inline (the point here is the absent font link, not embed-vs-link).
+    let html = convert_with(
+        "= Doc\n\nBody.",
+        &Options::new().unset("webfonts").safe_mode(SafeMode::Unsafe),
+    );
     // No emitted web-font <link> (the embedded CSS names Google Fonts only in a
     // commented-out @import, so match on the <link> tag itself).
     assert!(!html.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));

@@ -36,6 +36,7 @@ mod html;
 mod options;
 mod renderer;
 
+pub use asciidoc_parser::SafeMode;
 pub use options::Options;
 
 #[cfg(test)]

@@ -1,12 +1,17 @@
 = The Default Stylesheet
 :navtitle: Default Stylesheet
-:description: How asciidoc-html5 embeds Asciidoctor's default stylesheet and how to control the web fonts.
+:description: How asciidoc-html5 applies Asciidoctor's default stylesheet and how the safe mode and web fonts control it.
 
 When you convert a document, `asciidoc-html5` produces a standalone HTML5
-document with Asciidoctor's default stylesheet embedded in its `<head>`, so the
-result looks presentable without any extra files or setup. This is the same
-stylesheet Asciidoctor's `html5` backend embeds, included verbatim, so a
-document converted with `adoc` looks the same as one converted with Asciidoctor.
+document that carries Asciidoctor's default stylesheet, so the result looks
+presentable without any extra files or setup. This is the same stylesheet
+Asciidoctor's `html5` backend uses, included verbatim, so a document converted
+with `adoc` looks the same as one converted with Asciidoctor.
+
+Whether the stylesheet is _linked_ or _embedded_ depends on the
+xref:ROOT:safe-modes.adoc[safe mode]. Under the API default (`secure`) the
+converter links to _asciidoctor.css_; the `adoc` command, and any safe mode
+below `secure`, embeds the stylesheet inline instead. See <<applying>>.
 
 [NOTE]
 ====
@@ -15,7 +20,7 @@ invocations it shows are normative: they are verified against the
 implementation, so the documented behavior is guaranteed.
 ====
 
-== Why embed a stylesheet?
+== Why a stylesheet?
 
 A stylesheet is not just decoration. Several AsciiDoc features only work when a
 companion CSS class exists to back them, and the default stylesheet provides
@@ -30,7 +35,7 @@ come from the stylesheet.
 * The *TOC position* (a left or right sidebar) is a page-layout change the
 stylesheet makes.
 
-Embedding the default stylesheet means these features work out of the box, and
+Applying the default stylesheet means these features work out of the box, and
 it serves as a reference for the styles any custom stylesheet must provide.
 
 == Web fonts
@@ -44,29 +49,16 @@ Noto Serif:: body text
 Open Sans:: headings
 Droid Sans Mono:: monospaced phrases and verbatim blocks
 
+[#applying]
 == Applying the stylesheet
 
-There is nothing special to do: converting a document embeds the stylesheet
-automatically. The `<head>` of the output holds the web-font `<link>` followed
-by a `<style>` element containing the stylesheet.
+There is nothing special to do: converting a document applies the default
+stylesheet automatically. Under the default safe mode (`secure`), the `<head>`
+links to _asciidoctor.css_:
 
 [,rust]
 ----
 let html = asciidoc_html5::convert("= My Document\n\nHello.");
-assert!(html.contains("<style>"));
-----
-
-Converting a file from the command line produces the same self-contained result:
-
- $ adoc my-document.adoc
-
-If you would rather link to the stylesheet than embed it, set the `linkcss`
-attribute. The `<style>` element is then replaced by a `<link>` to
-_asciidoctor.css_:
-
-[,rust]
-----
-let html = asciidoc_html5::convert("= My Document\n:linkcss:\n\nHello.");
 assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
 ----
 
@@ -76,20 +68,35 @@ file for you (there is no `copycss` step, tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39]); it only
 produces the HTML.
 
-[NOTE]
-====
-Asciidoctor's API links to the stylesheet by default (instead of embedding it)
-because of its default _safe mode_. `asciidoc-html5` has no safe mode: it always
-embeds the default stylesheet unless you ask for `linkcss`. Modeling safe mode is
-tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/37[issue #37].
-====
+To embed the stylesheet inline instead -- so the output is self-contained -- run
+the document under a xref:ROOT:safe-modes.adoc[safe mode] below `secure`. The
+`adoc` command does this by default (it runs `unsafe`), so converting a file from
+the command line produces a self-contained result:
+
+ $ adoc my-document.adoc
+
+Through the API, pass the safe mode explicitly:
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options, SafeMode};
+
+let html = convert_with(
+    "= My Document\n\nHello.",
+    &Options::new().safe_mode(SafeMode::Server),
+);
+assert!(html.contains("<style>"));
+----
+
+The `linkcss` attribute overrides the safe-mode default: set it to link even
+under a low safe mode, or unset it from the API (`Options::unset("linkcss")`) to
+embed under `secure`. Under `secure`, a document cannot unset `linkcss` itself.
 
 == Disable or change the web fonts
 
 Unset the `webfonts` attribute in the document header to drop the Google Fonts
-`<link>`. The stylesheet stays embedded, and the browser falls back to the
-generic font families it names (for example, `sans-serif`):
+`<link>`. The browser then falls back to the generic font families the
+stylesheet names (for example, `sans-serif`):
 
 [,asciidoc]
 ----
@@ -119,7 +126,7 @@ Hello.
 
 == Known limitations
 
-`asciidoc-html5` embeds only the default stylesheet. A few of Asciidoctor's
+`asciidoc-html5` applies only the default stylesheet. A few of Asciidoctor's
 stylesheet features are not available:
 
 * *Custom stylesheets.* Setting `stylesheet` to your own CSS file has no effect:
@@ -129,8 +136,8 @@ Supporting custom stylesheets is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
 * *docinfo.* Injecting auxiliary styles through a docinfo file is not supported,
 tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40[issue #40].
-* *copycss.* The library never writes files, so with `linkcss` you must supply
-_asciidoctor.css_ yourself; writing it out is tracked in
+* *copycss.* The library never writes files, so with a linked stylesheet you
+must supply _asciidoctor.css_ yourself; writing it out is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
 
 To pin down exactly which markup the renderer supports today, see the
