@@ -122,11 +122,13 @@ mod tests {
     #[test]
     fn reads_a_file_from_the_base_directory_and_chomps_the_trailing_newline() {
         let dir = scratch(&[("docinfo.html", "<meta name=\"x\">\n")]);
+
         let got = handler(&dir, SafeMode::Server).resolve_docinfo(
             None,
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got.as_deref(), Some("<meta name=\"x\">"));
         let _ = fs::remove_dir_all(&dir);
     }
@@ -134,11 +136,13 @@ mod tests {
     #[test]
     fn a_relative_docinfodir_is_a_subdirectory_of_the_base() {
         let dir = scratch(&[("meta/docinfo.html", "IN-META")]);
+
         let got = handler(&dir, SafeMode::Server).resolve_docinfo(
             Some("meta"),
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got.as_deref(), Some("IN-META"));
         let _ = fs::remove_dir_all(&dir);
     }
@@ -146,11 +150,13 @@ mod tests {
     #[test]
     fn a_missing_file_resolves_to_none() {
         let dir = scratch(&[]);
+
         let got = handler(&dir, SafeMode::Server).resolve_docinfo(
             None,
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got, None);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -161,11 +167,13 @@ mod tests {
         // the climb clamped at the base directory: `../../docinfo.html` folds to
         // `docinfo.html` inside the base, so the in-base file is read.
         let dir = scratch(&[("docinfo.html", "IN-BASE")]);
+
         let got = handler(&dir, SafeMode::Server).resolve_docinfo(
             Some("../.."),
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got.as_deref(), Some("IN-BASE"));
         let _ = fs::remove_dir_all(&dir);
     }
@@ -177,11 +185,13 @@ mod tests {
         // is not reachable.
         let base = scratch(&[]);
         let other = scratch(&[("docinfo.html", "OUTSIDE")]);
+
         let got = handler(&base, SafeMode::Server).resolve_docinfo(
             Some(other.to_str().unwrap()),
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got, None);
         let _ = fs::remove_dir_all(&base);
         let _ = fs::remove_dir_all(&other);
@@ -193,11 +203,13 @@ mod tests {
         // a file outside the base directory is read.
         let base = scratch(&[]);
         let other = scratch(&[("docinfo.html", "OUTSIDE")]);
+
         let got = handler(&base, SafeMode::Unsafe).resolve_docinfo(
             Some(other.to_str().unwrap()),
             "docinfo.html",
             &Parser::default(),
         );
+
         assert_eq!(got.as_deref(), Some("OUTSIDE"));
         let _ = fs::remove_dir_all(&base);
         let _ = fs::remove_dir_all(&other);

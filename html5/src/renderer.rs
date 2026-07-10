@@ -857,6 +857,7 @@ mod tests {
         let style = html
             .find("<style>")
             .or_else(|| html.find("./asciidoctor.css"));
+
         let docinfo = html.find("<meta name=\"x\"").expect("head docinfo");
         let head_end = html.find("</head>").expect("head end");
         assert!(style.expect("stylesheet") < docinfo && docinfo < head_end);
@@ -869,6 +870,7 @@ mod tests {
             "= Doc\n:docinfo: shared\n\nBody.",
             &[("docinfo-header.html", "<div class=\"banner\">Hi</div>")],
         );
+
         assert!(html.contains("<div class=\"banner\">Hi</div>\n<div id=\"header\">"));
     }
 
@@ -879,6 +881,7 @@ mod tests {
             "= Doc\n:docinfo: shared\n\nBody.",
             &[("docinfo-footer.html", "<p>bye</p>")],
         );
+
         assert!(html.contains("</div>\n<p>bye</p>\n</body>"));
     }
 
@@ -894,6 +897,7 @@ mod tests {
                 ("docinfo-footer.html", "<p>bye</p>"),
             ],
         );
+
         assert!(!html.contains("<div id=\"header\">"));
         assert!(!html.contains("<div id=\"footer\">"));
         assert!(html.contains("<div class=\"banner\">Hi</div>"));
@@ -912,6 +916,7 @@ mod tests {
                 ("mydoc-docinfo.html", "<meta name=\"private\">"),
             ],
         );
+
         let shared = html.find("name=\"shared\"").expect("shared docinfo");
         let private = html.find("name=\"private\"").expect("private docinfo");
         assert!(shared < private);
@@ -926,6 +931,7 @@ mod tests {
             "= Doc\n:docinfo: shared\n:project: Widgets\n\nBody.",
             &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")],
         );
+
         assert!(html.contains("<meta name=\"app\" content=\"Widgets\">"));
     }
 
@@ -937,7 +943,9 @@ mod tests {
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new().safe_mode(SafeMode::Server),
         );
+
         assert!(html.contains("</head>"));
+
         // Nothing spliced: head still flows stylesheet → `</head>`.
         assert!(!html.contains("<meta name=\"x\""));
     }

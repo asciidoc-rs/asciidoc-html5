@@ -593,12 +593,14 @@ mod tests {
     #[test]
     fn docinfo_is_read_from_the_base_directory_below_secure() {
         let dir = docinfo_scratch("below-secure", &[("docinfo.html", "<meta name=\"x\">")]);
+
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new()
                 .safe_mode(SafeMode::Server)
                 .base_dir(dir.clone()),
         );
+
         assert!(html.contains("<meta name=\"x\">\n</head>"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -608,10 +610,12 @@ mod tests {
         // Secure is the default; docinfo is dropped without any file being read,
         // even with a base directory and the `docinfo` attribute set.
         let dir = docinfo_scratch("secure", &[("docinfo.html", "<meta name=\"x\">")]);
+
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new().base_dir(dir.clone()),
         );
+
         assert!(!html.contains("<meta name=\"x\">"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -631,6 +635,7 @@ mod tests {
                 .safe_mode(SafeMode::Server)
                 .base_dir(dir.clone()),
         );
+
         assert!(!without.contains("name=\"private\""));
 
         // Naming the primary file `guide.adoc` supplies the docname, so
@@ -642,6 +647,7 @@ mod tests {
                 .base_dir(dir.clone())
                 .input_file(dir.join("guide.adoc")),
         );
+
         assert!(with.contains("name=\"private\""));
         let _ = std::fs::remove_dir_all(&dir);
     }

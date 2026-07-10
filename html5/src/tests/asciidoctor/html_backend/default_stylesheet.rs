@@ -504,6 +504,7 @@ The `<style>` element in your docinfo file will be inserted directly below the d
             .safe_mode(SafeMode::Server)
             .base_dir(dir.clone()),
     );
+
     let _ = std::fs::remove_dir_all(&dir);
 
     // The default stylesheet's closing `</style>` is immediately followed by the

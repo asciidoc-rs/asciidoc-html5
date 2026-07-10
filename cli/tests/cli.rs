@@ -393,11 +393,13 @@ fn docinfo_files_are_read_from_disk_and_injected() {
 
     fs::write(&input, "= Doc\n:docinfo: shared\n\nBody.").expect("write input");
     fs::write(dir.join("docinfo.html"), "<meta name=\"di-head\">\n").expect("write head docinfo");
+
     fs::write(
         dir.join("docinfo-header.html"),
         "<div class=\"di-header\"></div>\n",
     )
     .expect("write header docinfo");
+
     fs::write(
         dir.join("docinfo-footer.html"),
         "<p class=\"di-footer\"></p>\n",
@@ -408,6 +410,7 @@ fn docinfo_files_are_read_from_disk_and_injected() {
         .arg(&input)
         .status()
         .expect("run the adoc binary");
+
     assert!(status.success(), "adoc exited with {status}");
 
     let html = fs::read_to_string(&derived).unwrap_or_default();
@@ -418,11 +421,13 @@ fn docinfo_files_are_read_from_disk_and_injected() {
         html.contains("<meta name=\"di-head\">\n</head>"),
         "head docinfo not placed at the bottom of <head>: {html}"
     );
+
     // Header docinfo appears immediately before the header div.
     assert!(
         html.contains("<div class=\"di-header\"></div>\n<div id=\"header\">"),
         "header docinfo not placed before the header div"
     );
+
     // Footer docinfo appears immediately after the footer div, before `</body>`.
     assert!(
         html.contains("</div>\n<p class=\"di-footer\"></p>\n</body>"),
@@ -447,6 +452,7 @@ fn secure_safe_mode_disables_docinfo() {
         .args(["-S", "secure", "-o", "-"])
         .output()
         .expect("run the adoc binary");
+
     let _ = fs::remove_dir_all(&dir);
 
     assert!(
@@ -454,7 +460,9 @@ fn secure_safe_mode_disables_docinfo() {
         "adoc exited with {}",
         output.status
     );
+
     let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
     assert!(
         !html.contains("di-head"),
         "docinfo should be disabled under the secure safe mode"
@@ -478,6 +486,7 @@ fn safe_mode_still_reads_in_base_docinfo() {
         .args(["--safe", "-o", "-"])
         .output()
         .expect("run the adoc binary");
+
     let _ = fs::remove_dir_all(&dir);
 
     assert!(
@@ -485,7 +494,9 @@ fn safe_mode_still_reads_in_base_docinfo() {
         "adoc exited with {}",
         output.status
     );
+
     let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
     assert!(
         html.contains("<meta name=\"di-head\">\n</head>"),
         "in-base docinfo should still be injected under --safe"
