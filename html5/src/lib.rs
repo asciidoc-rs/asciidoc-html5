@@ -36,7 +36,9 @@ mod html;
 mod options;
 mod renderer;
 
-pub use asciidoc_parser::SafeMode;
+pub use asciidoc_parser::{
+    document::DocinfoLocation, parser::DocinfoFileHandler, Parser as DocumentParser, SafeMode,
+};
 pub use options::Options;
 
 #[cfg(test)]

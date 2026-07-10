@@ -378,6 +378,88 @@ fn invalid_safe_mode_is_rejected() {
     );
 }
 
+/// A shared docinfo file sitting next to the input is read from disk and its
+/// content is injected at each of the three positions: the head docinfo lands
+/// at the bottom of `<head>`, the header docinfo just before `<div
+/// id="header">`, and the footer docinfo just after the footer `<div>`. This
+/// exercises the CLI's file-system docinfo handler end to end.
+#[test]
+fn docinfo_files_are_read_from_disk_and_injected() {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-docinfo-{}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create docinfo dir");
+    let input = dir.join("document.adoc");
+    let derived = dir.join("document.html");
+
+    fs::write(&input, "= Doc\n:docinfo: shared\n\nBody.").expect("write input");
+    fs::write(dir.join("docinfo.html"), "<meta name=\"di-head\">\n").expect("write head docinfo");
+    fs::write(
+        dir.join("docinfo-header.html"),
+        "<div class=\"di-header\"></div>\n",
+    )
+    .expect("write header docinfo");
+    fs::write(
+        dir.join("docinfo-footer.html"),
+        "<p class=\"di-footer\"></p>\n",
+    )
+    .expect("write footer docinfo");
+
+    let status = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .status()
+        .expect("run the adoc binary");
+    assert!(status.success(), "adoc exited with {status}");
+
+    let html = fs::read_to_string(&derived).unwrap_or_default();
+    let _ = fs::remove_dir_all(&dir);
+
+    // Head docinfo appears flush above `</head>` (its trailing newline chomped).
+    assert!(
+        html.contains("<meta name=\"di-head\">\n</head>"),
+        "head docinfo not placed at the bottom of <head>: {html}"
+    );
+    // Header docinfo appears immediately before the header div.
+    assert!(
+        html.contains("<div class=\"di-header\"></div>\n<div id=\"header\">"),
+        "header docinfo not placed before the header div"
+    );
+    // Footer docinfo appears immediately after the footer div, before `</body>`.
+    assert!(
+        html.contains("</div>\n<p class=\"di-footer\"></p>\n</body>"),
+        "footer docinfo not placed after the footer div"
+    );
+}
+
+/// Under the `secure` safe mode, docinfo files are not read even when the
+/// `docinfo` attribute is set and the file exists — matching Asciidoctor, which
+/// disables docinfo at `secure` and above.
+#[test]
+fn secure_safe_mode_disables_docinfo() {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-docinfo-secure-{}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create docinfo dir");
+    let input = dir.join("document.adoc");
+
+    fs::write(&input, "= Doc\n:docinfo: shared\n\nBody.").expect("write input");
+    fs::write(dir.join("docinfo.html"), "<meta name=\"di-head\">\n").expect("write head docinfo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .args(["-S", "secure", "-o", "-"])
+        .output()
+        .expect("run the adoc binary");
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    assert!(
+        !html.contains("di-head"),
+        "docinfo should be disabled under the secure safe mode"
+    );
+}
+
 /// A `-a` spec with no attribute name is rejected with a nonzero exit status
 /// and an `adoc:`-prefixed error.
 #[test]

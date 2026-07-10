@@ -47,7 +47,12 @@
 //! [`convert_with`]: crate::convert_with
 //! [`convert_file_with`]: crate::convert_file_with
 
-use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
+use std::rc::Rc;
+
+use asciidoc_parser::{
+    parser::{DocinfoFileHandler, ModificationContext},
+    Parser, SafeMode,
+};
 
 /// The options to supply to a conversion from outside the document source: a
 /// set of document attributes and the [safe mode](SafeMode).
@@ -79,6 +84,16 @@ pub struct Options {
     /// The safe mode to process the document under. `None` defaults to
     /// [`SafeMode::Secure`], matching Asciidoctor's API default.
     safe_mode: Option<SafeMode>,
+
+    /// The primary file name (`docname` source), if the caller supplied one.
+    /// Needed to resolve *private* docinfo files (whose names derive from it).
+    primary_file_name: Option<String>,
+
+    /// The docinfo file handler, if the caller supplied one. Resolving docinfo
+    /// files is a file-system concern the library leaves to the embedder (or
+    /// the `adoc` CLI); a handler bridges the parser's docinfo resolution to
+    /// wherever those files live.
+    docinfo_handler: Option<Rc<dyn DocinfoFileHandler>>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -132,6 +147,23 @@ impl Precedence {
     }
 }
 
+/// Adapts the shared docinfo handler [`Options`] stores (as an [`Rc`], so
+/// `Options` stays [`Clone`]) to the by-value, concrete-type handler the parser
+/// takes ownership of, delegating every call to the inner handler.
+#[derive(Debug)]
+struct SharedDocinfoHandler(Rc<dyn DocinfoFileHandler>);
+
+impl DocinfoFileHandler for SharedDocinfoHandler {
+    fn resolve_docinfo(
+        &self,
+        docinfodir: Option<&str>,
+        file_name: &str,
+        parser: &Parser,
+    ) -> Option<String> {
+        self.0.resolve_docinfo(docinfodir, file_name, parser)
+    }
+}
+
 impl Options {
     /// Creates an empty set of options — no attributes supplied and the default
     /// safe mode. Converting with it is equivalent to calling
@@ -160,6 +192,51 @@ impl Options {
     /// ```
     pub fn safe_mode(mut self, safe: SafeMode) -> Self {
         self.safe_mode = Some(safe);
+        self
+    }
+
+    /// Sets the primary file name the document is parsed as (Asciidoctor's
+    /// `docname` source).
+    ///
+    /// Its base name, minus the final extension, is the `<docname>` used to
+    /// build *private* docinfo file names (`<docname>-docinfo.html` and its
+    /// `-header`/`-footer` variants). Without it, only *shared* docinfo files
+    /// (`docinfo.html`, …) can be resolved. It has no other effect on
+    /// rendering.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::Options;
+    ///
+    /// let opts = Options::new().primary_file_name("guide.adoc");
+    /// ```
+    pub fn primary_file_name<S: Into<String>>(mut self, name: S) -> Self {
+        self.primary_file_name = Some(name.into());
+        self
+    }
+
+    /// Supplies the [`DocinfoFileHandler`] that resolves the document's
+    /// [docinfo] files.
+    ///
+    /// Docinfo lets AsciiDoc inject auxiliary content — extra `<head>` metadata
+    /// or styles, a custom header or footer — from external *docinfo files*
+    /// into fixed positions of the output. The library is a string→string
+    /// converter and never touches the file system itself, so the caller
+    /// provides a handler that maps a computed docinfo file name to its
+    /// content (the `adoc` CLI ships one that reads from disk).
+    ///
+    /// Which files are consulted is governed as in Asciidoctor: the `docinfo`
+    /// attribute selects the scopes and locations (`shared`, `private-head`,
+    /// …), `docinfodir` relocates the search, and `docinfosubs` controls
+    /// attribute substitution — all resolved by the parser. Note that,
+    /// matching Asciidoctor, docinfo is disabled entirely at
+    /// [`SafeMode::Secure`] and above (the default), so a caller must also
+    /// lower the [`safe_mode`](Self::safe_mode) for docinfo to take effect.
+    ///
+    /// [docinfo]: https://docs.asciidoctor.org/asciidoc/latest/docinfo/
+    pub fn docinfo_file_handler<H: DocinfoFileHandler + 'static>(mut self, handler: H) -> Self {
+        self.docinfo_handler = Some(Rc::new(handler));
         self
     }
 
@@ -258,6 +335,16 @@ impl Options {
             };
         }
 
+        // The primary file name (needed for private docinfo) and the docinfo
+        // handler are threaded straight through to the parser, which owns
+        // docinfo resolution.
+        if let Some(name) = &self.primary_file_name {
+            parser = parser.with_primary_file_name(name);
+        }
+        if let Some(handler) = &self.docinfo_handler {
+            parser = parser.with_docinfo_file_handler(SharedDocinfoHandler(Rc::clone(handler)));
+        }
+
         // Matching Asciidoctor: in `Secure` (or greater), `linkcss` defaults on
         // — the converter links the stylesheet instead of embedding it — unless
         // the caller supplied `linkcss` from the API/CLI. Seeding it as an
@@ -281,7 +368,35 @@ impl Options {
 
 #[cfg(test)]
 mod tests {
-    use crate::{convert, convert_with, Options, SafeMode};
+    use std::collections::HashMap;
+
+    use crate::{convert, convert_with, DocinfoFileHandler, DocumentParser, Options, SafeMode};
+
+    /// A docinfo handler backed by a fixed file-name → content map.
+    #[derive(Debug)]
+    struct MapHandler(HashMap<String, String>);
+
+    impl MapHandler {
+        fn new(pairs: &[(&str, &str)]) -> Self {
+            Self(
+                pairs
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            )
+        }
+    }
+
+    impl DocinfoFileHandler for MapHandler {
+        fn resolve_docinfo(
+            &self,
+            _docinfodir: Option<&str>,
+            file_name: &str,
+            _parser: &DocumentParser,
+        ) -> Option<String> {
+            self.0.get(file_name).cloned()
+        }
+    }
 
     // The default web-font family, present when `webfonts` is set with no value.
     const DEFAULT_FAMILY: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
@@ -464,5 +579,58 @@ mod tests {
         let html = convert_with("= Doc\n\nBody.", &Options::new().unset("linkcss"));
         assert!(html.contains("<style>"));
         assert!(!html.contains("./asciidoctor.css"));
+    }
+
+    // The docinfo handler is consulted only when the document enables docinfo
+    // (via the `docinfo` attribute) and the safe mode is below `Secure`.
+
+    #[test]
+    fn docinfo_handler_injects_head_content_below_secure() {
+        let html = convert_with(
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .docinfo_file_handler(MapHandler::new(&[("docinfo.html", "<meta name=\"x\">")])),
+        );
+        assert!(html.contains("<meta name=\"x\">\n</head>"));
+    }
+
+    #[test]
+    fn docinfo_is_disabled_under_the_secure_default() {
+        // Docinfo injects external file content, so — matching Asciidoctor — it
+        // is disabled at `Secure` and above (the default). The handler is never
+        // consulted, even with the `docinfo` attribute set.
+        let html = convert_with(
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &Options::new()
+                .docinfo_file_handler(MapHandler::new(&[("docinfo.html", "<meta name=\"x\">")])),
+        );
+        assert!(!html.contains("<meta name=\"x\">"));
+    }
+
+    #[test]
+    fn private_docinfo_requires_a_primary_file_name() {
+        let files = &[("guide-docinfo.html", "<meta name=\"private\">")];
+
+        // Without a primary file name, the `<docname>` is unknown, so the
+        // private docinfo file cannot be resolved.
+        let without = convert_with(
+            "= Doc\n:docinfo: private\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .docinfo_file_handler(MapHandler::new(files)),
+        );
+        assert!(!without.contains("name=\"private\""));
+
+        // With a primary file name of `guide.adoc`, the `guide-docinfo.html`
+        // private file is found and injected.
+        let with = convert_with(
+            "= Doc\n:docinfo: private\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .primary_file_name("guide.adoc")
+                .docinfo_file_handler(MapHandler::new(files)),
+        );
+        assert!(with.contains("name=\"private\""));
     }
 }

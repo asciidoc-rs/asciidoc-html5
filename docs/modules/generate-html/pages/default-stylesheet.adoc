@@ -134,8 +134,9 @@ the library converts a string to a string and cannot read an external file.
 Explicitly unsetting the stylesheet (`:stylesheet!:`) does drop the default one.
 Supporting custom stylesheets is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
-* *docinfo.* Injecting auxiliary styles through a docinfo file is not supported,
-tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40[issue #40].
+* *docinfo.* Auxiliary content from docinfo files is injected into the head,
+header, and footer. The library never reads files itself, so the `adoc` CLI
+reads them from disk and an embedder supplies them through a docinfo handler.
 * *copycss.* The library never writes files, so with a linked stylesheet you
 must supply _asciidoctor.css_ yourself; writing it out is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
