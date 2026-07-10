@@ -289,32 +289,43 @@ Hello.
     )));
 }
 
-// The stylesheet limitations that are checkable: a custom `stylesheet` value
-// has no effect (the file is not read, so its contents are absent), and
-// explicitly unsetting the stylesheet drops the default one.
+// The stylesheet behaviors that are checkable: a custom `stylesheet` value is
+// linked (or, with supplied content, embedded), and explicitly unsetting the
+// stylesheet drops the default one.
 #[test]
 fn custom_and_unset_stylesheet_behaviors() {
     verifies!(
         r#"
 == Known limitations
 
-`asciidoc-html5` applies only the default stylesheet. A few of Asciidoctor's
-stylesheet features are not available:
+`asciidoc-html5` applies the default stylesheet in full and custom stylesheets
+in part. A few of Asciidoctor's stylesheet features are not available:
 
-* *Custom stylesheets.* Setting `stylesheet` to your own CSS file has no effect:
-the library converts a string to a string and cannot read an external file.
-Explicitly unsetting the stylesheet (`:stylesheet!:`) does drop the default one.
-Supporting custom stylesheets is tracked in
+* *Custom stylesheets* are partially supported. When the stylesheet is _linked_
+-- under the `secure` API default, or any safe mode with `linkcss` set -- the
+`<head>` links to your stylesheet at its normalized web path, honoring
+`stylesdir`. _Embedding_ a custom stylesheet requires handing its contents to
+the API through `Options::stylesheet_content`, because the library cannot read
+an external file; the `adoc` command does not yet resolve a stylesheet file from
+disk, nor copy a linked one into place (`copycss`). Remaining work is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
 "#
     );
 
-    // A custom stylesheet file is not read, so neither its name nor the default
-    // stylesheet appears in the output.
-    let custom = convert("= Doc\n:stylesheet: my-theme.css\n\nBody.");
-    assert!(!custom.contains("my-theme.css"));
-    assert!(!custom.contains("<style>"));
-    assert!(!custom.contains("asciidoctor.css"));
+    // Under the `secure` default, a custom stylesheet is linked at its
+    // normalized web path (with `stylesdir` mirrored into it).
+    let linked = convert("= Doc\n:stylesheet: my-theme.css\n:stylesdir: css\n\nBody.");
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./css/my-theme.css\">"));
+    assert!(!linked.contains("./asciidoctor.css"));
+
+    // Embedding a custom stylesheet uses the CSS supplied through the API.
+    let embedded = convert_with(
+        "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .stylesheet_content("body { color: #ff0000; }"),
+    );
+    assert!(embedded.contains("<style>\nbody { color: #ff0000; }\n</style>"));
 
     // Explicitly unsetting the stylesheet drops the default (linked or embedded).
     let unset = convert("= Doc\n:stylesheet!:\n\nBody.");

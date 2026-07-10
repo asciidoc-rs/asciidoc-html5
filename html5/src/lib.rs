@@ -51,7 +51,7 @@ mod tests;
 /// For callers that already hold a parsed [`Document`] (for example, to inspect
 /// or transform it first), call [`convert_document`] directly. To supply
 /// document attributes from outside the source (Asciidoctor's `-a name=value`),
-/// use [`convert_with`].
+/// or to embed a custom stylesheet, use [`convert_with`].
 pub fn convert(source: &str) -> String {
     convert_with(source, &Options::default())
 }
@@ -65,6 +65,10 @@ pub fn convert(source: &str) -> String {
 /// from outside the document source. See [`Options`] for override vs. soft-set
 /// precedence.
 ///
+/// Unlike [`convert_document`], this path also honors a custom stylesheet whose
+/// contents were supplied via [`Options::stylesheet_content`], embedding them
+/// when the document selects an embedded custom stylesheet.
+///
 /// # Examples
 ///
 /// ```
@@ -77,7 +81,7 @@ pub fn convert(source: &str) -> String {
 pub fn convert_with(source: &str, options: &Options) -> String {
     let mut parser = options.apply(Parser::default());
     let document = parser.parse(source);
-    convert_document(&document)
+    renderer::render_document(&document, options.custom_stylesheet())
 }
 
 /// Reads the AsciiDoc file at `path` and renders it to a complete HTML5
@@ -157,5 +161,5 @@ pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Resu
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    renderer::render_document(document)
+    renderer::render_document(document, None)
 }
