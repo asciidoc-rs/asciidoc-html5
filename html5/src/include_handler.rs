@@ -527,7 +527,10 @@ mod tests {
         }
 
         assert_eq!(norm("/a/b/../c"), "/a/c");
-        assert_eq!(norm("a/./b"), "a/b");
+        // A leading `.` is dropped. (`Path::components` already elides a `.` in
+        // the middle of a path, so only a leading one reaches the `CurDir`
+        // arm.)
+        assert_eq!(norm("./a/b"), "a/b");
         // A leading `..` in a relative path is kept (nothing to pop).
         assert_eq!(norm("../a"), "../a");
     }
