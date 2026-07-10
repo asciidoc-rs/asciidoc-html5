@@ -22,7 +22,7 @@
 //! directory itself, matching Asciidoctor's recovery behavior.
 
 use std::{
-    fmt, fs,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -37,6 +37,7 @@ use asciidoc_parser::{attributes::Attrlist, parser::IncludeFileHandler, Parser, 
 /// and reads never escape. Under [`SafeMode::Unsafe`] there is no jail and
 /// targets resolve freely, including to absolute paths and paths outside the
 /// base directory.
+#[derive(Debug)]
 pub(crate) struct FsIncludeFileHandler {
     /// The base directory: the anchor for relative targets and, when jailed,
     /// the boundary reads may not cross. Expected to be absolute.
@@ -44,15 +45,6 @@ pub(crate) struct FsIncludeFileHandler {
 
     /// The safe mode in force, which decides whether resolution is jailed.
     safe: SafeMode,
-}
-
-impl fmt::Debug for FsIncludeFileHandler {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FsIncludeFileHandler")
-            .field("base_dir", &self.base_dir)
-            .field("safe", &self.safe)
-            .finish()
-    }
 }
 
 impl FsIncludeFileHandler {
@@ -92,11 +84,16 @@ impl FsIncludeFileHandler {
     /// as-is, and `..` may climb anywhere.
     fn resolve_free(&self, start: &str, target: &str) -> PathBuf {
         if is_absolute(target) {
-            return normalize(&PathBuf::from(posixify(target)));
+            return normalize(&PathBuf::from(target));
         }
 
+        // An absolute `start` is a native path (the including file's own
+        // location), so it is kept verbatim — posixifying it would corrupt a
+        // Windows path such as a drive prefix or a `\\?\` verbatim path. A
+        // relative `start` is a `/`-separated document path, joined onto the
+        // base directory a segment at a time.
         let anchor = if is_absolute(start) {
-            PathBuf::from(posixify(start))
+            PathBuf::from(start)
         } else {
             join_segments(&self.base_dir, start)
         };
@@ -289,7 +286,9 @@ mod tests {
 
     use asciidoc_parser::SafeMode;
 
-    use super::FsIncludeFileHandler;
+    use super::{
+        directory_of, fold_into, is_absolute, normalize, posixify, strip_root, FsIncludeFileHandler,
+    };
 
     const BASE: &str = "/home/user/project";
 
@@ -297,11 +296,15 @@ mod tests {
         FsIncludeFileHandler::new(PathBuf::from(BASE), safe)
     }
 
+    /// Resolves a target and renders the result with forward slashes, so the
+    /// expectations below are written the same way on every platform (a
+    /// `PathBuf` prints with `\` on Windows and `/` elsewhere, but the
+    /// resolution logic is separator-independent).
     fn resolve(safe: SafeMode, source: Option<&str>, target: &str) -> String {
         handler(safe)
             .resolve(source, target)
             .to_string_lossy()
-            .into_owned()
+            .replace('\\', "/")
     }
 
     // With no jail (`unsafe`), a relative target anchors at the base directory
@@ -384,6 +387,20 @@ mod tests {
         );
     }
 
+    // Under a jail, a source directory equal to the base contributes no offset:
+    // a top-level include resolves directly inside the base directory.
+    #[test]
+    fn jailed_source_directory_equal_to_base_has_no_offset() {
+        assert_eq!(
+            resolve(
+                SafeMode::Safe,
+                Some("/home/user/project/main.adoc"),
+                "part.adoc"
+            ),
+            "/home/user/project/part.adoc"
+        );
+    }
+
     // Under a jail, a source directory outside the base is dropped: resolution
     // recovers to the base directory.
     #[test]
@@ -392,6 +409,127 @@ mod tests {
             resolve(SafeMode::Safe, Some("/etc/intro.adoc"), "detail.adoc"),
             "/home/user/project/detail.adoc"
         );
+    }
+
+    // Under `unsafe`, an absolute source directory is honored directly (the
+    // target resolves alongside the including file, wherever it lives).
+    #[test]
+    fn free_absolute_source_directory_is_honored() {
+        assert_eq!(
+            resolve(SafeMode::Unsafe, Some("/var/docs/main.adoc"), "part.adoc"),
+            "/var/docs/part.adoc"
+        );
+    }
+
+    // A source with no directory component (a bare file name) anchors at the
+    // base directory.
+    #[test]
+    fn source_without_a_directory_anchors_at_base() {
+        assert_eq!(
+            resolve(SafeMode::Unsafe, Some("main.adoc"), "part.adoc"),
+            "/home/user/project/part.adoc"
+        );
+        assert_eq!(
+            resolve(SafeMode::Safe, Some("main.adoc"), "part.adoc"),
+            "/home/user/project/part.adoc"
+        );
+    }
+
+    // Backslash-separated targets and a Windows drive-letter base are handled
+    // the same way, so include resolution works on Windows as well as Posix.
+    #[test]
+    fn windows_style_paths_resolve() {
+        // A backslash-separated relative target is treated like a Posix one.
+        assert_eq!(
+            resolve(SafeMode::Unsafe, None, r"sub\part.adoc"),
+            "/home/user/project/sub/part.adoc"
+        );
+
+        // A drive-letter base with a jailed absolute target recovers into the
+        // jail, dropping the drive root.
+        let handler = FsIncludeFileHandler::new(PathBuf::from(r"C:\book"), SafeMode::Safe);
+        assert_eq!(
+            handler
+                .resolve(None, r"C:\Windows\system32")
+                .to_string_lossy()
+                .replace('\\', "/"),
+            "C:/book/Windows/system32"
+        );
+    }
+
+    // `is_absolute` recognizes Posix roots, Windows backslash roots, and drive
+    // prefixes, and rejects relative paths.
+    #[test]
+    fn is_absolute_recognizes_roots() {
+        assert!(is_absolute("/etc"));
+        assert!(is_absolute(r"\etc"));
+        assert!(is_absolute("C:/dir"));
+        assert!(is_absolute("c:rel"));
+        assert!(!is_absolute("dir/file"));
+        assert!(!is_absolute("file.adoc"));
+        assert!(!is_absolute(""));
+    }
+
+    // `strip_root` removes a leading Posix slash, a backslash, or a drive
+    // prefix (with or without a trailing separator).
+    #[test]
+    fn strip_root_removes_the_leading_root() {
+        assert_eq!(strip_root("/x/y"), "x/y");
+        assert_eq!(strip_root(r"\x\y"), r"x\y");
+        assert_eq!(strip_root("C:/x/y"), "x/y");
+        assert_eq!(strip_root("C:x"), "x");
+        assert_eq!(strip_root("relative"), "relative");
+    }
+
+    // `directory_of` returns the portion before the final separator (either
+    // kind), or the empty string when there is none.
+    #[test]
+    fn directory_of_returns_the_parent() {
+        assert_eq!(directory_of("a/b/c.adoc"), "a/b");
+        assert_eq!(directory_of(r"a\b\c.adoc"), r"a\b");
+        assert_eq!(directory_of("c.adoc"), "");
+        assert_eq!(directory_of(""), "");
+    }
+
+    // `posixify` converts backslash separators to forward slashes and leaves a
+    // Posix path untouched.
+    #[test]
+    fn posixify_normalizes_separators() {
+        assert_eq!(posixify(r"a\b\c"), "a/b/c");
+        assert_eq!(posixify("a/b/c"), "a/b/c");
+    }
+
+    // `fold_into` drops `.` and empty components, resolves `..` by popping, and
+    // clamps a `..` with nothing to pop (so it cannot climb past the start).
+    #[test]
+    fn fold_into_resolves_and_clamps_components() {
+        fn fold(path: &str) -> Vec<String> {
+            let mut segments = vec!["base".to_string()];
+            fold_into(&mut segments, path);
+            segments
+        }
+
+        assert_eq!(fold("a/./b"), vec!["base", "a", "b"]);
+        assert_eq!(fold("a//b"), vec!["base", "a", "b"]);
+        assert_eq!(fold("a/../b"), vec!["base", "b"]);
+        // Two `..` pop `base` then clamp (nothing left to pop).
+        assert_eq!(fold("../../x"), vec!["x"]);
+    }
+
+    // `normalize` resolves `.`/`..` lexically, popping normal components but
+    // preserving a `..` that has nothing to pop (the unjailed escape case).
+    #[test]
+    fn normalize_folds_lexically() {
+        fn norm(path: &str) -> String {
+            normalize(std::path::Path::new(path))
+                .to_string_lossy()
+                .replace('\\', "/")
+        }
+
+        assert_eq!(norm("/a/b/../c"), "/a/c");
+        assert_eq!(norm("a/./b"), "a/b");
+        // A leading `..` in a relative path is kept (nothing to pop).
+        assert_eq!(norm("../a"), "../a");
     }
 
     // End-to-end resolution against a real temporary project directory,
