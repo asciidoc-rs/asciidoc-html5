@@ -12,7 +12,7 @@ use std::{
     process::ExitCode,
 };
 
-use asciidoc_html5::{DocinfoFileHandler, DocumentParser, Options, SafeMode};
+use asciidoc_html5::{Options, SafeMode};
 use clap::Parser;
 
 /// Convert an AsciiDoc document to HTML5.
@@ -75,6 +75,23 @@ Repeat -a to set several attributes."
     )]
     attribute: Vec<String>,
 
+    /// Base directory for the document and its resources (default: input's dir)
+    #[arg(
+        short = 'B',
+        long = "base-dir",
+        value_name = "DIR",
+        long_help = "Set the base directory, the way Asciidoctor's -B option does.\n\n\
+The base directory is where filesystem-relative resources are resolved from. \
+Today that means `include::` targets: a relative include resolves against the \
+including file's directory, and under the `safe` and `server` safe modes reads \
+may not climb above the base directory (a target that tries is recovered back \
+inside). Under `unsafe` there is no such restriction; under `secure` includes \
+become links and are never read.\n\n\
+When omitted, the base directory is the directory containing the input file, or \
+the current directory when the document is read from standard input."
+    )]
+    base_dir: Option<PathBuf>,
+
     /// Set the safe mode: unsafe, safe, server, or secure (default: unsafe)
     #[arg(
         short = 'S',
@@ -121,8 +138,8 @@ fn main() -> ExitCode {
 /// standard-output writer in as a parameter keeps the conversion pipeline
 /// testable without spawning the binary.
 fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
-    let options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
-    let options = configure_docinfo(options, cli.input.as_deref());
+    let mut options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
+    options = apply_base_dir(cli, options)?;
 
     let source = read_input(cli.input.as_deref())?;
 
@@ -131,6 +148,43 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     match output_target(cli) {
         OutputTarget::File(path) => fs::write(path, html),
         OutputTarget::Stdout => stdout.write_all(html.as_bytes()),
+    }
+}
+
+/// Records the base directory and primary file on `options`, mirroring
+/// Asciidoctor's `-B`/`--base-dir`.
+///
+/// An explicit `-B` sets the base directory. Otherwise it is left to the
+/// library to derive from the input file's directory, except when the document
+/// is read from standard input — there is no file to derive from, so the
+/// current directory is used, matching Asciidoctor. In every case the input
+/// file (when there is one) is recorded so its top-level `include::` directives
+/// resolve against its own directory.
+///
+/// # Errors
+///
+/// Returns an [`io::Error`] when the current directory is needed but cannot be
+/// determined.
+fn apply_base_dir(cli: &Cli, mut options: Options) -> io::Result<Options> {
+    if let Some(dir) = &cli.base_dir {
+        options = options.base_dir(dir.clone());
+    } else if input_file(cli).is_none() {
+        options = options.base_dir(std::env::current_dir()?);
+    }
+
+    if let Some(path) = input_file(cli) {
+        options = options.input_file(path.to_path_buf());
+    }
+
+    Ok(options)
+}
+
+/// Returns the input file path when `adoc` reads from a real file, or `None`
+/// when it reads from standard input (no `input`, or the conventional `-`).
+fn input_file(cli: &Cli) -> Option<&Path> {
+    match cli.input.as_deref() {
+        Some(path) if path.as_os_str() != "-" => Some(path),
+        _ => None,
     }
 }
 
@@ -182,92 +236,6 @@ fn build_options(specs: &[String]) -> io::Result<Options> {
         options = apply_attribute_spec(options, spec)?;
     }
     Ok(options)
-}
-
-/// Configures docinfo resolution on `options` for the given `input`.
-///
-/// A file input contributes both its path (the `docname` source for *private*
-/// docinfo files) and a file-system docinfo handler rooted at the file's
-/// directory. Standard input has no name — so no private docinfo — but still
-/// gets a handler rooted at the current directory, so *shared* docinfo files
-/// there are found, matching Asciidoctor's use of the base directory.
-///
-/// Registering the handler is always harmless: the library resolves docinfo
-/// only when the document opts in via the `docinfo` attribute and the safe mode
-/// is below `secure`, so an ordinary conversion is unaffected.
-fn configure_docinfo(options: Options, input: Option<&Path>) -> Options {
-    match input {
-        Some(path) if path.as_os_str() != "-" => {
-            // The document directory is the input's parent; an input with no
-            // parent (a bare file name) resolves against the current directory.
-            let base_dir = path
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            options
-                .primary_file_name(path.to_string_lossy())
-                .docinfo_file_handler(FsDocinfoHandler { base_dir })
-        }
-        _ => options.docinfo_file_handler(FsDocinfoHandler {
-            base_dir: PathBuf::from("."),
-        }),
-    }
-}
-
-/// Reads docinfo files from the file system for the `adoc` CLI.
-///
-/// The `asciidoc-html5` library never touches the file system itself; this
-/// handler bridges the parser's docinfo resolution to files on disk. It
-/// resolves each requested docinfo file name against the document's directory,
-/// or against `docinfodir` when that attribute is set (a relative `docinfodir`
-/// is taken relative to the document directory; an absolute one is used as-is),
-/// matching Asciidoctor.
-#[derive(Debug)]
-struct FsDocinfoHandler {
-    /// The document's directory, against which docinfo file names — and a
-    /// relative `docinfodir` — are resolved.
-    base_dir: PathBuf,
-}
-
-impl DocinfoFileHandler for FsDocinfoHandler {
-    fn resolve_docinfo(
-        &self,
-        docinfodir: Option<&str>,
-        file_name: &str,
-        _parser: &DocumentParser,
-    ) -> Option<String> {
-        // The search directory is `docinfodir` when set (absolute as-is, a
-        // relative value appended to the document directory), else the document
-        // directory itself.
-        let dir = match docinfodir {
-            Some(docinfodir) => {
-                let docinfodir = Path::new(docinfodir);
-                if docinfodir.is_absolute() {
-                    docinfodir.to_path_buf()
-                } else {
-                    self.base_dir.join(docinfodir)
-                }
-            }
-            None => self.base_dir.clone(),
-        };
-
-        // A docinfo file that cannot be read is treated as absent, matching
-        // Asciidoctor: the location simply omits it.
-        let content = fs::read_to_string(dir.join(file_name)).ok()?;
-
-        // Asciidoctor normalizes docinfo content, dropping a single trailing
-        // newline so the injected fragment sits flush against the element that
-        // follows it in the output.
-        Some(chomp_trailing_newline(&content))
-    }
-}
-
-/// Removes a single trailing line ending (`\n` or `\r\n`) from `s`, if present.
-fn chomp_trailing_newline(s: &str) -> String {
-    s.strip_suffix('\n')
-        .map(|s| s.strip_suffix('\r').unwrap_or(s))
-        .unwrap_or(s)
-        .to_string()
 }
 
 /// Parses one `-a` attribute spec and records it in `options`, mirroring

@@ -17,9 +17,10 @@ track_file!("docs/modules/generate-html/pages/default-stylesheet.adoc");
 // reproduction with no added coverage.
 //
 // The prose is non-normative documentation. The docinfo bullet describes a
-// supported feature but only its file-system boundary (which this string→string
-// API cannot exercise), and the `copycss` limitation describes an absent
-// feature, so neither carries a rule to verify here.
+// supported feature whose behavior (placement, the base-directory resolution,
+// and the safe-mode jail) is verified from the docinfo and include tests rather
+// than here, and the `copycss` limitation describes an absent feature, so
+// neither carries a rule to verify on this page.
 
 /// Converts `source` under a safe mode below `Secure`, so the default
 /// stylesheet is embedded inline (`<style>`). The default (`Secure`) mode links
@@ -327,8 +328,8 @@ https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
 non_normative!(
     r#"
 * *docinfo.* Auxiliary content from docinfo files is injected into the head,
-header, and footer. The library never reads files itself, so the `adoc` CLI
-reads them from disk and an embedder supplies them through a docinfo handler.
+header, and footer. Files are resolved from the base directory and confined by
+the safe mode, exactly as `include::` targets are.
 * *copycss.* The library never writes files, so with a linked stylesheet you
 must supply _asciidoctor.css_ yourself; writing it out is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].

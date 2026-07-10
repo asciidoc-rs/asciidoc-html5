@@ -502,48 +502,31 @@ impl Renderer {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use crate::{convert, convert_with, Options, SafeMode};
 
-    use crate::{convert, convert_with, DocinfoFileHandler, DocumentParser, Options, SafeMode};
-
-    /// A docinfo handler backed by a fixed file-name → content map, so the
-    /// docinfo tests can supply files without touching the file system.
-    #[derive(Debug)]
-    struct MapHandler(HashMap<String, String>);
-
-    impl MapHandler {
-        fn new(pairs: &[(&str, &str)]) -> Self {
-            Self(
-                pairs
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            )
+    /// Converts `source` with the given docinfo files (name → content) written
+    /// to a fresh temp directory, under `Server` safe mode (docinfo is disabled
+    /// at `Secure` and above) with a primary file of `mydoc.adoc` in that
+    /// directory (so both shared and private docinfo files resolve).
+    ///
+    /// `tag` names the temp directory so concurrent tests do not collide.
+    fn with_docinfo(tag: &str, source: &str, files: &[(&str, &str)]) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-docinfo-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        for (name, content) in files {
+            std::fs::write(dir.join(name), content).expect("write scratch file");
         }
-    }
 
-    impl DocinfoFileHandler for MapHandler {
-        fn resolve_docinfo(
-            &self,
-            _docinfodir: Option<&str>,
-            file_name: &str,
-            _parser: &DocumentParser,
-        ) -> Option<String> {
-            self.0.get(file_name).cloned()
-        }
-    }
-
-    /// Converts `source` with the given docinfo files available, under `Server`
-    /// safe mode (docinfo is disabled at `Secure` and above) and a primary file
-    /// name of `mydoc.adoc` (so private docinfo files resolve).
-    fn with_docinfo(source: &str, files: &[(&str, &str)]) -> String {
-        convert_with(
+        let html = convert_with(
             source,
             &Options::new()
                 .safe_mode(SafeMode::Server)
-                .primary_file_name("mydoc.adoc")
-                .docinfo_file_handler(MapHandler::new(files)),
-        )
+                .input_file(dir.join("mydoc.adoc")),
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        html
     }
 
     /// Converts `source` under a safe mode below `Secure`, so the default
@@ -862,6 +845,7 @@ mod tests {
     #[test]
     fn head_docinfo_is_appended_to_the_bottom_of_the_head() {
         let html = with_docinfo(
+            "head",
             "= Doc\n:docinfo: shared\n\nBody.",
             &[("docinfo.html", "<meta name=\"x\" content=\"y\">")],
         );
@@ -881,6 +865,7 @@ mod tests {
     #[test]
     fn header_docinfo_is_inserted_before_the_header_div() {
         let html = with_docinfo(
+            "header",
             "= Doc\n:docinfo: shared\n\nBody.",
             &[("docinfo-header.html", "<div class=\"banner\">Hi</div>")],
         );
@@ -890,6 +875,7 @@ mod tests {
     #[test]
     fn footer_docinfo_is_inserted_after_the_footer_div() {
         let html = with_docinfo(
+            "footer",
             "= Doc\n:docinfo: shared\n\nBody.",
             &[("docinfo-footer.html", "<p>bye</p>")],
         );
@@ -901,6 +887,7 @@ mod tests {
         // Docinfo header/footer are emitted whether or not the built-in header
         // and footer are suppressed — this is what lets docinfo replace them.
         let html = with_docinfo(
+            "suppressed",
             "= Doc\n:docinfo: shared\n:noheader:\n:nofooter:\n\nBody.",
             &[
                 ("docinfo-header.html", "<div class=\"banner\">Hi</div>"),
@@ -918,6 +905,7 @@ mod tests {
         // With both scopes enabled, the shared file's content precedes the
         // private file's, matching Asciidoctor's concatenation order.
         let html = with_docinfo(
+            "scopes",
             "= Doc\n:docinfo: shared,private\n\nBody.",
             &[
                 ("docinfo.html", "<meta name=\"shared\">"),
@@ -934,6 +922,7 @@ mod tests {
         // With `docinfosubs` at its implied default (`attributes`), attribute
         // references in the docinfo file are resolved.
         let html = with_docinfo(
+            "subs",
             "= Doc\n:docinfo: shared\n:project: Widgets\n\nBody.",
             &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")],
         );
@@ -941,9 +930,9 @@ mod tests {
     }
 
     #[test]
-    fn no_handler_means_no_docinfo() {
-        // Without a docinfo handler configured, the `docinfo` attribute has no
-        // effect and the output carries no injected content.
+    fn no_base_directory_means_no_docinfo() {
+        // With neither a base directory nor a primary file, no docinfo handler
+        // is installed, so the `docinfo` attribute has no effect.
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new().safe_mode(SafeMode::Server),

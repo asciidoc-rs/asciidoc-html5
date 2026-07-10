@@ -3,9 +3,9 @@
 //!
 //! [`Options`] carries the settings applied to a conversion from *outside* the
 //! document source: a set of document attributes (the equivalent of
-//! Asciidoctor's `-a name=value` CLI option and the `:attributes` API option)
+//! Asciidoctor's `-a name=value` CLI option and the `attributes` API option)
 //! and the [`SafeMode`] under which the document is processed (Asciidoctor's
-//! `:safe` option). It is the parameter accepted by the `_with` conversion
+//! `safe` API option). It is the parameter accepted by the `_with` conversion
 //! entry points ([`convert_with`] and [`convert_file_with`]).
 //!
 //! # Safe mode
@@ -47,12 +47,11 @@
 //! [`convert_with`]: crate::convert_with
 //! [`convert_file_with`]: crate::convert_file_with
 
-use std::rc::Rc;
+use std::path::{Path, PathBuf};
 
-use asciidoc_parser::{
-    parser::{DocinfoFileHandler, ModificationContext},
-    Parser, SafeMode,
-};
+use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
+
+use crate::{docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFileHandler};
 
 /// The options to supply to a conversion from outside the document source: a
 /// set of document attributes and the [safe mode](SafeMode).
@@ -85,15 +84,18 @@ pub struct Options {
     /// [`SafeMode::Secure`], matching Asciidoctor's API default.
     safe_mode: Option<SafeMode>,
 
-    /// The primary file name (`docname` source), if the caller supplied one.
-    /// Needed to resolve *private* docinfo files (whose names derive from it).
-    primary_file_name: Option<String>,
+    /// The base directory: the anchor for filesystem-relative resources
+    /// (`include::` targets and docinfo files) and, under a jailed safe mode,
+    /// the boundary reads may not cross. `None` leaves it to be derived from
+    /// the primary file's directory (see [`base_dir`](Self::base_dir)).
+    base_dir: Option<PathBuf>,
 
-    /// The docinfo file handler, if the caller supplied one. Resolving docinfo
-    /// files is a file-system concern the library leaves to the embedder (or
-    /// the `adoc` CLI); a handler bridges the parser's docinfo resolution to
-    /// wherever those files live.
-    docinfo_handler: Option<Rc<dyn DocinfoFileHandler>>,
+    /// The path of the primary document, used to name it for diagnostics, to
+    /// anchor top-level `include::` resolution, and to derive the `docname`
+    /// that names *private* docinfo files. Set by
+    /// [`convert_file_with`](crate::convert_file_with) and by
+    /// [`input_file`](Self::input_file).
+    primary_file: Option<PathBuf>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -147,23 +149,6 @@ impl Precedence {
     }
 }
 
-/// Adapts the shared docinfo handler [`Options`] stores (as an [`Rc`], so
-/// `Options` stays [`Clone`]) to the by-value, concrete-type handler the parser
-/// takes ownership of, delegating every call to the inner handler.
-#[derive(Debug)]
-struct SharedDocinfoHandler(Rc<dyn DocinfoFileHandler>);
-
-impl DocinfoFileHandler for SharedDocinfoHandler {
-    fn resolve_docinfo(
-        &self,
-        docinfodir: Option<&str>,
-        file_name: &str,
-        parser: &Parser,
-    ) -> Option<String> {
-        self.0.resolve_docinfo(docinfodir, file_name, parser)
-    }
-}
-
 impl Options {
     /// Creates an empty set of options — no attributes supplied and the default
     /// safe mode. Converting with it is equivalent to calling
@@ -174,11 +159,12 @@ impl Options {
 
     /// Sets the [`SafeMode`] the document is processed under.
     ///
-    /// This is Asciidoctor's `:safe` option. When left unset, conversion uses
-    /// [`SafeMode::Secure`], the most conservative mode and Asciidoctor's API
-    /// default. Following Asciidoctor, `Secure` links the default stylesheet
-    /// (to `./asciidoctor.css`) instead of embedding it, unless the caller sets
-    /// `linkcss` explicitly; lower modes embed it inline.
+    /// This is Asciidoctor's `safe` API option. When left unset, conversion
+    /// uses [`SafeMode::Secure`], the most conservative mode and
+    /// Asciidoctor's API default. Following Asciidoctor, `Secure` links the
+    /// default stylesheet (to `./asciidoctor.css`) instead of embedding it,
+    /// unless the caller sets `linkcss` explicitly; lower modes embed it
+    /// inline.
     ///
     /// # Examples
     ///
@@ -195,48 +181,44 @@ impl Options {
         self
     }
 
-    /// Sets the primary file name the document is parsed as (Asciidoctor's
-    /// `docname` source).
+    /// Sets the base directory that filesystem-relative resources resolve
+    /// against — Asciidoctor's `-B`/`--base-dir` (the `base_dir` API option).
     ///
-    /// Its base name, minus the final extension, is the `<docname>` used to
-    /// build *private* docinfo file names (`<docname>-docinfo.html` and its
-    /// `-header`/`-footer` variants). Without it, only *shared* docinfo files
-    /// (`docinfo.html`, …) can be resolved. It has no other effect on
-    /// rendering.
+    /// Such resources are `include::` directives and docinfo files. The base
+    /// directory anchors relative include targets and docinfo file lookups and,
+    /// under the `safe` and `server` [safe modes](SafeMode), is the boundary
+    /// those reads may not cross: a target (or a `docinfodir`) that tries to
+    /// climb above it is recovered back inside, matching Asciidoctor. Under
+    /// `unsafe` there is no such restriction, and under `secure` includes are
+    /// turned into links and docinfo is dropped, without any file being read.
     ///
-    /// # Examples
+    /// When left unset, the base directory is derived from the primary file's
+    /// directory (see [`input_file`](Self::input_file)); with neither a base
+    /// directory nor a primary file, include and docinfo resolution are not
+    /// enabled and `include::` directives and docinfo are left unresolved.
     ///
-    /// ```
-    /// use asciidoc_html5::Options;
-    ///
-    /// let opts = Options::new().primary_file_name("guide.adoc");
-    /// ```
-    pub fn primary_file_name<S: Into<String>>(mut self, name: S) -> Self {
-        self.primary_file_name = Some(name.into());
+    /// The path should be absolute; relative paths are interpreted against the
+    /// process's current directory when files are read.
+    pub fn base_dir<P: Into<PathBuf>>(mut self, dir: P) -> Self {
+        self.base_dir = Some(dir.into());
         self
     }
 
-    /// Supplies the [`DocinfoFileHandler`] that resolves the document's
-    /// [docinfo] files.
+    /// Sets the path of the primary document.
     ///
-    /// Docinfo lets AsciiDoc inject auxiliary content — extra `<head>` metadata
-    /// or styles, a custom header or footer — from external *docinfo files*
-    /// into fixed positions of the output. The library is a string→string
-    /// converter and never touches the file system itself, so the caller
-    /// provides a handler that maps a computed docinfo file name to its
-    /// content (the `adoc` CLI ships one that reads from disk).
+    /// This names the document in diagnostics, anchors the resolution of its
+    /// top-level `include::` directives (a relative include target resolves
+    /// against this file's directory), and provides the `docname` from which
+    /// *private* docinfo file names are built (`<docname>-docinfo.html`, …).
+    /// When [`base_dir`](Self::base_dir) is unset, this file's directory also
+    /// becomes the base directory.
     ///
-    /// Which files are consulted is governed as in Asciidoctor: the `docinfo`
-    /// attribute selects the scopes and locations (`shared`, `private-head`,
-    /// …), `docinfodir` relocates the search, and `docinfosubs` controls
-    /// attribute substitution — all resolved by the parser. Note that,
-    /// matching Asciidoctor, docinfo is disabled entirely at
-    /// [`SafeMode::Secure`] and above (the default), so a caller must also
-    /// lower the [`safe_mode`](Self::safe_mode) for docinfo to take effect.
-    ///
-    /// [docinfo]: https://docs.asciidoctor.org/asciidoc/latest/docinfo/
-    pub fn docinfo_file_handler<H: DocinfoFileHandler + 'static>(mut self, handler: H) -> Self {
-        self.docinfo_handler = Some(Rc::new(handler));
+    /// [`convert_file_with`](crate::convert_file_with) sets this automatically
+    /// from the path it reads; callers that convert already-read source with
+    /// [`convert_with`](crate::convert_with) can set it explicitly so includes
+    /// and docinfo resolve as they would for the file on disk.
+    pub fn input_file<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.primary_file = Some(path.into());
         self
     }
 
@@ -335,16 +317,6 @@ impl Options {
             };
         }
 
-        // The primary file name (needed for private docinfo) and the docinfo
-        // handler are threaded straight through to the parser, which owns
-        // docinfo resolution.
-        if let Some(name) = &self.primary_file_name {
-            parser = parser.with_primary_file_name(name);
-        }
-        if let Some(handler) = &self.docinfo_handler {
-            parser = parser.with_docinfo_file_handler(SharedDocinfoHandler(Rc::clone(handler)));
-        }
-
         // Matching Asciidoctor: in `Secure` (or greater), `linkcss` defaults on
         // — the converter links the stylesheet instead of embedding it — unless
         // the caller supplied `linkcss` from the API/CLI. Seeding it as an
@@ -355,7 +327,46 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
+        // Anchor filesystem-relative resources: `include::` targets and docinfo
+        // files. Naming the primary file lets the parser resolve top-level
+        // includes against that file's directory and derive the `docname` for
+        // private docinfo; supplying a base directory (given directly or derived
+        // from the primary file) installs the filesystem include and docinfo
+        // handlers, each confined by the safe mode. Under `secure` the parser
+        // converts includes to links and drops docinfo without consulting either
+        // handler, so installing them there is harmless.
+        if let Some(primary) = &self.primary_file {
+            parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
+        }
+        if let Some(base) = self.effective_base_dir() {
+            parser = parser
+                .with_include_file_handler(FsIncludeFileHandler::new(base.clone(), mode))
+                .with_docinfo_file_handler(FsDocinfoFileHandler::new(base, mode));
+        }
+
         parser
+    }
+
+    /// The base directory that anchors include and docinfo resolution, or
+    /// `None` when there is nothing to anchor (neither a base directory nor
+    /// a primary file).
+    ///
+    /// An explicit [`base_dir`](Self::base_dir) wins; otherwise the primary
+    /// file's directory is used (an empty directory component — a bare file
+    /// name — means the current directory). The result is canonicalized when it
+    /// exists on disk, so the handler's jail comparisons and the primary file's
+    /// name share one absolute form.
+    fn effective_base_dir(&self) -> Option<PathBuf> {
+        if let Some(base) = &self.base_dir {
+            return Some(canonicalize_or(base));
+        }
+
+        let primary = self.primary_file.as_deref()?;
+        let dir = primary
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        Some(canonicalize_or(dir))
     }
 
     /// Whether any recorded directive names `name` (already lowercased). Used
@@ -366,37 +377,17 @@ impl Options {
     }
 }
 
+/// Canonicalizes `path` to its absolute form, falling back to the path as given
+/// when it cannot be canonicalized (for example, when it does not exist on
+/// disk). A canonical base directory keeps the include and docinfo handlers'
+/// jail comparisons on the same footing as the paths the parser reports.
+fn canonicalize_or(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use crate::{convert, convert_with, DocinfoFileHandler, DocumentParser, Options, SafeMode};
-
-    /// A docinfo handler backed by a fixed file-name → content map.
-    #[derive(Debug)]
-    struct MapHandler(HashMap<String, String>);
-
-    impl MapHandler {
-        fn new(pairs: &[(&str, &str)]) -> Self {
-            Self(
-                pairs
-                    .iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            )
-        }
-    }
-
-    impl DocinfoFileHandler for MapHandler {
-        fn resolve_docinfo(
-            &self,
-            _docinfodir: Option<&str>,
-            file_name: &str,
-            _parser: &DocumentParser,
-        ) -> Option<String> {
-            self.0.get(file_name).cloned()
-        }
-    }
+    use crate::{convert, convert_with, Options, SafeMode};
 
     // The default web-font family, present when `webfonts` is set with no value.
     const DEFAULT_FAMILY: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
@@ -581,56 +572,77 @@ mod tests {
         assert!(!html.contains("./asciidoctor.css"));
     }
 
-    // The docinfo handler is consulted only when the document enables docinfo
-    // (via the `docinfo` attribute) and the safe mode is below `Secure`.
+    // Docinfo is read from the base directory only when the document enables it
+    // (via the `docinfo` attribute) and the safe mode is below `Secure` —
+    // matching Asciidoctor, which drops docinfo at `Secure` and above. These
+    // exercise the wiring in `apply`; the handler's own resolution and jail are
+    // covered in `docinfo_handler`.
+
+    /// Creates a fresh temp directory named after `tag`, populated with `files`
+    /// (name → content), for a docinfo test to point a base directory at.
+    fn docinfo_scratch(tag: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-opts-docinfo-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        for (name, content) in files {
+            std::fs::write(dir.join(name), content).expect("write scratch file");
+        }
+        dir
+    }
 
     #[test]
-    fn docinfo_handler_injects_head_content_below_secure() {
+    fn docinfo_is_read_from_the_base_directory_below_secure() {
+        let dir = docinfo_scratch("below-secure", &[("docinfo.html", "<meta name=\"x\">")]);
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new()
                 .safe_mode(SafeMode::Server)
-                .docinfo_file_handler(MapHandler::new(&[("docinfo.html", "<meta name=\"x\">")])),
+                .base_dir(dir.clone()),
         );
         assert!(html.contains("<meta name=\"x\">\n</head>"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn docinfo_is_disabled_under_the_secure_default() {
-        // Docinfo injects external file content, so — matching Asciidoctor — it
-        // is disabled at `Secure` and above (the default). The handler is never
-        // consulted, even with the `docinfo` attribute set.
+        // Secure is the default; docinfo is dropped without any file being read,
+        // even with a base directory and the `docinfo` attribute set.
+        let dir = docinfo_scratch("secure", &[("docinfo.html", "<meta name=\"x\">")]);
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
-            &Options::new()
-                .docinfo_file_handler(MapHandler::new(&[("docinfo.html", "<meta name=\"x\">")])),
+            &Options::new().base_dir(dir.clone()),
         );
         assert!(!html.contains("<meta name=\"x\">"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn private_docinfo_requires_a_primary_file_name() {
-        let files = &[("guide-docinfo.html", "<meta name=\"private\">")];
+    fn private_docinfo_requires_a_primary_file() {
+        let dir = docinfo_scratch(
+            "private",
+            &[("guide-docinfo.html", "<meta name=\"private\">")],
+        );
 
-        // Without a primary file name, the `<docname>` is unknown, so the
-        // private docinfo file cannot be resolved.
+        // With only a base directory, the `<docname>` is unknown, so the private
+        // file is not resolved.
         let without = convert_with(
             "= Doc\n:docinfo: private\n\nBody.",
             &Options::new()
                 .safe_mode(SafeMode::Server)
-                .docinfo_file_handler(MapHandler::new(files)),
+                .base_dir(dir.clone()),
         );
         assert!(!without.contains("name=\"private\""));
 
-        // With a primary file name of `guide.adoc`, the `guide-docinfo.html`
-        // private file is found and injected.
+        // Naming the primary file `guide.adoc` supplies the docname, so
+        // `guide-docinfo.html` is found and injected.
         let with = convert_with(
             "= Doc\n:docinfo: private\n\nBody.",
             &Options::new()
                 .safe_mode(SafeMode::Server)
-                .primary_file_name("guide.adoc")
-                .docinfo_file_handler(MapHandler::new(files)),
+                .base_dir(dir.clone())
+                .input_file(dir.join("guide.adoc")),
         );
         assert!(with.contains("name=\"private\""));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

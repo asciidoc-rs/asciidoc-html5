@@ -28,4 +28,18 @@ Shorthand that sets the safe mode to `safe`. Cannot be combined with
 With no safe-mode option, `adoc` runs `unsafe`, which embeds the default
 stylesheet.
 
+== Set the base directory
+
+`-B`, `--base-dir=DIR`::
+Set the base directory that filesystem-relative resources resolve against.
+Today that means `include::` targets: a relative include resolves against the
+including file's directory, and under the `safe` and `server` safe modes reads
+may not climb above the base directory. Under `unsafe` there is no such
+restriction, and under `secure` includes become links that are never read.
++
+ $ adoc -B ./book -S safe book/index.adoc
+
+When omitted, the base directory is the directory containing the input file, or
+the current directory when the document is read from standard input.
+
 You can also set the xref:api:set-safe-mode.adoc[safe mode from the API].

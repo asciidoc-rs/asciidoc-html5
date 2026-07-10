@@ -1,25 +1,6 @@
-use crate::{
-    convert, convert_with, tests::sdd::*, DocinfoFileHandler, DocumentParser, Options, SafeMode,
-};
+use crate::{convert, convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.adoc");
-
-/// A docinfo handler that serves one fixed `<style>` block as the shared head
-/// docinfo file (`docinfo.html`), so the page's "auxiliary styles with docinfo"
-/// recipe can be exercised without touching the file system.
-#[derive(Debug)]
-struct SharedHeadDocinfo(&'static str);
-
-impl DocinfoFileHandler for SharedHeadDocinfo {
-    fn resolve_docinfo(
-        &self,
-        _docinfodir: Option<&str>,
-        file_name: &str,
-        _parser: &DocumentParser,
-    ) -> Option<String> {
-        (file_name == "docinfo.html").then(|| self.0.to_string())
-    }
-}
 
 // Asciidoctor's "Default Stylesheet" page. It documents the stylesheet that the
 // `html5` backend embeds into (or links from) a standalone document, the
@@ -510,14 +491,20 @@ The `<style>` element in your docinfo file will be inserted directly below the d
 "#
     );
 
-    // The page's `docinfo.html`, served as the shared head docinfo file.
+    // The page's `docinfo.html`, written to a temp directory as the shared head
+    // docinfo file and loaded via the base directory.
     let docinfo = "<style>\nh1, h2, h3, h4, h5, h6, #toctitle,\n.sidebarblock > .content > .title {\n  color: rgba(0, 0, 0, 0.8);\n}\n</style>";
+    let dir = std::env::temp_dir().join(format!("adoc-ds-docinfo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    std::fs::write(dir.join("docinfo.html"), docinfo).expect("write docinfo.html");
+
     let html = convert_with(
         "= Document Title\n:docinfo: shared\n\nBody.",
         &Options::new()
             .safe_mode(SafeMode::Server)
-            .docinfo_file_handler(SharedHeadDocinfo(docinfo)),
+            .base_dir(dir.clone()),
     );
+    let _ = std::fs::remove_dir_all(&dir);
 
     // The default stylesheet's closing `</style>` is immediately followed by the
     // docinfo `<style>`, which in turn is immediately followed by `</head>`: the
