@@ -12,6 +12,17 @@
 //! handler) under [`SafeMode::Secure`] and above, so this handler is only ever
 //! asked to resolve a target under `unsafe`, `safe`, or `server`.
 //!
+//! # Divergence from Asciidoctor: symlinks
+//!
+//! Asciidoctor's jail is purely *lexical* — it resolves `..` and absolute
+//! targets against the base directory with string operations (Ruby's
+//! `File.expand_path`) but does not follow symlinks, so a symlink placed inside
+//! the base directory that points outside it can still be read under `safe` or
+//! `server`. This handler is deliberately stricter: under a jailed safe mode it
+//! canonicalizes the resolved path (following symlinks) and refuses any read
+//! whose real location escapes the base directory. The trade-off is that a
+//! symlinked include Asciidoctor would follow is instead left unresolved here.
+//!
 //! # Base directory
 //!
 //! The base directory is the anchor for relative include targets and, under a
@@ -40,7 +51,9 @@ use asciidoc_parser::{attributes::Attrlist, parser::IncludeFileHandler, Parser, 
 #[derive(Debug)]
 pub(crate) struct FsIncludeFileHandler {
     /// The base directory: the anchor for relative targets and, when jailed,
-    /// the boundary reads may not cross. Expected to be absolute.
+    /// the boundary reads may not cross. Expected to be absolute and
+    /// canonical, so the jailed symlink-containment check (which compares a
+    /// canonicalized path against it) is sound.
     base_dir: PathBuf,
 
     /// The safe mode in force, which decides whether resolution is jailed.
@@ -148,9 +161,25 @@ impl IncludeFileHandler for FsIncludeFileHandler {
     ) -> Option<String> {
         let path = self.resolve(source, target);
 
-        // A read failure (missing file, a directory, non-UTF-8, or — under a
-        // jail — a path the recovery relocated to somewhere that does not
-        // exist) leaves the directive unresolved, which the parser reports.
+        if self.jailed() {
+            // Lexical resolution keeps the *path* inside the base directory, but
+            // a symlink under the base directory could still point outside it.
+            // Resolve the real path (following symlinks) and refuse the read
+            // when it escapes the base directory. This is stricter than
+            // Asciidoctor, whose jail is purely lexical (see the module docs);
+            // canonicalization also fails for a path the recovery relocated to
+            // somewhere that does not exist, which likewise leaves the directive
+            // unresolved.
+            let real = path.canonicalize().ok()?;
+            if !real.starts_with(&self.base_dir) {
+                return None;
+            }
+            return fs::read_to_string(real).ok();
+        }
+
+        // Without a jail, a read failure (missing file, a directory, or
+        // non-UTF-8 content) simply leaves the directive unresolved, which the
+        // parser reports.
         fs::read_to_string(path).ok()
     }
 }
@@ -609,6 +638,34 @@ mod tests {
             let html = convert_file_with(&main, &Options::new()).unwrap();
             assert!(!html.contains("Included from part."));
             assert!(html.contains("part.adoc"));
+        }
+
+        // A symlink inside the base directory that points outside it lives at a
+        // lexically-in-jail path, so the lexical jail alone would follow it.
+        // Under `unsafe` (no jail) it is read, but under `safe` the handler
+        // resolves the real path and refuses to leave the base directory —
+        // stricter than Asciidoctor. Symlink creation is Unix-only.
+        #[cfg(unix)]
+        #[test]
+        fn safe_mode_does_not_follow_a_symlink_out_of_the_base() {
+            let main = project("symlink");
+            let base = main.parent().expect("base dir");
+            let root = base.parent().expect("root dir");
+
+            // `base/leak.adoc` -> `root/secret.adoc` (outside the base).
+            std::os::unix::fs::symlink(root.join("secret.adoc"), base.join("leak.adoc"))
+                .expect("create symlink");
+            fs::write(&main, "= Main\n\ninclude::leak.adoc[]\n").expect("rewrite main");
+
+            // `unsafe` has no jail, so the symlink is followed out of the base.
+            let unsafe_html =
+                convert_file_with(&main, &Options::new().safe_mode(SafeMode::Unsafe)).unwrap();
+            assert!(unsafe_html.contains("Included from secret."));
+
+            // `safe` resolves the real path and refuses to leave the base.
+            let safe_html =
+                convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
+            assert!(!safe_html.contains("Included from secret."));
         }
     }
 }
