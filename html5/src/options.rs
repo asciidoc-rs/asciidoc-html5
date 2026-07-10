@@ -3,9 +3,9 @@
 //!
 //! [`Options`] carries the settings applied to a conversion from *outside* the
 //! document source: a set of document attributes (the equivalent of
-//! Asciidoctor's `-a name=value` CLI option and the `:attributes` API option)
+//! Asciidoctor's `-a name=value` CLI option and the `attributes` API option)
 //! and the [`SafeMode`] under which the document is processed (Asciidoctor's
-//! `:safe` option). It is the parameter accepted by the `_with` conversion
+//! `safe` API option). It is the parameter accepted by the `_with` conversion
 //! entry points ([`convert_with`] and [`convert_file_with`]).
 //!
 //! # Safe mode
@@ -158,11 +158,12 @@ impl Options {
 
     /// Sets the [`SafeMode`] the document is processed under.
     ///
-    /// This is Asciidoctor's `:safe` option. When left unset, conversion uses
-    /// [`SafeMode::Secure`], the most conservative mode and Asciidoctor's API
-    /// default. Following Asciidoctor, `Secure` links the default stylesheet
-    /// (to `./asciidoctor.css`) instead of embedding it, unless the caller sets
-    /// `linkcss` explicitly; lower modes embed it inline.
+    /// This is Asciidoctor's `safe` API option. When left unset, conversion
+    /// uses [`SafeMode::Secure`], the most conservative mode and
+    /// Asciidoctor's API default. Following Asciidoctor, `Secure` links the
+    /// default stylesheet (to `./asciidoctor.css`) instead of embedding it,
+    /// unless the caller sets `linkcss` explicitly; lower modes embed it
+    /// inline.
     ///
     /// # Examples
     ///
@@ -180,7 +181,7 @@ impl Options {
     }
 
     /// Sets the base directory that filesystem-relative resources resolve
-    /// against — Asciidoctor's `-B`/`--base-dir` (the `:base_dir` API option).
+    /// against — Asciidoctor's `-B`/`--base-dir` (the `base_dir` API option).
     ///
     /// Today the only such resource is the `include::` directive. The base
     /// directory anchors relative include targets and, under the `safe` and

@@ -16,7 +16,7 @@
 //!
 //! The base directory is the anchor for relative include targets and, under a
 //! jailed safe mode, the boundary reads may not cross. It is Asciidoctor's
-//! `-B`/`--base-dir` (and the `:base_dir` API option). When the including
+//! `-B`/`--base-dir` (and the `base_dir` API option). When the including
 //! file's own directory sits inside the base directory, targets resolve
 //! relative to that directory; otherwise resolution falls back to the base
 //! directory itself, matching Asciidoctor's recovery behavior.

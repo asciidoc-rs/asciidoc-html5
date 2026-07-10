@@ -62,7 +62,7 @@ pub fn convert(source: &str) -> String {
 ///
 /// This is the attribute-aware counterpart to [`convert`]: the attributes in
 /// `options` are the equivalent of Asciidoctor's `-a name=value` CLI option and
-/// the `:attributes` API option, supplying (and, for overrides, locking) values
+/// the `attributes` API option, supplying (and, for overrides, locking) values
 /// from outside the document source. See [`Options`] for override vs. soft-set
 /// precedence.
 ///
