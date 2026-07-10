@@ -31,8 +31,8 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 // - the external Asciidoctor Skins themes (out of scope; third-party).
 //
 // The page's docinfo recipe *is* verified: this crate injects head docinfo
-// below the default stylesheet, so we supply the page's `docinfo.html`
-// `<style>` through a `DocinfoFileHandler` and check its placement (issue #40).
+// below the default stylesheet, so we write the page's `docinfo.html` `<style>`
+// to a base directory and check its placement.
 
 // The renderer embeds `html5/assets/asciidoctor-default.css`; the definitive
 // copy is the Asciidoctor stylesheet vendored under `ref/`. Guard against the

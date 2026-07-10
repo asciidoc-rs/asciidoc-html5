@@ -98,9 +98,10 @@ Its integer value is `1`.
 // source-highlighter (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), backend
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), docdir
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), docfile
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and docinfo
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/40).
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo files are
+// now supported, but SERVER does not yet stop a document from setting `docinfo`
+// itself — a residual divergence, not tracked separately.
 non_normative!(
     r#"
 [#server]
@@ -141,11 +142,11 @@ Its integer value is `10`.
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
 // SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), backend
-// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), `docinfo`
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/40), `docdir`
+// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), `docdir`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), `docfile`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and source
 // highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+// Docinfo is surfaced: SECURE disables it (no docinfo file is read).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). The one restriction observable
 // here is that SECURE "prevents access to stylesheets," which is why it links
