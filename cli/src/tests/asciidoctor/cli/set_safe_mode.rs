@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use asciidoc_html5::SafeMode;
 use clap::Parser as _;
 
@@ -7,14 +9,13 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/set-safe-mode.adoc");
 
 // Asciidoctor's "Set the Safe Mode Using the CLI" page, tracked from the CLI
 // crate. `adoc` mirrors Asciidoctor's CLI: the safe mode defaults to `UNSAFE`,
-// `-S`/`--safe-mode` assigns a named level, and `--safe` selects `SAFE`. Each
-// claim drives `adoc`'s own option parsing (`Cli` + `resolve_safe_mode`), and
-// the default/secure cases are confirmed end to end through `run`.
+// `-S`/`--safe-mode` assigns a named level, `--safe` selects `SAFE`, and
+// `-B`/`--base-dir` sets the base directory. Each claim drives `adoc`'s own
+// option parsing (`Cli` + `resolve_safe_mode`), and the default/secure and
+// base-directory cases are confirmed end to end through `run`.
 //
-// The hidden `-B`/`--base-dir` note (tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/44) and the
-// `asciidoctor-safe` command alias have no counterpart in `adoc`, so those are
-// non-normative.
+// The `asciidoctor-safe` command alias has no counterpart in `adoc`, so it
+// stays non-normative.
 
 /// Resolves the safe mode `adoc` would use for the given command-line
 /// arguments, exercising the full `Cli` parse plus [`resolve_safe_mode`].
@@ -42,6 +43,61 @@ fn run_adoc(label: &str, args: &[&str], source: &str) -> String {
     run(&cli, &mut stdout).expect("adoc converts");
     let _ = std::fs::remove_file(&path);
     String::from_utf8(stdout).expect("adoc output is UTF-8")
+}
+
+/// A throwaway on-disk project rooted at a unique temp directory, used to
+/// exercise `include::` resolution and the base-directory jail end to end.
+struct TempProject {
+    dir: PathBuf,
+}
+
+impl TempProject {
+    /// Creates a fresh, empty project directory named for `label`.
+    fn new(label: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!(
+            "adoc-cli-set-safe-mode-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create project dir");
+        Self { dir }
+    }
+
+    /// The absolute path of `relative` within the project.
+    fn path(&self, relative: &str) -> PathBuf {
+        self.dir.join(relative)
+    }
+
+    /// Writes `contents` to `relative`, creating parent directories as needed.
+    fn write(&self, relative: &str, contents: &str) {
+        let path = self.path(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dir");
+        }
+        std::fs::write(path, contents).expect("write project file");
+    }
+
+    /// Runs `adoc` on the project's `input` file with `args` (with `-o -`
+    /// forcing output to the captured stdout), returning the rendered HTML.
+    fn run(&self, args: &[&str], input: &str) -> String {
+        let input = self.path(input);
+        let input = input.to_str().expect("input path is UTF-8");
+
+        let mut full: Vec<&str> = vec!["adoc", "-o", "-"];
+        full.extend_from_slice(args);
+        full.push(input);
+
+        let cli = Cli::parse_from(full);
+        let mut stdout = Vec::new();
+        run(&cli, &mut stdout).expect("adoc converts");
+        String::from_utf8(stdout).expect("adoc output is UTF-8")
+    }
+}
+
+impl Drop for TempProject {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 // The CLI default safe mode is `UNSAFE`. With no safe-mode flag, `adoc`
@@ -122,16 +178,54 @@ Provided for compatibility with the python AsciiDoc `safe` command.
     );
 }
 
-// The hidden `-B`/`--base-dir` note (a base-directory chroot `adoc` does not
-// provide, tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/44)
-// and the closing cross-references carry no rule to verify here.
-non_normative!(
-    r#"
+// `-B`/`--base-dir=DIR` sets the base directory, matching Asciidoctor. `adoc`
+// accepts both forms into `Cli::base_dir`, and — since the base directory is
+// the jail for `include::` resolution under a jailed safe mode — it can chroot
+// the conversion: under `safe`, an include that climbs above the base directory
+// is blocked, but widening the base directory with `-B` brings it back in
+// reach.
+#[test]
+fn base_dir_option_sets_the_base_directory() {
+    verifies!(
+        r#"
 ////
 -B, --base-dir=DIR
 Base directory containing the document and resources. Defaults to the directory containing the source file, or the working directory if the source is read from a stream. Can be used as a way to chroot the execution of the program.
 ////
 
+"#
+    );
+
+    // Both the short `-B` and long `--base-dir=` forms parse into `base_dir`.
+    assert_eq!(
+        Cli::parse_from(["adoc", "-B", "/docs/site", "doc.adoc"]).base_dir,
+        Some(PathBuf::from("/docs/site"))
+    );
+    assert_eq!(
+        Cli::parse_from(["adoc", "--base-dir=/docs/site", "doc.adoc"]).base_dir,
+        Some(PathBuf::from("/docs/site"))
+    );
+
+    // The base directory is the jail for `include::` under a jailed safe mode.
+    // A document in `base/` that includes `../note.adoc` reaches outside the
+    // default base directory (its own folder), so under `safe` it is blocked...
+    let project = TempProject::new("base-dir");
+    project.write("base/main.adoc", "= Main\n\ninclude::../note.adoc[]\n");
+    project.write("note.adoc", "Note from the parent directory.\n");
+
+    let blocked = project.run(&["-S", "safe"], "base/main.adoc");
+    assert!(!blocked.contains("Note from the parent directory."));
+
+    // ...but pointing `-B` at the parent directory widens the jail to include
+    // it, so the same include now resolves.
+    let parent = project.dir.to_str().expect("path is UTF-8").to_owned();
+    let allowed = project.run(&["-S", "safe", "-B", &parent], "base/main.adoc");
+    assert!(allowed.contains("Note from the parent directory."));
+}
+
+// The closing cross-references carry no rule to verify here.
+non_normative!(
+    r#"
 You can also set the xref:api:set-safe-mode.adoc[safe mode from the API] and xref:ROOT:reference-safe-mode.adoc[enable or disable content based on the current safe mode].
 "#
 );
