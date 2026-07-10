@@ -101,7 +101,8 @@ Its integer value is `1`.
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo files are
 // now supported, but SERVER does not yet stop a document from setting `docinfo`
-// itself — a residual divergence, not tracked separately.
+// itself, tracked (with the other document-set restrictions) in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
 [#server]
