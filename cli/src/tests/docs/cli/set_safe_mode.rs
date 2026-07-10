@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use asciidoc_html5::SafeMode;
 use clap::Parser as _;
 
@@ -37,6 +39,61 @@ fn run_adoc(label: &str, args: &[&str], source: &str) -> String {
     run(&cli, &mut stdout).expect("adoc converts");
     let _ = std::fs::remove_file(&path);
     String::from_utf8(stdout).expect("adoc output is UTF-8")
+}
+
+/// A throwaway on-disk project rooted at a unique temp directory, used to
+/// exercise `include::` resolution and the base-directory jail end to end.
+struct TempProject {
+    dir: PathBuf,
+}
+
+impl TempProject {
+    /// Creates a fresh, empty project directory named for `label`.
+    fn new(label: &str) -> Self {
+        let dir = std::env::temp_dir().join(format!(
+            "adoc-docs-set-safe-mode-{label}-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create project dir");
+        Self { dir }
+    }
+
+    /// The absolute path of `relative` within the project.
+    fn path(&self, relative: &str) -> PathBuf {
+        self.dir.join(relative)
+    }
+
+    /// Writes `contents` to `relative`, creating parent directories as needed.
+    fn write(&self, relative: &str, contents: &str) {
+        let path = self.path(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create parent dir");
+        }
+        std::fs::write(path, contents).expect("write project file");
+    }
+
+    /// Runs `adoc` on the project's `input` file with `args` (with `-o -`
+    /// forcing output to the captured stdout), returning the rendered HTML.
+    fn run(&self, args: &[&str], input: &str) -> String {
+        let input = self.path(input);
+        let input = input.to_str().expect("input path is UTF-8");
+
+        let mut full: Vec<&str> = vec!["adoc", "-o", "-"];
+        full.extend_from_slice(args);
+        full.push(input);
+
+        let cli = Cli::parse_from(full);
+        let mut stdout = Vec::new();
+        run(&cli, &mut stdout).expect("adoc converts");
+        String::from_utf8(stdout).expect("adoc output is UTF-8")
+    }
+}
+
+impl Drop for TempProject {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 non_normative!(
@@ -124,6 +181,54 @@ stylesheet.
 
     let html = run_adoc("default", &[], "= Doc\n\nBody.");
     assert!(html.contains("<style>"));
+}
+
+// `-B`/`--base-dir` sets the base directory, which is the jail for `include::`
+// resolution under a jailed safe mode.
+#[test]
+fn base_dir_sets_the_include_jail() {
+    verifies!(
+        r#"
+== Set the base directory
+
+`-B`, `--base-dir=DIR`::
+Set the base directory that filesystem-relative resources resolve against.
+Today that means `include::` targets: a relative include resolves against the
+including file's directory, and under the `safe` and `server` safe modes reads
+may not climb above the base directory. Under `unsafe` there is no such
+restriction, and under `secure` includes become links that are never read.
++
+ $ adoc -B ./book -S safe book/index.adoc
+
+When omitted, the base directory is the directory containing the input file, or
+the current directory when the document is read from standard input.
+
+"#
+    );
+
+    // Both spellings parse into `base_dir`.
+    assert_eq!(
+        Cli::parse_from(["adoc", "-B", "./book", "doc.adoc"]).base_dir,
+        Some(PathBuf::from("./book"))
+    );
+    assert_eq!(
+        Cli::parse_from(["adoc", "--base-dir=./book", "doc.adoc"]).base_dir,
+        Some(PathBuf::from("./book"))
+    );
+
+    // A document in `base/` that includes `../note.adoc` reaches above its own
+    // directory. Under `safe` with the default base directory it is blocked;
+    // pointing `-B` at the parent widens the jail so the include resolves.
+    let project = TempProject::new("base-dir");
+    project.write("base/index.adoc", "= Book\n\ninclude::../note.adoc[]\n");
+    project.write("note.adoc", "Shared note text.\n");
+
+    let blocked = project.run(&["-S", "safe"], "base/index.adoc");
+    assert!(!blocked.contains("Shared note text."));
+
+    let parent = project.dir.to_str().expect("path is UTF-8").to_owned();
+    let allowed = project.run(&["-S", "safe", "-B", &parent], "base/index.adoc");
+    assert!(allowed.contains("Shared note text."));
 }
 
 non_normative!(

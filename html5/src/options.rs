@@ -3,9 +3,9 @@
 //!
 //! [`Options`] carries the settings applied to a conversion from *outside* the
 //! document source: a set of document attributes (the equivalent of
-//! Asciidoctor's `-a name=value` CLI option and the `:attributes` API option)
+//! Asciidoctor's `-a name=value` CLI option and the `attributes` API option)
 //! and the [`SafeMode`] under which the document is processed (Asciidoctor's
-//! `:safe` option). It is the parameter accepted by the `_with` conversion
+//! `safe` API option). It is the parameter accepted by the `_with` conversion
 //! entry points ([`convert_with`] and [`convert_file_with`]).
 //!
 //! # Safe mode
@@ -47,7 +47,11 @@
 //! [`convert_with`]: crate::convert_with
 //! [`convert_file_with`]: crate::convert_file_with
 
+use std::path::{Path, PathBuf};
+
 use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
+
+use crate::include_handler::FsIncludeFileHandler;
 
 /// The options to supply to a conversion from outside the document source: a
 /// set of document attributes and the [safe mode](SafeMode).
@@ -79,6 +83,18 @@ pub struct Options {
     /// The safe mode to process the document under. `None` defaults to
     /// [`SafeMode::Secure`], matching Asciidoctor's API default.
     safe_mode: Option<SafeMode>,
+
+    /// The base directory: the anchor for filesystem-relative resources (today,
+    /// `include::` targets) and, under a jailed safe mode, the boundary reads
+    /// may not cross. `None` leaves it to be derived from the primary file's
+    /// directory (see [`base_dir`](Self::base_dir)).
+    base_dir: Option<PathBuf>,
+
+    /// The path of the primary document, used to name it for diagnostics and to
+    /// anchor top-level `include::` resolution. Set by
+    /// [`convert_file_with`](crate::convert_file_with) and by
+    /// [`input_file`](Self::input_file).
+    primary_file: Option<PathBuf>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -142,11 +158,12 @@ impl Options {
 
     /// Sets the [`SafeMode`] the document is processed under.
     ///
-    /// This is Asciidoctor's `:safe` option. When left unset, conversion uses
-    /// [`SafeMode::Secure`], the most conservative mode and Asciidoctor's API
-    /// default. Following Asciidoctor, `Secure` links the default stylesheet
-    /// (to `./asciidoctor.css`) instead of embedding it, unless the caller sets
-    /// `linkcss` explicitly; lower modes embed it inline.
+    /// This is Asciidoctor's `safe` API option. When left unset, conversion
+    /// uses [`SafeMode::Secure`], the most conservative mode and
+    /// Asciidoctor's API default. Following Asciidoctor, `Secure` links the
+    /// default stylesheet (to `./asciidoctor.css`) instead of embedding it,
+    /// unless the caller sets `linkcss` explicitly; lower modes embed it
+    /// inline.
     ///
     /// # Examples
     ///
@@ -160,6 +177,44 @@ impl Options {
     /// ```
     pub fn safe_mode(mut self, safe: SafeMode) -> Self {
         self.safe_mode = Some(safe);
+        self
+    }
+
+    /// Sets the base directory that filesystem-relative resources resolve
+    /// against — Asciidoctor's `-B`/`--base-dir` (the `base_dir` API option).
+    ///
+    /// Today the only such resource is the `include::` directive. The base
+    /// directory anchors relative include targets and, under the `safe` and
+    /// `server` [safe modes](SafeMode), is the boundary those includes may not
+    /// cross: a target that tries to climb above it is recovered back inside,
+    /// matching Asciidoctor. Under `unsafe` there is no such restriction, and
+    /// under `secure` includes are turned into links without being read at all.
+    ///
+    /// When left unset, the base directory is derived from the primary file's
+    /// directory (see [`input_file`](Self::input_file)); with neither a base
+    /// directory nor a primary file, include resolution is not enabled and
+    /// `include::` directives are left unresolved.
+    ///
+    /// The path should be absolute; relative paths are interpreted against the
+    /// process's current directory when includes are read.
+    pub fn base_dir<P: Into<PathBuf>>(mut self, dir: P) -> Self {
+        self.base_dir = Some(dir.into());
+        self
+    }
+
+    /// Sets the path of the primary document.
+    ///
+    /// This names the document in diagnostics and anchors the resolution of its
+    /// top-level `include::` directives: a relative include target is resolved
+    /// against this file's directory. When [`base_dir`](Self::base_dir) is
+    /// unset, this file's directory also becomes the base directory.
+    ///
+    /// [`convert_file_with`](crate::convert_file_with) sets this automatically
+    /// from the path it reads; callers that convert already-read source with
+    /// [`convert_with`](crate::convert_with) can set it explicitly so includes
+    /// resolve as they would for the file on disk.
+    pub fn input_file<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.primary_file = Some(path.into());
         self
     }
 
@@ -268,7 +323,42 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
+        // Anchor filesystem-relative resources (today, `include::` targets).
+        // Naming the primary file lets the parser resolve its top-level
+        // includes against that file's directory; supplying a base directory
+        // (given directly or derived from the primary file) installs a
+        // filesystem include handler, confined by the safe mode. Under `secure`
+        // the parser converts includes to links without consulting the handler,
+        // so installing it there is harmless.
+        if let Some(primary) = &self.primary_file {
+            parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
+        }
+        if let Some(base) = self.effective_base_dir() {
+            parser = parser.with_include_file_handler(FsIncludeFileHandler::new(base, mode));
+        }
+
         parser
+    }
+
+    /// The base directory that anchors include resolution, or `None` when there
+    /// is nothing to anchor (neither a base directory nor a primary file).
+    ///
+    /// An explicit [`base_dir`](Self::base_dir) wins; otherwise the primary
+    /// file's directory is used (an empty directory component — a bare file
+    /// name — means the current directory). The result is canonicalized when it
+    /// exists on disk, so the handler's jail comparisons and the primary file's
+    /// name share one absolute form.
+    fn effective_base_dir(&self) -> Option<PathBuf> {
+        if let Some(base) = &self.base_dir {
+            return Some(canonicalize_or(base));
+        }
+
+        let primary = self.primary_file.as_deref()?;
+        let dir = primary
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        Some(canonicalize_or(dir))
     }
 
     /// Whether any recorded directive names `name` (already lowercased). Used
@@ -277,6 +367,14 @@ impl Options {
     fn mentions(&self, name: &str) -> bool {
         self.attributes.iter().any(|d| d.name == name)
     }
+}
+
+/// Canonicalizes `path` to its absolute form, falling back to the path as given
+/// when it cannot be canonicalized (for example, when it does not exist on
+/// disk). A canonical base directory keeps the include handler's jail
+/// comparisons on the same footing as the paths the parser reports.
+fn canonicalize_or(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]
