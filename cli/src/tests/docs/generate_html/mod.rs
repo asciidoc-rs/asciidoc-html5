@@ -6,4 +6,5 @@
 //! API invocations, and the sdd tool merges the two. The module grows a page
 //! per topic.
 
+mod custom_stylesheet;
 mod index;

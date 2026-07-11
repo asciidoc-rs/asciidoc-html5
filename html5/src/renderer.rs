@@ -70,7 +70,7 @@ fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
 ///   [`Options`](crate::Options); keying off the safe mode here means
 ///   [`convert_document`](crate::convert_document) on a document parsed under
 ///   `Secure` links it too, so the two paths stay consistent.
-fn links_stylesheet(document: &Document<'_>) -> bool {
+pub(crate) fn links_stylesheet(document: &Document<'_>) -> bool {
     if document.is_attribute_set("linkcss") {
         return true;
     }
@@ -87,19 +87,162 @@ fn links_stylesheet(document: &Document<'_>) -> bool {
         if level.parse::<u32>().is_ok_and(|n| n >= SafeMode::Secure as u32))
 }
 
+/// The `stylesheet` value when the document selects a *custom* stylesheet — a
+/// non-empty value other than `DEFAULT` that is not an explicit unset
+/// (`:stylesheet!:`). The default stylesheet and an unset stylesheet both yield
+/// `None`.
+fn custom_stylesheet_value(document: &Document<'_>) -> Option<String> {
+    match document.attribute_value("stylesheet") {
+        InterpretedValue::Unset if document.has_attribute("stylesheet") => None,
+        InterpretedValue::Value(value) if !value.is_empty() && value != "DEFAULT" => Some(value),
+        _ => None,
+    }
+}
+
+/// The relative filesystem path of a custom stylesheet that should be *embedded
+/// from disk*, or `None` when there is nothing to read: the stylesheet is the
+/// default, unset, *linked* (so only a `<link>` is needed), or a URI (which the
+/// library never fetches). The returned target joins `stylesdir` and
+/// `stylesheet` the way Asciidoctor's `normalize_system_path` would, ready to
+/// resolve against the base directory.
+///
+/// Reading the file is left to [`convert_with`](crate::convert_with), which
+/// holds the base directory and safe mode; the renderer itself stays free of
+/// filesystem access.
+pub(crate) fn embeddable_stylesheet_target(document: &Document<'_>) -> Option<String> {
+    let stylesheet = custom_stylesheet_value(document)?;
+
+    // A linked stylesheet needs no file read; a URI cannot be read from disk.
+    if links_stylesheet(document) || looks_like_uri(&stylesheet) {
+        return None;
+    }
+
+    let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+    let target = if stylesdir.is_empty() {
+        stylesheet
+    } else {
+        format!("{}/{stylesheet}", stylesdir.trim_end_matches(['/', '\\']))
+    };
+    Some(target)
+}
+
+/// Computes the web path Asciidoctor's `html5` backend uses when linking to a
+/// custom stylesheet — a minimal port of its `normalize_web_path(stylesheet,
+/// stylesdir)`.
+///
+/// A URI (`file:///…`, `https://…`, `data:…`, …), an absolute path, or a
+/// protocol-relative `//host/…` reference is complete already and is returned
+/// unchanged. Otherwise the stylesheet is treated as relative to `stylesdir`:
+/// the two are joined, `.` and `..` segments are collapsed, and a relative
+/// result is prefixed with `./`, so a bare `custom.css` becomes `./custom.css`
+/// and `custom.css` under `stylesdir=css` becomes `./css/custom.css`.
+fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
+    // A URI is emitted verbatim (Asciidoctor's `preserve_uri_target`).
+    if looks_like_uri(stylesheet) {
+        return stylesheet.to_string();
+    }
+
+    // Posixify (Asciidoctor works in forward-slash web paths) and join with the
+    // styles directory, unless the stylesheet is itself an absolute path — which
+    // ignores `stylesdir`, matching Asciidoctor's web-root check. A trailing
+    // separator on `stylesdir` is dropped so the join never doubles the `/`.
+    let sheet = stylesheet.replace('\\', "/");
+    let dir = stylesdir.replace('\\', "/");
+    let joined = if dir.is_empty() || sheet.starts_with('/') {
+        sheet
+    } else {
+        format!("{}/{}", dir.trim_end_matches('/'), sheet)
+    };
+
+    web_normalize(&joined)
+}
+
+/// Collapses `.`/`..` segments in a posix `path` and prefixes a plain relative
+/// result with `./`, following Asciidoctor's `PathResolver#web_path`.
+fn web_normalize(path: &str) -> String {
+    let (root, rest) = if let Some(rest) = path.strip_prefix("//") {
+        // A leading `//` is a protocol-relative (or UNC) authority; Asciidoctor
+        // preserves it rather than collapsing it to a single `/`.
+        ("//", rest)
+    } else if let Some(rest) = path.strip_prefix('/') {
+        ("/", rest)
+    } else if let Some(rest) = path.strip_prefix("./") {
+        ("./", rest)
+    } else {
+        ("./", path)
+    };
+
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in rest.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => match segments.last() {
+                // Pop the previous real segment.
+                Some(&last) if last != ".." => {
+                    segments.pop();
+                }
+
+                // A leading `..` at the web root has nowhere to go; drop it.
+                // Below the root, it is kept as a relative step.
+                _ if root == "/" => {}
+                _ => segments.push(".."),
+            },
+            other => segments.push(other),
+        }
+    }
+
+    // The `./` prefix marks a path that stays at or below the current directory.
+    // A relative result that already climbs (`../…`) is a complete reference on
+    // its own, so it keeps no `./`, matching Asciidoctor.
+    let prefix = if root == "./" && segments.first() == Some(&"..") {
+        ""
+    } else {
+        root
+    };
+    format!("{prefix}{}", segments.join("/"))
+}
+
+/// Whether `value` looks like a URI, mirroring Asciidoctor's `UriSniffRx`: a
+/// scheme of two or more characters (so a Windows drive letter like `c:` is not
+/// mistaken for one) starting with a letter, followed by a colon.
+fn looks_like_uri(value: &str) -> bool {
+    let Some(scheme_end) = value.find(':') else {
+        return false;
+    };
+    let scheme = &value[..scheme_end];
+    scheme.len() >= 2
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
+}
+
 /// Renders a parsed [`Document`] to a standalone HTML5 document string.
-pub(crate) fn render_document(document: &Document<'_>) -> String {
-    let mut renderer = Renderer { out: String::new() };
+///
+/// `custom_stylesheet` is the CSS to embed when the document selects a custom
+/// stylesheet that is *embedded* rather than linked (see
+/// [`Options::stylesheet_content`](crate::Options::stylesheet_content)); it is
+/// `None` for callers that cannot supply it, such as the string-only
+/// [`convert`](crate::convert) entry point.
+pub(crate) fn render_document(document: &Document<'_>, custom_stylesheet: Option<&str>) -> String {
+    let mut renderer = Renderer {
+        out: String::new(),
+        custom_stylesheet,
+    };
     renderer.document(document);
     renderer.out
 }
 
 /// Accumulates HTML as the document tree is walked.
-struct Renderer {
+struct Renderer<'a> {
     out: String,
+
+    /// The CSS to embed for a custom, embedded stylesheet, if the caller
+    /// supplied any.
+    custom_stylesheet: Option<&'a str>,
 }
 
-impl Renderer {
+impl Renderer<'_> {
     /// Appends a line of markup followed by a newline, matching Asciidoctor's
     /// convention of one element per line with no indentation.
     fn line(&mut self, s: &str) {
@@ -284,26 +427,37 @@ impl Renderer {
         }
     }
 
-    /// Emits the default-stylesheet portion of the `<head>`: the Google Fonts
-    /// `<link>` and either an inline `<style>` (the default) or, under
-    /// `linkcss`, a `<link>` to `./asciidoctor.css`.
+    /// Emits the stylesheet portion of the `<head>`, mirroring Asciidoctor's
+    /// `html5` backend.
     ///
-    /// This mirrors Asciidoctor's `html5` backend, which only emits this block
-    /// when the `stylesheet` attribute selects the default stylesheet — that
-    /// is, when it is absent, set with no value, empty, or `DEFAULT`
-    /// (Asciidoctor's `DEFAULT_STYLESHEET_KEYS`). Explicitly unsetting it
-    /// (`:stylesheet!:`) drops the block entirely, and a custom `stylesheet`
-    /// value is a documented limitation: this crate cannot read an external
-    /// stylesheet file, so it emits nothing rather than guessing.
+    /// Which stylesheet applies is keyed off the `stylesheet` attribute:
+    ///
+    /// - Absent, set with no value, empty, or `DEFAULT` (Asciidoctor's
+    ///   `DEFAULT_STYLESHEET_KEYS`): the default stylesheet — the Google Fonts
+    ///   `<link>` plus either an inline `<style>` or, under `linkcss`, a
+    ///   `<link>` to `./asciidoctor.css`.
+    /// - Explicitly unset (`:stylesheet!:`): no stylesheet block at all.
+    /// - Any other value: a *custom* stylesheet, handled by
+    ///   [`custom_stylesheet`](Self::custom_stylesheet).
     fn stylesheet(&mut self, document: &Document<'_>) {
-        match document.attribute_value("stylesheet") {
-            // Explicitly unset (`:stylesheet!:`): no stylesheet at all.
-            InterpretedValue::Unset if document.has_attribute("stylesheet") => return,
-            // A custom stylesheet file — unsupported (see docs); emit nothing.
-            InterpretedValue::Value(ref value) if !value.is_empty() && value != "DEFAULT" => return,
-            // Absent, `Set`, empty, or `DEFAULT`: the default stylesheet.
-            _ => {}
+        // Explicitly unset (`:stylesheet!:`): no stylesheet block at all.
+        if matches!(
+            document.attribute_value("stylesheet"),
+            InterpretedValue::Unset
+        ) && document.has_attribute("stylesheet")
+        {
+            return;
         }
+
+        // A custom stylesheet: link to it, or embed CSS the caller supplied /
+        // that was read from disk.
+        if let Some(value) = custom_stylesheet_value(document) {
+            self.custom_stylesheet(document, &value);
+            return;
+        }
+
+        // Otherwise the default stylesheet applies (absent, `Set`, empty, or
+        // `DEFAULT`).
 
         self.webfonts_link(document);
 
@@ -321,6 +475,37 @@ impl Renderer {
                     .strip_suffix('\n')
                     .unwrap_or(DEFAULT_STYLESHEET),
             );
+            self.line("</style>");
+        }
+    }
+
+    /// Emits the stylesheet block for a *custom* `stylesheet` value.
+    ///
+    /// Unlike the default stylesheet, no web-font `<link>` is emitted —
+    /// matching Asciidoctor, which loads the web fonts only for its own
+    /// default stylesheet. Then:
+    ///
+    /// - Under `linkcss` (which the `Secure` default turns on), the head links
+    ///   to the stylesheet at the web path Asciidoctor would use, computed from
+    ///   the `stylesheet` and `stylesdir` attributes by [`normalize_web_path`].
+    /// - Otherwise the stylesheet is embedded inline from `custom_stylesheet` —
+    ///   the CSS the caller supplied through
+    ///   [`Options::stylesheet_content`](crate::Options::stylesheet_content) or
+    ///   that [`convert_with`](crate::convert_with) read from disk. When
+    ///   neither produced any CSS — as for the string-only
+    ///   [`convert`](crate::convert) entry point, which has no base directory
+    ///   to read from — the block is omitted.
+    fn custom_stylesheet(&mut self, document: &Document<'_>, stylesheet: &str) {
+        if links_stylesheet(document) {
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+            let href = normalize_web_path(stylesheet, &stylesdir);
+            self.line(&format!(
+                "<link rel=\"stylesheet\" href=\"{}\">",
+                escape_attribute(&href)
+            ));
+        } else if let Some(css) = self.custom_stylesheet {
+            self.line("<style>");
+            self.line(css.strip_suffix('\n').unwrap_or(css));
             self.line("</style>");
         }
     }
@@ -836,6 +1021,271 @@ mod tests {
     fn default_stylesheet_value_still_embeds_the_default() {
         let html = embed("= Doc\n:stylesheet: DEFAULT\n\nBody.");
         assert!(html.contains("<style>\n/*! Asciidoctor default stylesheet"));
+    }
+
+    // A custom `stylesheet` under the default (`Secure`) safe mode links to it
+    // at its normalized web path, and — unlike the default stylesheet — emits no
+    // web-font `<link>`.
+    #[test]
+    fn custom_stylesheet_links_under_the_secure_default() {
+        let html = convert("= Doc\n:stylesheet: my-theme.css\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-theme.css\">"));
+        assert!(!html.contains("<style>"));
+        assert!(!html.contains("./asciidoctor.css"));
+
+        // No web fonts for a custom stylesheet.
+        assert!(!html.contains("fonts.googleapis.com"));
+    }
+
+    // An explicit `linkcss` links a custom stylesheet even under an embedding
+    // safe mode, mirroring the styles directory in the linked path.
+    #[test]
+    fn custom_stylesheet_link_mirrors_the_styles_directory() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: custom.css\n:stylesdir: css\n\nBody.",
+            &Options::new().safe_mode(SafeMode::Unsafe).set("linkcss"),
+        );
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./css/custom.css\">"));
+    }
+
+    // A stylesheet given as a URI is linked verbatim.
+    #[test]
+    fn custom_stylesheet_uri_is_linked_verbatim() {
+        let html = convert("= Doc\n:stylesheet: file:///home/user/custom.css\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"file:///home/user/custom.css\">"));
+    }
+
+    // Under an embedding safe mode, a custom stylesheet embeds the CSS the caller
+    // supplied through `Options::stylesheet_content`.
+    #[test]
+    fn custom_stylesheet_embeds_supplied_content() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .stylesheet_content("body { color: #ff0000; }\n"),
+        );
+        assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+
+        // Still no default stylesheet and no web fonts.
+        assert!(!html.contains("/*! Asciidoctor default stylesheet"));
+        assert!(!html.contains("fonts.googleapis.com"));
+    }
+
+    // When embedding is requested for a custom stylesheet but no content was
+    // supplied (the string-only `convert` path cannot read a file), the block is
+    // omitted rather than guessed at.
+    #[test]
+    fn custom_stylesheet_without_content_emits_nothing_when_embedding() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(!html.contains("<style>"));
+        assert!(!html.contains("<link rel=\"stylesheet\""));
+    }
+
+    // The supplied content is ignored when the stylesheet is linked, not
+    // embedded: the head links to the stylesheet path instead.
+    #[test]
+    fn supplied_content_is_ignored_when_linking() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new().stylesheet_content("body { color: red; }"),
+        );
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-theme.css\">"));
+        assert!(!html.contains("<style>"));
+    }
+
+    // Directly exercise the `normalize_web_path` port against Asciidoctor's
+    // documented behavior for the stylesheet link.
+    #[test]
+    fn normalize_web_path_matches_asciidoctor() {
+        use super::normalize_web_path;
+
+        // A bare relative stylesheet gains a `./` prefix.
+        assert_eq!(normalize_web_path("custom.css", ""), "./custom.css");
+
+        // An explicit `./` is preserved (not doubled).
+        assert_eq!(normalize_web_path("./custom.css", ""), "./custom.css");
+
+        // A relative directory in the stylesheet value is kept.
+        assert_eq!(
+            normalize_web_path("stylesheets/custom.css", ""),
+            "./stylesheets/custom.css"
+        );
+
+        // `stylesdir` is mirrored into the linked path.
+        assert_eq!(
+            normalize_web_path("custom.css", "./stylesheets"),
+            "./stylesheets/custom.css"
+        );
+
+        // A trailing separator on `stylesdir` does not double up.
+        assert_eq!(normalize_web_path("custom.css", "css/"), "./css/custom.css");
+
+        // A `..` segment is collapsed against the styles directory.
+        assert_eq!(normalize_web_path("../custom.css", "css"), "./custom.css");
+
+        // A relative path that climbs out is a complete reference: it keeps its
+        // leading `..` and gains no `./` prefix.
+        assert_eq!(
+            normalize_web_path("../shared/theme.css", ""),
+            "../shared/theme.css"
+        );
+
+        // A `..` at the web root has nowhere to climb, so it is dropped.
+        assert_eq!(normalize_web_path("/../secret.css", ""), "/secret.css");
+
+        // A protocol-relative `//host/…` reference keeps its authority `//`
+        // rather than collapsing to a single `/` (matches Asciidoctor 2.0.26).
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/theme.css", ""),
+            "//cdn.example.com/theme.css"
+        );
+
+        // Asciidoctor's `web_path` treats the segment after `//` as an ordinary
+        // path segment, not an RFC-3986 authority: a `..` deeper in the path
+        // pops the segment before it and keeps the host, but a `..` right after
+        // the authority pops the host itself. We match Asciidoctor 2.0.26, which
+        // emits `//cdn.example.com/theme.css` and `//theme.css` respectively.
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/a/../theme.css", ""),
+            "//cdn.example.com/theme.css"
+        );
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/../theme.css", ""),
+            "//theme.css"
+        );
+
+        // A URI or an absolute path is a complete reference already.
+        assert_eq!(
+            normalize_web_path("file:///home/user/custom.css", "ignored"),
+            "file:///home/user/custom.css"
+        );
+        assert_eq!(
+            normalize_web_path("https://cdn.example/custom.css", ""),
+            "https://cdn.example/custom.css"
+        );
+        assert_eq!(
+            normalize_web_path("/abs/custom.css", "css"),
+            "/abs/custom.css"
+        );
+    }
+
+    /// Converts `source` with the given files (name → content) written to a
+    /// fresh temp directory, under an embedding safe mode with a primary file
+    /// of `mydoc.adoc` in that directory. This exercises the disk-read
+    /// embedding path: a custom `stylesheet` is resolved and read from that
+    /// directory.
+    ///
+    /// `tag` names the temp directory so concurrent tests do not collide.
+    fn with_files(tag: &str, source: &str, files: &[(&str, &str)]) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-css-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        for (name, content) in files {
+            let path = dir.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("create scratch subdir");
+            }
+            std::fs::write(path, content).expect("write scratch file");
+        }
+
+        let html = convert_with(
+            source,
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .input_file(dir.join("mydoc.adoc")),
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        html
+    }
+
+    // Under an embedding safe mode with a base directory, a custom stylesheet is
+    // read from disk and embedded — the `adoc` default and the API's file path.
+    #[test]
+    fn custom_stylesheet_is_read_from_disk_and_embedded() {
+        let html = with_files(
+            "embed",
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &[("my-theme.css", "body { color: #ff0000; }\n")],
+        );
+        assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+
+        // A custom stylesheet still gets neither the default CSS nor web fonts.
+        assert!(!html.contains("/*! Asciidoctor default stylesheet"));
+        assert!(!html.contains("fonts.googleapis.com"));
+    }
+
+    // `stylesdir` relocates the on-disk lookup, just as it does the linked path.
+    #[test]
+    fn custom_stylesheet_read_honors_stylesdir() {
+        let html = with_files(
+            "stylesdir",
+            "= Doc\n:stylesheet: theme.css\n:stylesdir: css\n\nBody.",
+            &[("css/theme.css", ".from-subdir { color: green; }\n")],
+        );
+        assert!(html.contains("<style>\n.from-subdir { color: green; }\n</style>"));
+    }
+
+    // Unsetting `stylesdir` (`:stylesdir!:`) drops the parser's default styles
+    // directory (`.`), so the stylesheet resolves under its bare name against
+    // the base directory.
+    #[test]
+    fn custom_stylesheet_read_with_stylesdir_unset() {
+        let html = with_files(
+            "no-stylesdir",
+            "= Doc\n:stylesheet: theme.css\n:stylesdir!:\n\nBody.",
+            &[("theme.css", ".bare { color: blue; }\n")],
+        );
+        assert!(html.contains("<style>\n.bare { color: blue; }\n</style>"));
+    }
+
+    // A caller-supplied `stylesheet_content` wins over the file on disk.
+    #[test]
+    fn supplied_content_beats_the_file_on_disk() {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-css-{}-supplied", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        std::fs::write(dir.join("my-theme.css"), "body { color: black; }\n").expect("write css");
+
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .input_file(dir.join("mydoc.adoc"))
+                .stylesheet_content("body { color: supplied; }"),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(html.contains("<style>\nbody { color: supplied; }\n</style>"));
+        assert!(!html.contains("color: black"));
+    }
+
+    // A missing stylesheet file leaves the block out rather than embedding an
+    // empty or fabricated one.
+    #[test]
+    fn a_missing_stylesheet_file_emits_no_style_block() {
+        let html = with_files(
+            "missing",
+            "= Doc\n:stylesheet: absent.css\n\nBody.",
+            &[("unrelated.css", "ignored")],
+        );
+        assert!(!html.contains("<style>"));
+        assert!(!html.contains("<link rel=\"stylesheet\""));
+    }
+
+    // Without a base directory (plain `convert`, no input file), an embedded
+    // custom stylesheet has no source, so its block is omitted.
+    #[test]
+    fn no_base_directory_means_no_embedded_custom_stylesheet() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(!html.contains("<style>"));
     }
 
     // Docinfo splices caller-supplied content into three fixed positions of the

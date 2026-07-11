@@ -5,5 +5,6 @@
 //! tracked as non-normative; the API invocations each page shows are verified
 //! by ordinary tests in the same module. The module grows a page per topic.
 
+mod custom_stylesheet;
 mod default_stylesheet;
 mod index;

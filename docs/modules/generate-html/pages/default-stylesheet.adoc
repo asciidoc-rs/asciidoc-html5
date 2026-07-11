@@ -126,14 +126,15 @@ Hello.
 
 == Known limitations
 
-`asciidoc-html5` applies only the default stylesheet. A few of Asciidoctor's
-stylesheet features are not available:
+`asciidoc-html5` applies both the default stylesheet and custom stylesheets. A
+few of Asciidoctor's stylesheet features are not available:
 
-* *Custom stylesheets.* Setting `stylesheet` to your own CSS file has no effect:
-the library converts a string to a string and cannot read an external file.
-Explicitly unsetting the stylesheet (`:stylesheet!:`) does drop the default one.
-Supporting custom stylesheets is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
+* *Custom stylesheets* are supported: set the `stylesheet` attribute to apply
+your own in place of the default, embedded or linked per the safe mode. See
+xref:custom-stylesheet.adoc[]. What is _not_ supported is copying a linked
+stylesheet into an output directory (`copycss`) and fetching a remote
+stylesheet to embed; both are tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
 * *docinfo.* Auxiliary content from docinfo files is injected into the head,
 header, and footer. Files are resolved from the base directory and confined by
 the safe mode, exactly as `include::` targets are.

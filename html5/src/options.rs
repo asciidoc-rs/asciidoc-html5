@@ -84,6 +84,12 @@ pub struct Options {
     /// [`SafeMode::Secure`], matching Asciidoctor's API default.
     safe_mode: Option<SafeMode>,
 
+    /// The CSS to embed when the document selects a custom stylesheet and the
+    /// stylesheet is embedded rather than linked. `None` leaves the library
+    /// with nothing to embed for a custom stylesheet. See
+    /// [`Options::stylesheet_content`].
+    stylesheet_content: Option<String>,
+
     /// The base directory: the anchor for filesystem-relative resources
     /// (`include::` targets and docinfo files) and, under a jailed safe mode,
     /// the boundary reads may not cross. `None` leaves it to be derived from
@@ -178,6 +184,39 @@ impl Options {
     /// ```
     pub fn safe_mode(mut self, safe: SafeMode) -> Self {
         self.safe_mode = Some(safe);
+        self
+    }
+
+    /// Supplies the CSS to embed when the document selects a *custom*
+    /// stylesheet — that is, when the `stylesheet` attribute is set to a
+    /// non-empty value other than `DEFAULT`.
+    ///
+    /// The library converts text to text and cannot read an external stylesheet
+    /// file on its own, so a caller that wants a custom stylesheet *embedded*
+    /// (`<style>…</style>`) must hand its contents in through this method. This
+    /// is the string counterpart to Asciidoctor reading the file named by
+    /// `stylesheet`/`stylesdir` from disk.
+    ///
+    /// The content is used only when the stylesheet is embedded. Under
+    /// `linkcss` (including the `Secure` default, which links) the converter
+    /// links to the stylesheet's normalized web path instead and ignores this
+    /// value. It is likewise ignored when the document uses the default
+    /// stylesheet or unsets the stylesheet entirely.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_with, Options, SafeMode};
+    ///
+    /// let opts = Options::new()
+    ///     .safe_mode(SafeMode::Unsafe)
+    ///     .attribute("stylesheet", "my-theme.css")
+    ///     .stylesheet_content("body { color: #ff0000; }");
+    /// let html = convert_with("= Doc\n\nBody.", &opts);
+    /// assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+    /// ```
+    pub fn stylesheet_content<S: Into<String>>(mut self, css: S) -> Self {
+        self.stylesheet_content = Some(css.into());
         self
     }
 
@@ -385,7 +424,7 @@ impl Options {
     /// name — means the current directory). The result is canonicalized when it
     /// exists on disk, so the handler's jail comparisons and the primary file's
     /// name share one absolute form.
-    fn effective_base_dir(&self) -> Option<PathBuf> {
+    pub(crate) fn effective_base_dir(&self) -> Option<PathBuf> {
         if let Some(base) = &self.base_dir {
             return Some(canonicalize_or(base));
         }
@@ -403,6 +442,17 @@ impl Options {
     /// the safe mode would otherwise default.
     fn mentions(&self, name: &str) -> bool {
         self.attributes.iter().any(|d| d.name == name)
+    }
+
+    /// The CSS to embed for a custom stylesheet, if the caller supplied any.
+    pub(crate) fn custom_stylesheet(&self) -> Option<&str> {
+        self.stylesheet_content.as_deref()
+    }
+
+    /// The safe mode conversion runs under, defaulting to [`SafeMode::Secure`]
+    /// (Asciidoctor's API default) when the caller left it unset.
+    pub(crate) fn safe_mode_or_default(&self) -> SafeMode {
+        self.safe_mode.unwrap_or(SafeMode::Secure)
     }
 
     /// The [`Action`] of the last directive naming `name` (already lowercased),
