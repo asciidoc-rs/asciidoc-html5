@@ -505,9 +505,11 @@ mod tests {
     use crate::{convert, convert_with, Options, SafeMode};
 
     /// Converts `source` with the given docinfo files (name → content) written
-    /// to a fresh temp directory, under `Server` safe mode (docinfo is disabled
-    /// at `Secure` and above) with a primary file of `mydoc.adoc` in that
-    /// directory (so both shared and private docinfo files resolve).
+    /// to a fresh temp directory, under `Safe` safe mode with a primary file of
+    /// `mydoc.adoc` in that directory (so both shared and private docinfo files
+    /// resolve). `Safe` — not `Server` — is used because these sources enable
+    /// docinfo from the *document* (`:docinfo:`), which `Server` and above
+    /// forbid; and `Secure` disables docinfo resolution entirely.
     ///
     /// `tag` names the temp directory so concurrent tests do not collide.
     fn with_docinfo(tag: &str, source: &str, files: &[(&str, &str)]) -> String {
@@ -521,7 +523,7 @@ mod tests {
         let html = convert_with(
             source,
             &Options::new()
-                .safe_mode(SafeMode::Server)
+                .safe_mode(SafeMode::Safe)
                 .input_file(dir.join("mydoc.adoc")),
         );
 
@@ -938,10 +940,12 @@ mod tests {
     #[test]
     fn no_base_directory_means_no_docinfo() {
         // With neither a base directory nor a primary file, no docinfo handler
-        // is installed, so the `docinfo` attribute has no effect.
+        // is installed, so the `docinfo` attribute has no effect. `Safe` (not
+        // `Server`) keeps the document's `:docinfo:` in force, so this isolates
+        // the "no handler" path rather than the safe-mode docinfo lock.
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
-            &Options::new().safe_mode(SafeMode::Server),
+            &Options::new().safe_mode(SafeMode::Safe),
         );
 
         assert!(html.contains("</head>"));

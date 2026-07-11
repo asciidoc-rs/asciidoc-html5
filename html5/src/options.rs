@@ -327,6 +327,22 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
+        // Matching Asciidoctor: `Server` and above forbid the *document* from
+        // enabling docinfo — only the API may (Asciidoctor's SERVER "prevents
+        // the document from setting … docinfo"). Unless the caller set `docinfo`
+        // from the API, seed it unset and *silently* locked, so a document
+        // `:docinfo:` assignment is dropped with no warning. (Under `Secure` the
+        // parser disables docinfo resolution outright; the lock is what covers
+        // `Server`, where a document-set value would otherwise be honored and a
+        // docinfo file read.)
+        if mode >= SafeMode::Server && !self.mentions("docinfo") {
+            parser = parser.with_intrinsic_attribute_bool_silent(
+                "docinfo",
+                false,
+                ModificationContext::ApiOnly,
+            );
+        }
+
         // Anchor filesystem-relative resources: `include::` targets and docinfo
         // files. Naming the primary file lets the parser resolve top-level
         // includes against that file's directory and derive the `docname` for
@@ -572,9 +588,10 @@ mod tests {
         assert!(!html.contains("./asciidoctor.css"));
     }
 
-    // Docinfo is read from the base directory only when the document enables it
-    // (via the `docinfo` attribute) and the safe mode is below `Secure` —
-    // matching Asciidoctor, which drops docinfo at `Secure` and above. These
+    // Docinfo is read from the base directory only when docinfo is enabled and
+    // the safe mode permits it: below `Server` a document `:docinfo:` enables it;
+    // `Server` and above require an API-set value (a document `:docinfo:` is
+    // ignored); `Secure` drops docinfo entirely — matching Asciidoctor. These
     // exercise the wiring in `apply`; the handler's own resolution and jail are
     // covered in `docinfo_handler`.
 
@@ -594,10 +611,49 @@ mod tests {
     fn docinfo_is_read_from_the_base_directory_below_secure() {
         let dir = docinfo_scratch("below-secure", &[("docinfo.html", "<meta name=\"x\">")]);
 
+        // `Safe` permits a document-set `:docinfo:` (only `Server` and above
+        // forbid it) and installs the handler, so the file is read.
+        let html = convert_with(
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .base_dir(dir.clone()),
+        );
+
+        assert!(html.contains("<meta name=\"x\">\n</head>"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn document_set_docinfo_is_ignored_under_server() {
+        // Under `Server`, a document that turns docinfo on itself is ignored —
+        // Asciidoctor's SERVER "prevents the document from setting … docinfo".
+        // The file exists in the base directory but must not be read.
+        let dir = docinfo_scratch("server-doc", &[("docinfo.html", "<meta name=\"x\">")]);
+
         let html = convert_with(
             "= Doc\n:docinfo: shared\n\nBody.",
             &Options::new()
                 .safe_mode(SafeMode::Server)
+                .base_dir(dir.clone()),
+        );
+
+        assert!(!html.contains("<meta name=\"x\">"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn api_set_docinfo_still_applies_under_server() {
+        // The restriction is on the *document*, not the API: an API-set
+        // `docinfo` is honored under `Server`, and the document need not (and
+        // here does not) mention it.
+        let dir = docinfo_scratch("server-api", &[("docinfo.html", "<meta name=\"x\">")]);
+
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute("docinfo", "shared")
                 .base_dir(dir.clone()),
         );
 
@@ -627,12 +683,13 @@ mod tests {
             &[("guide-docinfo.html", "<meta name=\"private\">")],
         );
 
-        // With only a base directory, the `<docname>` is unknown, so the private
-        // file is not resolved.
+        // `Safe` keeps the document's `:docinfo: private` in force (unlike
+        // `Server`); with only a base directory the `<docname>` is unknown, so
+        // the private file is not resolved.
         let without = convert_with(
             "= Doc\n:docinfo: private\n\nBody.",
             &Options::new()
-                .safe_mode(SafeMode::Server)
+                .safe_mode(SafeMode::Safe)
                 .base_dir(dir.clone()),
         );
 
@@ -643,7 +700,7 @@ mod tests {
         let with = convert_with(
             "= Doc\n:docinfo: private\n\nBody.",
             &Options::new()
-                .safe_mode(SafeMode::Server)
+                .safe_mode(SafeMode::Safe)
                 .base_dir(dir.clone())
                 .input_file(dir.join("guide.adoc")),
         );

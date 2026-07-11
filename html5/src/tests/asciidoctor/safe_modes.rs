@@ -99,9 +99,10 @@ Its integer value is `1`.
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), backend
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), docdir
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo files are
-// now supported, but SERVER does not yet stop a document from setting `docinfo`
-// itself, tracked (with the other document-set restrictions) in
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo is the
+// exception: its SERVER restriction *is* enforced — a document `:docinfo:` is
+// ignored under SERVER and above, so only an API value enables docinfo.
+// Enforcing the same for the attributes above is tracked in
 // https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"

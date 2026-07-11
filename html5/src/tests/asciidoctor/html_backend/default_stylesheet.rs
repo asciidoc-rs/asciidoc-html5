@@ -492,16 +492,19 @@ The `<style>` element in your docinfo file will be inserted directly below the d
     );
 
     // The page's `docinfo.html`, written to a temp directory as the shared head
-    // docinfo file and loaded via the base directory.
+    // docinfo file and enabled with `-a docinfo=shared` — exactly the page's
+    // command (an API-set value, which `Server` honors from the API even though
+    // it forbids a document from setting `docinfo` itself).
     let docinfo = "<style>\nh1, h2, h3, h4, h5, h6, #toctitle,\n.sidebarblock > .content > .title {\n  color: rgba(0, 0, 0, 0.8);\n}\n</style>";
     let dir = std::env::temp_dir().join(format!("adoc-ds-docinfo-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("create scratch dir");
     std::fs::write(dir.join("docinfo.html"), docinfo).expect("write docinfo.html");
 
     let html = convert_with(
-        "= Document Title\n:docinfo: shared\n\nBody.",
+        "= Document Title\n\nBody.",
         &Options::new()
             .safe_mode(SafeMode::Server)
+            .attribute("docinfo", "shared")
             .base_dir(dir.clone()),
     );
 

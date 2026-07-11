@@ -503,6 +503,41 @@ fn safe_mode_still_reads_in_base_docinfo() {
     );
 }
 
+/// Under the `server` safe mode, a document that enables docinfo itself
+/// (`:docinfo: shared` in its header) is ignored — Asciidoctor's SERVER
+/// "prevents the document from setting … docinfo". The file is present but must
+/// not be read.
+#[test]
+fn server_ignores_document_set_docinfo() {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-docinfo-server-{}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create docinfo dir");
+    let input = dir.join("document.adoc");
+
+    fs::write(&input, "= Doc\n:docinfo: shared\n\nBody.").expect("write input");
+    fs::write(dir.join("docinfo.html"), "<meta name=\"di-head\">\n").expect("write head docinfo");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .args(["-S", "server", "-o", "-"])
+        .output()
+        .expect("run the adoc binary");
+
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
+    assert!(
+        !html.contains("di-head"),
+        "a document-set docinfo must be ignored under the server safe mode"
+    );
+}
+
 /// A `-a` spec with no attribute name is rejected with a nonzero exit status
 /// and an `adoc:`-prefixed error.
 #[test]
