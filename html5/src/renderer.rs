@@ -157,8 +157,8 @@ fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     web_normalize(&joined)
 }
 
-/// Collapses `.`/`..` segments in a posix `path` and prefixes a relative result
-/// with `./`, following Asciidoctor's `PathResolver#web_path`.
+/// Collapses `.`/`..` segments in a posix `path` and prefixes a plain relative
+/// result with `./`, following Asciidoctor's `PathResolver#web_path`.
 fn web_normalize(path: &str) -> String {
     let (root, rest) = if let Some(rest) = path.strip_prefix('/') {
         ("/", rest)
@@ -186,7 +186,15 @@ fn web_normalize(path: &str) -> String {
         }
     }
 
-    format!("{root}{}", segments.join("/"))
+    // The `./` prefix marks a path that stays at or below the current directory.
+    // A relative result that already climbs (`../…`) is a complete reference on
+    // its own, so it keeps no `./`, matching Asciidoctor.
+    let prefix = if root == "./" && segments.first() == Some(&"..") {
+        ""
+    } else {
+        root
+    };
+    format!("{prefix}{}", segments.join("/"))
 }
 
 /// Whether `value` looks like a URI, mirroring Asciidoctor's `UriSniffRx`: a
@@ -1106,6 +1114,14 @@ mod tests {
         assert_eq!(normalize_web_path("custom.css", "css/"), "./css/custom.css");
         // A `..` segment is collapsed against the styles directory.
         assert_eq!(normalize_web_path("../custom.css", "css"), "./custom.css");
+        // A relative path that climbs out is a complete reference: it keeps its
+        // leading `..` and gains no `./` prefix.
+        assert_eq!(
+            normalize_web_path("../shared/theme.css", ""),
+            "../shared/theme.css"
+        );
+        // A `..` at the web root has nowhere to climb, so it is dropped.
+        assert_eq!(normalize_web_path("/../secret.css", ""), "/secret.css");
         // A URI or an absolute path is a complete reference already.
         assert_eq!(
             normalize_web_path("file:///home/user/custom.css", "ignored"),
@@ -1175,6 +1191,19 @@ mod tests {
             &[("css/theme.css", ".from-subdir { color: green; }\n")],
         );
         assert!(html.contains("<style>\n.from-subdir { color: green; }\n</style>"));
+    }
+
+    // Unsetting `stylesdir` (`:stylesdir!:`) drops the parser's default styles
+    // directory (`.`), so the stylesheet resolves under its bare name against
+    // the base directory.
+    #[test]
+    fn custom_stylesheet_read_with_stylesdir_unset() {
+        let html = with_files(
+            "no-stylesdir",
+            "= Doc\n:stylesheet: theme.css\n:stylesdir!:\n\nBody.",
+            &[("theme.css", ".bare { color: blue; }\n")],
+        );
+        assert!(html.contains("<style>\n.bare { color: blue; }\n</style>"));
     }
 
     // A caller-supplied `stylesheet_content` wins over the file on disk.
