@@ -78,20 +78,16 @@ command line embeds the stylesheet:
     );
 
     let dir = scratch("embed");
-    let html = adoc_stdout(&[
-        dir.join("my-document.adoc")
-            .to_str()
-            .expect("path is UTF-8"),
-        "-o",
-        "-",
-    ]);
+    let path = dir.join("my-document.adoc");
+    let path = path.to_str().expect("path is UTF-8");
+
+    let html = adoc_stdout(&[path, "-o", "-"]);
     assert!(html.contains("<style>"));
     assert!(!html.contains("./asciidoctor.css"));
-    let _ = std::fs::remove_dir_all(&dir);
 
-    // The API example and the `secure` alternative it closes with are verified
-    // by the `asciidoc-html5` crate against the API, so they are non-normative
-    // here.
+    // Only the API example is verified by the `asciidoc-html5` crate against the
+    // API, so it is non-normative here; the `secure` sentence that follows is a
+    // CLI-checkable claim and stays verified below.
     non_normative!(
         r#"
 Through the API, pass a safe mode below `secure` explicitly:
@@ -107,11 +103,23 @@ let html = convert_with(
 assert!(html.contains("<style>"));
 ----
 
+"#
+    );
+
+    verifies!(
+        r#"
 If the safe mode is `secure`, the converter <<link,links to the stylesheet>>
 instead. The same two rules apply to the default and a custom stylesheet alike.
 
 "#
     );
+
+    // The same command under `secure` links the stylesheet instead of embedding
+    // it.
+    let secure = adoc_stdout(&[path, "-o", "-", "-S", "secure"]);
+    assert!(secure.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    assert!(!secure.contains("<style>"));
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `adoc -a linkcss` links to the default stylesheet at `./asciidoctor.css`
