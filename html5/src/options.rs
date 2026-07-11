@@ -424,7 +424,7 @@ impl Options {
     /// name — means the current directory). The result is canonicalized when it
     /// exists on disk, so the handler's jail comparisons and the primary file's
     /// name share one absolute form.
-    fn effective_base_dir(&self) -> Option<PathBuf> {
+    pub(crate) fn effective_base_dir(&self) -> Option<PathBuf> {
         if let Some(base) = &self.base_dir {
             return Some(canonicalize_or(base));
         }
@@ -447,6 +447,12 @@ impl Options {
     /// The CSS to embed for a custom stylesheet, if the caller supplied any.
     pub(crate) fn custom_stylesheet(&self) -> Option<&str> {
         self.stylesheet_content.as_deref()
+    }
+
+    /// The safe mode conversion runs under, defaulting to [`SafeMode::Secure`]
+    /// (Asciidoctor's API default) when the caller left it unset.
+    pub(crate) fn safe_mode_or_default(&self) -> SafeMode {
+        self.safe_mode.unwrap_or(SafeMode::Secure)
     }
 
     /// The [`Action`] of the last directive naming `name` (already lowercased),

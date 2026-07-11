@@ -214,6 +214,68 @@ fn run_adoc(args: &[&str], source: &str) -> (std::process::ExitStatus, String, S
     )
 }
 
+/// A custom `stylesheet` set in the document header is read from the input
+/// file's directory and embedded, under the `adoc` default (`unsafe`) mode.
+/// This is the end-to-end custom-stylesheet path: the binary resolves the file
+/// on disk without any extra flags.
+#[test]
+fn custom_stylesheet_is_embedded_from_the_input_directory() {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-css-{}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    let input = dir.join("doc.adoc");
+    fs::write(&input, "= Doc\n:stylesheet: my-theme.css\n\nBody.").expect("write input");
+    fs::write(dir.join("my-theme.css"), "body { color: #ff0000; }\n").expect("write stylesheet");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg("-")
+        .output()
+        .expect("run the adoc binary");
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+    assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+    // A custom stylesheet suppresses the default stylesheet and the web fonts.
+    assert!(!html.contains("/*! Asciidoctor default stylesheet"));
+    assert!(!html.contains("fonts.googleapis.com"));
+}
+
+/// Under `--safe-mode=secure`, the same custom stylesheet is *linked* (at its
+/// normalized web path) rather than read from disk.
+#[test]
+fn custom_stylesheet_is_linked_under_secure() {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-css-link-{}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    let input = dir.join("doc.adoc");
+    fs::write(&input, "= Doc\n:stylesheet: my-theme.css\n\nBody.").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("--safe-mode=secure")
+        .arg("-o")
+        .arg("-")
+        .output()
+        .expect("run the adoc binary");
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+    assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-theme.css\">"));
+    assert!(!html.contains("<style>"));
+}
+
 /// `-a name=value` supplies a document attribute and, being an override, wins
 /// over an assignment of the same name in the document header.
 #[test]

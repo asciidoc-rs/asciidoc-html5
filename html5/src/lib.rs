@@ -67,9 +67,14 @@ pub fn convert(source: &str) -> String {
 /// from outside the document source. See [`Options`] for override vs. soft-set
 /// precedence.
 ///
-/// Unlike [`convert_document`], this path also honors a custom stylesheet whose
-/// contents were supplied via [`Options::stylesheet_content`], embedding them
-/// when the document selects an embedded custom stylesheet.
+/// Unlike [`convert_document`], this path also honors a custom stylesheet when
+/// the document selects one and it is *embedded* (rather than linked): the CSS
+/// comes from [`Options::stylesheet_content`] when the caller supplied it,
+/// otherwise it is read from disk relative to the base directory (see
+/// [`Options::base_dir`]/[`Options::input_file`]) under the same safe-mode jail
+/// as `include::` targets. Without a base directory — the plain [`convert`]
+/// case — an embedded custom stylesheet has no source to read, so its block is
+/// omitted.
 ///
 /// # Examples
 ///
@@ -83,7 +88,31 @@ pub fn convert(source: &str) -> String {
 pub fn convert_with(source: &str, options: &Options) -> String {
     let mut parser = options.apply(Parser::default());
     let document = parser.parse(source);
-    renderer::render_document(&document, options.custom_stylesheet())
+
+    // A custom, embedded stylesheet takes its CSS from the caller when supplied,
+    // otherwise from disk (below). `read_to_string` keeps the borrow of
+    // `document` from the read helper separate from the render call.
+    let embedded = options
+        .custom_stylesheet()
+        .map(str::to_owned)
+        .or_else(|| read_embedded_stylesheet(&document, options));
+
+    renderer::render_document(&document, embedded.as_deref())
+}
+
+/// Reads a custom stylesheet from disk when the document selects one to
+/// *embed*, resolving it against the base directory the way an `include::`
+/// target resolves and confining the read to the safe mode's jail. Returns
+/// `None` when there is nothing to read — the stylesheet is linked, a URI, the
+/// default, or unset — or when no base directory anchors the lookup (the plain
+/// [`convert`] case) or the file cannot be read.
+fn read_embedded_stylesheet(document: &Document<'_>, options: &Options) -> Option<String> {
+    let target = renderer::embeddable_stylesheet_target(document)?;
+    let base_dir = options.effective_base_dir()?;
+    let safe = options.safe_mode_or_default();
+
+    let path = include_handler::resolve(&base_dir, safe, None, &target);
+    include_handler::read_confined(&base_dir, safe, &path)
 }
 
 /// Reads the AsciiDoc file at `path` and renders it to a complete HTML5

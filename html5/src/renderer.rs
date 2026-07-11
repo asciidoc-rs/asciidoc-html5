@@ -70,7 +70,7 @@ fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
 ///   [`Options`](crate::Options); keying off the safe mode here means
 ///   [`convert_document`](crate::convert_document) on a document parsed under
 ///   `Secure` links it too, so the two paths stay consistent.
-fn links_stylesheet(document: &Document<'_>) -> bool {
+pub(crate) fn links_stylesheet(document: &Document<'_>) -> bool {
     if document.is_attribute_set("linkcss") {
         return true;
     }
@@ -85,6 +85,45 @@ fn links_stylesheet(document: &Document<'_>) -> bool {
     // document (its built-in default is `Secure`).
     matches!(attribute_str(document, "safe-mode-level"), Some(level)
         if level.parse::<u32>().is_ok_and(|n| n >= SafeMode::Secure as u32))
+}
+
+/// The `stylesheet` value when the document selects a *custom* stylesheet — a
+/// non-empty value other than `DEFAULT` that is not an explicit unset
+/// (`:stylesheet!:`). The default stylesheet and an unset stylesheet both yield
+/// `None`.
+fn custom_stylesheet_value(document: &Document<'_>) -> Option<String> {
+    match document.attribute_value("stylesheet") {
+        InterpretedValue::Unset if document.has_attribute("stylesheet") => None,
+        InterpretedValue::Value(value) if !value.is_empty() && value != "DEFAULT" => Some(value),
+        _ => None,
+    }
+}
+
+/// The relative filesystem path of a custom stylesheet that should be *embedded
+/// from disk*, or `None` when there is nothing to read: the stylesheet is the
+/// default, unset, *linked* (so only a `<link>` is needed), or a URI (which the
+/// library never fetches). The returned target joins `stylesdir` and
+/// `stylesheet` the way Asciidoctor's `normalize_system_path` would, ready to
+/// resolve against the base directory.
+///
+/// Reading the file is left to [`convert_with`](crate::convert_with), which
+/// holds the base directory and safe mode; the renderer itself stays free of
+/// filesystem access.
+pub(crate) fn embeddable_stylesheet_target(document: &Document<'_>) -> Option<String> {
+    let stylesheet = custom_stylesheet_value(document)?;
+
+    // A linked stylesheet needs no file read; a URI cannot be read from disk.
+    if links_stylesheet(document) || looks_like_uri(&stylesheet) {
+        return None;
+    }
+
+    let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+    let target = if stylesdir.is_empty() {
+        stylesheet
+    } else {
+        format!("{}/{stylesheet}", stylesdir.trim_end_matches(['/', '\\']))
+    };
+    Some(target)
 }
 
 /// Computes the web path Asciidoctor's `html5` backend uses when linking to a
@@ -388,17 +427,24 @@ impl Renderer<'_> {
     /// - Any other value: a *custom* stylesheet, handled by
     ///   [`custom_stylesheet`](Self::custom_stylesheet).
     fn stylesheet(&mut self, document: &Document<'_>) {
-        match document.attribute_value("stylesheet") {
-            // Explicitly unset (`:stylesheet!:`): no stylesheet at all.
-            InterpretedValue::Unset if document.has_attribute("stylesheet") => return,
-            // A custom stylesheet: link to it, or embed caller-supplied CSS.
-            InterpretedValue::Value(ref value) if !value.is_empty() && value != "DEFAULT" => {
-                self.custom_stylesheet(document, value);
-                return;
-            }
-            // Absent, `Set`, empty, or `DEFAULT`: the default stylesheet.
-            _ => {}
+        // Explicitly unset (`:stylesheet!:`): no stylesheet block at all.
+        if matches!(
+            document.attribute_value("stylesheet"),
+            InterpretedValue::Unset
+        ) && document.has_attribute("stylesheet")
+        {
+            return;
         }
+
+        // A custom stylesheet: link to it, or embed CSS the caller supplied /
+        // that was read from disk.
+        if let Some(value) = custom_stylesheet_value(document) {
+            self.custom_stylesheet(document, &value);
+            return;
+        }
+
+        // Otherwise the default stylesheet applies (absent, `Set`, empty, or
+        // `DEFAULT`).
 
         self.webfonts_link(document);
 
@@ -429,12 +475,13 @@ impl Renderer<'_> {
     /// - Under `linkcss` (which the `Secure` default turns on), the head links
     ///   to the stylesheet at the web path Asciidoctor would use, computed from
     ///   the `stylesheet` and `stylesdir` attributes by [`normalize_web_path`].
-    /// - Otherwise the stylesheet is embedded inline. The library cannot read a
-    ///   stylesheet file itself, so it embeds the CSS the caller supplied
-    ///   through [`Options::stylesheet_content`](crate::Options::stylesheet_content).
-    ///   When none was supplied — as for the string-only
-    ///   [`convert`](crate::convert) entry point — the block is omitted, a
-    ///   documented limitation.
+    /// - Otherwise the stylesheet is embedded inline from `custom_stylesheet` —
+    ///   the CSS the caller supplied through
+    ///   [`Options::stylesheet_content`](crate::Options::stylesheet_content) or
+    ///   that [`convert_with`](crate::convert_with) read from disk. When
+    ///   neither produced any CSS — as for the string-only
+    ///   [`convert`](crate::convert) entry point, which has no base directory
+    ///   to read from — the block is omitted.
     fn custom_stylesheet(&mut self, document: &Document<'_>, stylesheet: &str) {
         if links_stylesheet(document) {
             let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
@@ -1072,6 +1119,107 @@ mod tests {
             normalize_web_path("/abs/custom.css", "css"),
             "/abs/custom.css"
         );
+    }
+
+    /// Converts `source` with the given files (name → content) written to a
+    /// fresh temp directory, under an embedding safe mode with a primary file
+    /// of `mydoc.adoc` in that directory. This exercises the disk-read
+    /// embedding path: a custom `stylesheet` is resolved and read from that
+    /// directory.
+    ///
+    /// `tag` names the temp directory so concurrent tests do not collide.
+    fn with_files(tag: &str, source: &str, files: &[(&str, &str)]) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-css-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        for (name, content) in files {
+            let path = dir.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("create scratch subdir");
+            }
+            std::fs::write(path, content).expect("write scratch file");
+        }
+
+        let html = convert_with(
+            source,
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .input_file(dir.join("mydoc.adoc")),
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        html
+    }
+
+    // Under an embedding safe mode with a base directory, a custom stylesheet is
+    // read from disk and embedded — the `adoc` default and the API's file path.
+    #[test]
+    fn custom_stylesheet_is_read_from_disk_and_embedded() {
+        let html = with_files(
+            "embed",
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &[("my-theme.css", "body { color: #ff0000; }\n")],
+        );
+        assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+        // A custom stylesheet still gets neither the default CSS nor web fonts.
+        assert!(!html.contains("/*! Asciidoctor default stylesheet"));
+        assert!(!html.contains("fonts.googleapis.com"));
+    }
+
+    // `stylesdir` relocates the on-disk lookup, just as it does the linked path.
+    #[test]
+    fn custom_stylesheet_read_honors_stylesdir() {
+        let html = with_files(
+            "stylesdir",
+            "= Doc\n:stylesheet: theme.css\n:stylesdir: css\n\nBody.",
+            &[("css/theme.css", ".from-subdir { color: green; }\n")],
+        );
+        assert!(html.contains("<style>\n.from-subdir { color: green; }\n</style>"));
+    }
+
+    // A caller-supplied `stylesheet_content` wins over the file on disk.
+    #[test]
+    fn supplied_content_beats_the_file_on_disk() {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-css-{}-supplied", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        std::fs::write(dir.join("my-theme.css"), "body { color: black; }\n").expect("write css");
+
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .input_file(dir.join("mydoc.adoc"))
+                .stylesheet_content("body { color: supplied; }"),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(html.contains("<style>\nbody { color: supplied; }\n</style>"));
+        assert!(!html.contains("color: black"));
+    }
+
+    // A missing stylesheet file leaves the block out rather than embedding an
+    // empty or fabricated one.
+    #[test]
+    fn a_missing_stylesheet_file_emits_no_style_block() {
+        let html = with_files(
+            "missing",
+            "= Doc\n:stylesheet: absent.css\n\nBody.",
+            &[("unrelated.css", "ignored")],
+        );
+        assert!(!html.contains("<style>"));
+        assert!(!html.contains("<link rel=\"stylesheet\""));
+    }
+
+    // Without a base directory (plain `convert`, no input file), an embedded
+    // custom stylesheet has no source, so its block is omitted.
+    #[test]
+    fn no_base_directory_means_no_embedded_custom_stylesheet() {
+        let html = convert_with(
+            "= Doc\n:stylesheet: my-theme.css\n\nBody.",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(!html.contains("<style>"));
     }
 
     // Docinfo splices caller-supplied content into three fixed positions of the

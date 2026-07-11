@@ -293,25 +293,23 @@ Hello.
 }
 
 // The stylesheet behaviors that are checkable: a custom `stylesheet` value is
-// linked (or, with supplied content, embedded), and explicitly unsetting the
-// stylesheet drops the default one.
+// linked (and cross-references the custom-stylesheet page), and explicitly
+// unsetting the stylesheet drops the default one.
 #[test]
 fn custom_and_unset_stylesheet_behaviors() {
     verifies!(
         r#"
 == Known limitations
 
-`asciidoc-html5` applies the default stylesheet in full and custom stylesheets
-in part. A few of Asciidoctor's stylesheet features are not available:
+`asciidoc-html5` applies both the default stylesheet and custom stylesheets. A
+few of Asciidoctor's stylesheet features are not available:
 
-* *Custom stylesheets* are partially supported. When the stylesheet is _linked_
--- under the `secure` API default, or any safe mode with `linkcss` set -- the
-`<head>` links to your stylesheet at its normalized web path, honoring
-`stylesdir`. _Embedding_ a custom stylesheet requires handing its contents to
-the API through `Options::stylesheet_content`, because the library cannot read
-an external file; the `adoc` command does not yet resolve a stylesheet file from
-disk, nor copy a linked one into place (`copycss`). Remaining work is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
+* *Custom stylesheets* are supported: set the `stylesheet` attribute to apply
+your own in place of the default, embedded or linked per the safe mode. See
+xref:custom-stylesheet.adoc[]. What is _not_ supported is copying a linked
+stylesheet into an output directory (`copycss`) and fetching a remote
+stylesheet to embed; both are tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
 "#
     );
 
@@ -321,7 +319,8 @@ https://github.com/asciidoc-rs/asciidoc-html5/issues/36[issue #36].
     assert!(linked.contains("<link rel=\"stylesheet\" href=\"./css/my-theme.css\">"));
     assert!(!linked.contains("./asciidoctor.css"));
 
-    // Embedding a custom stylesheet uses the CSS supplied through the API.
+    // Embedding a custom stylesheet uses the CSS supplied through the API (the
+    // full embed-from-disk path is covered on the custom-stylesheet page).
     let embedded = convert_with(
         "= Doc\n:stylesheet: my-theme.css\n\nBody.",
         &Options::new()

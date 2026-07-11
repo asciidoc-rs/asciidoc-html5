@@ -6,17 +6,20 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/custom-stylesheet.a
 // stylesheet other than the default via the `stylesheet`, `stylesdir`,
 // `linkcss`, and `copycss` attributes.
 //
-// This crate converts a string to a string and cannot read a stylesheet file
-// from disk, so the parts of this page that read, embed-from-disk, or copy a
-// file are non-normative here. What *is* verifiable is the linked case: when a
-// custom stylesheet is linked (the `secure` API default, or any mode with
-// `linkcss` set), this crate emits a `<link>` to the stylesheet at the web path
-// Asciidoctor would use, mirroring `stylesdir` into it. That path computation
-// is pure string work, so it is reproduced faithfully here. Embedding a custom
-// stylesheet is possible too, but only when the caller supplies its contents
-// through `Options::stylesheet_content` (see the "Default Stylesheet" page for
-// that claim); this page drives embedding from disk, which this crate does not
-// do, so those spans stay non-normative.
+// The verifiable claim reproduced here is the *linked* case, which is where
+// Asciidoctor's own web-path computation lives: when a custom stylesheet is
+// linked (the `secure` API default, or any mode with `linkcss` set), this crate
+// emits a `<link>` to the stylesheet at the web path Asciidoctor would use,
+// mirroring `stylesdir` into it. That path computation is pure string work, so
+// it is reproduced faithfully here.
+//
+// Embedding a custom stylesheet read from disk is also supported now (resolved
+// against the base directory under the safe mode's jail); the behavior and its
+// `adoc`/API surface are verified on this project's own
+// xref:generate-html:custom-stylesheet.adoc[] docs page (tracked from both
+// crates) rather than duplicated here. The `copycss` file copy and remote
+// (`http`) stylesheet fetch this crate does not perform stay non-normative;
+// they are tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39.
 //
 // Tracked from the library crate only: every verifiable claim is about the HTML
 // `<head>` that `asciidoc_html5::convert`/`convert_with` emits. Where the page
