@@ -92,7 +92,11 @@ fn chomp_trailing_newline(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+    };
 
     use asciidoc_parser::{parser::DocinfoFileHandler, Parser, SafeMode};
 
@@ -101,9 +105,18 @@ mod tests {
     /// Writes `files` (name → content) into a fresh temp directory and returns
     /// its canonical path, so the handler's jail comparisons share one absolute
     /// form with the paths it resolves.
+    ///
+    /// The directory name is made unique with a process-wide atomic counter
+    /// (the process id keeps it distinct across concurrent test binaries):
+    /// several callers pass the same `files` — notably `&[]` — so anything
+    /// derived from the argument would collide, and a shared directory lets
+    /// one test's cleanup delete another's files mid-run.
     fn scratch(files: &[(&str, &str)]) -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir =
-            std::env::temp_dir().join(format!("adoc-docinfo-{}-{:p}", std::process::id(), files));
+            std::env::temp_dir().join(format!("adoc-docinfo-{}-{unique}", std::process::id()));
         fs::create_dir_all(&dir).expect("create scratch dir");
         for (name, content) in files {
             let path = dir.join(name);
