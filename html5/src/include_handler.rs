@@ -67,15 +67,6 @@ impl FsIncludeFileHandler {
         Self { base_dir, safe }
     }
 
-    /// Whether the safe mode confines resolution to the base-directory jail.
-    ///
-    /// `safe` and `server` are jailed; `unsafe` is not. (`secure` never reaches
-    /// this handler — the parser turns includes into links before consulting
-    /// it.)
-    fn jailed(&self) -> bool {
-        self.safe >= SafeMode::Safe
-    }
-
     /// Resolves the include `target` — as written in the directive of the file
     /// named by `source` — to a filesystem path.
     ///
@@ -84,71 +75,120 @@ impl FsIncludeFileHandler {
     /// directory is the starting point for a relative `target`; when `source`
     /// is `None` the base directory is used.
     fn resolve(&self, source: Option<&str>, target: &str) -> PathBuf {
-        let start = source.map(directory_of).unwrap_or_default();
-        if self.jailed() {
-            self.resolve_jailed(start, target)
-        } else {
-            self.resolve_free(start, target)
-        }
+        resolve(&self.base_dir, self.safe, source, target)
+    }
+}
+
+/// Whether the safe mode confines resolution to the base-directory jail.
+///
+/// `safe` and `server` are jailed; `unsafe` is not. (`secure` never reaches the
+/// filesystem handlers — the parser turns includes into links, and drops
+/// docinfo, before consulting them.)
+pub(crate) fn jailed(safe: SafeMode) -> bool {
+    safe >= SafeMode::Safe
+}
+
+/// Resolves `target` against `base_dir` — relative to `source`'s directory when
+/// given, else to the base directory itself — honoring the safe mode's jail.
+///
+/// This is shared by the [`FsIncludeFileHandler`] (whose `source` is the
+/// including file) and the docinfo handler (which passes `None`, resolving
+/// against the base directory). See [`read_confined`] for the matching read.
+pub(crate) fn resolve(
+    base_dir: &Path,
+    safe: SafeMode,
+    source: Option<&str>,
+    target: &str,
+) -> PathBuf {
+    let start = source.map(directory_of).unwrap_or_default();
+    if jailed(safe) {
+        resolve_jailed(base_dir, start, target)
+    } else {
+        resolve_free(base_dir, start, target)
+    }
+}
+
+/// Resolves `target` without a jail: relative targets anchor at `start` (itself
+/// relative to the base directory), absolute targets are taken as-is, and `..`
+/// may climb anywhere.
+fn resolve_free(base_dir: &Path, start: &str, target: &str) -> PathBuf {
+    if is_absolute(target) {
+        return normalize(&PathBuf::from(target));
     }
 
-    /// Resolves `target` without a jail: relative targets anchor at `start`
-    /// (itself relative to the base directory), absolute targets are taken
-    /// as-is, and `..` may climb anywhere.
-    fn resolve_free(&self, start: &str, target: &str) -> PathBuf {
-        if is_absolute(target) {
-            return normalize(&PathBuf::from(target));
+    // An absolute `start` is a native path (the including file's own location),
+    // so it is kept verbatim — posixifying it would corrupt a Windows path such
+    // as a drive prefix or a `\\?\` verbatim path. A relative `start` is a
+    // `/`-separated document path, joined onto the base directory a segment at a
+    // time.
+    let anchor = if is_absolute(start) {
+        PathBuf::from(start)
+    } else {
+        join_segments(base_dir, start)
+    };
+
+    normalize(&join_segments(&anchor, target))
+}
+
+/// Resolves `target` inside the jail: the result is always within the base
+/// directory. A `..` that would climb above the base is dropped, and an
+/// absolute `start` or `target` is treated as relative to the base directory
+/// (recovered), matching Asciidoctor.
+fn resolve_jailed(base_dir: &Path, start: &str, target: &str) -> PathBuf {
+    let mut segments: Vec<String> = Vec::new();
+
+    // The starting directory contributes segments only when it sits inside the
+    // jail: a relative `start` is taken relative to the base directory, and an
+    // absolute `start` keeps only the portion below the base directory
+    // (dropping it entirely if it lies outside).
+    if is_absolute(start) {
+        if let Some(rel) = strip_base_prefix(base_dir, start) {
+            fold_into(&mut segments, &rel);
         }
-
-        // An absolute `start` is a native path (the including file's own
-        // location), so it is kept verbatim — posixifying it would corrupt a
-        // Windows path such as a drive prefix or a `\\?\` verbatim path. A
-        // relative `start` is a `/`-separated document path, joined onto the
-        // base directory a segment at a time.
-        let anchor = if is_absolute(start) {
-            PathBuf::from(start)
-        } else {
-            join_segments(&self.base_dir, start)
-        };
-
-        normalize(&join_segments(&anchor, target))
+    } else {
+        fold_into(&mut segments, start);
     }
 
-    /// Resolves `target` inside the jail: the result is always within the base
-    /// directory. A `..` that would climb above the base is dropped, and an
-    /// absolute `start` or `target` is treated as relative to the base
-    /// directory (recovered), matching Asciidoctor.
-    fn resolve_jailed(&self, start: &str, target: &str) -> PathBuf {
-        let mut segments: Vec<String> = Vec::new();
-
-        // The starting directory contributes segments only when it sits inside
-        // the jail: a relative `start` is taken relative to the base directory,
-        // and an absolute `start` keeps only the portion below the base
-        // directory (dropping it entirely if it lies outside).
-        if is_absolute(start) {
-            if let Some(rel) = strip_base_prefix(&self.base_dir, start) {
-                fold_into(&mut segments, &rel);
-            }
-        } else {
-            fold_into(&mut segments, start);
-        }
-
-        // An absolute target is recovered to the jail root: it replaces any
-        // starting segments and is reinterpreted relative to the base
-        // directory.
-        if is_absolute(target) {
-            segments.clear();
-            fold_into(&mut segments, strip_root(target));
-        } else {
-            fold_into(&mut segments, target);
-        }
-
-        let mut path = self.base_dir.clone();
-        for segment in &segments {
-            path.push(segment);
-        }
-        path
+    // An absolute target is recovered to the jail root: it replaces any starting
+    // segments and is reinterpreted relative to the base directory.
+    if is_absolute(target) {
+        segments.clear();
+        fold_into(&mut segments, strip_root(target));
+    } else {
+        fold_into(&mut segments, target);
     }
+
+    let mut path = base_dir.to_path_buf();
+    for segment in &segments {
+        path.push(segment);
+    }
+    path
+}
+
+/// Reads the file at `path`, enforcing the safe mode's jail.
+///
+/// Under a jailed safe mode (`safe`/`server`) the real path is resolved
+/// (following symlinks) and the read is refused when it escapes `base_dir`;
+/// under `unsafe` the file is read directly. A read failure (missing file, a
+/// directory, non-UTF-8 content) or an escaping symlink yields `None`. Shared
+/// by the include and docinfo handlers.
+pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<String> {
+    if jailed(safe) {
+        // Lexical resolution keeps the *path* inside the base directory, but a
+        // symlink under the base directory could still point outside it. Resolve
+        // the real path (following symlinks) and refuse the read when it escapes
+        // the base directory. This is stricter than Asciidoctor, whose jail is
+        // purely lexical (see the module docs); canonicalization also fails for
+        // a path the recovery relocated to somewhere that does not exist, which
+        // likewise leaves the resource unresolved.
+        let real = path.canonicalize().ok()?;
+        if !real.starts_with(base_dir) {
+            return None;
+        }
+        return fs::read_to_string(real).ok();
+    }
+
+    fs::read_to_string(path).ok()
 }
 
 impl IncludeFileHandler for FsIncludeFileHandler {
@@ -160,27 +200,7 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         _parser: &Parser,
     ) -> Option<String> {
         let path = self.resolve(source, target);
-
-        if self.jailed() {
-            // Lexical resolution keeps the *path* inside the base directory, but
-            // a symlink under the base directory could still point outside it.
-            // Resolve the real path (following symlinks) and refuse the read
-            // when it escapes the base directory. This is stricter than
-            // Asciidoctor, whose jail is purely lexical (see the module docs);
-            // canonicalization also fails for a path the recovery relocated to
-            // somewhere that does not exist, which likewise leaves the directive
-            // unresolved.
-            let real = path.canonicalize().ok()?;
-            if !real.starts_with(&self.base_dir) {
-                return None;
-            }
-            return fs::read_to_string(real).ok();
-        }
-
-        // Without a jail, a read failure (missing file, a directory, or
-        // non-UTF-8 content) simply leaves the directive unresolved, which the
-        // parser reports.
-        fs::read_to_string(path).ok()
+        read_confined(&self.base_dir, self.safe, &path)
     }
 }
 

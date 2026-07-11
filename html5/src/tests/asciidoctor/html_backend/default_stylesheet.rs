@@ -28,8 +28,11 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 // - the `@import`/custom-stylesheet "extend" recipe (custom stylesheets are
 //   tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/36);
 // - the `copycss` file copy (tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39);
-// - the docinfo-based customizations (docinfo is tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/40);
 // - the external Asciidoctor Skins themes (out of scope; third-party).
+//
+// The page's docinfo recipe *is* verified: this crate injects head docinfo
+// below the default stylesheet, so we write the page's `docinfo.html` `<style>`
+// to a base directory and check its placement.
 
 // The renderer embeds `html5/assets/asciidoctor-default.css`; the definitive
 // copy is the Asciidoctor stylesheet vendored under `ref/`. Guard against the
@@ -441,10 +444,10 @@ Another way is to create a custom stylesheet, but import the default stylesheet 
 "#
 );
 
-// docinfo injects auxiliary content (e.g. a `<style>` block) into fixed
-// positions of the generated HTML, such as the bottom of the `<head>`. This
-// crate has no docinfo support; supporting docinfo files is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/40.
+// The docinfo recipe: create a `docinfo.html` head docinfo file carrying a
+// `<style>` element, then load it with `-a docinfo=shared`. The setup is prose
+// and a file example (nothing to verify); the placement claim that follows it
+// is verified below.
 non_normative!(
     r#"
 [#customize-docinfo]
@@ -472,8 +475,50 @@ Now tell Asciidoctor to look for and load the docinfo file using the `docinfo` a
 
  $ asciidoctor -a docinfo=shared document.adoc
 
+"#
+);
+
+// A head docinfo file's content is injected at the bottom of the `<head>`,
+// directly below the default stylesheet. Docinfo is disabled at `Secure` (the
+// default), so — like `-a docinfo=shared` on the `adoc` CLI — this converts
+// under a lower safe mode, which also embeds the default stylesheet inline.
+#[test]
+fn head_docinfo_is_inserted_below_the_default_stylesheet() {
+    verifies!(
+        r#"
 The `<style>` element in your docinfo file will be inserted directly below the default stylesheet in the generated HTML.
 
+"#
+    );
+
+    // The page's `docinfo.html`, written to a temp directory as the shared head
+    // docinfo file and enabled with `-a docinfo=shared` — exactly the page's
+    // command (an API-set value, which `Server` honors from the API even though
+    // it forbids a document from setting `docinfo` itself).
+    let docinfo = "<style>\nh1, h2, h3, h4, h5, h6, #toctitle,\n.sidebarblock > .content > .title {\n  color: rgba(0, 0, 0, 0.8);\n}\n</style>";
+    let dir = std::env::temp_dir().join(format!("adoc-ds-docinfo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    std::fs::write(dir.join("docinfo.html"), docinfo).expect("write docinfo.html");
+
+    let html = convert_with(
+        "= Document Title\n\nBody.",
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .attribute("docinfo", "shared")
+            .base_dir(dir.clone()),
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The default stylesheet's closing `</style>` is immediately followed by the
+    // docinfo `<style>`, which in turn is immediately followed by `</head>`: the
+    // docinfo styles sit directly below the default stylesheet, at the bottom of
+    // the head.
+    assert!(html.contains(&format!("</style>\n{docinfo}\n</head>")));
+}
+
+non_normative!(
+    r#"
 [#customize-targets]
 === Make more elements addressable from CSS
 

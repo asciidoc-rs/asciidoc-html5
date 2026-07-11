@@ -32,6 +32,7 @@ use std::{fs, io, path::Path};
 
 use asciidoc_parser::{Document, Parser};
 
+mod docinfo_handler;
 mod html;
 mod include_handler;
 mod options;
