@@ -328,19 +328,32 @@ impl Options {
         }
 
         // Matching Asciidoctor: `Server` and above forbid the *document* from
-        // enabling docinfo — only the API may (Asciidoctor's SERVER "prevents
-        // the document from setting … docinfo"). Unless the caller set `docinfo`
-        // from the API, seed it unset and *silently* locked, so a document
-        // `:docinfo:` assignment is dropped with no warning. (Under `Secure` the
-        // parser disables docinfo resolution outright; the lock is what covers
-        // `Server`, where a document-set value would otherwise be honored and a
-        // docinfo file read.)
-        if mode >= SafeMode::Server && !self.mentions("docinfo") {
-            parser = parser.with_intrinsic_attribute_bool_silent(
-                "docinfo",
-                false,
-                ModificationContext::ApiOnly,
-            );
+        // controlling docinfo — only the API may (Asciidoctor's SERVER "prevents
+        // the document from setting … docinfo"). Re-seed docinfo *silently*
+        // locked (`ApiOnly`) at whatever value the API directives resolved to,
+        // or unset when the API did not touch it, so any document `:docinfo:` is
+        // dropped with no warning and a docinfo file is read only when the API
+        // asked for it. This runs after the directive loop, so it wins — and,
+        // unlike a plain `mentions` check, it also covers a *soft* default: a
+        // soft API value seeds `docinfo` as document-overridable, which would
+        // otherwise let a document enable docinfo reads under `Server`. (Under
+        // `Secure` the parser drops docinfo resolution outright, so the value
+        // locked here is moot there.)
+        if mode >= SafeMode::Server {
+            let ctx = ModificationContext::ApiOnly;
+            parser = match self.last_action("docinfo") {
+                Some(Action::Value(value)) => {
+                    parser.with_intrinsic_attribute_silent("docinfo", value, ctx)
+                }
+                Some(Action::Set) => {
+                    parser.with_intrinsic_attribute_bool_silent("docinfo", true, ctx)
+                }
+                // An explicit API unset, or no API mention at all: docinfo off,
+                // locked against the document.
+                Some(Action::Unset) | None => {
+                    parser.with_intrinsic_attribute_bool_silent("docinfo", false, ctx)
+                }
+            };
         }
 
         // Anchor filesystem-relative resources: `include::` targets and docinfo
@@ -390,6 +403,22 @@ impl Options {
     /// the safe mode would otherwise default.
     fn mentions(&self, name: &str) -> bool {
         self.attributes.iter().any(|d| d.name == name)
+    }
+
+    /// The [`Action`] of the last directive naming `name` (already lowercased),
+    /// or `None` when no directive names it. This is the value [`apply`] leaves
+    /// in force, since it replays the directives in order and a later one for
+    /// the same name wins — regardless of whether it was an override or a soft
+    /// default, both of which set the same value (they differ only in the
+    /// modification context).
+    ///
+    /// [`apply`]: Self::apply
+    fn last_action(&self, name: &str) -> Option<&Action> {
+        self.attributes
+            .iter()
+            .rev()
+            .find(|directive| directive.name == name)
+            .map(|directive| &directive.action)
     }
 }
 
@@ -654,6 +683,46 @@ mod tests {
             &Options::new()
                 .safe_mode(SafeMode::Server)
                 .attribute("docinfo", "shared")
+                .base_dir(dir.clone()),
+        );
+
+        assert!(html.contains("<meta name=\"x\">\n</head>"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn soft_default_docinfo_does_not_let_the_document_enable_it_under_server() {
+        // A *soft* API default leaves an attribute document-overridable, so a
+        // `mentions`-based guard would skip the safe-mode lock. Under `Server`
+        // docinfo must stay API-controlled regardless: a document `:docinfo:`
+        // is still ignored even when the API only soft-touched docinfo (here a
+        // soft unset, which by itself does not enable docinfo).
+        let dir = docinfo_scratch("server-soft", &[("docinfo.html", "<meta name=\"x\">")]);
+
+        let html = convert_with(
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .unset_default("docinfo")
+                .base_dir(dir.clone()),
+        );
+
+        assert!(!html.contains("<meta name=\"x\">"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn soft_default_docinfo_value_is_honored_but_locked_under_server() {
+        // A soft-default docinfo *value* still enables docinfo under `Server`
+        // (the API asked for it), but the document cannot turn it off: the
+        // document's `:docinfo!:` is ignored and the file is still read.
+        let dir = docinfo_scratch("server-soft-val", &[("docinfo.html", "<meta name=\"x\">")]);
+
+        let html = convert_with(
+            "= Doc\n:docinfo!:\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute_default("docinfo", "shared")
                 .base_dir(dir.clone()),
         );
 
