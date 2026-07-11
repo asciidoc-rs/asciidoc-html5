@@ -130,12 +130,12 @@ pub(crate) fn embeddable_stylesheet_target(document: &Document<'_>) -> Option<St
 /// custom stylesheet — a minimal port of its `normalize_web_path(stylesheet,
 /// stylesdir)`.
 ///
-/// A URI (`file:///…`, `https://…`, `data:…`, …) or an absolute path is a
-/// complete reference already and is returned unchanged. Otherwise the
-/// stylesheet is treated as relative to `stylesdir`: the two are joined, `.`
-/// and `..` segments are collapsed, and a relative result is prefixed with
-/// `./`, so a bare `custom.css` becomes `./custom.css` and `custom.css` under
-/// `stylesdir=css` becomes `./css/custom.css`.
+/// A URI (`file:///…`, `https://…`, `data:…`, …), an absolute path, or a
+/// protocol-relative `//host/…` reference is complete already and is returned
+/// unchanged. Otherwise the stylesheet is treated as relative to `stylesdir`:
+/// the two are joined, `.` and `..` segments are collapsed, and a relative
+/// result is prefixed with `./`, so a bare `custom.css` becomes `./custom.css`
+/// and `custom.css` under `stylesdir=css` becomes `./css/custom.css`.
 fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     // A URI is emitted verbatim (Asciidoctor's `preserve_uri_target`).
     if looks_like_uri(stylesheet) {
@@ -160,7 +160,11 @@ fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
 /// Collapses `.`/`..` segments in a posix `path` and prefixes a plain relative
 /// result with `./`, following Asciidoctor's `PathResolver#web_path`.
 fn web_normalize(path: &str) -> String {
-    let (root, rest) = if let Some(rest) = path.strip_prefix('/') {
+    let (root, rest) = if let Some(rest) = path.strip_prefix("//") {
+        // A leading `//` is a protocol-relative (or UNC) authority; Asciidoctor
+        // preserves it rather than collapsing it to a single `/`.
+        ("//", rest)
+    } else if let Some(rest) = path.strip_prefix('/') {
         ("/", rest)
     } else if let Some(rest) = path.strip_prefix("./") {
         ("./", rest)
@@ -1132,6 +1136,13 @@ mod tests {
 
         // A `..` at the web root has nowhere to climb, so it is dropped.
         assert_eq!(normalize_web_path("/../secret.css", ""), "/secret.css");
+
+        // A protocol-relative `//host/…` reference keeps its authority `//`
+        // rather than collapsing to a single `/` (matches Asciidoctor 2.0.26).
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/theme.css", ""),
+            "//cdn.example.com/theme.css"
+        );
 
         // A URI or an absolute path is a complete reference already.
         assert_eq!(
