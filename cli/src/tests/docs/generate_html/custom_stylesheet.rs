@@ -33,6 +33,19 @@ implementation, so the documented behavior is guaranteed.
 
 == Specify the custom stylesheet
 
+"#
+);
+
+// The "Specify the custom stylesheet" walkthrough is exactly the setup this
+// test drives: a _my-theme.css_ next to the document and a header
+// `:stylesheet: my-theme.css`. `adoc my-document.adoc` then embeds that
+// header-named stylesheet, read from the input file's directory, into the
+// `<head>` — self-contained output with no web fonts. This is the CLI
+// counterpart to the API embedding the library crate verifies.
+#[test]
+fn adoc_embeds_a_custom_stylesheet_from_disk() {
+    verifies!(
+        r#"
 Set the `stylesheet` attribute to the path of your stylesheet, relative to the
 document. An empty value (the default) keeps the default stylesheet; any other
 value selects a custom one.
@@ -56,17 +69,6 @@ Then point the `stylesheet` attribute at it from the document header:
 Hello.
 ----
 
-"#
-);
-
-// `adoc my-document.adoc` embeds the header-named custom stylesheet, read from
-// the input file's directory, into the `<head>` — self-contained output with no
-// web fonts. This is the CLI counterpart to the API embedding the library crate
-// verifies.
-#[test]
-fn adoc_embeds_a_custom_stylesheet_from_disk() {
-    verifies!(
-        r#"
 Converting the file from the command line embeds the stylesheet's contents into
 the `<head>`, so the output is self-contained:
 
