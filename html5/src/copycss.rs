@@ -8,10 +8,12 @@
 //! `<link>` resolves. The default stylesheet is written under the public name
 //! `asciidoctor.css`; a custom stylesheet mirrors its `stylesdir` web path.
 //!
-//! `copycss` is on by default in every safe mode except `secure` (see
-//! [`Options::apply`](crate::Options)); a document `:!copycss:` disables it.
-//! When the `stylesheet` attribute is unset outright, `linkcss` and `copycss`
-//! are both ignored.
+//! `copycss` is set by default (by the parser's built-in attributes), so a copy
+//! happens below the `secure` safe mode unless a document `:!copycss:` (or an
+//! API unset) disables it. Under `secure` the stylesheet is linked but never
+//! copied, matching Asciidoctor, which copies only when converting below
+//! `secure`. When the `stylesheet` attribute is unset outright, `linkcss` and
+//! `copycss` are both ignored.
 //!
 //! This module produces the *plan* — a destination path relative to the output
 //! directory and the CSS to write there. Performing the write is the caller's
@@ -20,7 +22,7 @@
 
 use std::path::PathBuf;
 
-use asciidoc_parser::{document::InterpretedValue, Document};
+use asciidoc_parser::{document::InterpretedValue, Document, SafeMode};
 
 use crate::{
     include_handler,
@@ -47,14 +49,22 @@ pub(crate) struct StylesheetCopy {
 /// Computes the [`StylesheetCopy`] the document calls for, or `None` when no
 /// stylesheet should be copied.
 ///
-/// A copy happens only when the stylesheet is *linked*, `copycss` is enabled,
-/// and the `stylesheet` attribute has not been disabled — matching
-/// Asciidoctor. A custom stylesheet that is a URI (or lives under a URI
-/// `stylesdir`), or whose source cannot be read, yields `None`.
+/// A copy happens only when converting below the `secure` safe mode, with the
+/// stylesheet *linked*, `copycss` enabled, and the `stylesheet` attribute not
+/// disabled — matching Asciidoctor. A custom stylesheet that is a URI (or lives
+/// under a URI `stylesdir`), or whose source cannot be read, yields `None`.
 pub(crate) fn stylesheet_copy(
     document: &Document<'_>,
     options: &Options,
 ) -> Option<StylesheetCopy> {
+    // Asciidoctor copies the stylesheet only when converting below `secure`;
+    // under `secure` the stylesheet is linked but never copied. The parser sets
+    // `copycss` by default in every mode, so this safe-mode gate — not the
+    // attribute — is what keeps `secure` from copying.
+    if options.safe_mode_or_default() >= SafeMode::Secure {
+        return None;
+    }
+
     // A disabled stylesheet ignores `linkcss`/`copycss` entirely; otherwise the
     // copy is gated on the stylesheet being linked and `copycss` being enabled.
     if stylesheet_disabled(document) || !links_stylesheet(document) || !copycss_enabled(document) {
@@ -197,6 +207,15 @@ mod tests {
         let (dest, content) = plan("= Doc\n\nBody.", &options).expect("a copy");
         assert_eq!(dest, "css/asciidoctor.css");
         assert_eq!(content, DEFAULT_STYLESHEET);
+    }
+
+    // Under `secure` the stylesheet is linked but never copied, even though the
+    // parser sets `copycss` by default and `linkcss` is on — the safe-mode gate,
+    // not the attribute, is what suppresses the copy.
+    #[test]
+    fn no_copy_under_secure() {
+        let options = Options::new().safe_mode(SafeMode::Secure);
+        assert!(plan("= Doc\n\nBody.", &options).is_none());
     }
 
     // Without `linkcss` (the stylesheet is embedded), nothing is copied even

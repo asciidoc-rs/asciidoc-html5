@@ -366,21 +366,12 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
-        // Matching Asciidoctor: `copycss` is set by default in every safe mode
-        // except `secure`. Unlike `linkcss`, the document may turn it off (its
-        // `:!copycss:` must land by the end of the header to take effect), so
-        // seed it as a document-overridable default (`Anywhere`) below `Secure`
-        // when the API has not spoken. `copycss` only governs whether a *linked*
-        // stylesheet is also copied next to the output (see the
-        // [`copycss`](crate::copycss) module); it never affects the HTML. Under
-        // `Secure` it is left unset, so nothing is copied there by default.
-        if mode < SafeMode::Secure && !self.mentions("copycss") {
-            parser = parser.with_intrinsic_attribute_bool(
-                "copycss",
-                true,
-                ModificationContext::Anywhere,
-            );
-        }
+        // `copycss` needs no seeding here: the parser sets it on by default in
+        // every safe mode (document-overridable), and the copy is gated on the
+        // safe mode being below `Secure` where it is resolved (see the
+        // [`copycss`](crate::copycss) module). `copycss` only governs whether a
+        // *linked* stylesheet is also copied next to the output; it never
+        // affects the HTML.
 
         // Matching Asciidoctor: `Server` and above forbid the *document* from
         // controlling docinfo — only the API may (Asciidoctor's SERVER "prevents

@@ -212,6 +212,20 @@ broken unless you copy the file yourself.
     .expect("convert");
     assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
     assert!(out_dir.join("asciidoctor.css").is_file());
+
+    // The closing note: under `secure`, `copycss` is off by default, so the same
+    // conversion links the stylesheet but writes nothing to the output directory.
+    let secure_dir = dir.join("secure");
+    let mut secure_writer = DirAssetWriter::new(&secure_dir);
+    let secure = convert_file_with_writer(
+        dir.join("my-document.adoc"),
+        &Options::new().safe_mode(SafeMode::Secure),
+        &mut secure_writer,
+    )
+    .expect("convert");
+    assert!(secure.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    assert!(!secure_dir.join("asciidoctor.css").exists());
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -190,6 +190,29 @@ After running this command, _asciidoctor.css_ sits next to _my-document.html_:
  $ ls
  asciidoctor.css  my-document.adoc  my-document.html
 
+"#
+    );
+
+    let dir = scratch("copy");
+    let _ = adoc_stdout(&[
+        dir.join("my-document.adoc")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-o",
+        dir.join("my-document.html")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-a",
+        "linkcss",
+    ]);
+    assert!(dir.join("asciidoctor.css").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The sidebar and closing note describe the library `AssetWriter` API and
+    // the `secure` behavior; the `asciidoc-html5` crate verifies those against
+    // the API, so they are non-normative here.
+    non_normative!(
+        r#"
 ****
 As in Asciidoctor, embedding or linking the stylesheet is the converter's job,
 but copying the file is a separate step. The `asciidoc-html5` library renders
@@ -216,21 +239,6 @@ broken unless you copy the file yourself.
 
 "#
     );
-
-    let dir = scratch("copy");
-    let _ = adoc_stdout(&[
-        dir.join("my-document.adoc")
-            .to_str()
-            .expect("path is UTF-8"),
-        "-o",
-        dir.join("my-document.html")
-            .to_str()
-            .expect("path is UTF-8"),
-        "-a",
-        "linkcss",
-    ]);
-    assert!(dir.join("asciidoctor.css").is_file());
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `adoc -a linkcss -a copycss!` links the stylesheet but does not copy it: no
