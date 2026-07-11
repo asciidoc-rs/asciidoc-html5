@@ -7,8 +7,8 @@ track_file!("docs/modules/generate-html/pages/custom-stylesheet.adoc");
 // This crate's "Apply a Custom Stylesheet" page, tracked from the CLI. Its
 // prose and the API (Rust) invocations are non-normative here — the
 // `asciidoc-html5` crate verifies those against the API, and the sdd tool
-// merges the two crates by line. What this crate verifies is the one `adoc`
-// invocation the page shows: `adoc my-document.adoc` reads the custom
+// merges the two crates by line. What this test suite verifies is the one
+// `adoc` invocation the page shows: `adoc my-document.adoc` reads the custom
 // stylesheet named in the header from the input file's directory and embeds it
 // into the `<head>`, with no web fonts.
 
