@@ -87,6 +87,16 @@ non_normative!(
     r#"
 == Embed or link
 
+"#
+);
+
+// The embed-vs-link decision follows the safe mode (a mode below `secure`
+// embeds; `secure`, or `linkcss`, links), and embedding reads the stylesheet
+// from disk anchored at the base directory the named document establishes.
+#[test]
+fn embed_or_link_follows_the_safe_mode_and_reads_from_disk() {
+    verifies!(
+        r#"
 Which form the `<head>` takes follows the xref:ROOT:safe-modes.adoc[safe mode],
 exactly as for the default stylesheet:
 
@@ -102,7 +112,48 @@ at the input file's directory; through the API, name the document with
 `Options::input_file` (or set `Options::base_dir`).
 
 "#
-);
+    );
+
+    // A stylesheet on disk, next to the named document.
+    let dir = std::env::temp_dir().join(format!("adoc-docs-embedlink-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    std::fs::write(dir.join("theme.css"), "body { color: #ff0000; }\n").expect("write css");
+    let doc = dir.join("my-document.adoc");
+    let source = "= My Document\n:stylesheet: theme.css\n\nHello.";
+
+    // A safe mode below `secure` (here the jailed `server`) embeds the file's
+    // contents, read from the base directory the named document anchors.
+    let embedded = convert_with(
+        source,
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .input_file(doc.clone()),
+    );
+
+    // The `secure` API default links instead, at the normalized web path.
+    let linked = convert_with(source, &Options::new().input_file(doc.clone()));
+
+    // `linkcss` links even under an embedding safe mode.
+    let linkcss = convert_with(
+        source,
+        &Options::new()
+            .safe_mode(SafeMode::Unsafe)
+            .set("linkcss")
+            .input_file(doc.clone()),
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // Below `secure`: the file's contents are embedded, not linked.
+    assert!(embedded.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+    assert!(!embedded.contains("<link rel=\"stylesheet\""));
+
+    // `secure` links at the normalized web path; `linkcss` does the same below it.
+    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./theme.css\">"));
+    assert!(!linked.contains("<style>"));
+    assert!(linkcss.contains("<link rel=\"stylesheet\" href=\"./theme.css\">"));
+    assert!(!linkcss.contains("<style>"));
+}
 
 // Supplied content embeds the CSS inline with no file access, under an
 // embedding safe mode.
