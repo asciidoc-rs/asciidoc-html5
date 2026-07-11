@@ -29,7 +29,7 @@ use std::slice::Iter;
 
 use asciidoc_parser::{
     blocks::{Block, Break, BreakType, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
-    document::{Header, InterpretedValue},
+    document::{DocinfoLocation, Header, InterpretedValue},
     Document, SafeMode,
 };
 
@@ -233,8 +233,17 @@ impl Renderer<'_> {
         // does the same unless the document opts out.
         self.stylesheet(document);
 
+        // Head docinfo is appended to the bottom of the `<head>`, below the
+        // default stylesheet, matching Asciidoctor.
+        self.docinfo(document, DocinfoLocation::Head);
+
         self.line("</head>");
         self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
+
+        // Header docinfo is inserted immediately before the header `<div>`,
+        // whether or not the header itself is suppressed by `noheader` — this
+        // is what lets a docinfo header replace the default one.
+        self.docinfo(document, DocinfoLocation::Header);
 
         // The header is suppressed by `noheader`.
         if !document.is_attribute_set("noheader") {
@@ -253,6 +262,10 @@ impl Renderer<'_> {
             self.line("</div>");
             self.line("</div>");
         }
+
+        // Footer docinfo is inserted immediately after the footer `<div>`, again
+        // whether or not the footer itself is suppressed by `nofooter`.
+        self.docinfo(document, DocinfoLocation::Footer);
 
         self.line("</body>");
         self.line("</html>");
@@ -339,6 +352,27 @@ impl Renderer<'_> {
         }
 
         self.line("</div>");
+    }
+
+    /// Emits the resolved docinfo content for `location`, if any.
+    ///
+    /// Docinfo is auxiliary content the caller supplies from *docinfo files*
+    /// (via a [`DocinfoFileHandler`]) and AsciiDoc injects verbatim into fixed
+    /// positions of the output: the bottom of the `<head>`
+    /// ([`Head`](DocinfoLocation::Head)), immediately before the header `<div>`
+    /// ([`Header`](DocinfoLocation::Header)), and immediately after the footer
+    /// `<div>` ([`Footer`](DocinfoLocation::Footer)). The parser has already
+    /// selected the applicable files (per the `docinfo` attribute),
+    /// concatenated them, and applied `docinfosubs` substitutions, so this
+    /// crate only places the resulting fragment. An empty result emits
+    /// nothing.
+    ///
+    /// [`DocinfoFileHandler`]: asciidoc_parser::parser::DocinfoFileHandler
+    fn docinfo(&mut self, document: &Document<'_>, location: DocinfoLocation) {
+        let content = document.docinfo(location);
+        if !content.is_empty() {
+            self.line(content);
+        }
     }
 
     /// Emits the stylesheet portion of the `<head>`, mirroring Asciidoctor's
@@ -594,6 +628,33 @@ impl Renderer<'_> {
 #[cfg(test)]
 mod tests {
     use crate::{convert, convert_with, Options, SafeMode};
+
+    /// Converts `source` with the given docinfo files (name → content) written
+    /// to a fresh temp directory, under `Safe` safe mode with a primary file of
+    /// `mydoc.adoc` in that directory (so both shared and private docinfo files
+    /// resolve). `Safe` — not `Server` — is used because these sources enable
+    /// docinfo from the *document* (`:docinfo:`), which `Server` and above
+    /// forbid; and `Secure` disables docinfo resolution entirely.
+    ///
+    /// `tag` names the temp directory so concurrent tests do not collide.
+    fn with_docinfo(tag: &str, source: &str, files: &[(&str, &str)]) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-docinfo-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        for (name, content) in files {
+            std::fs::write(dir.join(name), content).expect("write scratch file");
+        }
+
+        let html = convert_with(
+            source,
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file(dir.join("mydoc.adoc")),
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+        html
+    }
 
     /// Converts `source` under a safe mode below `Secure`, so the default
     /// stylesheet is embedded inline (`<style>`) rather than linked. The
@@ -1011,5 +1072,121 @@ mod tests {
             normalize_web_path("/abs/custom.css", "css"),
             "/abs/custom.css"
         );
+    }
+
+    // Docinfo splices caller-supplied content into three fixed positions of the
+    // output: the bottom of the `<head>`, before the header `<div>`, and after
+    // the footer `<div>`. The parser resolves which files apply (per the
+    // `docinfo` attribute) and applies `docinfosubs`; the renderer only places
+    // the result.
+
+    #[test]
+    fn head_docinfo_is_appended_to_the_bottom_of_the_head() {
+        let html = with_docinfo(
+            "head",
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &[("docinfo.html", "<meta name=\"x\" content=\"y\">")],
+        );
+
+        // The head docinfo sits below the stylesheet block and just above the
+        // closing `</head>`.
+        assert!(html.contains("<meta name=\"x\" content=\"y\">\n</head>"));
+
+        let style = html
+            .find("<style>")
+            .or_else(|| html.find("./asciidoctor.css"));
+
+        let docinfo = html.find("<meta name=\"x\"").expect("head docinfo");
+        let head_end = html.find("</head>").expect("head end");
+        assert!(style.expect("stylesheet") < docinfo && docinfo < head_end);
+    }
+
+    #[test]
+    fn header_docinfo_is_inserted_before_the_header_div() {
+        let html = with_docinfo(
+            "header",
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &[("docinfo-header.html", "<div class=\"banner\">Hi</div>")],
+        );
+
+        assert!(html.contains("<div class=\"banner\">Hi</div>\n<div id=\"header\">"));
+    }
+
+    #[test]
+    fn footer_docinfo_is_inserted_after_the_footer_div() {
+        let html = with_docinfo(
+            "footer",
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &[("docinfo-footer.html", "<p>bye</p>")],
+        );
+
+        assert!(html.contains("</div>\n<p>bye</p>\n</body>"));
+    }
+
+    #[test]
+    fn header_docinfo_survives_noheader_and_footer_docinfo_survives_nofooter() {
+        // Docinfo header/footer are emitted whether or not the built-in header
+        // and footer are suppressed — this is what lets docinfo replace them.
+        let html = with_docinfo(
+            "suppressed",
+            "= Doc\n:docinfo: shared\n:noheader:\n:nofooter:\n\nBody.",
+            &[
+                ("docinfo-header.html", "<div class=\"banner\">Hi</div>"),
+                ("docinfo-footer.html", "<p>bye</p>"),
+            ],
+        );
+
+        assert!(!html.contains("<div id=\"header\">"));
+        assert!(!html.contains("<div id=\"footer\">"));
+        assert!(html.contains("<div class=\"banner\">Hi</div>"));
+        assert!(html.contains("<p>bye</p>"));
+    }
+
+    #[test]
+    fn shared_docinfo_is_placed_before_private_docinfo() {
+        // With both scopes enabled, the shared file's content precedes the
+        // private file's, matching Asciidoctor's concatenation order.
+        let html = with_docinfo(
+            "scopes",
+            "= Doc\n:docinfo: shared,private\n\nBody.",
+            &[
+                ("docinfo.html", "<meta name=\"shared\">"),
+                ("mydoc-docinfo.html", "<meta name=\"private\">"),
+            ],
+        );
+
+        let shared = html.find("name=\"shared\"").expect("shared docinfo");
+        let private = html.find("name=\"private\"").expect("private docinfo");
+        assert!(shared < private);
+    }
+
+    #[test]
+    fn docinfosubs_resolves_attribute_references_by_default() {
+        // With `docinfosubs` at its implied default (`attributes`), attribute
+        // references in the docinfo file are resolved.
+        let html = with_docinfo(
+            "subs",
+            "= Doc\n:docinfo: shared\n:project: Widgets\n\nBody.",
+            &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")],
+        );
+
+        assert!(html.contains("<meta name=\"app\" content=\"Widgets\">"));
+    }
+
+    #[test]
+    fn no_base_directory_means_no_docinfo() {
+        // With neither a base directory nor a primary file, no docinfo handler
+        // is installed, so the `docinfo` attribute has no effect. `Safe` (not
+        // `Server`) keeps the document's `:docinfo:` in force, so this isolates
+        // the "no handler" path rather than the safe-mode docinfo lock.
+        let html = convert_with(
+            "= Doc\n:docinfo: shared\n\nBody.",
+            &Options::new().safe_mode(SafeMode::Safe),
+        );
+
+        assert!(html.contains("</head>"));
+
+        // Nothing spliced: head still flows stylesheet → `</head>`.
+        assert!(!html.contains("<meta name=\"x\""));
     }
 }

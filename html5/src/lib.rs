@@ -32,7 +32,9 @@ use std::{fs, io, path::Path};
 
 use asciidoc_parser::{Document, Parser};
 
+mod docinfo_handler;
 mod html;
+mod include_handler;
 mod options;
 mod renderer;
 
@@ -61,7 +63,7 @@ pub fn convert(source: &str) -> String {
 ///
 /// This is the attribute-aware counterpart to [`convert`]: the attributes in
 /// `options` are the equivalent of Asciidoctor's `-a name=value` CLI option and
-/// the `:attributes` API option, supplying (and, for overrides, locking) values
+/// the `attributes` API option, supplying (and, for overrides, locking) values
 /// from outside the document source. See [`Options`] for override vs. soft-set
 /// precedence.
 ///
@@ -116,13 +118,20 @@ pub fn convert_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
 /// counterpart to [`convert_with`]. See [`Options`] for the attributes it
 /// accepts and their override vs. soft-set precedence.
 ///
+/// The `path` is recorded as the primary document (see
+/// [`Options::input_file`]), so its top-level `include::` directives resolve
+/// against the file's own directory, and — unless the caller sets one with
+/// [`Options::base_dir`] — that directory becomes the base directory that
+/// anchors and (under a jailed safe mode) confines include resolution.
+///
 /// # Errors
 ///
 /// Returns the [`io::Error`] from reading `path` — for example, when the file
 /// does not exist or does not contain valid UTF-8.
 pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<String> {
+    let path = path.as_ref();
     let source = fs::read_to_string(path)?;
-    Ok(convert_with(&source, options))
+    Ok(convert_with(&source, &options.clone().input_file(path)))
 }
 
 /// Renders an already-parsed [`Document`] to a complete HTML5 document.
