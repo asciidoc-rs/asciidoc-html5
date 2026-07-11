@@ -1144,6 +1144,20 @@ mod tests {
             "//cdn.example.com/theme.css"
         );
 
+        // Asciidoctor's `web_path` treats the segment after `//` as an ordinary
+        // path segment, not an RFC-3986 authority: a `..` deeper in the path
+        // pops the segment before it and keeps the host, but a `..` right after
+        // the authority pops the host itself. We match Asciidoctor 2.0.26, which
+        // emits `//cdn.example.com/theme.css` and `//theme.css` respectively.
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/a/../theme.css", ""),
+            "//cdn.example.com/theme.css"
+        );
+        assert_eq!(
+            normalize_web_path("//cdn.example.com/../theme.css", ""),
+            "//theme.css"
+        );
+
         // A URI or an absolute path is a complete reference already.
         assert_eq!(
             normalize_web_path("file:///home/user/custom.css", "ignored"),
