@@ -177,6 +177,7 @@ fn web_normalize(path: &str) -> String {
                 Some(&last) if last != ".." => {
                     segments.pop();
                 }
+
                 // A leading `..` at the web root has nowhere to go; drop it.
                 // Below the root, it is kept as a relative step.
                 _ if root == "/" => {}
@@ -1027,6 +1028,7 @@ mod tests {
         assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-theme.css\">"));
         assert!(!html.contains("<style>"));
         assert!(!html.contains("./asciidoctor.css"));
+
         // No web fonts for a custom stylesheet.
         assert!(!html.contains("fonts.googleapis.com"));
     }
@@ -1060,6 +1062,7 @@ mod tests {
                 .stylesheet_content("body { color: #ff0000; }\n"),
         );
         assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+
         // Still no default stylesheet and no web fonts.
         assert!(!html.contains("/*! Asciidoctor default stylesheet"));
         assert!(!html.contains("fonts.googleapis.com"));
@@ -1098,30 +1101,38 @@ mod tests {
 
         // A bare relative stylesheet gains a `./` prefix.
         assert_eq!(normalize_web_path("custom.css", ""), "./custom.css");
+
         // An explicit `./` is preserved (not doubled).
         assert_eq!(normalize_web_path("./custom.css", ""), "./custom.css");
+
         // A relative directory in the stylesheet value is kept.
         assert_eq!(
             normalize_web_path("stylesheets/custom.css", ""),
             "./stylesheets/custom.css"
         );
+
         // `stylesdir` is mirrored into the linked path.
         assert_eq!(
             normalize_web_path("custom.css", "./stylesheets"),
             "./stylesheets/custom.css"
         );
+
         // A trailing separator on `stylesdir` does not double up.
         assert_eq!(normalize_web_path("custom.css", "css/"), "./css/custom.css");
+
         // A `..` segment is collapsed against the styles directory.
         assert_eq!(normalize_web_path("../custom.css", "css"), "./custom.css");
+
         // A relative path that climbs out is a complete reference: it keeps its
         // leading `..` and gains no `./` prefix.
         assert_eq!(
             normalize_web_path("../shared/theme.css", ""),
             "../shared/theme.css"
         );
+
         // A `..` at the web root has nowhere to climb, so it is dropped.
         assert_eq!(normalize_web_path("/../secret.css", ""), "/secret.css");
+
         // A URI or an absolute path is a complete reference already.
         assert_eq!(
             normalize_web_path("file:///home/user/custom.css", "ignored"),
@@ -1177,6 +1188,7 @@ mod tests {
             &[("my-theme.css", "body { color: #ff0000; }\n")],
         );
         assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+
         // A custom stylesheet still gets neither the default CSS nor web fonts.
         assert!(!html.contains("/*! Asciidoctor default stylesheet"));
         assert!(!html.contains("fonts.googleapis.com"));

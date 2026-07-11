@@ -106,6 +106,7 @@ As with the default stylesheet, you can set the `linkcss` document attribute and
             .set("linkcss"),
     );
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-stylesheet.css\">"));
+
     // A custom stylesheet gets neither the default stylesheet nor the web fonts.
     assert!(!html.contains("./asciidoctor.css"));
     assert!(!html.contains("fonts.googleapis.com"));

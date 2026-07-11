@@ -242,6 +242,7 @@ fn custom_stylesheet_is_embedded_from_the_input_directory() {
         output.status
     );
     assert!(html.contains("<style>\nbody { color: #ff0000; }\n</style>"));
+
     // A custom stylesheet suppresses the default stylesheet and the web fonts.
     assert!(!html.contains("/*! Asciidoctor default stylesheet"));
     assert!(!html.contains("fonts.googleapis.com"));
