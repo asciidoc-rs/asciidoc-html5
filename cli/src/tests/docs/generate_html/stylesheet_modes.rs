@@ -74,6 +74,26 @@ command line embeds the stylesheet:
 
  $ adoc my-document.adoc
 
+"#
+    );
+
+    let dir = scratch("embed");
+    let html = adoc_stdout(&[
+        dir.join("my-document.adoc")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-o",
+        "-",
+    ]);
+    assert!(html.contains("<style>"));
+    assert!(!html.contains("./asciidoctor.css"));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The API example and the `secure` alternative it closes with are verified
+    // by the `asciidoc-html5` crate against the API, so they are non-normative
+    // here.
+    non_normative!(
+        r#"
 Through the API, pass a safe mode below `secure` explicitly:
 
 [,rust]
@@ -92,22 +112,6 @@ instead. The same two rules apply to the default and a custom stylesheet alike.
 
 "#
     );
-
-    let dir = scratch("embed");
-    let path = dir.join("my-document.adoc");
-    let path = path.to_str().expect("path is UTF-8");
-
-    let html = adoc_stdout(&[path, "-o", "-"]);
-    assert!(html.contains("<style>"));
-    assert!(!html.contains("./asciidoctor.css"));
-
-    // The alternative the sentence above notes: the same command under `secure`
-    // links the stylesheet instead of embedding it.
-    let secure = adoc_stdout(&[path, "-o", "-", "-S", "secure"]);
-    assert!(secure.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
-    assert!(!secure.contains("<style>"));
-
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `adoc -a linkcss` links to the default stylesheet at `./asciidoctor.css`
@@ -115,7 +119,7 @@ instead. The same two rules apply to the default and a custom stylesheet alike.
 #[test]
 fn link_to_the_stylesheet() {
     verifies!(
-        r##"
+        r#"
 [#link]
 == Link to the stylesheet
 
@@ -136,6 +140,26 @@ Since no stylesheet was specified, the converter links to the default one:
 <link rel="stylesheet" href="./asciidoctor.css">
 ----
 
+"#
+    );
+
+    let dir = scratch("link");
+    let html = adoc_stdout(&[
+        dir.join("my-document.adoc")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-o",
+        "-",
+        "-a",
+        "linkcss",
+    ]);
+    assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The API example and the transitional prose are verified by the
+    // `asciidoc-html5` crate against the API, so they are non-normative here.
+    non_normative!(
+        r##"
 Through the API, `secure` (the default) links, and `linkcss` forces linking
 under any safe mode:
 
@@ -151,19 +175,6 @@ But where does that linked stylesheet file come from? Read on.
 
 "##
     );
-
-    let dir = scratch("link");
-    let html = adoc_stdout(&[
-        dir.join("my-document.adoc")
-            .to_str()
-            .expect("path is UTF-8"),
-        "-o",
-        "-",
-        "-a",
-        "linkcss",
-    ]);
-    assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // `adoc -a linkcss` with a real output file copies _asciidoctor.css_ into the
