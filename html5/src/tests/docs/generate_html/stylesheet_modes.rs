@@ -92,6 +92,15 @@ instead. The same two rules apply to the default and a custom stylesheet alike.
         &Options::new().safe_mode(SafeMode::Server),
     );
     assert!(html.contains("<style>"));
+
+    // The alternative the sentence above notes: under `secure`, the same
+    // document links the stylesheet instead of embedding it.
+    let secure = convert_with(
+        "= My Document\n\nHello.",
+        &Options::new().safe_mode(SafeMode::Secure),
+    );
+    assert!(secure.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    assert!(!secure.contains("<style>"));
 }
 
 // Setting `linkcss` links to the stylesheet instead of embedding it; the

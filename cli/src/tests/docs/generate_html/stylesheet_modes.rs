@@ -94,14 +94,19 @@ instead. The same two rules apply to the default and a custom stylesheet alike.
     );
 
     let dir = scratch("embed");
-    let html = adoc_stdout(&[
-        dir.join("my-document.adoc")
-            .to_str()
-            .expect("path is UTF-8"),
-        "-o",
-        "-",
-    ]);
+    let path = dir.join("my-document.adoc");
+    let path = path.to_str().expect("path is UTF-8");
+
+    let html = adoc_stdout(&[path, "-o", "-"]);
     assert!(html.contains("<style>"));
+    assert!(!html.contains("./asciidoctor.css"));
+
+    // The alternative the sentence above notes: the same command under `secure`
+    // links the stylesheet instead of embedding it.
+    let secure = adoc_stdout(&[path, "-o", "-", "-S", "secure"]);
+    assert!(secure.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    assert!(!secure.contains("<style>"));
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 
