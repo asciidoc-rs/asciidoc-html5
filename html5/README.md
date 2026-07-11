@@ -48,7 +48,10 @@ documentation for the running list of what the renderer aims to emit.
 This crate renders HTML5 only. Asciidoctor's other backends are out of scope;
 in particular, **DocBook and man page output are not planned**, and the renderer
 emits HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5`
-backends) is not supported.**
+backends) is not supported.** The renderer also never reads over the network:
+**fetching a remote resource to embed it (for example, a remote stylesheet via
+`allow-uri-read`) is not planned** — a remote reference is linked, never
+inlined.
 
 ## Why this exists
 

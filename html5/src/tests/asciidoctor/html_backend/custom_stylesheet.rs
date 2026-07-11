@@ -17,9 +17,11 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/custom-stylesheet.a
 // against the base directory under the safe mode's jail); the behavior and its
 // `adoc`/API surface are verified on this project's own
 // xref:generate-html:custom-stylesheet.adoc[] docs page (tracked from both
-// crates) rather than duplicated here. The `copycss` file copy and remote
-// (`http`) stylesheet fetch this crate does not perform stay non-normative;
-// they are tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39.
+// crates) rather than duplicated here. The `copycss` file copy stays
+// non-normative and is tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/39. Fetching a remote
+// (`http`) stylesheet to embed it is *not planned* — neither the library nor
+// the CLI reads over the network — so that path also stays non-normative.
 //
 // Tracked from the library crate only: every verifiable claim is about the HTML
 // `<head>` that `asciidoc_html5::convert`/`convert_with` emits. Where the page

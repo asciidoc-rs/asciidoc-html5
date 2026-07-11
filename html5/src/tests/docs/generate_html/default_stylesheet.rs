@@ -307,9 +307,10 @@ few of Asciidoctor's stylesheet features are not available:
 * *Custom stylesheets* are supported: set the `stylesheet` attribute to apply
 your own in place of the default, embedded or linked per the safe mode. See
 xref:custom-stylesheet.adoc[]. What is _not_ supported is copying a linked
-stylesheet into an output directory (`copycss`) and fetching a remote
-stylesheet to embed; both are tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
+stylesheet into an output directory (`copycss`), tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39]. Fetching a
+remote stylesheet to embed it (`allow-uri-read`) is *not planned*: neither the
+library nor the `adoc` CLI reads over the network.
 "#
     );
 

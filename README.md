@@ -11,7 +11,7 @@ A Rust HTML5 renderer for [AsciiDoc](https://asciidoc.org), built on the [`ascii
 
 As of July 2026, this project is in its infancy and should not be expected to be meaningfully useful. I am building this based on [`asciidoc-parser`](https://github.com/asciidoc-rs/asciidoc-parser), which is largely feature-complete. 
 
-This project targets HTML5 output only. Asciidoctor's other backends are out of scope; in particular, **DocBook and man page output are not planned**, and the renderer emits HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5` backends) is not supported.** If you need to generate DocBook, man pages, or XHTML from AsciiDoc, use [Asciidoctor](https://asciidoctor.org) itself.
+This project targets HTML5 output only. Asciidoctor's other backends are out of scope; in particular, **DocBook and man page output are not planned**, and the renderer emits HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5` backends) is not supported.** If you need to generate DocBook, man pages, or XHTML from AsciiDoc, use [Asciidoctor](https://asciidoctor.org) itself. Neither the library nor the `adoc` CLI reads over the network: **fetching a remote resource to embed it (for example, a remote stylesheet via `allow-uri-read`) is not planned** — a remote reference is linked, never inlined.
 
 ## Why do this?
 

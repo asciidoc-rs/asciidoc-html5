@@ -280,9 +280,11 @@ non_normative!(
 `asciidoc-html5` produces HTML but never writes companion files. With a _linked_
 custom stylesheet you are responsible for placing the stylesheet where the HTML
 references it; there is no `copycss` step that copies it into an output
-directory. Embedding a _remote_ stylesheet (an `http`/`https` URL) is likewise
-unsupported, since the library does not fetch over the network -- a remote
-stylesheet can still be linked, as shown above. Both are tracked in
+directory, which is tracked in
 https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
+
+Embedding a _remote_ stylesheet (an `http`/`https` URL) is *not planned*:
+neither the library nor the `adoc` CLI reads over the network, so a remote
+stylesheet can only be linked, as shown above, never fetched and inlined.
 "#
 );
