@@ -149,10 +149,10 @@ non_normative!(
 
 == API examples
 
-The Rust API exposes three entry points. The file-based `convert_file` shown
-above is the most common. The other two are `convert`, for AsciiDoc you already
-hold in memory, and `convert_document`, for a document you have already parsed.
-Each returns a complete, standalone HTML5 document.
+The Rust API's three conversion entry points each return a complete, standalone
+HTML5 document. The file-based `convert_file` shown above is the most common; the
+other two are `convert`, for AsciiDoc you already hold in memory, and
+`convert_document`, for a document you have already parsed.
 
 Convert AsciiDoc held in memory with `convert`:
 
@@ -161,12 +161,12 @@ Convert AsciiDoc held in memory with `convert`:
 let html = asciidoc_html5::convert("= Hello\n\nWorld.");
 ----
 
-If you already hold a parsed document — for example, to inspect or transform it
-first — render it with `convert_document`:
+To load a document without converting it — say, to inspect or transform it first
+— parse it with `load` and render the result with `convert_document`:
 
 [,rust]
 ----
-let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
+let doc = asciidoc_html5::load("= Hello\n\nWorld.");
 let html = asciidoc_html5::convert_document(&doc);
 ----
 

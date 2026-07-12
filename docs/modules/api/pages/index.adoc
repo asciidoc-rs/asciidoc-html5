@@ -33,16 +33,17 @@ pipeline rather than shelling out to a separate process.
 Converting AsciiDoc happens in two steps:
 
 load:: The AsciiDoc source is parsed into a document model -- an in-memory tree of
-the document's elements. `asciidoc-html5` relies on
-https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] for this step,
-which returns an
-https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`].
+the document's elements. `load` (for a string) and `load_file` (for a file)
+perform this step, returning an
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`]
+(the parsing itself is handled by
+https://crates.io/crates/asciidoc-parser[`asciidoc-parser`]).
 
 convert:: The document model is rendered to a complete HTML5 document.
 
 You can run both steps together with `convert` (for a string) or `convert_file`
-(for a file), or run them separately by parsing with `asciidoc-parser` and then
-rendering the resulting document with `convert_document`.
+(for a file), or run them separately -- `load` (or `load_file`) to parse, then
+`convert_document` to render the document you get back.
 
 Run the two steps together with `convert`:
 
@@ -56,7 +57,7 @@ parsing and rendering:
 
 [,rust]
 ----
-let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
+let doc = asciidoc_html5::load("= Hello\n\nWorld.");
 // inspect or transform `doc` here
 let html = asciidoc_html5::convert_document(&doc);
 ----
@@ -65,18 +66,33 @@ Both paths produce the same HTML5 for the same source.
 
 == API entry points
 
-The library provides three entry points. Each returns a complete, standalone
-HTML5 document.
+The library provides five basic entry points: a _convert_ and a _load_ function
+for each input, plus `convert_document` to render a document you already hold.
+Each parsing entry point also has an option-aware `_with` variant, described
+below.
+
+The convert entry points parse and render in one call, each returning a complete,
+standalone HTML5 document as a `String`:
 
 `asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to HTML5.
 `asciidoc_html5::convert_file`:: reads an AsciiDoc file, parses it, and renders it
 to HTML5, returning the HTML as a `String`.
+
+The load entry points parse only, returning an `asciidoc_parser::Document` you can
+inspect or transform before rendering:
+
+`asciidoc_html5::load`:: parses an AsciiDoc string into a document.
+`asciidoc_html5::load_file`:: reads an AsciiDoc file and parses it into a document.
+
+And `convert_document` renders a document you already hold:
+
 `asciidoc_html5::convert_document`:: renders an already-parsed
 `asciidoc_parser::Document` to HTML5.
 
-Use `convert_file` when your source is a file on disk and `convert` when you
-already hold it in memory. Reach for `convert_document` when you have parsed the
-document separately -- for example, to analyze it before rendering.
+Use the `_file` entry points when your source is a file on disk and the string
+forms when you already hold it in memory. Reach for `load` (or `load_file`)
+followed by `convert_document` when you want to analyze or transform the document
+before rendering it.
 
 == Supplying document attributes
 
@@ -99,6 +115,10 @@ an assignment of the same name in the document header. Use `attribute_default`
 (Asciidoctor's soft-set `name=value@`) to treat your value as a fallback the
 document can override instead. The `set` and `unset` methods turn an attribute on
 or off, matching Asciidoctor's `name` and `name!`.
+
+The load entry points take the same `Options`: `load_with` and `load_file_with`
+are the option-aware counterparts of `load` and `load_file`, applying these
+settings at parse time and returning the document without rendering it.
 
 [NOTE]
 .Known limitation

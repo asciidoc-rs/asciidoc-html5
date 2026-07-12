@@ -53,6 +53,14 @@ source ──► Parser::parse ──► Document ──► convert_document ─
   `Document` (e.g. a future Antora-style generator that parses many files,
   merges catalogs, and calls [`Document::resolve_references`] with a combined
   index before rendering each one).
+- [`load`]/[`load_file`] are the *load* half — parse only, returning the owned
+  `Document<'static>` without rendering — so the two steps above the arrow can be
+  run separately: `load` then `convert_document`. They exist because the load
+  step has to honor [`Options`] (attributes, safe mode, the `include::`/docinfo
+  jail), which the bare `asciidoc-parser` [`Parser`] exposes only as scattered
+  builder methods; `load`/`load_with` apply the whole `Options` bundle in one
+  call, the same seeding [`convert`]/[`convert_with`] perform. By construction
+  `convert_document(&load(source))` equals `convert(source)`.
 
 ## The walker
 
@@ -296,7 +304,11 @@ depends on:
    read-only iterators for building a multi-document cross-reference index.
 
 [`convert`]: crate::convert
+[`convert_with`]: crate::convert_with
 [`convert_document`]: crate::convert_document
+[`load`]: crate::load
+[`load_file`]: crate::load_file
+[`Options`]: crate::Options
 [`Document`]: asciidoc_parser::Document
 [`Document::attribute_value`]: asciidoc_parser::Document::attribute_value
 [`Document::has_attribute`]: asciidoc_parser::Document::has_attribute

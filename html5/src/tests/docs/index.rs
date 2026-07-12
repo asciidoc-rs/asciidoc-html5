@@ -1,8 +1,6 @@
 use std::fs;
 
-use asciidoc_parser::Parser;
-
-use crate::{convert, convert_document, convert_file, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, load, tests::sdd::*};
 
 track_file!("docs/modules/ROOT/pages/index.adoc");
 
@@ -136,10 +134,10 @@ Pass `--help` to the CLI to see every option:
 
 == API examples
 
-The Rust API exposes three entry points. The file-based `convert_file` shown
-above is the most common. The other two are `convert`, for AsciiDoc you already
-hold in memory, and `convert_document`, for a document you have already parsed.
-Each returns a complete, standalone HTML5 document.
+The Rust API's three conversion entry points each return a complete, standalone
+HTML5 document. The file-based `convert_file` shown above is the most common; the
+other two are `convert`, for AsciiDoc you already hold in memory, and
+`convert_document`, for a document you have already parsed.
 
 "#
 );
@@ -174,27 +172,27 @@ non_normative!(
 "#
 );
 
-// The second "API examples" entry: the sentence introducing
+// The second "API examples" entry: the sentence introducing `load` +
 // `convert_document` and its listing.
 #[test]
-fn convert_document_renders_a_parsed_document() {
+fn load_then_convert_document_renders_a_parsed_document() {
     verifies!(
         r#"
-If you already hold a parsed document — for example, to inspect or transform it
-first — render it with `convert_document`:
+To load a document without converting it — say, to inspect or transform it first
+— parse it with `load` and render the result with `convert_document`:
 
 [,rust]
 ----
-let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
+let doc = asciidoc_html5::load("= Hello\n\nWorld.");
 let html = asciidoc_html5::convert_document(&doc);
 ----
 "#
     );
 
-    // `convert_document` renders a document that was parsed separately, giving
-    // the same result as `convert` of the same source.
+    // `load` parses the document separately; rendering it with `convert_document`
+    // gives the same result as `convert` of the same source.
     let source = "= Hello\n\nWorld.";
-    let doc = Parser::default().parse(source);
+    let doc = load(source);
     let html = convert_document(&doc);
 
     assert_eq!(html, convert(source));
