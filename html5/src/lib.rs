@@ -349,4 +349,40 @@ mod writer_tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    // `convert_file_with_writer` honors the `copycss=<path>` read-from override
+    // (Asciidoctor's copy/link split): the bytes are read from the `copycss`
+    // path, but the copy is written to — and the HTML links — the `stylesheet`
+    // web path. This is the API-surface counterpart to the `adoc` copy/link
+    // split the CLI crate verifies and the `stylesheet_copy` unit test resolves.
+    #[test]
+    fn file_writer_honors_the_copycss_read_from_override() {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-lib-copycss-split-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("vendor")).expect("create dirs");
+        std::fs::write(dir.join("main.adoc"), "= Doc\n\nBody.").expect("write adoc");
+        std::fs::write(dir.join("vendor/theme.css"), "body { color: maroon; }").expect("write css");
+
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .attribute("copycss", "vendor/theme.css")
+            .attribute("stylesheet", "published.css");
+
+        let mut writer = RecordingAssetWriter::default();
+        let html = convert_file_with_writer(dir.join("main.adoc"), &options, &mut writer)
+            .expect("convert");
+
+        // The HTML links the stylesheet at its own web path, not the copycss one.
+        assert!(html.contains(r#"<link rel="stylesheet" href="./published.css">"#));
+
+        // The copy is written to that same web path, but its bytes come from the
+        // copycss read-from path.
+        assert_eq!(writer.written.len(), 1);
+        let (path, content) = &writer.written[0];
+        assert_eq!(path.to_string_lossy().replace('\\', "/"), "published.css");
+        assert_eq!(content, b"body { color: maroon; }");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
