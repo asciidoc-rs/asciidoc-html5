@@ -116,8 +116,10 @@ fn entry_points() {
         r#"
 == API entry points
 
-The library provides five entry points: a _convert_ and a _load_ function for
-each input, plus `convert_document` to render a document you already hold.
+The library provides five basic entry points: a _convert_ and a _load_ function
+for each input, plus `convert_document` to render a document you already hold.
+Each parsing entry point also has an option-aware `_with` variant, described
+below.
 
 The convert entry points parse and render in one call, each returning a complete,
 standalone HTML5 document as a `String`:
@@ -243,6 +245,10 @@ or off, matching Asciidoctor's `name` and `name!`.
 
 non_normative!(
     r#"
+The load entry points take the same `Options`: `load_with` and `load_file_with`
+are the option-aware counterparts of `load` and `load_file`, applying these
+settings at parse time and returning the document without rendering it.
+
 [NOTE]
 .Known limitation
 ====
