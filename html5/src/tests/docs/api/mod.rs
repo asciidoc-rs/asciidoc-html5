@@ -5,5 +5,6 @@
 //! non-normative; the Rust snippets each page shows are verified by ordinary
 //! tests in the same module.
 
+mod convert_files;
 mod index;
 mod set_safe_mode;

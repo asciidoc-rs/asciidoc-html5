@@ -1,2 +1,3 @@
 * xref:index.adoc[Using the API]
+** xref:convert-files.adoc[Load and Convert Files]
 ** xref:set-safe-mode.adoc[Set Safe Mode]

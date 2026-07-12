@@ -1,0 +1,131 @@
+= Load and Convert AsciiDoc Files Using the API
+:navtitle: Load and Convert Files
+:description: How to load an AsciiDoc file into a document model and convert an AsciiDoc file to HTML5 with the asciidoc_html5 Rust API.
+
+This page explains how to load and convert AsciiDoc files using the API.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The API calls it shows are
+normative: they are verified against the implementation, so the documented
+behavior is guaranteed.
+====
+
+== Load an AsciiDoc file
+
+When you load AsciiDoc, you parse the document (down to the block level) into a
+document model -- an in-memory tree of the document's elements. `asciidoc-html5`
+relies on https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] for this
+step, which returns an
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`].
+That object contains the full block structure of the AsciiDoc document.
+
+[NOTE]
+====
+Asciidoctor defers inline parsing until conversion, so a freshly loaded document
+has not yet processed its inline content. `asciidoc-parser` differs here: it
+applies inline substitutions eagerly, while parsing, so each block already
+carries its rendered inline HTML by the time `parse` returns.
+====
+
+Let's assume we're working with the following AsciiDoc document:
+
+._document.adoc_
+[,asciidoc]
+----
+= Document Title
+
+The main content.
+----
+
+To read this source file from disk and parse it into a document model, call
+`load_file`:
+
+[,rust]
+----
+let doc = asciidoc_html5::load_file("document.adoc")?;
+----
+
+If you already hold the source in memory, parse it with `load` instead. Both
+return an `asciidoc_parser::Document` you can inspect and later render with
+`convert_document`.
+
+Using the `doc` value, you can get information about the document, such as the
+document title:
+
+[,rust]
+----
+assert_eq!(doc.doctitle(), Some("Document Title"));
+----
+
+You can also inspect the document attributes:
+
+[,rust]
+----
+assert!(doc.has_attribute("doctitle"));
+----
+
+Going deeper, you can find blocks in the document, such as all the top-level
+paragraph blocks, by filtering the document's blocks on their context:
+
+[,rust]
+----
+use asciidoc_parser::blocks::IsBlock;
+
+let paragraphs = doc
+    .nested_blocks()
+    .filter(|block| block.resolved_context().as_ref() == "paragraph")
+    .count();
+assert_eq!(paragraphs, 1);
+----
+
+However, if you're only interested in converting the AsciiDoc source, then it's
+better to use the `convert_file` entry point.
+
+== Convert an AsciiDoc file
+
+When you convert AsciiDoc, you parse and convert the document to the output
+format in a single step. `asciidoc-html5` produces HTML5 -- the only output
+format it supports, and the same format the `adoc` CLI produces.
+
+Let's again assume we're working with the following AsciiDoc document:
+
+._document.adoc_
+[,asciidoc]
+----
+= Document Title
+
+The main content.
+----
+
+To convert this source file to HTML5, call `convert_file`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert_file("document.adoc")?;
+----
+
+`convert_file` reads the file, parses it, and returns the rendered HTML5 as a
+`String`. Unlike Asciidoctor, it does not write an output file: what you do with
+the returned string is up to you. To write it to disk under a derived or chosen
+name, use the xref:ROOT:convert-your-first-file.adoc[`adoc` CLI], or write the
+string yourself:
+
+[,rust]
+----
+let html = asciidoc_html5::convert_file("document.adoc")?;
+std::fs::write("out.html", html)?;
+----
+
+[NOTE]
+.Known limitation
+====
+Asciidoctor's `convert_file` accepts a `:to_file` option to control the output
+file and a `:backend` option to select a different converter -- for example,
+`backend: 'docbook'` to emit DocBook XML. `asciidoc-html5` offers neither: it
+returns HTML5 as a `String`, leaving the file writing to the caller (or the
+`adoc` CLI), and DocBook and the other Asciidoctor backends are not planned.
+HTML5 is the only output format.
+====
+
+That covers the basics of loading and converting AsciiDoc using the API.

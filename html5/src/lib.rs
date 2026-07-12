@@ -26,11 +26,21 @@
 //! # Ok::<(), std::io::Error>(())
 //! ```
 //!
+//! To *load* a document — parse it without converting — use [`load`] (or
+//! [`load_file`]), inspect or transform the returned [`Document`], then render
+//! it with [`convert_document`]:
+//!
+//! ```
+//! let doc = asciidoc_html5::load("= Hello\n\nWorld.");
+//! assert_eq!(doc.doctitle(), Some("Hello"));
+//! let html = asciidoc_html5::convert_document(&doc);
+//! ```
+//!
 //! [Asciidoctor]: https://asciidoctor.org
 
 use std::{fs, io, path::Path};
 
-use asciidoc_parser::{Document, Parser};
+use asciidoc_parser::Parser;
 
 mod asset_writer;
 mod copycss;
@@ -40,7 +50,7 @@ mod include_handler;
 mod options;
 mod renderer;
 
-pub use asciidoc_parser::SafeMode;
+pub use asciidoc_parser::{Document, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
 pub use options::Options;
 
@@ -54,9 +64,11 @@ mod tests;
 /// the resulting [`Document`] to [`convert_document`].
 ///
 /// For callers that already hold a parsed [`Document`] (for example, to inspect
-/// or transform it first), call [`convert_document`] directly. To supply
-/// document attributes from outside the source (Asciidoctor's `-a name=value`),
-/// or to embed a custom stylesheet, use [`convert_with`].
+/// or transform it first), call [`convert_document`] directly; produce that
+/// document with [`load`]/[`load_file`], which parse under [`Options`] the way
+/// this function does. To supply document attributes from outside the source
+/// (Asciidoctor's `-a name=value`), or to embed a custom stylesheet, use
+/// [`convert_with`].
 pub fn convert(source: &str) -> String {
     convert_with(source, &Options::default())
 }
@@ -89,8 +101,7 @@ pub fn convert(source: &str) -> String {
 /// assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
 /// ```
 pub fn convert_with(source: &str, options: &Options) -> String {
-    let mut parser = options.apply(Parser::default());
-    let document = parser.parse(source);
+    let document = load_with(source, options);
     render(&document, options)
 }
 
@@ -124,8 +135,7 @@ pub fn convert_with_writer(
     options: &Options,
     writer: &mut impl AssetWriter,
 ) -> io::Result<String> {
-    let mut parser = options.apply(Parser::default());
-    let document = parser.parse(source);
+    let document = load_with(source, options);
     let html = render(&document, options);
     emit_stylesheet_copy(&document, options, writer)?;
     Ok(html)
@@ -247,7 +257,108 @@ pub fn convert_file_with_writer<P: AsRef<Path>>(
     convert_with_writer(&source, &options.clone().input_file(path), writer)
 }
 
+/// Parses `source` as AsciiDoc into a [`Document`] — the *load* step on its
+/// own, without converting.
+///
+/// This is the parse-only counterpart to [`convert`]: where `convert` parses
+/// and renders in one call, `load` stops at the parsed [`Document`], the
+/// in-memory model you can inspect (its title, attributes, and block structure)
+/// or transform before rendering it with [`convert_document`]. It mirrors
+/// Asciidoctor's `load` entry point.
+///
+/// The returned document is fully owned (`Document<'static>`): the parser
+/// copies what it needs from `source`, so the document does not borrow from it
+/// and can be returned, stored, or moved freely.
+///
+/// `load` parses under the default [`Options`] — the same configuration
+/// [`convert`] uses — so `convert_document(&load(source))` equals
+/// `convert(source)`. To parse under externally-supplied attributes or a chosen
+/// safe mode, use [`load_with`].
+///
+/// # Examples
+///
+/// ```
+/// let doc = asciidoc_html5::load("= Hello\n\nWorld.");
+/// assert_eq!(doc.doctitle(), Some("Hello"));
+/// ```
+pub fn load(source: &str) -> Document<'static> {
+    load_with(source, &Options::default())
+}
+
+/// Parses `source` as AsciiDoc into a [`Document`], applying the parse-time
+/// settings carried by `options` — the *load* step with [`Options`].
+///
+/// This is the parse-only counterpart to [`convert_with`] and the
+/// [`Options`]-aware counterpart to [`load`]. `options` seeds the parser
+/// exactly as [`convert_with`] does: the externally-supplied document
+/// attributes (with override vs. soft-default precedence), the [safe
+/// mode](Options::safe_mode), and — when the caller names a base directory or
+/// primary file — `include::` and docinfo resolution confined by the safe
+/// mode's jail. These settings live across several lower-level
+/// `asciidoc-parser` [`Parser`] builder methods; `load_with` is the single call
+/// that applies the whole [`Options`] bundle.
+///
+/// Options that affect only *rendering* — a custom stylesheet's embedded
+/// contents (see [`Options::stylesheet_content`]) — have no effect here, since
+/// `load_with` does not render. When those matter, render with [`convert_with`]
+/// (passing the same `options`) rather than [`convert_document`], which renders
+/// without them.
+pub fn load_with(source: &str, options: &Options) -> Document<'static> {
+    let mut parser = options.apply(Parser::default());
+    parser.parse(source)
+}
+
+/// Reads the AsciiDoc file at `path` and parses it into a [`Document`] — the
+/// *load* step for a file on disk.
+///
+/// This is the file-based counterpart to [`load`] and the parse-only
+/// counterpart to [`convert_file`]: it reads `path` as UTF-8 and parses the
+/// contents, returning the owned [`Document`]. It mirrors Asciidoctor's
+/// `load_file` entry point.
+///
+/// # Errors
+///
+/// Returns the [`io::Error`] from reading `path` — for example, when the file
+/// does not exist or does not contain valid UTF-8.
+///
+/// # Examples
+///
+/// ```no_run
+/// let doc = asciidoc_html5::load_file("document.adoc")?;
+/// println!("{:?}", doc.doctitle());
+/// # Ok::<(), std::io::Error>(())
+/// ```
+pub fn load_file<P: AsRef<Path>>(path: P) -> io::Result<Document<'static>> {
+    load_file_with(path, &Options::default())
+}
+
+/// Reads the AsciiDoc file at `path` and parses it into a [`Document`],
+/// applying the parse-time settings carried by `options` — the *load* step for
+/// a file, with [`Options`].
+///
+/// This is the file-based counterpart to [`load_with`] and the parse-only
+/// counterpart to [`convert_file_with`]. Like [`convert_file_with`], it records
+/// `path` as the primary document (see [`Options::input_file`]), so the file's
+/// top-level `include::` directives resolve against its own directory and —
+/// absent an explicit [`base_dir`](Options::base_dir) — that directory anchors
+/// and (under a jailed safe mode) confines include and docinfo resolution.
+///
+/// # Errors
+///
+/// Returns the [`io::Error`] from reading `path` — for example, when the file
+/// does not exist or does not contain valid UTF-8.
+pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<Document<'static>> {
+    let path = path.as_ref();
+    let source = fs::read_to_string(path)?;
+    Ok(load_with(&source, &options.clone().input_file(path)))
+}
+
 /// Renders an already-parsed [`Document`] to a complete HTML5 document.
+///
+/// This is the render-only half of the load-and-convert split: pair it with
+/// [`load`]/[`load_file`] (which parse under [`Options`]) to run the load and
+/// convert steps separately, capturing or transforming the [`Document`] in
+/// between.
 ///
 /// The returned string is a standalone HTML5 document: a `<!DOCTYPE html>`
 /// declaration followed by `<html>`, a `<head>` carrying the document title and
@@ -382,6 +493,90 @@ mod writer_tests {
         let (path, content) = &writer.written[0];
         assert_eq!(path.to_string_lossy().replace('\\', "/"), "published.css");
         assert_eq!(content, b"body { color: maroon; }");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod load_tests {
+    use asciidoc_parser::{blocks::IsBlock as _, document::InterpretedValue};
+
+    use crate::{
+        convert, convert_document, convert_with, load, load_file, load_file_with, load_with,
+        Options, SafeMode,
+    };
+
+    // `load` returns the parsed document, and rendering it with
+    // `convert_document` reproduces `convert` — the load and convert steps split
+    // apart and reassembled match the combined path.
+    #[test]
+    fn load_then_convert_document_matches_convert() {
+        let source = "= Hello\n\nWorld.";
+
+        let doc = load(source);
+        assert_eq!(doc.doctitle(), Some("Hello"));
+        assert!(doc.nested_blocks().next().is_some());
+
+        assert_eq!(convert_document(&doc), convert(source));
+    }
+
+    // `load_with` applies the `Options` at parse time: an externally-supplied
+    // attribute lands in the document model, and rendering the loaded document
+    // matches `convert_with` for the same options.
+    #[test]
+    fn load_with_applies_options_at_parse_time() {
+        let source = "= Doc\n\nBody.";
+        let opts = Options::new()
+            .safe_mode(SafeMode::Server)
+            .attribute("author", "Ada Lovelace");
+
+        let doc = load_with(source, &opts);
+        assert_eq!(
+            doc.attribute_value("author"),
+            InterpretedValue::Value("Ada Lovelace".to_string())
+        );
+
+        // The separately loaded-and-rendered path equals the combined one.
+        assert_eq!(convert_document(&doc), convert_with(source, &opts));
+    }
+
+    // `load_file` reads and parses a file into an owned document, the file-based
+    // counterpart to `load`.
+    #[test]
+    fn load_file_reads_and_parses() {
+        let source = "= From File\n\nBody.";
+        let path = std::env::temp_dir().join(format!(
+            "asciidoc-html5-load-file-{}.adoc",
+            std::process::id()
+        ));
+        std::fs::write(&path, source).expect("write temp input");
+
+        let doc = load_file(&path).expect("load_file reads and parses");
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(doc.doctitle(), Some("From File"));
+    }
+
+    // `load_file_with` records the file as the primary document, so a relative
+    // top-level `include::` resolves against the file's own directory — the same
+    // anchoring `convert_file_with` performs.
+    #[test]
+    fn load_file_with_anchors_includes_at_the_file_directory() {
+        let dir = std::env::temp_dir().join(format!("adoc-load-file-inc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        std::fs::write(dir.join("main.adoc"), "= Doc\n\ninclude::part.adoc[]\n")
+            .expect("write main");
+        std::fs::write(dir.join("part.adoc"), "Included body.\n").expect("write part");
+
+        let doc = load_file_with(
+            dir.join("main.adoc"),
+            &Options::new().safe_mode(SafeMode::Safe),
+        )
+        .expect("load_file_with reads and parses");
+
+        // The include resolved, so the rendered document carries the included text.
+        assert!(convert_document(&doc).contains("Included body."));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
