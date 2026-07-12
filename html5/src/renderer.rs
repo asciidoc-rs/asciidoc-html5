@@ -841,8 +841,12 @@ mod tests {
 
     #[test]
     fn doctype_drives_body_class() {
+        // `article` is the only doctype this renderer models, so `Options::apply`
+        // pins `doctype` to `article` and locks it against the document. A
+        // document `:doctype: book` is therefore dropped and the `<body class>`
+        // stays `article` (see the pin and its unit tests in `options.rs`).
         let html = convert("= Doc\n:doctype: book\n\nBody.");
-        assert!(html.contains("<body class=\"book\">"));
+        assert!(html.contains("<body class=\"article\">"));
     }
 
     #[test]

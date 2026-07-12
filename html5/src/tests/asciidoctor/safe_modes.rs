@@ -9,11 +9,11 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // link-vs-embed choice (`SECURE` "prevents access to stylesheets" and so links
 // it, while a lower mode embeds it inline), and the `docfile`/`docdir`
 // concealment under `SERVER`/`SECURE`. Other mode effects this crate honors —
-// the `docinfo` and `backend` restrictions, and (through asciidoc-parser's own
-// safe mode, which this crate sets; see #37) include directives and URI reads —
-// are exercised by unit tests elsewhere, so their spans stay non-normative
-// here. What remains unsurfaced — icons, `data-uri`, `source-highlighter`,
-// `doctype`, and SVG modes — is likewise non-normative.
+// the `docinfo`, `backend`, and `doctype` restrictions, and (through
+// asciidoc-parser's own safe mode, which this crate sets; see #37) include
+// directives and URI reads — are exercised by unit tests elsewhere, so their
+// spans stay non-normative here. What remains unsurfaced — icons, `data-uri`,
+// `source-highlighter`, and SVG modes — is likewise non-normative.
 
 non_normative!(
     r#"
@@ -98,17 +98,17 @@ Its integer value is `1`.
 
 // SERVER's host-revealing intrinsics `docfile` and `docdir` are enforced here:
 // `docfile` is trimmed to its basename and `docdir` is emptied by
-// `Options::apply`, verified below. Docinfo and backend are likewise enforced.
-// A document `:docinfo:` is ignored under SERVER and above, so only an API
-// value enables docinfo. Backend goes further than the page: because html5 is
-// the only backend this crate produces, `backend` is pinned to `html5` and
-// locked against the document (and the API) in *every* safe mode — subsuming
-// SERVER's restriction rather than merely matching it. Docinfo, backend,
-// docfile, and docdir are all covered by unit tests in `options.rs`. The
-// remaining document-set restrictions are not modeled yet, each tracked for
-// later implementation: source-highlighter
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45) and doctype
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46); enforcing those is
+// `Options::apply`, verified below. Docinfo, backend, and doctype are likewise
+// enforced. A document `:docinfo:` is ignored under SERVER and above, so only
+// an API value enables docinfo. Backend and doctype go further than the page:
+// because html5 is the only backend this crate produces and `article` the only
+// doctype it models, `backend` is pinned to `html5` and `doctype` to `article`,
+// each locked against the document (and the API) in *every* safe mode —
+// subsuming SERVER's restriction rather than merely matching it. Docinfo,
+// backend, doctype, docfile, and docdir are all covered by unit tests in
+// `options.rs`. The remaining document-set restriction is not modeled yet,
+// tracked for later implementation: source-highlighter
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45); enforcing it is
 // tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
@@ -142,10 +142,9 @@ This level trims `docfile` to its relative path and prevents the document from:
     assert!(!html.contains("/docs/guide"), "{html}");
 }
 
-// The `setting …` bullet folds the docinfo and backend restrictions (both
-// enforced, and covered by the `Options` tests) together with
-// source-highlighter and doctype (tracked in #45/#46), so it stays
-// non-normative here.
+// The `setting …` bullet folds the docinfo, backend, and doctype restrictions
+// (all enforced, and covered by the `Options` tests) together with
+// source-highlighter (tracked in #45), so it stays non-normative here.
 non_normative!(
     r#"
 * setting `source-highlighter`, `doctype`, `docinfo` and `backend`
@@ -197,9 +196,10 @@ Its integer value is `10`.
 
 // SECURE inherits SERVER's `docdir`/`docfile` concealment — `docdir` emptied,
 // `docfile` reduced to its basename — enforced in `Options::apply` and verified
-// below. Docinfo and backend are likewise surfaced: SECURE disables docinfo (no
-// docinfo file is read) and forces the backend to `html5`, locked against the
-// document (covered by unit tests in `options.rs`). The remaining SECURE
+// below. Docinfo, backend, and doctype are likewise surfaced: SECURE disables
+// docinfo (no docinfo file is read), forces the backend to `html5`, and pins
+// the doctype to `article`, each locked against the document (covered by unit
+// tests in `options.rs`). The remaining SECURE
 // restrictions are not surfaced by this renderer yet, each tracked for later
 // implementation: icons
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
