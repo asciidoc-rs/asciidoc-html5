@@ -8,3 +8,4 @@ mod sdd;
 
 mod asciidoctor;
 mod docs;
+mod output_dir;

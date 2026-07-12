@@ -290,6 +290,24 @@ mod tests {
         assert!(plan("= Doc\n\nBody.", &options).is_none());
     }
 
+    // `relative_web_path` keeps only web paths that stay within the output
+    // directory: it strips the `./` a contained path carries and rejects an
+    // empty result, an absolute path, a climbing `../` path, and a URI — none of
+    // which `normalize_web_path` prefixes with `./`.
+    #[test]
+    fn relative_web_path_selects_contained_targets() {
+        use super::relative_web_path;
+
+        assert_eq!(
+            relative_web_path("./css/theme.css"),
+            Some(PathBuf::from("css/theme.css"))
+        );
+        assert_eq!(relative_web_path("./"), None);
+        assert_eq!(relative_web_path("../up.css"), None);
+        assert_eq!(relative_web_path("/abs.css"), None);
+        assert_eq!(relative_web_path("https://example.org/x.css"), None);
+    }
+
     /// Creates a fresh temp directory named after `tag`, populated with `files`
     /// (relative name → content), for a copy test to read a source from.
     fn scratch(tag: &str, files: &[(&str, &str)]) -> PathBuf {

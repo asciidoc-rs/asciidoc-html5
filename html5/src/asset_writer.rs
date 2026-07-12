@@ -100,13 +100,11 @@ impl AssetWriter for DirAssetWriter {
             }
         }
 
-        // Create the destination's parent, unless it is empty (a bare file name
-        // rooted at an empty root writes into the current directory, which needs
-        // no `create_dir_all`).
-        if let Some(parent) = dest.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        // Create the destination's parent, unless there is none or it is empty
+        // (a bare file name, or a name rooted at an empty root, writes into the
+        // current directory, which needs no `create_dir_all`).
+        if let Some(parent) = dest.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent)?;
         }
         fs::write(dest, content)
     }
@@ -167,5 +165,34 @@ mod tests {
 
         assert_eq!(std::fs::read(root.join("escape.css")).unwrap(), b"x");
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // An interior `..` pops the segment before it rather than being dropped, so
+    // `a/../b.css` folds to `b.css` at the root (no `a` directory is created).
+    #[test]
+    fn folds_interior_parent_segments() {
+        let root = std::env::temp_dir().join(format!("adoc-asset-fold-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut writer = DirAssetWriter::new(&root);
+
+        writer
+            .write_asset(Path::new("a/../b.css"), b"y")
+            .expect("write");
+
+        assert_eq!(std::fs::read(root.join("b.css")).unwrap(), b"y");
+        assert!(!root.join("a").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // A destination with no parent directory to create (here the path clamps
+    // away to the root itself) skips `create_dir_all` and attempts the write
+    // directly rather than calling `create_dir_all("")`.
+    #[test]
+    fn destination_without_a_parent_skips_directory_creation() {
+        // Root `.` with a path that clamps to nothing leaves the destination at
+        // `.`, whose parent is empty; writing to a directory fails, but the point
+        // is that no `create_dir_all("")` is attempted first.
+        let mut writer = DirAssetWriter::new(".");
+        assert!(writer.write_asset(Path::new(".."), b"z").is_err());
     }
 }
