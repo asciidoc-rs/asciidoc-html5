@@ -95,13 +95,17 @@ Its integer value is `1`.
 
 // SERVER's host-revealing intrinsics `docfile` and `docdir` are enforced here:
 // `docfile` is trimmed to its basename and `docdir` is emptied by
-// `Options::apply`, verified below. Docinfo's SERVER restriction is likewise
-// enforced — a document `:docinfo:` is ignored under SERVER and above, so only
-// an API value enables docinfo. The remaining document-set restrictions are not
-// modeled yet, each tracked for later implementation: source-highlighter
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), and backend
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/47); enforcing those is
+// `Options::apply`, verified below. Docinfo and backend are likewise enforced.
+// A document `:docinfo:` is ignored under SERVER and above, so only an API
+// value enables docinfo. Backend goes further than the page: because html5 is
+// the only backend this crate produces, `backend` is pinned to `html5` and
+// locked against the document (and the API) in *every* safe mode — subsuming
+// SERVER's restriction rather than merely matching it. Docinfo, backend,
+// docfile, and docdir are all covered by unit tests in `options.rs`. The
+// remaining document-set restrictions are not modeled yet, each tracked for
+// later implementation: source-highlighter
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45) and doctype
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46); enforcing those is
 // tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
@@ -135,9 +139,10 @@ This level trims `docfile` to its relative path and prevents the document from:
     assert!(!html.contains("/docs/guide"), "{html}");
 }
 
-// The `setting …` bullet folds the docinfo restriction (enforced, and covered
-// by the `Options` tests) together with source-highlighter, doctype, and
-// backend (tracked in #45/#46/#47), so it stays non-normative here.
+// The `setting …` bullet folds the docinfo and backend restrictions (both
+// enforced, and covered by the `Options` tests) together with
+// source-highlighter and doctype (tracked in #45/#46), so it stays
+// non-normative here.
 non_normative!(
     r#"
 * setting `source-highlighter`, `doctype`, `docinfo` and `backend`
@@ -189,14 +194,15 @@ Its integer value is `10`.
 
 // SECURE inherits SERVER's `docdir`/`docfile` concealment — `docdir` emptied,
 // `docfile` reduced to its basename — enforced in `Options::apply` and verified
-// below. Docinfo is likewise surfaced: SECURE disables it (no docinfo file is
-// read). The remaining SECURE restrictions are not surfaced by this renderer
-// yet, each tracked for later implementation: icons
+// below. Docinfo and backend are likewise surfaced: SECURE disables docinfo (no
+// docinfo file is read) and forces the backend to `html5`, locked against the
+// document (covered by unit tests in `options.rs`). The remaining SECURE
+// restrictions are not surfaced by this renderer yet, each tracked for later
+// implementation: icons
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
-// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), backend
-// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), and source
-// highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), and
+// source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
 // stylesheets," which is why it links the stylesheet rather than embedding it —

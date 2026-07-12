@@ -490,6 +490,23 @@ impl Options {
         parser =
             parser.with_intrinsic_attribute_silent("docdir", docdir, ModificationContext::ApiOnly);
 
+        // html5 is the only backend this crate produces, so `backend` is pinned
+        // to `html5` in *every* safe mode and locked against the document.
+        // Seeding it as a *silent* `ApiOnly` intrinsic drops any document
+        // `:backend:` with no warning; running after the directive loop makes it
+        // win over an API `backend` directive or a *soft* API default too. This
+        // goes further than Asciidoctor — whose SERVER "disallows the document
+        // from setting attributes that would affect conversion" (backend among
+        // them) and whose SECURE "sets the backend to html5," while lower modes
+        // honor a document `:backend:` — precisely because a non-html5 backend
+        // is out of scope here: the `{backend}` intrinsic always reflects what
+        // is actually rendered.
+        parser = parser.with_intrinsic_attribute_silent(
+            "backend",
+            "html5",
+            ModificationContext::ApiOnly,
+        );
+
         // Anchor filesystem-relative resources: `include::` targets and docinfo
         // files. Naming the primary file lets the parser resolve top-level
         // includes against that file's directory and derive the `docname` for
@@ -1200,5 +1217,67 @@ mod tests {
             html.contains("name=[{docname}] suffix=[{docfilesuffix}]"),
             "{html}"
         );
+    }
+
+    // The backend the document sees is reachable through the `{backend}`
+    // intrinsic reference. html5 is the only backend this crate produces, so
+    // `apply` pins `backend` to `html5` in every safe mode and locks it against
+    // the document and the API alike — going further than Asciidoctor, which
+    // only restricts the document at `Server`/`Secure`.
+
+    // A helper document that echoes the resolved `backend` intrinsic into the
+    // body, where it lands in the rendered output.
+    const BACKEND_ECHO: &str = "= Doc\n:backend: docbook\n\nbackend={backend}";
+
+    #[test]
+    fn document_set_backend_is_pinned_to_html5_in_every_mode() {
+        // A document `:backend:` is dropped and `{backend}` resolves to html5
+        // regardless of the safe mode — including the lower modes where
+        // Asciidoctor would honor it.
+        for mode in [
+            SafeMode::Unsafe,
+            SafeMode::Safe,
+            SafeMode::Server,
+            SafeMode::Secure,
+        ] {
+            let html = convert_with(BACKEND_ECHO, &Options::new().safe_mode(mode));
+            assert!(html.contains("backend=html5"), "{mode:?} should pin html5");
+            assert!(
+                !html.contains("backend=docbook"),
+                "{mode:?} dropped docbook"
+            );
+        }
+    }
+
+    #[test]
+    fn api_set_backend_is_also_pinned_to_html5() {
+        // The pin overrides the API too: an API `backend` directive does not
+        // survive in any mode (unlike, e.g., `docinfo`, which the API may set).
+        for mode in [SafeMode::Unsafe, SafeMode::Server, SafeMode::Secure] {
+            let html = convert_with(
+                BACKEND_ECHO,
+                &Options::new()
+                    .safe_mode(mode)
+                    .attribute("backend", "docbook5"),
+            );
+            assert!(html.contains("backend=html5"), "{mode:?} should pin html5");
+            assert!(!html.contains("docbook"), "{mode:?} dropped the API value");
+        }
+    }
+
+    #[test]
+    fn soft_default_backend_does_not_survive() {
+        // A *soft* API default leaves an attribute document-overridable, so a
+        // `mentions`-based guard would skip the pin. The backend stays html5
+        // regardless: neither the document's `:backend:` nor the API's soft
+        // default takes effect.
+        let html = convert_with(
+            BACKEND_ECHO,
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .attribute_default("backend", "docbook5"),
+        );
+        assert!(html.contains("backend=html5"));
+        assert!(!html.contains("docbook"));
     }
 }
