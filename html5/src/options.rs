@@ -507,6 +507,24 @@ impl Options {
             ModificationContext::ApiOnly,
         );
 
+        // `article` is the only doctype this renderer models, so `doctype` is
+        // pinned to `article` in *every* safe mode and locked against the
+        // document, mirroring the `backend` pin above. Seeding it as a *silent*
+        // `ApiOnly` intrinsic drops any document `:doctype:` (e.g. `book`,
+        // `manpage`) with no warning; running after the directive loop makes it
+        // win over an API `doctype` directive or a *soft* API default too. This
+        // goes further than Asciidoctor — whose SERVER "disallows the document
+        // from setting attributes that would affect conversion" (doctype among
+        // them) while lower modes honor a document `:doctype:` — precisely
+        // because non-`article` doctypes are out of scope here: the `{doctype}`
+        // intrinsic (and the `<body class>` it drives) always reflects what is
+        // actually rendered.
+        parser = parser.with_intrinsic_attribute_silent(
+            "doctype",
+            "article",
+            ModificationContext::ApiOnly,
+        );
+
         // Anchor filesystem-relative resources: `include::` targets and docinfo
         // files. Naming the primary file lets the parser resolve top-level
         // includes against that file's directory and derive the `docname` for
@@ -1349,5 +1367,77 @@ mod tests {
         );
         assert!(html.contains("backend=html5"));
         assert!(!html.contains("docbook"));
+    }
+
+    // The doctype the document sees is reachable through the `{doctype}`
+    // intrinsic reference (and drives the `<body class>`). `article` is the only
+    // doctype this renderer models, so `apply` pins `doctype` to `article` in
+    // every safe mode and locks it against the document and the API alike —
+    // going further than Asciidoctor, which only restricts the document at
+    // `Server`/`Secure`.
+
+    // A helper document that sets a non-`article` doctype and echoes the
+    // resolved `doctype` intrinsic into the body, where it lands in the rendered
+    // output alongside the `<body class>`.
+    const DOCTYPE_ECHO: &str = "= Doc\n:doctype: book\n\ndoctype={doctype}";
+
+    #[test]
+    fn document_set_doctype_is_pinned_to_article_in_every_mode() {
+        // A document `:doctype:` is dropped and `{doctype}` resolves to article
+        // regardless of the safe mode — including the lower modes where
+        // Asciidoctor would honor it. The `<body class>` follows suit.
+        for mode in [
+            SafeMode::Unsafe,
+            SafeMode::Safe,
+            SafeMode::Server,
+            SafeMode::Secure,
+        ] {
+            let html = convert_with(DOCTYPE_ECHO, &Options::new().safe_mode(mode));
+            assert!(
+                html.contains("doctype=article"),
+                "{mode:?} should pin article"
+            );
+            assert!(!html.contains("doctype=book"), "{mode:?} dropped book");
+            assert!(
+                html.contains("<body class=\"article\">"),
+                "{mode:?} body class"
+            );
+        }
+    }
+
+    #[test]
+    fn api_set_doctype_is_also_pinned_to_article() {
+        // The pin overrides the API too: an API `doctype` directive does not
+        // survive in any mode (unlike, e.g., `docinfo`, which the API may set).
+        for mode in [SafeMode::Unsafe, SafeMode::Server, SafeMode::Secure] {
+            let html = convert_with(
+                DOCTYPE_ECHO,
+                &Options::new().safe_mode(mode).attribute("doctype", "book"),
+            );
+            assert!(
+                html.contains("doctype=article"),
+                "{mode:?} should pin article"
+            );
+            assert!(
+                !html.contains("doctype=book"),
+                "{mode:?} dropped the API value"
+            );
+        }
+    }
+
+    #[test]
+    fn soft_default_doctype_does_not_survive() {
+        // A *soft* API default leaves an attribute document-overridable, so a
+        // `mentions`-based guard would skip the pin. The doctype stays article
+        // regardless: neither the document's `:doctype:` nor the API's soft
+        // default takes effect.
+        let html = convert_with(
+            DOCTYPE_ECHO,
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .attribute_default("doctype", "book"),
+        );
+        assert!(html.contains("doctype=article"));
+        assert!(!html.contains("doctype=book"));
     }
 }
