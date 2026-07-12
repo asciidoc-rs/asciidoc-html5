@@ -78,9 +78,9 @@ dependencies = [
 
 [[package]]
 name = "asciidoc-parser"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ccca0003df805ff4caa461112dfbcd932aa9d5bfd4fd39d71ee35e4a4e000c7"
+checksum = "319e56fc7607996df13a99b3716278b5939713b39b5266e2c5aa506d86288612"
 dependencies = [
  "bytecount",
  "memchr",
