@@ -4,13 +4,16 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 
 // Asciidoctor's "Safe Modes" page, tracked from the library crate. This crate
 // models the same four safe modes through [`SafeMode`], with the same integer
-// levels and the same default (`SECURE`) for the API. Most of what a mode
-// governs in Asciidoctor — include directives, icons, `data-uri`,
-// `source-highlighter`, `docinfo`, backend locking, SVG modes — is not
-// something this renderer surfaces yet, so those spans are non-normative. What
-// is observable here is the integer level of each mode and its effect on the
-// default stylesheet: `SECURE` links it (it "prevents access to stylesheets"),
-// while a lower mode embeds it inline.
+// levels and the same default (`SECURE`) for the API. The tests below verify,
+// from the page, the integer level of each mode, the default stylesheet
+// link-vs-embed choice (`SECURE` "prevents access to stylesheets" and so links
+// it, while a lower mode embeds it inline), and the `docfile`/`docdir`
+// concealment under `SERVER`/`SECURE`. Other mode effects this crate honors —
+// the `docinfo` and `backend` restrictions, and (through asciidoc-parser's own
+// safe mode, which this crate sets; see #37) include directives and URI reads —
+// are exercised by unit tests elsewhere, so their spans stay non-normative
+// here. What remains unsurfaced — icons, `data-uri`, `source-highlighter`,
+// `doctype`, and SVG modes — is likewise non-normative.
 
 non_normative!(
     r#"
