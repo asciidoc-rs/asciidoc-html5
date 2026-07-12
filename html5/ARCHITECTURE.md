@@ -215,6 +215,21 @@ render-time default off `safe-mode-level` keeps `convert_document(&Document)`
 consistent with `convert` even for a document parsed by a bare `Parser` (whose
 built-in attributes already default to `Secure`).
 
+A *linked* stylesheet has to exist next to the HTML, which Asciidoctor handles
+with the `copycss` attribute — set by default in every safe mode but `secure`.
+`Options::apply` seeds `copycss` the same way (document-overridable, so a header
+`:!copycss:` can turn it off), and the `copycss` module turns the resolved state
+into a *plan*: the destination path relative to the output directory (the
+default stylesheet as `asciidoctor.css`, a custom one at its `stylesdir` web
+path, honoring a `copycss=<path>` read-from override) plus the bytes to write
+(the embedded default CSS, or a custom stylesheet read through the same
+safe-mode jail as `include::`). Because the library converts text to text and
+does not own the output directory, it never writes the file itself: the
+`_with_writer` entry points hand the plan to a caller-supplied `AssetWriter`
+(the file-writing seam, with `DirAssetWriter` as the on-disk implementation the
+CLI roots at the output directory). `copycss` is a pure file side effect — the
+returned HTML is byte-identical to the writer-less path.
+
 ## Cross references, footnotes, TOC (future)
 
 - **Cross references** are resolved by `Parser::parse` for single documents; the

@@ -617,3 +617,156 @@ fn empty_attribute_name_is_rejected() {
         "error should explain the missing attribute name, got: {stderr}"
     );
 }
+
+/// Creates a fresh temp directory named after `tag` for a `copycss` test to
+/// write its input, output, and copied stylesheet into.
+fn copycss_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("adoc-cli-copycss-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create copycss dir");
+    dir
+}
+
+/// With `linkcss` set (and `copycss` on by default under the CLI's `unsafe`
+/// mode), `adoc` copies the default stylesheet next to the output HTML as
+/// `asciidoctor.css`, matching Asciidoctor.
+#[test]
+fn linkcss_copies_the_default_stylesheet_next_to_the_output() {
+    let dir = copycss_dir("default");
+    let input = dir.join("doc.adoc");
+    let output = dir.join("doc.html");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write input");
+
+    let status = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .arg("-a")
+        .arg("linkcss")
+        .status()
+        .expect("run the adoc binary");
+
+    let stylesheet = dir.join("asciidoctor.css");
+    let copied = fs::read_to_string(&stylesheet).unwrap_or_default();
+    let html = fs::read_to_string(&output).unwrap_or_default();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(
+        html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#),
+        "the HTML should link the stylesheet"
+    );
+    assert!(
+        copied.contains("Asciidoctor default stylesheet") || !copied.is_empty(),
+        "asciidoctor.css should be copied next to the output"
+    );
+}
+
+/// When the output file coincides with the copied stylesheet's destination
+/// (`adoc -a linkcss -o asciidoctor.css …`), `adoc` skips the copy with a
+/// warning rather than letting it clobber — or be clobbered by — the HTML
+/// output: the `-o` file wins and holds the HTML.
+#[test]
+fn stylesheet_copy_does_not_clobber_the_output_file() {
+    let dir = copycss_dir("collide");
+    let input = dir.join("doc.adoc");
+    // The output file is named exactly like the copied default stylesheet.
+    let output = dir.join("asciidoctor.css");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write input");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .arg("-a")
+        .arg("linkcss")
+        .output()
+        .expect("run the adoc binary");
+
+    let written = fs::read_to_string(&output).unwrap_or_default();
+    let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        result.status.success(),
+        "adoc exited with {}",
+        result.status
+    );
+
+    // The output file holds the requested HTML, not stylesheet CSS.
+    assert!(
+        written.starts_with("<!DOCTYPE html>"),
+        "the -o file should hold the HTML output, was: {written:.40}"
+    );
+
+    // adoc warns that it skipped the copy because it is the output file.
+    assert!(
+        stderr.contains("not copying the stylesheet"),
+        "adoc should warn about the collision; stderr was: {stderr}"
+    );
+}
+
+/// Unsetting `copycss` (`-a copycss!`) keeps `adoc` from writing the stylesheet
+/// file even though the HTML still links it.
+#[test]
+fn copycss_unset_does_not_copy_the_stylesheet() {
+    let dir = copycss_dir("unset");
+    let input = dir.join("doc.adoc");
+    let output = dir.join("doc.html");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write input");
+
+    let status = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .arg("-a")
+        .arg("linkcss")
+        .arg("-a")
+        .arg("copycss!")
+        .status()
+        .expect("run the adoc binary");
+
+    let stylesheet_exists = dir.join("asciidoctor.css").exists();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(status.success(), "adoc exited with {status}");
+    assert!(
+        !stylesheet_exists,
+        "asciidoctor.css must not be copied when copycss is unset"
+    );
+}
+
+/// Writing the HTML to standard output has no output directory, so `copycss` is
+/// inert — nothing is copied, matching Asciidoctor.
+#[test]
+fn copycss_is_inert_when_writing_to_stdout() {
+    let dir = copycss_dir("stdout");
+    let input = dir.join("doc.adoc");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write input");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg("-")
+        .arg("-a")
+        .arg("linkcss")
+        .current_dir(&dir)
+        .output()
+        .expect("run the adoc binary");
+
+    // No stylesheet is written anywhere near the input or the working directory.
+    let near_input = dir.join("asciidoctor.css").exists();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+    assert!(
+        !near_input,
+        "copycss must not write a stylesheet when the HTML goes to stdout"
+    );
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+}

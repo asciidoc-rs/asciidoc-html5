@@ -366,6 +366,13 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
+        // `copycss` needs no seeding here: the parser sets it on by default in
+        // every safe mode (document-overridable), and the copy is gated on the
+        // safe mode being below `Secure` where it is resolved (see the
+        // [`copycss`](crate::copycss) module). `copycss` only governs whether a
+        // *linked* stylesheet is also copied next to the output; it never
+        // affects the HTML.
+
         // Matching Asciidoctor: `Server` and above forbid the *document* from
         // controlling docinfo — only the API may (Asciidoctor's SERVER "prevents
         // the document from setting … docinfo"). Re-seed docinfo *silently*

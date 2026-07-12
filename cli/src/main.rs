@@ -12,7 +12,7 @@ use std::{
     process::ExitCode,
 };
 
-use asciidoc_html5::{Options, SafeMode};
+use asciidoc_html5::{AssetWriter, DirAssetWriter, Options, SafeMode};
 use clap::Parser;
 
 /// Convert an AsciiDoc document to HTML5.
@@ -143,11 +143,77 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 
     let source = read_input(cli.input.as_deref())?;
 
-    let html = asciidoc_html5::convert_with(&source, &options);
-
     match output_target(cli) {
-        OutputTarget::File(path) => fs::write(path, html),
-        OutputTarget::Stdout => stdout.write_all(html.as_bytes()),
+        OutputTarget::File(path) => {
+            // Write any companion stylesheet (`copycss`) into the output file's
+            // directory, so a linked stylesheet lands next to the HTML that
+            // references it — matching Asciidoctor, which copies only when
+            // converting to a file. The guard keeps the copy from clobbering the
+            // output file itself when the two paths coincide.
+            let mut writer = OutputGuard {
+                inner: DirAssetWriter::new(output_dir(&path)),
+                output: path.clone(),
+            };
+            let html = asciidoc_html5::convert_with_writer(&source, &options, &mut writer)?;
+            fs::write(path, html)
+        }
+
+        // Writing to standard output has no directory to copy alongside, so
+        // `copycss` is inert here — again matching Asciidoctor, which skips the
+        // copy unless there is an output file.
+        OutputTarget::Stdout => {
+            let html = asciidoc_html5::convert_with(&source, &options);
+            stdout.write_all(html.as_bytes())
+        }
+    }
+}
+
+/// An [`AssetWriter`] wrapping a [`DirAssetWriter`] that refuses to write a
+/// companion file onto the primary output path, warning instead.
+///
+/// This guards the contradictory `adoc -a linkcss -o asciidoctor.css …` case,
+/// where the copied stylesheet and the output HTML resolve to the same file:
+/// the `-o` output must win, so the copy is skipped rather than being
+/// overwritten by (or overwriting) the HTML.
+struct OutputGuard {
+    /// The underlying filesystem writer, rooted at the output directory.
+    inner: DirAssetWriter,
+
+    /// The primary output file the copy must not collide with.
+    output: PathBuf,
+}
+
+impl AssetWriter for OutputGuard {
+    fn write_asset(&mut self, path: &Path, content: &[u8]) -> io::Result<()> {
+        let dest = self.inner.destination(path);
+        if same_file(&dest, &self.output) {
+            eprintln!(
+                "adoc: not copying the stylesheet to {}: it is the output file \
+                 (choose a different -o, or unset copycss)",
+                dest.display()
+            );
+            return Ok(());
+        }
+        self.inner.write_asset(path, content)
+    }
+}
+
+/// Whether `a` and `b` name the same file, comparing their absolute (but not
+/// symlink-resolved) forms so the check works before either file exists.
+fn same_file(a: &Path, b: &Path) -> bool {
+    match (std::path::absolute(a), std::path::absolute(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// The directory to root companion-file writes at for an output file `path`:
+/// its parent directory, or the current directory when `path` is a bare file
+/// name.
+fn output_dir(path: &Path) -> PathBuf {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+        _ => PathBuf::from("."),
     }
 }
 

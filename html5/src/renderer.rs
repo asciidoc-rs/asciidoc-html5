@@ -41,7 +41,12 @@ use crate::html::{class_attribute, escape_attribute, id_attribute};
 /// standalone document via `Stylesheets#primary_stylesheet_data`. It carries
 /// its own MIT license header; a drift-guard test keeps this copy identical to
 /// the reference one.
-const DEFAULT_STYLESHEET: &str = include_str!("../assets/asciidoctor-default.css");
+pub(crate) const DEFAULT_STYLESHEET: &str = include_str!("../assets/asciidoctor-default.css");
+
+/// The public file name Asciidoctor writes (and links) its default stylesheet
+/// under — `Stylesheets::DEFAULT_STYLESHEET_NAME`. The linked reference and the
+/// `copycss` destination both use it.
+pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
 
 /// The `family` query string Asciidoctor uses for its Google Fonts `<link>`
 /// when the `webfonts` attribute carries no explicit value: Open Sans for
@@ -50,7 +55,7 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 
 /// Reads a document attribute as an explicit string value, if it has one.
 /// `Set`/`Unset`/absent all yield `None` (use `is_attribute_set` for booleans).
-fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
+pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<String> {
     match document.attribute_value(name) {
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
@@ -91,7 +96,7 @@ pub(crate) fn links_stylesheet(document: &Document<'_>) -> bool {
 /// non-empty value other than `DEFAULT` that is not an explicit unset
 /// (`:stylesheet!:`). The default stylesheet and an unset stylesheet both yield
 /// `None`.
-fn custom_stylesheet_value(document: &Document<'_>) -> Option<String> {
+pub(crate) fn custom_stylesheet_value(document: &Document<'_>) -> Option<String> {
     match document.attribute_value("stylesheet") {
         InterpretedValue::Unset if document.has_attribute("stylesheet") => None,
         InterpretedValue::Value(value) if !value.is_empty() && value != "DEFAULT" => Some(value),
@@ -117,13 +122,32 @@ pub(crate) fn embeddable_stylesheet_target(document: &Document<'_>) -> Option<St
         return None;
     }
 
+    Some(stylesdir_join(document, &stylesheet))
+}
+
+/// Joins the `stylesdir` attribute ahead of `stylesheet` to form the
+/// filesystem-relative target Asciidoctor's `normalize_system_path` would
+/// resolve — the path from which a custom stylesheet is read (to embed it, or
+/// to copy it under `copycss`). A trailing separator on `stylesdir` is dropped
+/// so the join never doubles the `/`; an empty `stylesdir` leaves the
+/// stylesheet untouched.
+pub(crate) fn stylesdir_join(document: &Document<'_>, stylesheet: &str) -> String {
     let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
-    let target = if stylesdir.is_empty() {
-        stylesheet
+    if stylesdir.is_empty() {
+        stylesheet.to_string()
     } else {
         format!("{}/{stylesheet}", stylesdir.trim_end_matches(['/', '\\']))
-    };
-    Some(target)
+    }
+}
+
+/// Whether the document has *disabled* its stylesheet with an explicit
+/// `:stylesheet!:` (unset). When it has, no stylesheet block is emitted and the
+/// `linkcss`/`copycss` attributes are ignored, matching Asciidoctor.
+pub(crate) fn stylesheet_disabled(document: &Document<'_>) -> bool {
+    matches!(
+        document.attribute_value("stylesheet"),
+        InterpretedValue::Unset
+    ) && document.has_attribute("stylesheet")
 }
 
 /// Computes the web path Asciidoctor's `html5` backend uses when linking to a
@@ -136,7 +160,7 @@ pub(crate) fn embeddable_stylesheet_target(document: &Document<'_>) -> Option<St
 /// the two are joined, `.` and `..` segments are collapsed, and a relative
 /// result is prefixed with `./`, so a bare `custom.css` becomes `./custom.css`
 /// and `custom.css` under `stylesdir=css` becomes `./css/custom.css`.
-fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
+pub(crate) fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     // A URI is emitted verbatim (Asciidoctor's `preserve_uri_target`).
     if looks_like_uri(stylesheet) {
         return stylesheet.to_string();
@@ -205,7 +229,7 @@ fn web_normalize(path: &str) -> String {
 /// Whether `value` looks like a URI, mirroring Asciidoctor's `UriSniffRx`: a
 /// scheme of two or more characters (so a Windows drive letter like `c:` is not
 /// mistaken for one) starting with a letter, followed by a colon.
-fn looks_like_uri(value: &str) -> bool {
+pub(crate) fn looks_like_uri(value: &str) -> bool {
     let Some(scheme_end) = value.find(':') else {
         return false;
     };
@@ -441,11 +465,7 @@ impl Renderer<'_> {
     ///   [`custom_stylesheet`](Self::custom_stylesheet).
     fn stylesheet(&mut self, document: &Document<'_>) {
         // Explicitly unset (`:stylesheet!:`): no stylesheet block at all.
-        if matches!(
-            document.attribute_value("stylesheet"),
-            InterpretedValue::Unset
-        ) && document.has_attribute("stylesheet")
-        {
+        if stylesheet_disabled(document) {
             return;
         }
 
@@ -462,9 +482,17 @@ impl Renderer<'_> {
         self.webfonts_link(document);
 
         if links_stylesheet(document) {
-            // Asciidoctor writes the stylesheet out under the public name
-            // `asciidoctor.css`, normalized to a relative web path.
-            self.line("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">");
+            // Asciidoctor links the default stylesheet under its public name
+            // `asciidoctor.css`, normalized to a web path against `stylesdir`
+            // (the same join a custom stylesheet's link uses) — so with no
+            // `stylesdir` the href is `./asciidoctor.css`, and under
+            // `stylesdir=css` it becomes `./css/asciidoctor.css`.
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+            let href = normalize_web_path(DEFAULT_STYLESHEET_NAME, &stylesdir);
+            self.line(&format!(
+                "<link rel=\"stylesheet\" href=\"{}\">",
+                escape_attribute(&href)
+            ));
         } else {
             // The template is `<style>\n{data}\n</style>`, where `data` is the
             // stylesheet with a single trailing newline chomped, so no blank
@@ -1007,6 +1035,14 @@ mod tests {
         assert!(!html.contains("<style>"));
         // The web-font link is still emitted alongside the linked stylesheet.
         assert!(html.contains("fonts.googleapis.com"));
+    }
+
+    // The linked default stylesheet honors `stylesdir`, normalized the same way
+    // a custom stylesheet's link is — matching Asciidoctor.
+    #[test]
+    fn linked_default_stylesheet_honors_the_styles_directory() {
+        let html = convert("= Doc\n:linkcss:\n:stylesdir: css\n\nBody.");
+        assert!(html.contains("<link rel=\"stylesheet\" href=\"./css/asciidoctor.css\">"));
     }
 
     #[test]

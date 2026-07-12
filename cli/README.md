@@ -12,7 +12,10 @@ aims to be compatible with [Asciidoctor](https://asciidoctor.org)'s default
 `adoc` produces HTML5 only. Asciidoctor's other backends are out of scope; in
 particular, **DocBook and man page output are not planned**, and `adoc` emits
 HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5` backends)
-is not supported.**
+is not supported.** `adoc` also never reads over the network: **fetching a
+remote resource to embed it (for example, a remote stylesheet via
+`allow-uri-read`) is not planned** — a remote reference is linked, never
+inlined.
 
 This is the **binary** crate of the
 [`asciidoc-html5` workspace](https://github.com/asciidoc-rs/asciidoc-html5). It

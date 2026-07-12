@@ -32,6 +32,8 @@ use std::{fs, io, path::Path};
 
 use asciidoc_parser::{Document, Parser};
 
+mod asset_writer;
+mod copycss;
 mod docinfo_handler;
 mod html;
 mod include_handler;
@@ -39,6 +41,7 @@ mod options;
 mod renderer;
 
 pub use asciidoc_parser::SafeMode;
+pub use asset_writer::{AssetWriter, DirAssetWriter};
 pub use options::Options;
 
 #[cfg(test)]
@@ -88,16 +91,72 @@ pub fn convert(source: &str) -> String {
 pub fn convert_with(source: &str, options: &Options) -> String {
     let mut parser = options.apply(Parser::default());
     let document = parser.parse(source);
+    render(&document, options)
+}
 
+/// Parses and renders `source` like [`convert_with`], and additionally emits
+/// the companion files the conversion calls for through `writer`.
+///
+/// Today the only companion file is the stylesheet copied under the `copycss`
+/// attribute: when the stylesheet is *linked* and `copycss` is enabled (its
+/// default below the `secure` safe mode), the linked stylesheet is written
+/// through `writer` at its path relative to the output directory — the default
+/// stylesheet as `asciidoctor.css` (under `stylesdir` when set), a custom
+/// stylesheet at its `stylesdir` web path, the same location the head links.
+/// This is the piece [`convert_with`] cannot do on its own: the library
+/// renders text to text and does not own the output directory, so a caller that
+/// wants `copycss` to take effect supplies an [`AssetWriter`] (for the
+/// filesystem, [`DirAssetWriter`] rooted at the output directory) to receive
+/// the write.
+///
+/// The returned HTML is byte-identical to [`convert_with`]'s; `copycss` is a
+/// pure file side effect and never changes the document. A custom stylesheet's
+/// bytes are read from disk under the same base directory and safe-mode jail as
+/// an embedded stylesheet, so a copy happens only when a base directory anchors
+/// the read (see [`Options::base_dir`]/[`Options::input_file`]).
+///
+/// # Errors
+///
+/// Returns any [`io::Error`] raised while writing a companion file through
+/// `writer`.
+pub fn convert_with_writer(
+    source: &str,
+    options: &Options,
+    writer: &mut impl AssetWriter,
+) -> io::Result<String> {
+    let mut parser = options.apply(Parser::default());
+    let document = parser.parse(source);
+    let html = render(&document, options);
+    emit_stylesheet_copy(&document, options, writer)?;
+    Ok(html)
+}
+
+/// Renders `document` to HTML, resolving the embedded custom stylesheet the way
+/// [`convert_with`] does. Shared by the string entry points with and without an
+/// [`AssetWriter`].
+fn render(document: &Document<'_>, options: &Options) -> String {
     // A custom, embedded stylesheet takes its CSS from the caller when supplied,
-    // otherwise from disk (below). `read_to_string` keeps the borrow of
+    // otherwise from disk. Keeping this a separate binding keeps the borrow of
     // `document` from the read helper separate from the render call.
     let embedded = options
         .custom_stylesheet()
         .map(str::to_owned)
-        .or_else(|| read_embedded_stylesheet(&document, options));
+        .or_else(|| read_embedded_stylesheet(document, options));
 
-    renderer::render_document(&document, embedded.as_deref())
+    renderer::render_document(document, embedded.as_deref())
+}
+
+/// Writes the `copycss` stylesheet copy through `writer`, when the document
+/// calls for one. A no-op otherwise.
+fn emit_stylesheet_copy(
+    document: &Document<'_>,
+    options: &Options,
+    writer: &mut impl AssetWriter,
+) -> io::Result<()> {
+    if let Some(copy) = copycss::stylesheet_copy(document, options) {
+        writer.write_asset(&copy.dest, copy.content.as_bytes())?;
+    }
+    Ok(())
 }
 
 /// Reads a custom stylesheet from disk when the document selects one to
@@ -163,6 +222,31 @@ pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Resu
     Ok(convert_with(&source, &options.clone().input_file(path)))
 }
 
+/// Reads the AsciiDoc file at `path`, renders it like [`convert_file_with`],
+/// and emits the conversion's companion files through `writer`.
+///
+/// This is the file-based counterpart to [`convert_with_writer`] and the
+/// [`AssetWriter`]-aware counterpart to [`convert_file_with`]: reading `path`
+/// records it as the primary document (anchoring its `include::` resolution
+/// and, absent an explicit [`base_dir`](Options::base_dir), the base
+/// directory), so a custom stylesheet copied under `copycss` is read relative
+/// to the file's own directory. See [`convert_with_writer`] for what `copycss`
+/// writes.
+///
+/// # Errors
+///
+/// Returns the [`io::Error`] from reading `path`, or any error raised while
+/// writing a companion file through `writer`.
+pub fn convert_file_with_writer<P: AsRef<Path>>(
+    path: P,
+    options: &Options,
+    writer: &mut impl AssetWriter,
+) -> io::Result<String> {
+    let path = path.as_ref();
+    let source = fs::read_to_string(path)?;
+    convert_with_writer(&source, &options.clone().input_file(path), writer)
+}
+
 /// Renders an already-parsed [`Document`] to a complete HTML5 document.
 ///
 /// The returned string is a standalone HTML5 document: a `<!DOCTYPE html>`
@@ -200,4 +284,105 @@ pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Resu
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
     renderer::render_document(document, None)
+}
+
+#[cfg(test)]
+mod writer_tests {
+    use std::path::PathBuf;
+
+    use crate::{
+        asset_writer::RecordingAssetWriter, convert_file_with_writer, convert_with,
+        convert_with_writer, Options, SafeMode,
+    };
+
+    // The HTML `convert_with_writer` returns is identical to `convert_with`'s —
+    // `copycss` is a side effect that never changes the document — and the
+    // default stylesheet is offered to the writer as `asciidoctor.css`.
+    #[test]
+    fn writer_copies_the_default_stylesheet_without_changing_the_html() {
+        let source = "= Doc\n\nBody.";
+        let options = Options::new().safe_mode(SafeMode::Safe).set("linkcss");
+
+        let mut writer = RecordingAssetWriter::default();
+        let html = convert_with_writer(source, &options, &mut writer).expect("convert");
+
+        assert_eq!(html, convert_with(source, &options));
+        assert_eq!(writer.written.len(), 1);
+        let (path, content) = &writer.written[0];
+        assert_eq!(path, &PathBuf::from("asciidoctor.css"));
+        assert!(content.starts_with(b"/*"));
+    }
+
+    // With no `linkcss` (the stylesheet is embedded), the writer is never
+    // called.
+    #[test]
+    fn writer_is_untouched_when_the_stylesheet_is_embedded() {
+        let mut writer = RecordingAssetWriter::default();
+        let options = Options::new().safe_mode(SafeMode::Safe);
+        convert_with_writer("= Doc\n\nBody.", &options, &mut writer).expect("convert");
+        assert!(writer.written.is_empty());
+    }
+
+    // `convert_file_with_writer` anchors the custom stylesheet read at the input
+    // file's own directory, so a linked custom stylesheet is copied to its web
+    // path with the on-disk contents.
+    #[test]
+    fn file_writer_copies_a_custom_stylesheet_from_the_input_directory() {
+        let dir = std::env::temp_dir().join(format!("adoc-lib-copycss-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("css")).expect("create dirs");
+        std::fs::write(dir.join("main.adoc"), "= Doc\n\nBody.").expect("write adoc");
+        std::fs::write(dir.join("css/theme.css"), "body { color: teal; }").expect("write css");
+
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .attribute("stylesdir", "css")
+            .attribute("stylesheet", "theme.css");
+
+        let mut writer = RecordingAssetWriter::default();
+        convert_file_with_writer(dir.join("main.adoc"), &options, &mut writer).expect("convert");
+
+        assert_eq!(writer.written.len(), 1);
+        let (path, content) = &writer.written[0];
+        assert_eq!(path.to_string_lossy().replace('\\', "/"), "css/theme.css");
+        assert_eq!(content, b"body { color: teal; }");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // `convert_file_with_writer` honors the `copycss=<path>` read-from override
+    // (Asciidoctor's copy/link split): the bytes are read from the `copycss`
+    // path, but the copy is written to — and the HTML links — the `stylesheet`
+    // web path. This is the API-surface counterpart to the `adoc` copy/link
+    // split the CLI crate verifies and the `stylesheet_copy` unit test resolves.
+    #[test]
+    fn file_writer_honors_the_copycss_read_from_override() {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-lib-copycss-split-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("vendor")).expect("create dirs");
+        std::fs::write(dir.join("main.adoc"), "= Doc\n\nBody.").expect("write adoc");
+        std::fs::write(dir.join("vendor/theme.css"), "body { color: maroon; }").expect("write css");
+
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .attribute("copycss", "vendor/theme.css")
+            .attribute("stylesheet", "published.css");
+
+        let mut writer = RecordingAssetWriter::default();
+        let html = convert_file_with_writer(dir.join("main.adoc"), &options, &mut writer)
+            .expect("convert");
+
+        // The HTML links the stylesheet at its own web path, not the copycss one.
+        assert!(html.contains(r#"<link rel="stylesheet" href="./published.css">"#));
+
+        // The copy is written to that same web path, but its bytes come from the
+        // copycss read-from path.
+        assert_eq!(writer.written.len(), 1);
+        let (path, content) = &writer.written[0];
+        assert_eq!(path.to_string_lossy().replace('\\', "/"), "published.css");
+        assert_eq!(content, b"body { color: maroon; }");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
