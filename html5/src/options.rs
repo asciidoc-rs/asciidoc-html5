@@ -1142,6 +1142,76 @@ mod tests {
     // no safe-mode nuance — the stem and extension expose nothing the concealed
     // `docfile` basename does not — so they are set the same in every mode.
 
+    // The path-splitting helpers behind `docname`/`docfilesuffix` are exercised
+    // directly for the Asciidoctor `Helpers.extname`/`Helpers.basename` edges
+    // that the file-driven tests above do not reach.
+    #[test]
+    fn file_basename_falls_back_for_a_nameless_path() {
+        // A normal path yields its final component; a path with no final
+        // component (a bare root) falls back to the whole string.
+        assert_eq!(super::file_basename("/docs/guide.adoc"), "guide.adoc");
+        assert_eq!(super::file_basename("/"), "/");
+    }
+
+    #[test]
+    fn file_extension_matches_asciidoctor_extname() {
+        // A normal extension, and only the *final* one.
+        assert_eq!(super::file_extension("/docs/guide.adoc"), ".adoc");
+        assert_eq!(super::file_extension("/tmp/archive.tar.gz"), ".gz");
+
+        // No dot at all → no extension.
+        assert_eq!(super::file_extension("/tmp/README"), "");
+
+        // A dot in a *directory* component is not an extension (a path
+        // separator follows the last dot).
+        assert_eq!(super::file_extension("/etc/rc.d/README"), "");
+    }
+
+    #[test]
+    fn document_name_matches_asciidoctor_basename() {
+        // The suffix is stripped when a non-empty stem remains.
+        assert_eq!(super::document_name("/docs/guide.adoc", ".adoc"), "guide");
+
+        // Only the given suffix is removed (multi-extension).
+        assert_eq!(
+            super::document_name("/tmp/archive.tar.gz", ".gz"),
+            "archive.tar"
+        );
+
+        // An empty suffix (an extensionless name) removes nothing.
+        assert_eq!(super::document_name("/docs/README", ""), "README");
+
+        // A basename that is *entirely* the suffix — a leading-dot name such as
+        // `.adoc` — is kept whole rather than reduced to an empty stem.
+        assert_eq!(super::document_name("/docs/.adoc", ".adoc"), ".adoc");
+
+        // A suffix that is not actually a suffix of the basename leaves it
+        // whole (in practice the suffix is always the path's own extension).
+        assert_eq!(
+            super::document_name("/docs/guide.adoc", ".xyz"),
+            "guide.adoc"
+        );
+    }
+
+    #[test]
+    fn a_bare_set_docfile_or_docdir_is_not_treated_as_a_value() {
+        // A bare API `set` (no value) is not a value directive, so `docdir`
+        // still derives from the file's directory rather than being treated as
+        // caller-supplied. This exercises `last_value`'s non-value arm.
+        let (dir, file) = docpath_scratch("bare-set");
+
+        let html = convert_with(
+            "= Doc\n\ndir={docdir}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .set("docdir")
+                .input_file(file.clone()),
+        );
+
+        assert!(html.contains(&format!("dir={}", dir.display())), "{html}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn docname_and_docfilesuffix_are_derived_from_the_file() {
         for mode in [
