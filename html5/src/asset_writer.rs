@@ -74,10 +74,16 @@ impl DirAssetWriter {
     pub fn new<P: Into<PathBuf>>(root: P) -> Self {
         Self { root: root.into() }
     }
-}
 
-impl AssetWriter for DirAssetWriter {
-    fn write_asset(&mut self, path: &Path, content: &[u8]) -> io::Result<()> {
+    /// The path an asset given as `path` is written to: its normal segments
+    /// folded onto the root, with any root/drive prefix dropped and `..`
+    /// components resolved, so the result stays within the output directory.
+    ///
+    /// This is the *lexical* destination; [`write_asset`](Self::write_asset)
+    /// additionally refuses to follow a symlink out of the root. It lets a
+    /// caller learn where an asset would land — for example, to detect a
+    /// collision with the primary output file.
+    pub fn destination(&self, path: &Path) -> PathBuf {
         // Fold the relative path onto the root a component at a time, keeping
         // only the normal segments: a root or drive prefix is dropped and a
         // `..` pops the previous segment (clamping at the root), so the result
@@ -99,12 +105,32 @@ impl AssetWriter for DirAssetWriter {
                 _ => {}
             }
         }
+        dest
+    }
+}
+
+impl AssetWriter for DirAssetWriter {
+    fn write_asset(&mut self, path: &Path, content: &[u8]) -> io::Result<()> {
+        let dest = self.destination(path);
 
         // Create the destination's parent, unless there is none or it is empty
         // (a bare file name, or a name rooted at an empty root, writes into the
         // current directory, which needs no `create_dir_all`).
         if let Some(parent) = dest.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent)?;
+
+            // The fold above keeps `dest` within the root *lexically*, but a
+            // symlink already present in the output tree could still redirect
+            // the real write outside it. Resolve the real parent and refuse when
+            // it escapes the real root — the same stricter-than-Asciidoctor
+            // symlink containment the include handler applies to reads.
+            let root = self.root.canonicalize()?;
+            if !parent.canonicalize()?.starts_with(&root) {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "refusing to write a companion file outside the output directory",
+                ));
+            }
         }
         fs::write(dest, content)
     }
@@ -182,6 +208,30 @@ mod tests {
         assert_eq!(std::fs::read(root.join("b.css")).unwrap(), b"y");
         assert!(!root.join("a").exists());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // A symlink already present in the output tree cannot redirect a companion
+    // write outside the root: the real destination is checked against the real
+    // root and an escaping write is refused. (Symlink creation is Unix-only.)
+    #[cfg(unix)]
+    #[test]
+    fn refuses_to_follow_a_symlink_out_of_the_root() {
+        let base = std::env::temp_dir().join(format!("adoc-asset-symlink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let root = base.join("out");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(&root).expect("create root");
+        std::fs::create_dir_all(&outside).expect("create outside");
+
+        // `root/css` -> `outside`: an escaping symlink inside the output tree.
+        std::os::unix::fs::symlink(&outside, root.join("css")).expect("symlink");
+
+        let mut writer = DirAssetWriter::new(&root);
+        let result = writer.write_asset(Path::new("css/theme.css"), b"body {}");
+
+        assert!(result.is_err());
+        assert!(!outside.join("theme.css").exists());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     // A destination with no parent directory to create (here the path clamps
