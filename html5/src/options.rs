@@ -402,6 +402,65 @@ impl Options {
             };
         }
 
+        // Surface the `docfile` and `docdir` intrinsic attributes the way
+        // Asciidoctor's loader does, honoring the safe mode. Asciidoctor derives
+        // these from the input file; `asciidoc-parser` does not originate them,
+        // so this crate seeds them. Below `Server` they carry the input file's
+        // absolute path and directory (Asciidoctor's
+        // `File.absolute_path`/`File.dirname`); `Server` and above conceal the
+        // host location — `docfile` is trimmed to its basename and `docdir` is
+        // emptied. `Secure`, being higher than `Server`, inherits the same
+        // sanitization (both modes leave `docdir` empty and `docfile` a bare
+        // basename, matching Asciidoctor and the AsciiDoc attributes reference).
+        // Both are locked (`ApiOnly`) so the document cannot reassign them, and
+        // seeded silently so re-seeding over a caller-supplied value or the
+        // directive loop raises no lock warning.
+        let conceal = mode >= SafeMode::Server;
+
+        // `docfile` names the source document. It comes from a caller-supplied
+        // `docfile` value or, failing that, the primary file. Absent both — a
+        // plain source string with no file — there is nothing to name, so
+        // `docfile` stays unset, matching Asciidoctor (a string carries no
+        // `docfile`).
+        let docfile_source = self.last_value("docfile").map(str::to_owned).or_else(|| {
+            self.primary_file
+                .as_deref()
+                .map(|path| canonicalize_or(path).to_string_lossy().into_owned())
+        });
+        if let Some(source) = docfile_source {
+            let docfile = if conceal {
+                file_basename(&source)
+            } else {
+                source
+            };
+            parser = parser.with_intrinsic_attribute_silent(
+                "docfile",
+                docfile,
+                ModificationContext::ApiOnly,
+            );
+        }
+
+        // `docdir` is the source document's directory. Under concealment it is
+        // emptied; otherwise it is a caller-supplied `docdir`, the base
+        // directory, or — failing both — the current directory (Asciidoctor's
+        // `Dir.pwd` fallback for string input). It is always set, so `{docdir}`
+        // resolves to the empty string under `Server`/`Secure` rather than
+        // being left unresolved.
+        let docdir = if conceal {
+            String::new()
+        } else {
+            self.last_value("docdir")
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    self.effective_base_dir()
+                        .or_else(|| std::env::current_dir().ok())
+                        .map(|dir| dir.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                })
+        };
+        parser =
+            parser.with_intrinsic_attribute_silent("docdir", docdir, ModificationContext::ApiOnly);
+
         // Anchor filesystem-relative resources: `include::` targets and docinfo
         // files. Naming the primary file lets the parser resolve top-level
         // includes against that file's directory and derive the `docname` for
@@ -477,6 +536,28 @@ impl Options {
             .find(|directive| directive.name == name)
             .map(|directive| &directive.action)
     }
+
+    /// The explicit string value the last directive naming `name` assigns, when
+    /// that directive is a value assignment ([`Action::Value`]). A `Set`,
+    /// `Unset`, or no directive at all yields `None`. Used to let a
+    /// caller-supplied `docfile`/`docdir` seed the intrinsic this crate
+    /// otherwise derives from the file paths.
+    fn last_value(&self, name: &str) -> Option<&str> {
+        match self.last_action(name)? {
+            Action::Value(value) => Some(value),
+            Action::Set | Action::Unset => None,
+        }
+    }
+}
+
+/// The final path component of `path` — the file's basename — used to conceal a
+/// `docfile`'s host location under the `Server` and `Secure` safe modes. Falls
+/// back to the whole string when the path has no final component.
+fn file_basename(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_owned())
 }
 
 /// Canonicalizes `path` to its absolute form, falling back to the path as given
@@ -858,5 +939,126 @@ mod tests {
 
         assert!(with.contains("name=\"private\""));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // `docfile` and `docdir` are intrinsic attributes this crate originates
+    // (the parser does not), derived from the primary file and base directory
+    // and sanitized by the safe mode: below `Server` they carry the absolute
+    // path and directory; `Server` and above trim `docfile` to its basename and
+    // empty `docdir`, matching Asciidoctor.
+
+    /// Creates a temp directory named after `tag` containing an empty
+    /// `main.adoc`, returning the directory and the file both in the canonical
+    /// form `apply` records them in.
+    fn docpath_scratch(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-opts-docpath-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        let file = dir.join("main.adoc");
+        std::fs::write(&file, "").expect("write scratch file");
+        (super::canonicalize_or(&dir), super::canonicalize_or(&file))
+    }
+
+    #[test]
+    fn docfile_and_docdir_are_absolute_below_server() {
+        let (dir, file) = docpath_scratch("below-server");
+
+        let html = convert_with(
+            "= Doc\n\nfile={docfile} dir={docdir}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file(file.clone()),
+        );
+
+        assert!(
+            html.contains(&format!("file={} dir={}", file.display(), dir.display())),
+            "{html}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn server_trims_docfile_and_empties_docdir() {
+        let (dir, file) = docpath_scratch("server");
+
+        let html = convert_with(
+            "= Doc\n\nfile={docfile} dir={docdir}",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .input_file(file.clone()),
+        );
+
+        // `docfile` is trimmed to the basename and `docdir` is empty, so the
+        // host directory never appears.
+        assert!(html.contains("<p>file=main.adoc dir=</p>"), "{html}");
+        assert!(!html.contains(&dir.display().to_string()), "{html}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn secure_conceals_docfile_and_docdir_like_server() {
+        let (dir, file) = docpath_scratch("secure");
+
+        // `Secure` is the API default; it inherits `Server`'s sanitization.
+        let html = convert_with(
+            "= Doc\n\nfile={docfile} dir={docdir}",
+            &Options::new().input_file(file.clone()),
+        );
+
+        assert!(html.contains("<p>file=main.adoc dir=</p>"), "{html}");
+        assert!(!html.contains(&dir.display().to_string()), "{html}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_document_cannot_reassign_docdir_or_docfile() {
+        let (dir, file) = docpath_scratch("locked");
+
+        // The intrinsics are locked (`ApiOnly`), so a header assignment is
+        // dropped and the derived values stand — with no lock warning, since
+        // they are seeded silently.
+        let html = convert_with(
+            "= Doc\n:docdir: HACKED\n:docfile: HACKED\n\nfile={docfile} dir={docdir}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file(file.clone()),
+        );
+
+        assert!(!html.contains("HACKED"), "{html}");
+        assert!(
+            html.contains(&format!("file={} dir={}", file.display(), dir.display())),
+            "{html}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_caller_supplied_docdir_seeds_the_value_below_server() {
+        // With no primary file, a caller-supplied `docdir` stands in for the
+        // derived directory — used as given (not expanded), matching
+        // Asciidoctor's "docdir specified via API is not expanded".
+        let html = convert_with(
+            "= Doc\n\ndir={docdir}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .attribute("docdir", "virtual/directory"),
+        );
+
+        assert!(html.contains("<p>dir=virtual/directory</p>"), "{html}");
+    }
+
+    #[test]
+    fn string_input_has_docdir_but_no_docfile() {
+        // A plain source string names no file, so `docfile` stays unset (its
+        // reference is left unresolved), while `docdir` falls back to the
+        // current directory below `Server`.
+        let cwd = std::env::current_dir().expect("cwd");
+        let html = convert_with(
+            "= Doc\n\nfile=[{docfile}] dir={docdir}",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+
+        assert!(html.contains("file=[{docfile}]"), "{html}");
+        assert!(html.contains(&format!("dir={}", cwd.display())), "{html}");
     }
 }

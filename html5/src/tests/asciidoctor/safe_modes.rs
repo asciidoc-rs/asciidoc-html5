@@ -93,30 +93,78 @@ Its integer value is `1`.
     );
 }
 
-// The restrictions SERVER places on document-set attributes are not modeled by
-// this renderer yet; each is tracked for later implementation:
-// source-highlighter (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), backend
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), docdir
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo is the
-// exception: its SERVER restriction *is* enforced — a document `:docinfo:` is
-// ignored under SERVER and above, so only an API value enables docinfo.
-// Enforcing the same for the attributes above is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
+// SERVER's host-revealing intrinsics `docfile` and `docdir` are enforced here:
+// `docfile` is trimmed to its basename and `docdir` is emptied by
+// `Options::apply`, verified below. Docinfo's SERVER restriction is likewise
+// enforced — a document `:docinfo:` is ignored under SERVER and above, so only
+// an API value enables docinfo. The remaining document-set restrictions are not
+// modeled yet, each tracked for later implementation: source-highlighter
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), and backend
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/47); enforcing those is
+// tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
 [#server]
 == SERVER
 
 The `SERVER` safe mode level disallows the document from setting attributes that would affect conversion of the document.
+"#
+);
+
+// SERVER trims `docfile` to a relative path so neither the document nor its
+// output can reveal the source file's absolute location. This crate reduces
+// `docfile` to its basename; a document reference resolves to just the file
+// name.
+#[test]
+fn server_trims_docfile_to_a_relative_path() {
+    verifies!(
+        r#"
 This level trims `docfile` to its relative path and prevents the document from:
 
+"#
+    );
+
+    let html = convert_with(
+        "= Doc\n\nfile={docfile}",
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .input_file("/docs/guide/main.adoc"),
+    );
+    assert!(html.contains("<p>file=main.adoc</p>"), "{html}");
+    assert!(!html.contains("/docs/guide"), "{html}");
+}
+
+// The `setting …` bullet folds the docinfo restriction (enforced, and covered
+// by the `Options` tests) together with source-highlighter, doctype, and
+// backend (tracked in #45/#46/#47), so it stays non-normative here.
+non_normative!(
+    r#"
 * setting `source-highlighter`, `doctype`, `docinfo` and `backend`
+"#
+);
+
+// SERVER hides `docdir` from the document entirely, since it can expose the
+// host filesystem layout. This crate empties it, so a document reference
+// resolves to nothing.
+#[test]
+fn server_hides_docdir_from_the_document() {
+    verifies!(
+        r#"
 * seeing `docdir` (as it can reveal information about the host filesystem)
 
 "#
-);
+    );
+
+    let html = convert_with(
+        "= Doc\n\ndir=[{docdir}]",
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .input_file("/docs/guide/main.adoc"),
+    );
+    assert!(html.contains("<p>dir=[]</p>"), "{html}");
+    assert!(!html.contains("/docs/guide"), "{html}");
+}
 
 // SERVER allows `linkcss` (so the stylesheet is not forced to link, and embeds
 // by default) and has integer level 10.
@@ -139,21 +187,21 @@ Its integer value is `10`.
     .contains("<style>"));
 }
 
-// Most of SECURE's restrictions are not surfaced by this renderer yet, each
-// tracked for later implementation: icons
+// SECURE inherits SERVER's `docdir`/`docfile` concealment — `docdir` emptied,
+// `docfile` reduced to its basename — enforced in `Options::apply` and verified
+// below. Docinfo is likewise surfaced: SECURE disables it (no docinfo file is
+// read). The remaining SECURE restrictions are not surfaced by this renderer
+// yet, each tracked for later implementation: icons
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
 // SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), backend
-// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), `docdir`
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), `docfile`
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and source
+// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), and source
 // highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
-// Docinfo is surfaced: SECURE disables it (no docinfo file is read).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
-// mode, which this crate now sets (see #37). The one restriction observable
-// here is that SECURE "prevents access to stylesheets," which is why it links
-// the stylesheet rather than embedding it — verified in the next test (custom
-// stylesheets are https://github.com/asciidoc-rs/asciidoc-html5/issues/36).
+// mode, which this crate now sets (see #37). SECURE also "prevents access to
+// stylesheets," which is why it links the stylesheet rather than embedding it —
+// verified in the next test (custom stylesheets are
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/36).
 non_normative!(
     r#"
 [#secure]
@@ -170,7 +218,33 @@ Additionally, it:
 * disables `docinfo` files
 * disables `data-uri`
 * disables interactive (`opts=interactive`) and inline (`opts=inline`) modes for SVGs
+"#
+);
+
+// SECURE inherits SERVER's concealment of `docdir` and `docfile`: `docdir` is
+// emptied and `docfile` reduced to its basename, so neither exposes the host
+// filesystem. The page says "disables"; Asciidoctor — the parity oracle —
+// conceals rather than fully unsets (it keeps `docfile`'s basename), which is
+// what this crate reproduces.
+#[test]
+fn secure_conceals_docdir_and_docfile() {
+    verifies!(
+        r#"
 * disables `docdir` and `docfile` (as these can reveal information about the host filesystem)
+"#
+    );
+
+    // Secure is the API default (no safe mode set).
+    let html = convert_with(
+        "= Doc\n\nfile=[{docfile}] dir=[{docdir}]",
+        &Options::new().input_file("/docs/guide/main.adoc"),
+    );
+    assert!(html.contains("<p>file=[main.adoc] dir=[]</p>"), "{html}");
+    assert!(!html.contains("/docs/guide"), "{html}");
+}
+
+non_normative!(
+    r#"
 * disables source highlighting
 
 xref:extensions:index.adoc[Asciidoctor extensions] may still embed content into the document depending whether they honor the safe mode setting.
