@@ -580,4 +580,72 @@ mod load_tests {
 
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    // `load_file_with` populates the input-file attribute family on the loaded
+    // document — `docfile`, `docdir`, `docname`, `docfilesuffix` — the way
+    // Asciidoctor's `load_file` does, honoring the safe mode. This is the
+    // load-path counterpart to the `Options` unit tests for the same intrinsics:
+    // the attributes are observable directly on the returned `Document`.
+    #[test]
+    fn load_file_with_populates_the_input_file_attributes() {
+        let dir = std::env::temp_dir().join(format!("adoc-load-file-attrs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        let file = dir.join("guide.adoc");
+        std::fs::write(&file, "= Doc\n\nBody.").expect("write file");
+
+        let canonical_file = file.canonicalize().expect("canonicalize file");
+        let canonical_dir = dir.canonicalize().expect("canonicalize dir");
+
+        // Below `Server`, `docfile`/`docdir` are the absolute path and directory,
+        // matching Asciidoctor's `load_file` under `safe: :safe`.
+        let doc = load_file_with(&file, &Options::new().safe_mode(SafeMode::Safe))
+            .expect("load_file_with");
+        assert_eq!(
+            doc.attribute_value("docfile"),
+            InterpretedValue::Value(canonical_file.to_string_lossy().into_owned())
+        );
+        assert_eq!(
+            doc.attribute_value("docdir"),
+            InterpretedValue::Value(canonical_dir.to_string_lossy().into_owned())
+        );
+        assert_eq!(
+            doc.attribute_value("docname"),
+            InterpretedValue::Value("guide".to_string())
+        );
+        assert_eq!(
+            doc.attribute_value("docfilesuffix"),
+            InterpretedValue::Value(".adoc".to_string())
+        );
+
+        // `Server` and above conceal the host location: `docfile` is trimmed to
+        // its basename and `docdir` is emptied, while `docname`/`docfilesuffix`
+        // (which expose no more than the basename) are unchanged.
+        let concealed = load_file_with(&file, &Options::new().safe_mode(SafeMode::Server))
+            .expect("load_file_with");
+        assert_eq!(
+            concealed.attribute_value("docfile"),
+            InterpretedValue::Value("guide.adoc".to_string())
+        );
+        assert_eq!(
+            concealed.attribute_value("docdir"),
+            InterpretedValue::Value(String::new())
+        );
+        assert_eq!(
+            concealed.attribute_value("docfilesuffix"),
+            InterpretedValue::Value(".adoc".to_string())
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A string `load` names no file, so `docfile` is never set — matching
+    // Asciidoctor, whose string and IO inputs carry no `docfile`.
+    #[test]
+    fn load_of_a_string_has_no_docfile() {
+        let doc = load("= Doc\n\nBody.");
+        assert!(!matches!(
+            doc.attribute_value("docfile"),
+            InterpretedValue::Value(_)
+        ));
+    }
 }
