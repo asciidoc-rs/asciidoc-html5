@@ -1,8 +1,8 @@
 use std::fs;
 
-use asciidoc_parser::{blocks::IsBlock, Parser};
+use asciidoc_parser::blocks::IsBlock;
 
-use crate::{convert_file, tests::sdd::*};
+use crate::{convert_file, load, load_file, tests::sdd::*};
 
 track_file!("docs/modules/api/pages/convert-files.adoc");
 
@@ -47,8 +47,8 @@ behavior is guaranteed.
 "#
 );
 
-// Loading parses the source into a document model with `asciidoc_parser`'s
-// `Parser`, which returns a `Document` carrying the document's block structure.
+// Loading parses the source into a document model with `load`, which returns a
+// `Document` carrying the document's block structure.
 #[test]
 fn loading_returns_a_document_with_block_structure() {
     verifies!(
@@ -65,7 +65,7 @@ That object contains the full block structure of the AsciiDoc document.
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
     assert!(doc.nested_blocks().next().is_some());
 }
 
@@ -82,9 +82,8 @@ carries its rendered inline HTML by the time `parse` returns.
 "#
 );
 
-// Reading a file from disk and parsing its contents. There is no dedicated
-// file-loading entrypoint, so the snippet reads the file and hands the source
-// to `Parser::parse`; the parsed document reports the sample's title.
+// Reading a file from disk and parsing its contents with `load_file`; the
+// parsed document reports the sample's title.
 #[test]
 fn a_file_is_read_and_parsed_into_a_document() {
     verifies!(
@@ -99,13 +98,12 @@ Let's assume we're working with the following AsciiDoc document:
 The main content.
 ----
 
-To read this source file from disk and parse it into a document model, read the
-file and hand its contents to `asciidoc_parser::Parser`:
+To read this source file from disk and parse it into a document model, call
+`load_file`:
 
 [,rust]
 ----
-let source = std::fs::read_to_string("document.adoc")?;
-let doc = asciidoc_parser::Parser::default().parse(&source);
+let doc = asciidoc_html5::load_file("document.adoc")?;
 ----
 
 "#
@@ -117,8 +115,7 @@ let doc = asciidoc_parser::Parser::default().parse(&source);
     ));
     fs::write(&path, SAMPLE).expect("write temp input");
 
-    let source = fs::read_to_string(&path).expect("read temp input");
-    let doc = Parser::default().parse(&source);
+    let doc = load_file(&path).expect("load_file reads and parses");
     let _ = fs::remove_file(&path);
 
     assert_eq!(doc.doctitle(), Some("Document Title"));
@@ -126,8 +123,9 @@ let doc = asciidoc_parser::Parser::default().parse(&source);
 
 non_normative!(
     r#"
-If you already hold the source in memory, pass it to `parse` directly -- there is
-no separate file entry point for loading.
+If you already hold the source in memory, parse it with `load` instead. Both
+return an `asciidoc_parser::Document` you can inspect and later render with
+`convert_document`.
 
 "#
 );
@@ -148,7 +146,7 @@ assert_eq!(doc.doctitle(), Some("Document Title"));
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
     assert_eq!(doc.doctitle(), Some("Document Title"));
 }
 
@@ -168,7 +166,7 @@ assert!(doc.has_attribute("doctitle"));
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
     assert!(doc.has_attribute("doctitle"));
 }
 
@@ -196,7 +194,7 @@ assert_eq!(paragraphs, 1);
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
     let paragraphs = doc
         .nested_blocks()
         .filter(|block| block.resolved_context().as_ref() == "paragraph")

@@ -1,6 +1,6 @@
-use asciidoc_parser::Parser;
-
-use crate::{convert, convert_document, convert_file, convert_with, tests::sdd::*, Options};
+use crate::{
+    convert, convert_document, convert_file, convert_with, load, load_file, tests::sdd::*, Options,
+};
 
 track_file!("docs/modules/api/pages/index.adoc");
 
@@ -47,21 +47,22 @@ pipeline rather than shelling out to a separate process.
 Converting AsciiDoc happens in two steps:
 
 load:: The AsciiDoc source is parsed into a document model -- an in-memory tree of
-the document's elements. `asciidoc-html5` relies on
-https://crates.io/crates/asciidoc-parser[`asciidoc-parser`] for this step,
-which returns an
-https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`].
+the document's elements. `load` (for a string) and `load_file` (for a file)
+perform this step, returning an
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`]
+(the parsing itself is handled by
+https://crates.io/crates/asciidoc-parser[`asciidoc-parser`]).
 
 convert:: The document model is rendered to a complete HTML5 document.
 
 You can run both steps together with `convert` (for a string) or `convert_file`
-(for a file), or run them separately by parsing with `asciidoc-parser` and then
-rendering the resulting document with `convert_document`.
+(for a file), or run them separately -- `load` (or `load_file`) to parse, then
+`convert_document` to render the document you get back.
 
 "#
 );
 
-// The load/convert steps: `convert` runs both together, and parsing followed by
+// The load/convert steps: `convert` runs both together, and `load` followed by
 // `convert_document` runs them separately. Both paths agree for the same
 // source.
 #[test]
@@ -80,7 +81,7 @@ parsing and rendering:
 
 [,rust]
 ----
-let doc = asciidoc_parser::Parser::default().parse("= Hello\n\nWorld.");
+let doc = asciidoc_html5::load("= Hello\n\nWorld.");
 // inspect or transform `doc` here
 let html = asciidoc_html5::convert_document(&doc);
 ----
@@ -95,8 +96,9 @@ Both paths produce the same HTML5 for the same source.
     // Together: `convert` loads and converts the string in one call.
     let together = convert(source);
 
-    // Separately: parse into a document, then render it with `convert_document`.
-    let doc = Parser::default().parse(source);
+    // Separately: `load` parses into a document, then `convert_document` renders
+    // it.
+    let doc = load(source);
     let separately = convert_document(&doc);
 
     // Both paths produce the same HTML5 for the same source.
@@ -105,26 +107,33 @@ Both paths produce the same HTML5 for the same source.
     assert!(together.contains("<title>Hello</title>"));
 }
 
-non_normative!(
-    r#"
-== API entry points
-
-The library provides three entry points. Each returns a complete, standalone
-HTML5 document.
-
-"#
-);
-
-// The three entry points, each returning a complete, standalone HTML5 document:
-// `convert` from a string, `convert_file` from a file (as a `String`), and
-// `convert_document` from an already-parsed document.
+// The five entry points: `convert`/`convert_file` parse and render to a
+// `String`; `load`/`load_file` parse only, returning a `Document`; and
+// `convert_document` renders an already-parsed document.
 #[test]
 fn entry_points() {
     verifies!(
         r#"
+== API entry points
+
+The library provides five entry points: a _convert_ and a _load_ function for
+each input, plus `convert_document` to render a document you already hold.
+
+The convert entry points parse and render in one call, each returning a complete,
+standalone HTML5 document as a `String`:
+
 `asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to HTML5.
 `asciidoc_html5::convert_file`:: reads an AsciiDoc file, parses it, and renders it
 to HTML5, returning the HTML as a `String`.
+
+The load entry points parse only, returning an `asciidoc_parser::Document` you can
+inspect or transform before rendering:
+
+`asciidoc_html5::load`:: parses an AsciiDoc string into a document.
+`asciidoc_html5::load_file`:: reads an AsciiDoc file and parses it into a document.
+
+And `convert_document` renders a document you already hold:
+
 `asciidoc_html5::convert_document`:: renders an already-parsed
 `asciidoc_parser::Document` to HTML5.
 
@@ -139,26 +148,37 @@ to HTML5, returning the HTML as a `String`.
     assert!(from_string.contains("<title>Hello</title>"));
     assert!(from_string.trim_end().ends_with("</body>\n</html>"));
 
-    // `convert_file`: reads a file and returns the rendered HTML as a `String`.
+    // Write the source to a temp file for the `_file` entry points.
     let path = std::env::temp_dir().join(format!(
         "asciidoc-html5-docs-api-{}.adoc",
         std::process::id()
     ));
     std::fs::write(&path, source).expect("write temp input");
+
+    // `convert_file`: reads a file and returns the rendered HTML as a `String`.
     let from_file: String = convert_file(&path).expect("convert_file reads and renders");
-    let _ = std::fs::remove_file(&path);
     assert_eq!(from_file, from_string);
 
+    // `load`: parses a string into a document (parse only).
+    let doc = load(source);
+    assert_eq!(doc.doctitle(), Some("Hello"));
+
+    // `load_file`: reads and parses a file into the same document.
+    let doc_from_file = load_file(&path).expect("load_file reads and parses");
+    assert_eq!(doc_from_file.doctitle(), Some("Hello"));
+
     // `convert_document`: renders an already-parsed document to the same HTML5.
-    let doc = Parser::default().parse(source);
     assert_eq!(convert_document(&doc), from_string);
+
+    let _ = std::fs::remove_file(&path);
 }
 
 non_normative!(
     r#"
-Use `convert_file` when your source is a file on disk and `convert` when you
-already hold it in memory. Reach for `convert_document` when you have parsed the
-document separately -- for example, to analyze it before rendering.
+Use the `_file` entry points when your source is a file on disk and the string
+forms when you already hold it in memory. Reach for `load` (or `load_file`)
+followed by `convert_document` when you want to analyze or transform the document
+before rendering it.
 
 == Supplying document attributes
 

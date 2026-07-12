@@ -1,8 +1,8 @@
 use std::fs;
 
-use asciidoc_parser::{blocks::IsBlock, document::InterpretedValue, Parser};
+use asciidoc_parser::{blocks::IsBlock, document::InterpretedValue};
 
-use crate::{convert_file, tests::sdd::*};
+use crate::{convert_file, load, load_file, tests::sdd::*};
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/convert-files.adoc");
 
@@ -10,9 +10,9 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/convert-files.adoc");
 // library crate. It documents two Ruby entrypoints: `Asciidoctor.load_file`,
 // which parses a file into an `Asciidoctor::Document`, and
 // `Asciidoctor.convert_file`, which parses and converts a file to an output
-// format. This crate splits the same work across two crates: loading is
-// `asciidoc_parser`'s `Parser` (returning a `Document`, the analog of an
-// `Asciidoctor::Document`), and converting is this crate's `convert_file`. The
+// format. This crate has a direct analog for each: `load_file` parses a file
+// into a `Document` (the analog of an `Asciidoctor::Document`; `load` is its
+// string counterpart), and `convert_file` parses and converts one. The
 // document-inspection calls the page shows — `doctitle`, the attributes, and
 // finding paragraph blocks — map to `Document::doctitle`,
 // `has_attribute`/`attribute_value`, and filtering `nested_blocks` by context.
@@ -51,10 +51,9 @@ This page explains how to load and convert AsciiDoc files using the API.
 "#
 );
 
-// Loading parses the source into a document model. `asciidoc_parser`'s `Parser`
-// is this crate's load step: it parses down to the block level into a
-// `Document` (the analog of an `Asciidoctor::Document`) that carries the
-// document's full block structure.
+// Loading parses the source into a document model. `load` is this crate's load
+// step: it parses down to the block level into a `Document` (the analog of an
+// `Asciidoctor::Document`) that carries the document's full block structure.
 #[test]
 fn loading_parses_into_a_document_model() {
     verifies!(
@@ -67,7 +66,7 @@ This object contains the full block structure of the AsciiDoc document.
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
 
     // The parsed document exposes its block structure.
     assert!(doc.nested_blocks().next().is_some());
@@ -85,10 +84,9 @@ That processing is deferred until the parsed document is converted.
 "#
 );
 
-// `load_file` reads a file and parses its contents. This crate has no dedicated
-// file-loading entrypoint, so loading a file is `fs::read_to_string` followed
-// by `Parser::parse`. The Ruby `safe: :safe` option does not affect loading
-// here.
+// `load_file` reads a file and parses its contents. This crate's `load_file` is
+// the direct analog: it reads the file and parses it into a `Document`. The
+// Ruby `safe: :safe` option does not affect loading here.
 #[test]
 fn load_file_reads_and_parses_the_source_file() {
     verifies!(
@@ -118,11 +116,10 @@ doc = Asciidoctor.load_file 'document.adoc', safe: :safe
         std::process::id()
     ));
     fs::write(&path, SAMPLE).expect("write temp input");
-    let source = fs::read_to_string(&path).expect("read temp input");
-    let _ = fs::remove_file(&path);
 
-    // Parsing the file's contents yields the loaded document.
-    let doc = Parser::default().parse(&source);
+    // `load_file` reads and parses the file into the loaded document.
+    let doc = load_file(&path).expect("load_file reads and parses");
+    let _ = fs::remove_file(&path);
     assert_eq!(doc.doctitle(), Some("Document Title"));
 }
 
@@ -143,7 +140,7 @@ puts doc.doctitle
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
     assert_eq!(doc.doctitle(), Some("Document Title"));
 }
 
@@ -164,7 +161,7 @@ pp doc.attributes
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
 
     assert!(doc.has_attribute("doctitle"));
     assert_eq!(
@@ -191,7 +188,7 @@ puts doc.find_by context: :paragraph
 "#
     );
 
-    let doc = Parser::default().parse(SAMPLE);
+    let doc = load(SAMPLE);
 
     let paragraphs = doc
         .nested_blocks()

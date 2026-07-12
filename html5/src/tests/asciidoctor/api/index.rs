@@ -1,8 +1,6 @@
 use std::fs;
 
-use asciidoc_parser::Parser;
-
-use crate::{convert, convert_document, convert_file, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, load, load_file, tests::sdd::*};
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/index.adoc");
 
@@ -14,11 +12,12 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/index.adoc");
 // crate, so it is non-normative here. Two claims do have counterparts: that the
 // API can run the load and convert steps together or separately, and that its
 // entrypoints parse a string or file into a document model and convert it. This
-// crate verifies those against its own API — `convert`/`convert_file` for the
-// combined path and `asciidoc_parser`'s `Parser` (load) plus `convert_document`
-// (convert) for the separate path. The page is purely about the API, so —
-// unlike the shared introduction and get-started pages — it is tracked only
-// from this crate.
+// crate has a direct analog for each of the four Ruby entrypoints —
+// `load`/`load_file` (parse only, returning a `Document`) and
+// `convert`/`convert_file` (parse and render) — plus `convert_document` for the
+// `#convert` step on an already-loaded document, so the tests drive those. The
+// page is purely about the API, so — unlike the shared introduction and
+// get-started pages — it is tracked only from this crate.
 
 non_normative!(
     r#"
@@ -98,10 +97,10 @@ The <<API entrypoints>> section introduces these methods in more detail.
     // Together: `convert` loads and converts a string in a single call.
     let together = convert(source);
 
-    // Separately: load the string into a document model with the parser, then
-    // render that model with `convert_document` (this crate's `#convert` on the
+    // Separately: `load` parses the string into a document model, then
+    // `convert_document` renders that model (this crate's `#convert` on the
     // document). The combined and separate paths agree.
-    let doc = Parser::default().parse(source);
+    let doc = load(source);
     assert_eq!(together, convert_document(&doc));
 
     // The file counterpart, `convert_file`, loads and converts a file; for the
@@ -167,11 +166,11 @@ From there, you can either convert the document model to an output format, or yo
 "#
 );
 
-// The four Ruby entrypoints. `load`/`load_file` parse source or a file into an
-// `Asciidoctor::Document`; this crate's load step is `asciidoc_parser`'s
-// `Parser`, which yields a `Document`. `convert`/`convert_file` parse and
-// convert a string or file to the output format — HTML5 here, the only backend
-// this crate provides.
+// The four Ruby entrypoints, each with a direct analog in this crate.
+// `load`/`load_file` parse a string or file into a `Document` (the analog of an
+// `Asciidoctor::Document`); `convert`/`convert_file` parse and convert a string
+// or file to the output format — HTML5 here, the only backend this crate
+// provides.
 #[test]
 fn four_entrypoints() {
     verifies!(
@@ -188,9 +187,20 @@ There are four main entrypoints in the Asciidoctor API:
 
     let source = "= Hello\n\nWorld.";
 
-    // `load`: parse the source into a document model (a `Document`, the analog of
+    let path = std::env::temp_dir().join(format!(
+        "asciidoc-html5-api-entrypoints-{}.adoc",
+        std::process::id()
+    ));
+    fs::write(&path, source).expect("write temp input");
+
+    // `load`: parse a string into a document model (a `Document`, the analog of
     // an `Asciidoctor::Document`).
-    let doc = Parser::default().parse(source);
+    let doc = load(source);
+    assert_eq!(doc.doctitle(), Some("Hello"));
+
+    // `load_file`: parse the contents of a file into the same document model.
+    let doc_from_file = load_file(&path).expect("load_file reads and parses");
+    assert_eq!(doc_from_file.doctitle(), Some("Hello"));
 
     // `convert`: parse and convert a string to the output format. Rendering the
     // separately loaded document gives the same HTML5.
@@ -201,14 +211,10 @@ There are four main entrypoints in the Asciidoctor API:
 
     // `convert_file`: parse and convert the contents of a file; its output
     // matches converting the same source held in memory.
-    let path = std::env::temp_dir().join(format!(
-        "asciidoc-html5-api-entrypoints-{}.adoc",
-        std::process::id()
-    ));
-    fs::write(&path, source).expect("write temp input");
     let from_file = convert_file(&path).expect("convert_file reads and renders");
-    let _ = fs::remove_file(&path);
     assert_eq!(from_file, html);
+
+    let _ = fs::remove_file(&path);
 }
 
 non_normative!(
