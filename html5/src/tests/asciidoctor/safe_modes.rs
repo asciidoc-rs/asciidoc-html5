@@ -93,16 +93,17 @@ Its integer value is `1`.
     );
 }
 
-// The restrictions SERVER places on document-set attributes are not modeled by
-// this renderer yet; each is tracked for later implementation:
+// Several of the restrictions SERVER places on document-set attributes are not
+// modeled by this renderer yet; each is tracked for later implementation:
 // source-highlighter (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), doctype
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), backend
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), docdir
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), docdir
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo is the
-// exception: its SERVER restriction *is* enforced — a document `:docinfo:` is
-// ignored under SERVER and above, so only an API value enables docinfo.
-// Enforcing the same for the attributes above is tracked in
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo and
+// backend are the exceptions: their SERVER restrictions *are* enforced — a
+// document `:docinfo:` or `:backend:` is ignored under SERVER and above, so
+// only an API value takes effect (backend falls back to `html5` otherwise).
+// These are covered by unit tests in `options.rs`. Enforcing the same for the
+// remaining attributes is tracked in
 // https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
@@ -143,12 +144,13 @@ Its integer value is `10`.
 // tracked for later implementation: icons
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
-// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), backend
-// locking (https://github.com/asciidoc-rs/asciidoc-html5/issues/47), `docdir`
+// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), `docdir`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), `docfile`
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/49), and source
 // highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
-// Docinfo is surfaced: SECURE disables it (no docinfo file is read).
+// Docinfo and backend are surfaced: SECURE disables docinfo (no docinfo file is
+// read) and forces the backend to `html5`, locked against the document (covered
+// by unit tests in `options.rs`).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). The one restriction observable
 // here is that SECURE "prevents access to stylesheets," which is why it links

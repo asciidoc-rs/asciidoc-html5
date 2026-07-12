@@ -402,6 +402,31 @@ impl Options {
             };
         }
 
+        // Matching Asciidoctor: `Server` and above forbid the *document* from
+        // setting `backend`. Asciidoctor's SERVER "disallows the document from
+        // setting attributes that would affect conversion" — backend among them
+        // — and SECURE "sets the backend to html5." Re-seed `backend` *silently*
+        // locked (`ApiOnly`) at whatever the API resolved to, or at this crate's
+        // only backend, `html5`, when the API did not name it, so any document
+        // `:backend:` is dropped with no warning. This runs after the directive
+        // loop, so it wins even over a *soft* API default, which would otherwise
+        // leave `backend` document-overridable. This renderer emits html5
+        // regardless of the backend value; the lock is observable through the
+        // `{backend}` intrinsic reference.
+        if mode >= SafeMode::Server {
+            let ctx = ModificationContext::ApiOnly;
+            parser = match self.last_action("backend") {
+                Some(Action::Value(value)) => {
+                    parser.with_intrinsic_attribute_silent("backend", value, ctx)
+                }
+                // A bare API set, an API unset, or no API mention at all: fall
+                // back to html5, locked against the document.
+                Some(Action::Set) | Some(Action::Unset) | None => {
+                    parser.with_intrinsic_attribute_silent("backend", "html5", ctx)
+                }
+            };
+        }
+
         // Anchor filesystem-relative resources: `include::` targets and docinfo
         // files. Naming the primary file lets the parser resolve top-level
         // includes against that file's directory and derive the `docname` for
@@ -858,5 +883,72 @@ mod tests {
 
         assert!(with.contains("name=\"private\""));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // The backend the document sees is reachable through the `{backend}`
+    // intrinsic reference. These exercise the safe-mode gating in `apply`:
+    // below `Server` a document `:backend:` takes effect; `Server` and above
+    // ignore it, leaving the API value (or the html5 default) in force —
+    // matching Asciidoctor, which "disallows the document from setting"
+    // conversion attributes at `Server` and "sets the backend to html5" at
+    // `Secure`.
+
+    // A helper document that echoes the resolved `backend` intrinsic into the
+    // body, where it lands in the rendered output.
+    const BACKEND_ECHO: &str = "= Doc\n:backend: docbook\n\nbackend={backend}";
+
+    #[test]
+    fn document_set_backend_takes_effect_below_server() {
+        // Under `Safe` (below `Server`), the document's `:backend:` is honored,
+        // so the `{backend}` reference resolves to the document's value.
+        let html = convert_with(BACKEND_ECHO, &Options::new().safe_mode(SafeMode::Safe));
+        assert!(html.contains("backend=docbook"));
+    }
+
+    #[test]
+    fn document_set_backend_is_ignored_under_server() {
+        // Under `Server`, a document that sets `backend` itself is ignored, so
+        // the reference resolves to the html5 default rather than `docbook`.
+        let html = convert_with(BACKEND_ECHO, &Options::new().safe_mode(SafeMode::Server));
+        assert!(html.contains("backend=html5"));
+        assert!(!html.contains("backend=docbook"));
+    }
+
+    #[test]
+    fn document_set_backend_is_ignored_under_secure() {
+        // Under `Secure` (the API default), the backend is forced to html5 and
+        // the document cannot change it.
+        let html = convert_with(BACKEND_ECHO, &Options::new().safe_mode(SafeMode::Secure));
+        assert!(html.contains("backend=html5"));
+        assert!(!html.contains("backend=docbook"));
+    }
+
+    #[test]
+    fn api_set_backend_still_applies_under_server() {
+        // The restriction is on the *document*, not the API: an API-set
+        // `backend` is honored under `Server`, even against a conflicting
+        // document `:backend:`.
+        let html = convert_with(
+            BACKEND_ECHO,
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute("backend", "docbook5"),
+        );
+        assert!(html.contains("backend=docbook5"));
+    }
+
+    #[test]
+    fn soft_default_backend_does_not_let_the_document_set_it_under_server() {
+        // A *soft* API default leaves an attribute document-overridable, so a
+        // `mentions`-based guard would skip the safe-mode lock. Under `Server`
+        // the backend must stay API-controlled regardless: a document
+        // `:backend:` is still ignored even when the API only soft-touched it.
+        let html = convert_with(
+            BACKEND_ECHO,
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute_default("backend", "docbook5"),
+        );
+        assert!(html.contains("backend=docbook5"));
     }
 }
