@@ -99,11 +99,12 @@ Its integer value is `1`.
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/46), docdir
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/48), and docfile
 // (https://github.com/asciidoc-rs/asciidoc-html5/issues/49). Docinfo and
-// backend are the exceptions: their SERVER restrictions *are* enforced — a
-// document `:docinfo:` or `:backend:` is ignored under SERVER and above, so
-// only an API value takes effect (backend falls back to `html5` otherwise).
-// These are covered by unit tests in `options.rs`. Enforcing the same for the
-// remaining attributes is tracked in
+// backend are the exceptions: their SERVER restrictions *are* enforced. A
+// document `:docinfo:` is ignored under SERVER and above, so only an API value
+// enables docinfo; a document `:backend:` is likewise ignored, and because
+// html5 is the only backend this crate produces, backend is pinned to `html5`
+// there regardless of the API. These are covered by unit tests in `options.rs`.
+// Enforcing the same for the remaining attributes is tracked in
 // https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
 non_normative!(
     r#"
