@@ -402,40 +402,69 @@ impl Options {
             };
         }
 
-        // Surface the `docfile` and `docdir` intrinsic attributes the way
-        // Asciidoctor's loader does, honoring the safe mode. Asciidoctor derives
-        // these from the input file; `asciidoc-parser` does not originate them,
-        // so this crate seeds them. Below `Server` they carry the input file's
-        // absolute path and directory (Asciidoctor's
-        // `File.absolute_path`/`File.dirname`); `Server` and above conceal the
-        // host location — `docfile` is trimmed to its basename and `docdir` is
-        // emptied. `Secure`, being higher than `Server`, inherits the same
-        // sanitization (both modes leave `docdir` empty and `docfile` a bare
-        // basename, matching Asciidoctor and the AsciiDoc attributes reference).
-        // Both are locked (`ApiOnly`) so the document cannot reassign them, and
-        // seeded silently so re-seeding over a caller-supplied value or the
-        // directive loop raises no lock warning.
+        // Surface the input-file attribute family — `docfile`, `docdir`,
+        // `docname`, `docfilesuffix` — the way Asciidoctor's loader does,
+        // honoring the safe mode. Asciidoctor derives all four from the input
+        // path; `asciidoc-parser` does not originate them, so this crate seeds
+        // them. `docfile`/`docdir` reveal the host location, so the safe mode
+        // sanitizes them: below `Server` they carry the input file's absolute
+        // path and directory (Asciidoctor's `File.absolute_path`/`File.dirname`);
+        // `Server` and above conceal the host — `docfile` is trimmed to its
+        // basename and `docdir` is emptied. `Secure`, being higher than
+        // `Server`, inherits the same sanitization (both modes leave `docdir`
+        // empty and `docfile` a bare basename, matching Asciidoctor and the
+        // AsciiDoc attributes reference). `docname` (the file stem) and
+        // `docfilesuffix` (the file extension) expose no more than the concealed
+        // `docfile` already does, so they carry no safe-mode nuance and are set
+        // the same in every mode. All are locked (`ApiOnly`) so the document
+        // cannot reassign them, and seeded silently so re-seeding over a
+        // caller-supplied value or the directive loop raises no lock warning.
         let conceal = mode >= SafeMode::Server;
 
-        // `docfile` names the source document. It comes from a caller-supplied
-        // `docfile` value or, failing that, the primary file. Absent both — a
-        // plain source string with no file — there is nothing to name, so
-        // `docfile` stays unset, matching Asciidoctor (a string carries no
-        // `docfile`).
+        // The source document's path: a caller-supplied `docfile` value or,
+        // failing that, the primary file (made absolute). Absent both — a plain
+        // source string with no file — nothing names the document, so none of
+        // the four file intrinsics are seeded, matching Asciidoctor (a string
+        // carries no `docfile`/`docname`).
         let docfile_source = self.last_value("docfile").map(str::to_owned).or_else(|| {
             self.primary_file
                 .as_deref()
                 .map(|path| canonicalize_or(path).to_string_lossy().into_owned())
         });
-        if let Some(source) = docfile_source {
+        if let Some(source) = &docfile_source {
+            // `docfile` names the source document; `Server` and above trim it to
+            // its basename to conceal the host location.
             let docfile = if conceal {
-                file_basename(&source)
+                file_basename(source)
             } else {
-                source
+                source.clone()
             };
             parser = parser.with_intrinsic_attribute_silent(
                 "docfile",
                 docfile,
+                ModificationContext::ApiOnly,
+            );
+
+            // `docfilesuffix` is the file extension (leading dot included, empty
+            // when the name has none) and `docname` the basename with that
+            // suffix removed — Asciidoctor's `Helpers.extname`/`Helpers.basename`.
+            // A caller-supplied value wins over the derived one.
+            let docfilesuffix = self
+                .last_value("docfilesuffix")
+                .map(str::to_owned)
+                .unwrap_or_else(|| file_extension(source));
+            let docname = self
+                .last_value("docname")
+                .map(str::to_owned)
+                .unwrap_or_else(|| document_name(source, &docfilesuffix));
+            parser = parser.with_intrinsic_attribute_silent(
+                "docfilesuffix",
+                docfilesuffix,
+                ModificationContext::ApiOnly,
+            );
+            parser = parser.with_intrinsic_attribute_silent(
+                "docname",
+                docname,
                 ModificationContext::ApiOnly,
             );
         }
@@ -558,6 +587,35 @@ fn file_basename(path: &str) -> String {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_owned())
+}
+
+/// The `docfilesuffix` value for `path`: the file extension including the
+/// leading dot, or an empty string when the final path component has no
+/// extension. This mirrors Asciidoctor's `Helpers.extname` — the substring from
+/// the last `.` to the end, unless that dot lies in a directory component (a
+/// path separator follows it) or there is no dot at all.
+fn file_extension(path: &str) -> String {
+    match path.rfind('.') {
+        Some(idx) if !path[idx..].contains(['/', '\\']) => path[idx..].to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The `docname` value for `path`: its basename with the trailing `suffix`
+/// (the `docfilesuffix`) removed, mirroring Asciidoctor's `Helpers.basename`.
+/// An empty `suffix` (an extensionless name) removes nothing, and a basename
+/// that is *entirely* the suffix — a leading-dot name such as `.adoc` — is kept
+/// whole rather than reduced to an empty stem.
+fn document_name(path: &str, suffix: &str) -> String {
+    let base = file_basename(path);
+    if !suffix.is_empty() {
+        if let Some(stem) = base.strip_suffix(suffix) {
+            if !stem.is_empty() {
+                return stem.to_owned();
+            }
+        }
+    }
+    base
 }
 
 /// Canonicalizes `path` to its absolute form, falling back to the path as given
@@ -1060,5 +1118,87 @@ mod tests {
 
         assert!(html.contains("file=[{docfile}]"), "{html}");
         assert!(html.contains(&format!("dir={}", cwd.display())), "{html}");
+    }
+
+    // `docname` (the file stem) and `docfilesuffix` (the file extension) round
+    // out the input-file attribute family. Unlike `docfile`/`docdir` they carry
+    // no safe-mode nuance — the stem and extension expose nothing the concealed
+    // `docfile` basename does not — so they are set the same in every mode.
+
+    #[test]
+    fn docname_and_docfilesuffix_are_derived_from_the_file() {
+        for mode in [
+            SafeMode::Unsafe,
+            SafeMode::Safe,
+            SafeMode::Server,
+            SafeMode::Secure,
+        ] {
+            let html = convert_with(
+                "= Doc\n\nname={docname} suffix={docfilesuffix}",
+                &Options::new()
+                    .safe_mode(mode)
+                    .input_file("/docs/guide/userguide.adoc"),
+            );
+            assert!(
+                html.contains("<p>name=userguide suffix=.adoc</p>"),
+                "{mode:?}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn docfilesuffix_preserves_an_alternate_extension() {
+        let html = convert_with(
+            "= Doc\n\nname={docname} suffix={docfilesuffix}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file("/docs/notes.asciidoc"),
+        );
+        assert!(
+            html.contains("<p>name=notes suffix=.asciidoc</p>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn an_extensionless_name_has_an_empty_docfilesuffix() {
+        // With no extension, `docfilesuffix` is empty and `docname` is the whole
+        // basename (Asciidoctor's `Helpers.extname` fallback).
+        let html = convert_with(
+            "= Doc\n\nname={docname} suffix=[{docfilesuffix}]",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file("/docs/README"),
+        );
+        assert!(html.contains("<p>name=README suffix=[]</p>"), "{html}");
+    }
+
+    #[test]
+    fn a_document_cannot_reassign_docname_or_docfilesuffix() {
+        let html = convert_with(
+            "= Doc\n:docname: HACKED\n:docfilesuffix: .HACKED\n\nname={docname} suffix={docfilesuffix}",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .input_file("/docs/guide/userguide.adoc"),
+        );
+        assert!(!html.contains("HACKED"), "{html}");
+        assert!(
+            html.contains("<p>name=userguide suffix=.adoc</p>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn string_input_has_no_docname_or_docfilesuffix() {
+        // Without a file, none of the file-derived intrinsics beyond `docdir`
+        // are set, so their references are left unresolved.
+        let html = convert_with(
+            "= Doc\n\nname=[{docname}] suffix=[{docfilesuffix}]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(
+            html.contains("name=[{docname}] suffix=[{docfilesuffix}]"),
+            "{html}"
+        );
     }
 }
