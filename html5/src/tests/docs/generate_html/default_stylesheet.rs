@@ -4,23 +4,18 @@ track_file!("docs/modules/generate-html/pages/default-stylesheet.adoc");
 
 // This crate's "Default Stylesheet" page. It documents that a converted
 // document carries Asciidoctor's default stylesheet (and the web-font `<link>`
-// it relies on) in the standalone HTML5 `<head>`, that the safe mode decides
-// whether it is linked or embedded, and how the `linkcss`, `webfonts`, and
-// `stylesheet` attributes change that. Every claim is verified against
+// it relies on) in the standalone HTML5 `<head>`, and how the `webfonts`
+// attribute changes it. The embed/link/copy/disable modes it points to are
+// covered on the "Stylesheet Modes" page; every claim here is verified against
 // `asciidoc_html5`.
 //
-// The page is tracked from the library crate only. The `adoc` binary is a thin
-// wrapper over `convert_with`, so the stylesheet it produces is identical to
-// the library's; the one `adoc` invocation shown here (`adoc my-document.adoc`)
-// exercises the same skeleton already covered by the CLI crate's other page
-// tests. Tracking this page from both crates would only duplicate the full-page
-// reproduction with no added coverage.
+// The page is tracked from the library crate only. It shows no `adoc`
+// invocation whose behavior is not already covered by the CLI crate's other
+// page tests, so tracking it from both crates would only duplicate the
+// full-page reproduction with no added coverage.
 //
-// The prose is non-normative documentation. The docinfo bullet describes a
-// supported feature whose behavior (placement, the base-directory resolution,
-// and the safe-mode jail) is verified from the docinfo and include tests rather
-// than here, and the `copycss` limitation describes an absent feature, so
-// neither carries a rule to verify on this page.
+// The prose is non-normative documentation; the remote-stylesheet limitation
+// describes an absent feature, so it carries no rule to verify on this page.
 
 /// Converts `source` under a safe mode below `Secure`, so the default
 /// stylesheet is embedded inline (`<style>`). The default (`Secure`) mode links
@@ -43,9 +38,9 @@ Asciidoctor's `html5` backend uses, included verbatim, so a document converted
 with `adoc` looks the same as one converted with Asciidoctor.
 
 Whether the stylesheet is _linked_ or _embedded_ depends on the
-xref:ROOT:safe-modes.adoc[safe mode]. Under the API default (`secure`) the
-converter links to _asciidoctor.css_; the `adoc` command, and any safe mode
-below `secure`, embeds the stylesheet inline instead. See <<applying>>.
+xref:ROOT:safe-modes.adoc[safe mode], and it can be linked, copied, or disabled.
+See xref:stylesheet-modes.adoc[Stylesheet Modes] for those behaviors, which
+apply to the default and a xref:custom-stylesheet.adoc[custom stylesheet] alike.
 
 [NOTE]
 ====
@@ -119,102 +114,6 @@ Droid Sans Mono:: monospaced phrases and verbatim blocks
     assert!(html.contains(
         "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700\">"
     ));
-}
-
-// Applying the stylesheet: the default safe mode (`secure`) links it; a lower
-// safe mode embeds it; and `linkcss` overrides the safe-mode default either
-// way.
-#[test]
-fn applying_links_by_default_and_a_lower_safe_mode_embeds() {
-    verifies!(
-        r##"
-[#applying]
-== Applying the stylesheet
-
-There is nothing special to do: converting a document applies the default
-stylesheet automatically. Under the default safe mode (`secure`), the `<head>`
-links to _asciidoctor.css_:
-
-[,rust]
-----
-let html = asciidoc_html5::convert("= My Document\n\nHello.");
-assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
-----
-
-"##
-    );
-
-    let html = convert("= My Document\n\nHello.");
-    assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
-    assert!(!html.contains("<style>"));
-
-    non_normative!(
-        r#"
-You are then responsible for placing _asciidoctor.css_ next to the output so the
-browser can find it. Unlike Asciidoctor, `asciidoc-html5` does not write that
-file for you (there is no `copycss` step, tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39]); it only
-produces the HTML.
-
-"#
-    );
-
-    verifies!(
-        r#"
-To embed the stylesheet inline instead -- so the output is self-contained -- run
-the document under a xref:ROOT:safe-modes.adoc[safe mode] below `secure`. The
-`adoc` command does this by default (it runs `unsafe`), so converting a file from
-the command line produces a self-contained result:
-
- $ adoc my-document.adoc
-
-Through the API, pass the safe mode explicitly:
-
-[,rust]
-----
-use asciidoc_html5::{convert_with, Options, SafeMode};
-
-let html = convert_with(
-    "= My Document\n\nHello.",
-    &Options::new().safe_mode(SafeMode::Server),
-);
-assert!(html.contains("<style>"));
-----
-
-"#
-    );
-
-    // The API path shown on the page; the `adoc` default (unsafe) embeds too.
-    let embedded = convert_with(
-        "= My Document\n\nHello.",
-        &Options::new().safe_mode(SafeMode::Server),
-    );
-    assert!(embedded.contains("<style>"));
-    assert!(!embedded.contains("./asciidoctor.css"));
-
-    verifies!(
-        r#"
-The `linkcss` attribute overrides the safe-mode default: set it to link even
-under a low safe mode, or unset it from the API (`Options::unset("linkcss")`) to
-embed under `secure`. Under `secure`, a document cannot unset `linkcss` itself.
-
-"#
-    );
-
-    // Set `linkcss` to link even under a low (unsafe) safe mode.
-    let forced_link = convert_with(
-        "= Doc\n\nBody.",
-        &Options::new().set("linkcss").safe_mode(SafeMode::Unsafe),
-    );
-    assert!(forced_link.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
-
-    // Unset `linkcss` from the API to embed under `secure`.
-    let forced_embed = convert_with("= Doc\n\nBody.", &Options::new().unset("linkcss"));
-    assert!(forced_embed.contains("<style>"));
-
-    // A document cannot unset `linkcss` under `secure`.
-    let locked = convert("= Doc\n:linkcss!:\n\nBody.");
-    assert!(locked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
 }
 
 // Unsetting `webfonts` in the document header (or from outside) drops the
@@ -292,57 +191,16 @@ Hello.
     )));
 }
 
-// The stylesheet behaviors that are checkable: a custom `stylesheet` value is
-// linked (and cross-references the custom-stylesheet page), and explicitly
-// unsetting the stylesheet drops the default one.
-#[test]
-fn custom_and_unset_stylesheet_behaviors() {
-    verifies!(
-        r#"
-== Known limitations
-
-`asciidoc-html5` applies both the default stylesheet and custom stylesheets. A
-few of Asciidoctor's stylesheet features are not available:
-
-* *Custom stylesheets* are supported: set the `stylesheet` attribute to apply
-your own in place of the default, embedded or linked per the safe mode. See
-xref:custom-stylesheet.adoc[]. What is _not_ supported is copying a linked
-stylesheet into an output directory (`copycss`) and fetching a remote
-stylesheet to embed; both are tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
-"#
-    );
-
-    // Under the `secure` default, a custom stylesheet is linked at its
-    // normalized web path (with `stylesdir` mirrored into it).
-    let linked = convert("= Doc\n:stylesheet: my-theme.css\n:stylesdir: css\n\nBody.");
-    assert!(linked.contains("<link rel=\"stylesheet\" href=\"./css/my-theme.css\">"));
-    assert!(!linked.contains("./asciidoctor.css"));
-
-    // Embedding a custom stylesheet uses the CSS supplied through the API (the
-    // full embed-from-disk path is covered on the custom-stylesheet page).
-    let embedded = convert_with(
-        "= Doc\n:stylesheet: my-theme.css\n\nBody.",
-        &Options::new()
-            .safe_mode(SafeMode::Server)
-            .stylesheet_content("body { color: #ff0000; }"),
-    );
-    assert!(embedded.contains("<style>\nbody { color: #ff0000; }\n</style>"));
-
-    // Explicitly unsetting the stylesheet drops the default (linked or embedded).
-    let unset = convert("= Doc\n:stylesheet!:\n\nBody.");
-    assert!(!unset.contains("<style>"));
-    assert!(!unset.contains("asciidoctor.css"));
-}
-
 non_normative!(
     r#"
-* *docinfo.* Auxiliary content from docinfo files is injected into the head,
-header, and footer. Files are resolved from the base directory and confined by
-the safe mode, exactly as `include::` targets are.
-* *copycss.* The library never writes files, so with a linked stylesheet you
-must supply _asciidoctor.css_ yourself; writing it out is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
+== Known limitations
+
+`asciidoc-html5` applies both the default stylesheet and custom stylesheets,
+embedding, linking, copying (`copycss`), or disabling them as described in
+xref:stylesheet-modes.adoc[Stylesheet Modes]. One Asciidoctor stylesheet feature
+is *not planned*: fetching a _remote_ stylesheet (an `http`/`https` URL) to
+embed it. Neither the library nor the `adoc` CLI reads over the network, so a
+remote stylesheet can only be linked.
 
 To pin down exactly which markup the renderer supports today, see the
 xref:ROOT:index.adoc[introduction].

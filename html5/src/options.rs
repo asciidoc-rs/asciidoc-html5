@@ -366,6 +366,13 @@ impl Options {
                 parser.with_intrinsic_attribute_bool("linkcss", true, ModificationContext::ApiOnly);
         }
 
+        // `copycss` needs no seeding here: the parser sets it on by default in
+        // every safe mode (document-overridable), and the copy is gated on the
+        // safe mode being below `Secure` where it is resolved (see the
+        // [`copycss`](crate::copycss) module). `copycss` only governs whether a
+        // *linked* stylesheet is also copied next to the output; it never
+        // affects the HTML.
+
         // Matching Asciidoctor: `Server` and above forbid the *document* from
         // controlling docinfo — only the API may (Asciidoctor's SERVER "prevents
         // the document from setting … docinfo"). Re-seed docinfo *silently*
@@ -734,6 +741,31 @@ mod tests {
                 .safe_mode(SafeMode::Server)
                 .attribute("docinfo", "shared")
                 .base_dir(dir.clone()),
+        );
+
+        assert!(html.contains("<meta name=\"x\">\n</head>"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn api_bare_set_docinfo_applies_under_server() {
+        // A *bare* API `docinfo` (a set with no value, `Action::Set`) enables
+        // docinfo under `Server` just like a valued one. A boolean `docinfo`
+        // resolves to *private*, so it reads `<docname>-docinfo.html` given a
+        // primary file. This exercises the `Some(Action::Set)` arm, distinct
+        // from the valued `attribute("docinfo", …)` path above.
+        let dir = docinfo_scratch(
+            "server-api-bare",
+            &[("guide-docinfo.html", "<meta name=\"x\">")],
+        );
+
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .set("docinfo")
+                .base_dir(dir.clone())
+                .input_file(dir.join("guide.adoc")),
         );
 
         assert!(html.contains("<meta name=\"x\">\n</head>"));

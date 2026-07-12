@@ -7,10 +7,11 @@ track_file!("docs/modules/generate-html/pages/custom-stylesheet.adoc");
 // This crate's "Apply a Custom Stylesheet" page, tracked from the CLI. Its
 // prose and the API (Rust) invocations are non-normative here — the
 // `asciidoc-html5` crate verifies those against the API, and the sdd tool
-// merges the two crates by line. What this test suite verifies is the one
-// `adoc` invocation the page shows: `adoc my-document.adoc` reads the custom
-// stylesheet named in the header from the input file's directory and embeds it
-// into the `<head>`, with no web fonts.
+// merges the two crates by line. What this suite verifies is the two `adoc`
+// invocations the page shows: `adoc my-document.adoc` embeds a header-named
+// custom stylesheet from the input file's directory, and the copy/link split
+// copies a linked stylesheet from the `copycss` path to the `stylesheet` web
+// path.
 
 non_normative!(
     r#"
@@ -20,9 +21,8 @@ non_normative!(
 
 In place of Asciidoctor's default stylesheet, you can tell `asciidoc-html5` to
 apply a custom stylesheet of your own by setting the `stylesheet` document
-attribute. Whether the stylesheet is _embedded_ or _linked_ follows the same
-xref:ROOT:safe-modes.adoc[safe mode] rule as the
-xref:default-stylesheet.adoc[default stylesheet].
+attribute. It is embedded, linked, copied, or disabled by the same rules as the
+default stylesheet -- see xref:stylesheet-modes.adoc[Stylesheet Modes].
 
 [NOTE]
 ====
@@ -31,8 +31,6 @@ invocations it shows are normative: they are verified against the
 implementation, so the documented behavior is guaranteed.
 ====
 
-== Specify the custom stylesheet
-
 "#
 );
 
@@ -40,12 +38,13 @@ implementation, so the documented behavior is guaranteed.
 // test drives: a _my-theme.css_ next to the document and a header
 // `:stylesheet: my-theme.css`. `adoc my-document.adoc` then embeds that
 // header-named stylesheet, read from the input file's directory, into the
-// `<head>` — self-contained output with no web fonts. This is the CLI
-// counterpart to the API embedding the library crate verifies.
+// `<head>` — self-contained output with no web fonts.
 #[test]
 fn adoc_embeds_a_custom_stylesheet_from_disk() {
     verifies!(
         r#"
+== Specify the custom stylesheet
+
 Set the `stylesheet` attribute to the path of your stylesheet, relative to the
 document. An empty value (the default) keeps the default stylesheet; any other
 value selects a custom one.
@@ -104,15 +103,11 @@ web fonts.
 
 non_normative!(
     r##"
-== Embed or link
+== Embed or link a custom stylesheet
 
-Which form the `<head>` takes follows the xref:ROOT:safe-modes.adoc[safe mode],
-exactly as for the default stylesheet:
-
-* The `adoc` command (which runs `unsafe`) and any safe mode below `secure`
-_embed_ the stylesheet's contents inline.
-* The API default (`secure`), and any mode with `linkcss` set, _link_ to the
-stylesheet.
+Whether the `<head>` embeds or links a custom stylesheet follows the
+xref:stylesheet-modes.adoc[safe mode and `linkcss`], exactly as for the default
+stylesheet. Two details are specific to a custom stylesheet.
 
 Embedding reads the stylesheet from disk, so it resolves against a base
 directory and, under a jailed safe mode (`safe` or `server`), is confined to it
@@ -173,14 +168,75 @@ let html = asciidoc_html5::convert("= Doc\n:stylesheet: https://example.org/them
 assert!(html.contains(r#"<link rel="stylesheet" href="https://example.org/theme.css">"#));
 ----
 
+"##
+);
+
+// The copy/link split: `copycss=<path>` reads the stylesheet from that path but
+// writes (and links) it at the `stylesheet` web path. Driving the shown command
+// with a real output file (stdout would skip the copy), `adoc` reads
+// _vendor/theme.css_ and writes _theme.css_ next to the output HTML.
+#[test]
+fn adoc_copies_from_the_copycss_path() {
+    verifies!(
+        r#"
+[#copy]
+== Copy a linked stylesheet
+
+When a custom stylesheet is _linked_, the file it references has to exist next
+to the HTML. With `copycss` set (its default in every safe mode but `secure`),
+the `adoc` command copies it into the output directory at the same `stylesdir`
+web path the `<link>` uses; see
+xref:stylesheet-modes.adoc#copy[Copy the stylesheet to the output directory] for
+the full behavior and the `AssetWriter` API the library exposes.
+
+You can also copy the stylesheet _from_ a location other than the one the HTML
+links it under, by setting `copycss` to that path. The file is read from the
+`copycss` path but still written to (and linked at) the `stylesheet` web path:
+
+ $ adoc -a linkcss -a copycss=vendor/theme.css -a stylesheet=theme.css my-document.adoc
+
+"#
+    );
+
+    let dir = std::env::temp_dir().join(format!("adoc-docs-copysplit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("vendor")).expect("create temp dir");
+    let input = dir.join("my-document.adoc");
+    std::fs::write(&input, "= My Document\n\nHello.").expect("write input");
+    std::fs::write(dir.join("vendor/theme.css"), "body { color: green; }").expect("write css");
+    let output = dir.join("my-document.html");
+
+    let cli = Cli::parse_from([
+        "adoc",
+        input.to_str().expect("temp path is UTF-8"),
+        "-o",
+        output.to_str().expect("temp path is UTF-8"),
+        "-a",
+        "linkcss",
+        "-a",
+        "copycss=vendor/theme.css",
+        "-a",
+        "stylesheet=theme.css",
+    ]);
+    let mut stdout = Vec::new();
+    run(&cli, &mut stdout).expect("adoc converts the file");
+
+    // The stylesheet is read from the `copycss` path and written at the
+    // `stylesheet` web path next to the output HTML.
+    let copied = std::fs::read_to_string(dir.join("theme.css")).unwrap_or_default();
+    let html = std::fs::read_to_string(&output).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(copied, "body { color: green; }");
+    assert!(html.contains(r#"<link rel="stylesheet" href="./theme.css">"#));
+}
+
+non_normative!(
+    r#"
 == Known limitations
 
-`asciidoc-html5` produces HTML but never writes companion files. With a _linked_
-custom stylesheet you are responsible for placing the stylesheet where the HTML
-references it; there is no `copycss` step that copies it into an output
-directory. Embedding a _remote_ stylesheet (an `http`/`https` URL) is likewise
-unsupported, since the library does not fetch over the network -- a remote
-stylesheet can still be linked, as shown above. Both are tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
-"##
+Embedding a _remote_ stylesheet (an `http`/`https` URL) is *not planned*:
+neither the library nor the `adoc` CLI reads over the network, so a remote
+stylesheet can only be linked, as shown above, never fetched and inlined.
+"#
 );

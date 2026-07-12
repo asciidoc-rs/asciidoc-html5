@@ -22,12 +22,14 @@ track_file!("ref/asciidoctor/docs/modules/html-backend/pages/default-stylesheet.
 // tracking this page from the CLI crate too would only duplicate the full-page
 // reproduction with no independent claim to verify.
 //
-// The rest is non-normative here — features this crate does not implement (it
-// converts a string to a string and embeds only the default stylesheet), each
-// carrying no rule to verify:
+// The rest is non-normative here — recipes that carry no rule to verify on
+// *this* reference page, either because this crate does not implement them (it
+// embeds only the default stylesheet) or because it verifies them on its own
+// docs pages instead:
 // - the `@import`/custom-stylesheet "extend" recipe (custom stylesheets are
 //   tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/36);
-// - the `copycss` file copy (tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/39);
+// - the `copycss` file copy (supported now, and verified on this project's own
+//   xref:generate-html:stylesheet-modes.adoc[] docs page);
 // - the external Asciidoctor Skins themes (out of scope; third-party).
 //
 // The page's docinfo recipe *is* verified: this crate injects head docinfo
@@ -272,9 +274,9 @@ image::default-stylesheet.png[]
 // Setting `linkcss` makes the converter link to the default stylesheet instead
 // of embedding it. This crate emits the same `<link>` to `./asciidoctor.css` in
 // place of the inline `<style>`. (The companion `copycss`, which copies the
-// stylesheet file into the output directory, is a file-system side effect this
-// string-to-string library does not perform; it is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/39.)
+// stylesheet file into the output directory, is supported through the library's
+// `AssetWriter`; it is verified on this project's own
+// xref:generate-html:stylesheet-modes.adoc[] docs page, not exercised here.)
 #[test]
 fn linkcss_links_the_stylesheet_instead_of_embedding_it() {
     verifies!(
@@ -296,10 +298,9 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
 
 // The API links the default stylesheet by default because its default safe mode
 // is `secure`; a safe mode of server or lower embeds it instead. This crate now
-// models safe mode, so both halves are verifiable. The `copycss` file copy this
-// crate does not perform (tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/39) and the Ruby snippet
-// stay non-normative.
+// models safe mode, so both halves are verifiable. The `copycss` file copy
+// (verified on this project's own xref:generate-html:stylesheet-modes.adoc[]
+// docs page, not exercised here) and the Ruby snippet stay non-normative.
 #[test]
 fn the_api_links_by_default_and_a_lower_safe_mode_embeds() {
     verifies!(
