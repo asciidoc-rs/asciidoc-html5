@@ -741,6 +741,31 @@ mod tests {
     }
 
     #[test]
+    fn api_bare_set_docinfo_applies_under_server() {
+        // A *bare* API `docinfo` (a set with no value, `Action::Set`) enables
+        // docinfo under `Server` just like a valued one. A boolean `docinfo`
+        // resolves to *private*, so it reads `<docname>-docinfo.html` given a
+        // primary file. This exercises the `Some(Action::Set)` arm, distinct
+        // from the valued `attribute("docinfo", …)` path above.
+        let dir = docinfo_scratch(
+            "server-api-bare",
+            &[("guide-docinfo.html", "<meta name=\"x\">")],
+        );
+
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .set("docinfo")
+                .base_dir(dir.clone())
+                .input_file(dir.join("guide.adoc")),
+        );
+
+        assert!(html.contains("<meta name=\"x\">\n</head>"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn soft_default_docinfo_does_not_let_the_document_enable_it_under_server() {
         // A *soft* API default leaves an attribute document-overridable, so a
         // `mentions`-based guard would skip the safe-mode lock. Under `Server`
