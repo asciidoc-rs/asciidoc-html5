@@ -37,7 +37,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use asciidoc_parser::{attributes::Attrlist, parser::IncludeFileHandler, Parser, SafeMode};
+use asciidoc_parser::{
+    attributes::Attrlist,
+    parser::{IncludeContent, IncludeFileHandler},
+    Parser, SafeMode,
+};
 
 /// Resolves `include::` targets against the filesystem, anchored at a base
 /// directory and honoring the safe mode's jail.
@@ -198,9 +202,15 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         target: &str,
         _attrlist: &Attrlist<'src>,
         _parser: &Parser,
-    ) -> Option<String> {
+    ) -> Option<IncludeContent> {
         let path = self.resolve(source, target);
-        read_confined(&self.base_dir, self.safe, &path)
+
+        // The handler only ever reads UTF-8 files from the local filesystem
+        // and does not interpret the `encoding` attribute, so the content is
+        // returned via `IncludeContent::new` (the parser emits the non-UTF-8
+        // include-encoding warning itself when a non-UTF-8 encoding was asked
+        // for).
+        read_confined(&self.base_dir, self.safe, &path).map(IncludeContent::new)
     }
 }
 
