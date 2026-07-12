@@ -662,6 +662,50 @@ fn linkcss_copies_the_default_stylesheet_next_to_the_output() {
     );
 }
 
+/// When the output file coincides with the copied stylesheet's destination
+/// (`adoc -a linkcss -o asciidoctor.css …`), `adoc` skips the copy with a
+/// warning rather than letting it clobber — or be clobbered by — the HTML
+/// output: the `-o` file wins and holds the HTML.
+#[test]
+fn stylesheet_copy_does_not_clobber_the_output_file() {
+    let dir = copycss_dir("collide");
+    let input = dir.join("doc.adoc");
+    // The output file is named exactly like the copied default stylesheet.
+    let output = dir.join("asciidoctor.css");
+    fs::write(&input, "= Hello\n\nWorld.").expect("write input");
+
+    let result = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .arg("-a")
+        .arg("linkcss")
+        .output()
+        .expect("run the adoc binary");
+
+    let written = fs::read_to_string(&output).unwrap_or_default();
+    let stderr = String::from_utf8_lossy(&result.stderr).into_owned();
+    let _ = fs::remove_dir_all(&dir);
+
+    assert!(
+        result.status.success(),
+        "adoc exited with {}",
+        result.status
+    );
+
+    // The output file holds the requested HTML, not stylesheet CSS.
+    assert!(
+        written.starts_with("<!DOCTYPE html>"),
+        "the -o file should hold the HTML output, was: {written:.40}"
+    );
+
+    // adoc warns that it skipped the copy because it is the output file.
+    assert!(
+        stderr.contains("not copying the stylesheet"),
+        "adoc should warn about the collision; stderr was: {stderr}"
+    );
+}
+
 /// Unsetting `copycss` (`-a copycss!`) keeps `adoc` from writing the stylesheet
 /// file even though the HTML still links it.
 #[test]
