@@ -235,9 +235,8 @@ non_normative!(
     r#"
 == Known limitations
 
-Embedding a _remote_ stylesheet (an `http`/`https` URL) is unsupported, since
-the library does not fetch over the network -- a remote stylesheet can still be
-linked, as shown above. This is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
+Embedding a _remote_ stylesheet (an `http`/`https` URL) is *not planned*:
+neither the library nor the `adoc` CLI reads over the network, so a remote
+stylesheet can only be linked, as shown above, never fetched and inlined.
 "#
 );

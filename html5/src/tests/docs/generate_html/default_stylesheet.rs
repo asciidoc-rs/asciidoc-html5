@@ -198,9 +198,9 @@ non_normative!(
 `asciidoc-html5` applies both the default stylesheet and custom stylesheets,
 embedding, linking, copying (`copycss`), or disabling them as described in
 xref:stylesheet-modes.adoc[Stylesheet Modes]. One Asciidoctor stylesheet feature
-is not yet available: fetching a _remote_ stylesheet (an `http`/`https` URL) to
-embed. A remote stylesheet can still be linked. This is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/39[issue #39].
+is *not planned*: fetching a _remote_ stylesheet (an `http`/`https` URL) to
+embed it. Neither the library nor the `adoc` CLI reads over the network, so a
+remote stylesheet can only be linked.
 
 To pin down exactly which markup the renderer supports today, see the
 xref:ROOT:index.adoc[introduction].
