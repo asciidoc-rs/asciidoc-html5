@@ -1,0 +1,59 @@
+= Pipe Content Through the CLI
+:navtitle: Pipe Content
+:description: How to pipe AsciiDoc into the adoc command and its HTML5 back out through standard input and output.
+
+The `adoc` command can read AsciiDoc from standard input (STDIN) and write the
+rendered HTML5 to standard output (STDOUT), so it can sit in the middle of a
+shell pipeline. This is called piping.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Read from standard input
+
+Pass `-` as the input file to read the source from standard input:
+
+ $ echo 'content' | adoc -
+
+`adoc` also reads standard input when you give no input file at all, so both
+spellings pipe. Because piped input has no file name to derive an output name
+from, `adoc` writes the converted HTML to standard output by default. That makes
+the command above the same as naming standard output explicitly with `-o -`:
+
+ $ echo 'content' | adoc -o - -
+
+== Write to a file
+
+To capture the full standalone HTML document in a file instead of standard
+output, name it with `-o`:
+
+ $ echo 'content' | adoc -o output.html -
+
+== Resolve includes when piping
+
+Piped input has no location on disk, so relative `include::` targets have nothing
+to resolve against. Give an absolute base directory with `-B` so they resolve
+against it:
+
+ $ echo 'content' | adoc -B /path/to/basedir -o output.html -
+
+[NOTE]
+====
+Asciidoctor also lets you set an artificial `docdir` attribute to fix include
+resolution when piping. `adoc` accepts `-a docdir=…` and surfaces the attribute
+to the document, but it does not redirect include resolution — use `-B` for that.
+====
+
+== Known limitation: no embeddable-output mode
+
+Asciidoctor's `-e`/`--embedded` flag produces just the converted body (embeddable
+HTML) rather than a standalone document. `adoc` does not support this mode yet; it
+always writes a standalone HTML5 document. This is a known limitation to be lifted
+in a future release.
+
+You can also set the xref:cli:set-safe-mode.adoc[safe mode from the CLI], which
+governs how far a piped document may reach when resolving includes.
