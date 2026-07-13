@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use asciidoc_html5::{convert_with, Options, SafeMode};
 use clap::Parser as _;
 
-use crate::{input_file, output_target, run, tests::sdd::*, Cli, OutputTarget};
+use crate::{input_file, output_target, run, run_with_input, tests::sdd::*, Cli, OutputTarget};
 
 track_file!("ref/asciidoctor/docs/modules/cli/pages/io-piping.adoc");
 
@@ -69,6 +69,18 @@ fn run_adoc(label: &str, args: &[&str], source: &str) -> (Vec<u8>, PathBuf) {
     (stdout, path)
 }
 
+/// Pipes `source` through `adoc`: builds a `Cli` from `args` (which select
+/// standard input — an explicit `-` or an omitted input file), feeds `source`
+/// in as standard input, and returns the captured stdout. This drives the real
+/// stdin read path via [`run_with_input`], the injectable-reader core of `run`.
+fn run_piped(args: &[&str], source: &str) -> String {
+    let cli = Cli::parse_from(args);
+    let mut stdin = source.as_bytes();
+    let mut stdout = Vec::new();
+    run_with_input(&cli, &mut stdin, &mut stdout).expect("adoc converts");
+    String::from_utf8(stdout).expect("adoc output is UTF-8")
+}
+
 non_normative!(
     r#"
 = Pipe Content Through the CLI
@@ -98,6 +110,12 @@ For example:
 
     assert!(reads_stdin(&["adoc", "-"]));
     assert!(goes_to_stdout(&["adoc", "-"]));
+
+    // End to end, piping content through `-` reads the source from stdin and
+    // writes the converted HTML to stdout.
+    let html = run_piped(&["adoc", "-"], "= Doc\n\nBody.");
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(html.contains("<p>Body.</p>"));
 }
 
 // "Any variation of STDIN will work": for `adoc`, the two spellings that select
@@ -115,6 +133,10 @@ NOTE: Any variation of STDIN will work.
     for args in [&["adoc", "-"][..], &["adoc"][..]] {
         assert!(reads_stdin(args));
         assert!(goes_to_stdout(args));
+
+        // Both spellings convert the same piped source end to end.
+        let html = run_piped(args, "= Doc\n\nBody.");
+        assert!(html.contains("<p>Body.</p>"));
     }
 }
 
@@ -140,12 +162,14 @@ Therefore, it sends the converted text to standard output (STDOUT) by default.
     assert!(goes_to_stdout(&["adoc", "-"]));
     assert!(goes_to_stdout(&["adoc", "-o", "-", "-"]));
 
-    // End to end, `-o -` writes the converted HTML to the captured stdout.
-    let (stdout, input) = run_adoc("stdout", &["-o", "-"], "= Doc\n\nBody.");
-    let _ = std::fs::remove_file(&input);
-    let html = String::from_utf8(stdout).expect("adoc output is UTF-8");
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<p>Body.</p>"));
+    // End to end, piping to `-` reads stdin and writes the converted HTML to
+    // stdout — byte-for-byte the same as spelling out the destination `-o - -`.
+    let source = "= Doc\n\nBody.";
+    let bare = run_piped(&["adoc", "-"], source);
+    let explicit = run_piped(&["adoc", "-o", "-", "-"], source);
+    assert!(bare.starts_with("<!DOCTYPE html>"));
+    assert!(bare.contains("<p>Body.</p>"));
+    assert_eq!(bare, explicit);
 }
 
 // The `-o` flag redirects the full standalone document to a file instead of
