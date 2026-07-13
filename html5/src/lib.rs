@@ -48,11 +48,13 @@ mod docinfo_handler;
 mod html;
 mod include_handler;
 mod options;
+mod outline;
 mod renderer;
 
 pub use asciidoc_parser::{Document, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
 pub use options::Options;
+pub use outline::OutlineOptions;
 
 #[cfg(test)]
 mod tests;
@@ -395,6 +397,58 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
     renderer::render_document(document, None)
+}
+
+/// Generates the HTML table of contents (the *outline*) for `document`, or
+/// `None` when the document has no sections.
+///
+/// This is the standalone TOC generator: it produces only the nested
+/// `<ul class="sectlevel1">…</ul>` list of section links that Asciidoctor's
+/// `html5` backend emits from its `convert_outline` method — not a full
+/// document. Use it to build a table of contents on its own, for example to
+/// embed in a page template, from a [`Document`] you have already
+/// [`load`]ed. The depth follows the document's own `toclevels` attribute
+/// (default `2`); to override it — or the `sectnumlevels` used for numbered
+/// sections — pass [`OutlineOptions`] to [`convert_outline_with`].
+///
+/// The list mirrors Asciidoctor's structure exactly: each section becomes a
+/// `<li><a href="#id">title</a></li>`, and a section with subsections within
+/// the depth nests a child `<ul class="sectlevelN">` before its closing
+/// `</li>`. Discrete (floating) headings are not sections and do not appear.
+///
+/// # Examples
+///
+/// ```
+/// let doc = asciidoc_html5::load("= Doc\n\n== One\n\n== Two");
+/// let toc = asciidoc_html5::convert_outline(&doc).expect("the document has sections");
+/// assert!(toc.starts_with("<ul class=\"sectlevel1\">"));
+/// ```
+pub fn convert_outline(document: &Document<'_>) -> Option<String> {
+    outline::render_outline(document, &OutlineOptions::default())
+}
+
+/// Generates the HTML TOC for `document` under `options` — the
+/// [`OutlineOptions`]-aware counterpart to [`convert_outline`].
+///
+/// `options` overrides the depth (`toclevels`) and the numbered-section depth
+/// (`sectnumlevels`) that [`convert_outline`] takes from the document's
+/// attributes; any option left unset falls back to the document's own value.
+/// See [`convert_outline`] for the shape of the returned list.
+///
+/// # Examples
+///
+/// ```
+/// use asciidoc_html5::OutlineOptions;
+///
+/// let doc = asciidoc_html5::load("= Doc\n\n== One\n\n=== Nested\n\n== Two");
+///
+/// // Limit the TOC to top-level sections; the nested section is dropped.
+/// let toc = asciidoc_html5::convert_outline_with(&doc, &OutlineOptions::new().toclevels(1))
+///     .expect("the document has sections");
+/// assert!(!toc.contains("sectlevel2"));
+/// ```
+pub fn convert_outline_with(document: &Document<'_>, options: &OutlineOptions) -> Option<String> {
+    outline::render_outline(document, options)
 }
 
 #[cfg(test)]

@@ -1,0 +1,105 @@
+= Generate an HTML Table of Contents Using the API
+:navtitle: Generate an HTML TOC
+:description: How to generate a standalone HTML table of contents from a document with the asciidoc_html5 Rust API.
+
+`asciidoc-html5` can generate the HTML table of contents -- a document's section
+_outline_ -- on its own, apart from rendering the whole document. This is the
+counterpart to Asciidoctor's `convert_outline` method: it walks the document's
+section tree and returns the nested `<ul>` list of section links, the same markup
+that appears in a rendered document's TOC.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The API calls it shows are
+normative: they are verified against the implementation, so the documented
+behavior is guaranteed.
+====
+
+== Generate the outline
+
+Suppose you have loaded a document with a few sections, the second of which holds
+a subsection:
+
+[,asciidoc]
+----
+= Document Title
+
+== Section A
+
+== Section B
+
+=== Subsection
+
+== Section C
+----
+
+Pass the loaded document to `convert_outline`:
+
+[,rust]
+----
+let toc = asciidoc_html5::convert_outline(&doc);
+----
+
+`convert_outline` returns an `Option<String>`: `Some(html)` when the document has
+at least one section, or `None` when it has none, since there is then no TOC to
+build. For the document above it returns the nested section list:
+
+[,html]
+----
+<ul class="sectlevel1">
+<li><a href="#_section_a">Section A</a></li>
+<li><a href="#_section_b">Section B</a>
+<ul class="sectlevel2">
+<li><a href="#_subsection">Subsection</a></li>
+</ul>
+</li>
+<li><a href="#_section_c">Section C</a></li>
+</ul>
+----
+
+Each section becomes a list item linking to its auto-generated id, and a section
+with subsections nests a child `<ul class="sectlevelN">` inside its item. The
+markup matches Asciidoctor's default `html5` backend exactly, so it drops into a
+page template that expects Asciidoctor's TOC.
+
+== Limit the depth
+
+By default the outline reaches as deep as the document's `toclevels` attribute
+allows (two levels). To override that depth, pass `OutlineOptions` to
+`convert_outline_with`:
+
+[,rust]
+----
+use asciidoc_html5::OutlineOptions;
+
+let toc = asciidoc_html5::convert_outline_with(&doc, &OutlineOptions::new().toclevels(1));
+----
+
+With the depth limited to 1, the subsection is dropped and every top-level
+section renders as a leaf item:
+
+[,html]
+----
+<ul class="sectlevel1">
+<li><a href="#_section_a">Section A</a></li>
+<li><a href="#_section_b">Section B</a></li>
+<li><a href="#_section_c">Section C</a></li>
+</ul>
+----
+
+`OutlineOptions` also carries `sectnumlevels`, the depth to which numbered
+sections (those under the `sectnums` attribute) show their section number in the
+TOC. Any option left unset falls back to the document's own attribute value.
+
+== Known limitation
+
+Asciidoctor exposes `convert_outline` as a method on its HTML5 converter, and its
+documentation shows several Ruby-specific ways to reach it: resolving a converter
+with `Asciidoctor::Converter.create`, going through `document.converter`, running
+the composite converter chain with `convert(document, 'outline')`, and calling it
+from a Slim, Haml, or ERB template. `asciidoc-html5` models none of that converter
+machinery. It offers the outline as a single free function -- `convert_outline`,
+with `convert_outline_with` for options -- which is the one call all of those Ruby
+idioms ultimately make.
+
+That covers generating an HTML table of contents using the API.
