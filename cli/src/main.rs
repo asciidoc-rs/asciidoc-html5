@@ -33,7 +33,8 @@ backend.",
 adoc document.adoc              Convert a file; write the HTML to document.html\n  \
 adoc document.adoc -o out.html  Convert a file; write the HTML to out.html\n  \
 adoc document.adoc -o -         Convert a file; write the HTML to stdout\n  \
-cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n\n\
+cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n  \
+cat document.adoc | adoc -e      Convert stdin; write just the body (embedded)\n\n\
 Exit status is 0 on success, or 1 if the input cannot be read or the output \
 cannot be written."
 )]
@@ -116,6 +117,20 @@ Provided for compatibility with the Python AsciiDoc `safe` command, and \
 equivalent to --safe-mode=safe. Cannot be combined with --safe-mode."
     )]
     safe: bool,
+
+    /// Produce embedded (body-only) output instead of a standalone document
+    #[arg(
+        short = 'e',
+        long = "embedded",
+        long_help = "Produce embedded output, the way Asciidoctor's -e option does.\n\n\
+By default adoc writes a standalone HTML5 document — the full \
+<!DOCTYPE>/<head>/<body> shell around the header, content, and footer. With -e \
+it writes just the converted body, with no document shell, stylesheet, or \
+header/footer frame, suitable for dropping into a surrounding template.\n\n\
+Embedded output omits the doctitle by default; add `-a showtitle` to include it \
+as a leading <h1>."
+    )]
+    embedded: bool,
 }
 
 fn main() -> ExitCode {
@@ -149,6 +164,13 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
     let mut options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
     options = apply_base_dir(cli, options)?;
+
+    // Unlike the library's string API (embedded by default), the CLI defaults to
+    // a standalone document — matching Asciidoctor's command, which writes a full
+    // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
+    // body-only output. Setting the mode explicitly here also makes `-e` produce
+    // embedded output when writing to a file, not just to standard output.
+    options = options.standalone(!cli.embedded);
 
     let source = read_input(cli.input.as_deref(), stdin)?;
 

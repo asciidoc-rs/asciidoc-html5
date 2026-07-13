@@ -103,8 +103,13 @@ The <<API entrypoints>> section introduces these methods in more detail.
     let doc = load(source);
     assert_eq!(together, convert_document(&doc));
 
-    // The file counterpart, `convert_file`, loads and converts a file; for the
-    // same source it matches the string path.
+    // Together and separately agree — both are embedded (body-only) output for
+    // this string source, matching Asciidoctor's string conversion default.
+    assert!(together.contains("<p>World.</p>"));
+    assert!(!together.starts_with("<!DOCTYPE html>"));
+
+    // The file counterpart, `convert_file`, loads and converts a file in one
+    // call; matching Asciidoctor, a file conversion is a standalone document.
     let path = std::env::temp_dir().join(format!(
         "asciidoc-html5-api-steps-{}.adoc",
         std::process::id()
@@ -112,10 +117,8 @@ The <<API entrypoints>> section introduces these methods in more detail.
     fs::write(&path, source).expect("write temp input");
     let from_file = convert_file(&path).expect("convert_file reads and renders");
     let _ = fs::remove_file(&path);
-    assert_eq!(from_file, together);
-
-    assert!(together.starts_with("<!DOCTYPE html>"));
-    assert!(together.contains("<title>Hello</title>"));
+    assert!(from_file.starts_with("<!DOCTYPE html>"));
+    assert!(from_file.contains("<p>World.</p>"));
 }
 
 non_normative!(
@@ -202,17 +205,19 @@ There are four main entrypoints in the Asciidoctor API:
     let doc_from_file = load_file(&path).expect("load_file reads and parses");
     assert_eq!(doc_from_file.doctitle(), Some("Hello"));
 
-    // `convert`: parse and convert a string to the output format. Rendering the
-    // separately loaded document gives the same HTML5.
+    // `convert`: parse and convert a string to the output format. Matching
+    // Asciidoctor, a string conversion is embedded (body-only) output, and
+    // rendering the separately loaded document gives the same HTML5.
     let html = convert(source);
     assert_eq!(html, convert_document(&doc));
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
+    assert!(html.contains("<p>World.</p>"));
+    assert!(!html.starts_with("<!DOCTYPE html>"));
 
-    // `convert_file`: parse and convert the contents of a file; its output
-    // matches converting the same source held in memory.
+    // `convert_file`: parse and convert the contents of a file; matching
+    // Asciidoctor, a file conversion is a standalone document.
     let from_file = convert_file(&path).expect("convert_file reads and renders");
-    assert_eq!(from_file, html);
+    assert!(from_file.starts_with("<!DOCTYPE html>"));
+    assert!(from_file.contains("<p>World.</p>"));
 
     let _ = fs::remove_file(&path);
 }

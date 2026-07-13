@@ -16,16 +16,12 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/io-piping.adoc");
 // option parsing (`Cli` plus the private `input_file`/`output_target` routing),
 // and the conversion and base-directory behaviors are confirmed end to end.
 //
-// Two parts stay non-normative because `adoc` diverges from or does not yet
-// provide the documented behavior:
-//
-//   * The `docdir` attribute. Asciidoctor offers it as a second way to fix
-//     include resolution when piping; `adoc` accepts `-a docdir=…` and surfaces
-//     the attribute, but include resolution is governed by the base directory
-//     (`-B`) alone, so there is no matching rule to verify here.
-//   * The `-e`/`--embedded` embeddable-output mode. `adoc` always writes a
-//     standalone HTML5 document and has no body-only mode yet, so its section
-//     is a known limitation with nothing to verify.
+// The `docdir` attribute stays non-normative: Asciidoctor offers it as a second
+// way to fix include resolution when piping; `adoc` accepts `-a docdir=…` and
+// surfaces the attribute, but include resolution is governed by the base
+// directory (`-B`) alone, so there is no matching rule to verify here. The
+// `-e`/`--embedded` embeddable-output mode is now supported and is verified
+// below.
 
 /// Whether `adoc` would read this invocation's source from standard input
 /// rather than from a named input file.
@@ -271,13 +267,13 @@ Try both approaches to determine which one suits your needs better.
 "#
 );
 
-// The `-e`/`--embedded` embeddable-output mode is a known limitation: `adoc`
-// always writes a standalone HTML5 document and has no body-only mode (nor a
-// `showtitle`-gated header in one), so this section stays non-normative until
-// the feature lands. Tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/71.
-non_normative!(
-    r#"
+// The `-e`/`--embedded` embeddable-output mode: `adoc -e` writes just the
+// converted body, and `-a showtitle` adds the doctitle back as a leading
+// `<h1>`.
+#[test]
+fn the_embedded_flag_produces_body_only_output() {
+    verifies!(
+        r#"
 When piping source from STDIN to STDOUT through the `asciidoctor` command, you often just want the converted body (i.e., embeddable HTML).
 To produce that variant, add the `-e` flag, short for `--embedded` (previously the `-s` flag):
 
@@ -287,4 +283,21 @@ Or perhaps you want to include the doctitle as well:
 
  $ echo -e '= Document Title\n\ncontent' | asciidoctor -e -a showtitle -
 "#
-);
+    );
+
+    // `-e` yields the converted body only — no standalone document shell, and no
+    // doctitle `<h1>` unless it is asked for.
+    let body = run_piped(&["adoc", "-e", "-"], "= Document Title\n\ncontent");
+    assert!(!body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("<p>content</p>"));
+    assert!(!body.contains("<h1>"));
+
+    // Adding `-a showtitle` includes the doctitle as a leading `<h1>`, still
+    // without the standalone shell.
+    let with_title = run_piped(
+        &["adoc", "-e", "-a", "showtitle", "-"],
+        "= Document Title\n\ncontent",
+    );
+    assert!(with_title.contains("<h1>Document Title</h1>"));
+    assert!(!with_title.starts_with("<!DOCTYPE html>"));
+}

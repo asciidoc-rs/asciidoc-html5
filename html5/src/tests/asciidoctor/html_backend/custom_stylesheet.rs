@@ -1,4 +1,11 @@
-use crate::{convert_with, tests::sdd::*, Options};
+use crate::{tests::sdd::*, Options};
+
+// These tests assert the standalone document shell, so they render in
+// standalone mode explicitly. The string entry points default to embedded,
+// body-only output.
+fn convert_with(source: &str, options: &Options) -> String {
+    crate::convert_with(source, &options.clone().standalone(true))
+}
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/custom-stylesheet.adoc");
 

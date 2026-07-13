@@ -1,4 +1,15 @@
-use crate::{convert, convert_file_with, convert_with, tests::sdd::*, Options, SafeMode};
+use crate::{convert_file_with, tests::sdd::*, Options, SafeMode};
+
+// These tests assert the standalone document shell, so they render in
+// standalone mode explicitly. The string entry points default to embedded,
+// body-only output.
+fn convert(source: &str) -> String {
+    crate::convert_with(source, &Options::new().standalone(true))
+}
+
+fn convert_with(source: &str, options: &Options) -> String {
+    crate::convert_with(source, &options.clone().standalone(true))
+}
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/set-safe-mode.adoc");
 

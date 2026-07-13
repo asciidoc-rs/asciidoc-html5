@@ -15,11 +15,10 @@ track_file!("docs/modules/cli/pages/io-piping.adoc");
 // parsing (`Cli` plus the private `input_file`/`output_target` routing) and,
 // for conversion and include resolution, end to end.
 //
-// The page also documents two `adoc`-specific facts about the Asciidoctor
-// features it diverges from: `-a docdir=…` sets and surfaces the `docdir`
-// attribute but does not redirect include resolution (only `-B` does), and
-// there is no `-e`/`--embedded` embeddable-output mode yet. The first is
-// verified; the second is a known limitation with nothing to verify.
+// The page also documents an `adoc`-specific fact about an Asciidoctor feature
+// it diverges from: `-a docdir=…` sets and surfaces the `docdir` attribute but
+// does not redirect include resolution (only `-B` does). Its `-e`/`--embedded`
+// embeddable-output section is verified end to end.
 
 /// Whether `adoc` would read this invocation's source from standard input
 /// rather than from a named input file.
@@ -282,19 +281,53 @@ to the document, but it does not redirect include resolution — use `-B` for th
     assert!(!html.contains("Body via docdir."));
 }
 
-// The `-e`/`--embedded` embeddable-output mode is a known limitation: `adoc`
-// always writes a standalone document, so this closing section — and the
-// cross-reference after it — carry no rule to verify. Tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/71.
+// The `-e`/`--embedded` embeddable-output mode: `adoc -e` writes just the
+// converted body, and `-a showtitle` adds the doctitle back as a leading
+// `<h1>`; without `-e`, output is a standalone document.
+#[test]
+fn the_embedded_flag_produces_body_only_output() {
+    verifies!(
+        r#"
+== Embeddable output
+
+When piping through `adoc`, you often just want the converted body -- embeddable
+HTML to drop into a surrounding template -- rather than a standalone document. Add
+the `-e` flag (short for `--embedded`) to produce that:
+
+ $ echo 'content' | adoc -e -
+
+Embeddable output omits the doctitle by default. To include it as a leading
+`<h1>`, set the `showtitle` attribute:
+
+ $ printf '= Document Title\n\ncontent\n' | adoc -e -a showtitle -
+
+Without `-e`, `adoc` writes a standalone HTML5 document, matching Asciidoctor's
+command, which is standalone even when piping.
+
+"#
+    );
+
+    // `-e` yields the converted body only — no standalone shell, and no doctitle
+    // `<h1>` unless it is asked for.
+    let body = run_piped(&["adoc", "-e", "-"], "= Document Title\n\ncontent");
+    assert!(!body.starts_with("<!DOCTYPE html>"));
+    assert!(body.contains("<p>content</p>"));
+    assert!(!body.contains("<h1>"));
+
+    // `-a showtitle` includes the doctitle as a leading `<h1>`.
+    let with_title = run_piped(
+        &["adoc", "-e", "-a", "showtitle", "-"],
+        "= Document Title\n\ncontent",
+    );
+    assert!(with_title.contains("<h1>Document Title</h1>"));
+
+    // Without `-e`, the output is a standalone document.
+    let standalone = run_piped(&["adoc", "-"], "= Document Title\n\ncontent");
+    assert!(standalone.starts_with("<!DOCTYPE html>"));
+}
+
 non_normative!(
     r#"
-== Known limitation: no embeddable-output mode
-
-Asciidoctor's `-e`/`--embedded` flag produces just the converted body (embeddable
-HTML) rather than a standalone document. `adoc` does not support this mode yet; it
-always writes a standalone HTML5 document. This is a known limitation to be lifted
-in a future release.
-
 You can also set the xref:cli:set-safe-mode.adoc[safe mode from the CLI], which
 governs how far a piped document may reach when resolving includes.
 "#

@@ -59,11 +59,18 @@ pub use outline::OutlineOptions;
 #[cfg(test)]
 mod tests;
 
-/// Parses `source` as AsciiDoc and renders it to a complete HTML5 document.
+/// Parses `source` as AsciiDoc and renders it to *embedded*, body-only HTML5.
 ///
 /// This is the convenience entry point for callers that start from raw
 /// AsciiDoc text. It parses the source with a default [`Parser`] and then hands
 /// the resulting [`Document`] to [`convert_document`].
+///
+/// Like Asciidoctor's string `convert`, this returns embedded output — the
+/// converted body with no `<!DOCTYPE>`/`<head>`/`<body>` shell — suitable for
+/// dropping into a surrounding template. To render a complete standalone
+/// document from a string, convert with [`convert_with`] under
+/// [`Options::standalone(true)`](Options::standalone); the file entry point
+/// [`convert_file`] is standalone by default.
 ///
 /// For callers that already hold a parsed [`Document`] (for example, to inspect
 /// or transform it first), call [`convert_document`] directly; produce that
@@ -75,8 +82,12 @@ pub fn convert(source: &str) -> String {
     convert_with(source, &Options::default())
 }
 
-/// Parses `source` as AsciiDoc and renders it to a complete HTML5 document,
-/// seeding the parser with the document attributes carried by `options`.
+/// Parses `source` as AsciiDoc and renders it to HTML5, seeding the parser with
+/// the document attributes carried by `options`.
+///
+/// Like [`convert`], this returns *embedded*, body-only output by default;
+/// pass [`Options::standalone(true)`](Options::standalone) for a complete
+/// standalone document.
 ///
 /// This is the attribute-aware counterpart to [`convert`]: the attributes in
 /// `options` are the equivalent of Asciidoctor's `-a name=value` CLI option and
@@ -98,7 +109,8 @@ pub fn convert(source: &str) -> String {
 /// ```
 /// use asciidoc_html5::{convert_with, Options};
 ///
-/// let opts = Options::new().set("linkcss");
+/// // A standalone document links the default stylesheet under `linkcss`.
+/// let opts = Options::new().standalone(true).set("linkcss");
 /// let html = convert_with("= Doc\n\nBody.", &opts);
 /// assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
 /// ```
@@ -139,7 +151,14 @@ pub fn convert_with_writer(
 ) -> io::Result<String> {
     let document = load_with(source, options);
     let html = render(&document, options);
-    emit_stylesheet_copy(&document, options, writer)?;
+
+    // Embedded output emits no stylesheet, so there is nothing to copy alongside
+    // it — matching Asciidoctor, which skips the `copycss` copy for embeddable
+    // output. Only a standalone document can reference a copied stylesheet.
+    if options.is_standalone() {
+        emit_stylesheet_copy(&document, options, writer)?;
+    }
+
     Ok(html)
 }
 
@@ -149,13 +168,15 @@ pub fn convert_with_writer(
 fn render(document: &Document<'_>, options: &Options) -> String {
     // A custom, embedded stylesheet takes its CSS from the caller when supplied,
     // otherwise from disk. Keeping this a separate binding keeps the borrow of
-    // `document` from the read helper separate from the render call.
-    let embedded = options
+    // `document` from the read helper separate from the render call. (Embedded
+    // output emits no stylesheet, so this is unused there — but resolving it is
+    // cheap and keeps the render call uniform.)
+    let stylesheet = options
         .custom_stylesheet()
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
-    renderer::render_document(document, embedded.as_deref())
+    renderer::render_document(document, stylesheet.as_deref(), options.is_standalone())
 }
 
 /// Writes the `copycss` stylesheet copy through `writer`, when the document
@@ -231,7 +252,10 @@ pub fn convert_file<P: AsRef<Path>>(path: P) -> io::Result<String> {
 pub fn convert_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<String> {
     let path = path.as_ref();
     let source = fs::read_to_string(path)?;
-    Ok(convert_with(&source, &options.clone().input_file(path)))
+    Ok(convert_with(
+        &source,
+        &options.clone().input_file(path).default_standalone(),
+    ))
 }
 
 /// Reads the AsciiDoc file at `path`, renders it like [`convert_file_with`],
@@ -256,7 +280,11 @@ pub fn convert_file_with_writer<P: AsRef<Path>>(
 ) -> io::Result<String> {
     let path = path.as_ref();
     let source = fs::read_to_string(path)?;
-    convert_with_writer(&source, &options.clone().input_file(path), writer)
+    convert_with_writer(
+        &source,
+        &options.clone().input_file(path).default_standalone(),
+        writer,
+    )
 }
 
 /// Parses `source` as AsciiDoc into a [`Document`] — the *load* step on its
@@ -355,17 +383,18 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
     Ok(load_with(&source, &options.clone().input_file(path)))
 }
 
-/// Renders an already-parsed [`Document`] to a complete HTML5 document.
+/// Renders an already-parsed [`Document`] to HTML5.
 ///
 /// This is the render-only half of the load-and-convert split: pair it with
 /// [`load`]/[`load_file`] (which parse under [`Options`]) to run the load and
 /// convert steps separately, capturing or transforming the [`Document`] in
 /// between.
 ///
-/// The returned string is a standalone HTML5 document: a `<!DOCTYPE html>`
-/// declaration followed by `<html>`, a `<head>` carrying the document title and
-/// generator metadata, and a `<body>` whose structure mirrors Asciidoctor's
-/// default `html5` backend.
+/// Like the string entry point [`convert`], this returns *embedded*, body-only
+/// output — the converted body with no `<!DOCTYPE>`/`<head>`/`<body>` shell —
+/// so `convert_document(&load(source))` equals `convert(source)`. To render a
+/// standalone document from a [`Document`] you already hold, convert with
+/// [`convert_with`] under [`Options::standalone(true)`](Options::standalone).
 ///
 /// The renderer walks the document in block order, wrapping the HTML fragments
 /// the parser has already produced (see the note on inline substitution below)
@@ -396,7 +425,7 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    renderer::render_document(document, None)
+    renderer::render_document(document, None, false)
 }
 
 /// Generates the HTML table of contents (the *outline*) for `document`.
@@ -465,7 +494,13 @@ mod writer_tests {
     #[test]
     fn writer_copies_the_default_stylesheet_without_changing_the_html() {
         let source = "= Doc\n\nBody.";
-        let options = Options::new().safe_mode(SafeMode::Safe).set("linkcss");
+
+        // A copied stylesheet accompanies a standalone document (the string API
+        // is embedded by default, which emits no stylesheet to copy).
+        let options = Options::new()
+            .standalone(true)
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss");
 
         let mut writer = RecordingAssetWriter::default();
         let html = convert_with_writer(source, &options, &mut writer).expect("convert");

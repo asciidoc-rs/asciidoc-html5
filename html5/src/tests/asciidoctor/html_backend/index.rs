@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{convert, convert_file, tests::sdd::*};
+use crate::{convert_file, convert_with, tests::sdd::*, Options};
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/index.adoc");
 
@@ -50,7 +50,9 @@ This page explains how to use Asciidoctor to convert AsciiDoc to HTML.
 "#
     );
 
-    let html = convert("= Hello\n\nWorld.");
+    // Running Asciidoctor without parameters converts a file, which is
+    // standalone output; render standalone here to match that default.
+    let html = convert_with("= Hello\n\nWorld.", &Options::new().standalone(true));
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>Hello</title>"));
     assert!(html.contains("<p>World.</p>"));
@@ -123,8 +125,9 @@ fn converts_a_file_to_html5() {
 
     // The `title;body` tags of the page's example document — a title, a couple
     // of paragraphs, and a section. Reading it from disk with `convert_file`
-    // yields the same complete HTML5 document that `convert` produces for the
-    // same source.
+    // yields a complete, standalone HTML5 document — the same one a standalone
+    // string conversion produces for the same source. (The plain string
+    // `convert` is embedded by default, so we compare against a standalone one.)
     let source = "= The Dangers of Wolpertingers\n\
         :url-wolpertinger: https://en.wikipedia.org/wiki/Wolpertinger\n\n\
         Don't worry about gumberoos or splintercats.\n\
@@ -140,7 +143,7 @@ fn converts_a_file_to_html5() {
     let html = convert_file(&path).expect("convert_file reads and renders");
     let _ = fs::remove_file(&path);
 
-    assert_eq!(html, convert(source));
+    assert_eq!(html, convert_with(source, &Options::new().standalone(true)));
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>The Dangers of Wolpertingers</title>"));
     assert!(html.trim_end().ends_with("</body>\n</html>"));

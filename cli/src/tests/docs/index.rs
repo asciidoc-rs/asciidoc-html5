@@ -149,10 +149,14 @@ non_normative!(
 
 == API examples
 
-The Rust API's three conversion entry points each return a complete, standalone
-HTML5 document. The file-based `convert_file` shown above is the most common; the
-other two are `convert`, for AsciiDoc you already hold in memory, and
-`convert_document`, for a document you have already parsed.
+The Rust API has three conversion entry points. Matching Asciidoctor, they
+differ in their default output: the file-based `convert_file` shown above returns
+a complete, standalone HTML5 document, while the string entry points — `convert`,
+for AsciiDoc you already hold in memory, and `convert_document`, for a document
+you have already parsed — return embedded (body-only) output: the converted body
+with no `+++<!DOCTYPE>+++`, `<head>`, or footer frame, ready to drop into a
+surrounding template. Pass `Options::standalone(true)` to a string entry point
+when you want a full document instead.
 
 Convert AsciiDoc held in memory with `convert`:
 
