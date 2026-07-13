@@ -9,4 +9,5 @@
 //! `manpage` and `syntax` help topics) are tracked as non-normative.
 
 mod index;
+mod io_piping;
 mod set_safe_mode;

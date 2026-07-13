@@ -136,12 +136,21 @@ fn main() -> ExitCode {
 /// The destination follows [`output_target`]: a file named by `-o`/`--output`,
 /// a file whose name is derived from the input, or `stdout`. Threading the
 /// standard-output writer in as a parameter keeps the conversion pipeline
-/// testable without spawning the binary.
+/// testable without spawning the binary. Reads from the process's standard
+/// input; [`run_with_input`] is the same pipeline with an injectable reader, so
+/// the `-`/stdin read path can be exercised in tests.
 fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
+    let mut stdin = io::stdin().lock();
+    run_with_input(cli, &mut stdin, stdout)
+}
+
+/// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or a named
+/// file, converts it, and writes the HTML5 out — the testable core of [`run`].
+fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
     let mut options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
     options = apply_base_dir(cli, options)?;
 
-    let source = read_input(cli.input.as_deref())?;
+    let source = read_input(cli.input.as_deref(), stdin)?;
 
     match output_target(cli) {
         OutputTarget::File(path) => {
@@ -411,14 +420,17 @@ fn derive_output_path(input: &Path) -> PathBuf {
     input.with_extension("html")
 }
 
-/// Reads AsciiDoc source from `path`, or from stdin when `path` is `None` or
+/// Reads AsciiDoc source from `path`, or from `stdin` when `path` is `None` or
 /// the conventional `-`.
-fn read_input(path: Option<&std::path::Path>) -> io::Result<String> {
+///
+/// The standard-input reader is passed in rather than taken from
+/// [`io::stdin`] directly, so the stdin read path can be exercised in tests.
+fn read_input(path: Option<&std::path::Path>, stdin: &mut dyn Read) -> io::Result<String> {
     match path {
         Some(path) if path.as_os_str() != "-" => fs::read_to_string(path),
         _ => {
             let mut buf = String::new();
-            io::stdin().read_to_string(&mut buf)?;
+            stdin.read_to_string(&mut buf)?;
             Ok(buf)
         }
     }
