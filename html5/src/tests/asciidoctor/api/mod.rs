@@ -8,6 +8,7 @@
 
 mod convert_files;
 mod convert_strings;
+mod find_blocks;
 mod generate_html_toc;
 mod index;
 mod set_safe_mode;
