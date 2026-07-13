@@ -212,7 +212,8 @@ against it:
 
 // `adoc` accepts `-a docdir=…` and surfaces the attribute to the document, but
 // — unlike Asciidoctor — the `docdir` value does not redirect include
-// resolution; only the base directory (`-B`) does.
+// resolution; only the base directory (`-B`) does. This divergence is tracked
+// in https://github.com/asciidoc-rs/asciidoc-html5/issues/73.
 #[test]
 fn docdir_is_surfaced_but_does_not_redirect_includes() {
     verifies!(
@@ -268,7 +269,8 @@ to the document, but it does not redirect include resolution — use `-B` for th
 
 // The `-e`/`--embedded` embeddable-output mode is a known limitation: `adoc`
 // always writes a standalone document, so this closing section — and the
-// cross-reference after it — carry no rule to verify.
+// cross-reference after it — carry no rule to verify. Tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/71.
 non_normative!(
     r#"
 == Known limitation: no embeddable-output mode
