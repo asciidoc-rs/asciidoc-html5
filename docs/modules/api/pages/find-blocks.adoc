@@ -289,9 +289,7 @@ for block in doc.nested_blocks() {
 Not all blocks share the same model. Each item in a description list carries two
 nodes, and tables have a very different model from other blocks. These
 differences matter when you walk the tree by hand, and `descendant_blocks` also
-reaches two kinds of children `nested_blocks` cannot: the children of a
-Markdown-style blockquote, and (with `traverse_documents`) the blocks inside
-AsciiDoc table cells.
+reaches children of a Markdown-style blockquote that `nested_blocks` cannot.
 ====
 
 If the block you are after is close at hand or in a known location, a custom
