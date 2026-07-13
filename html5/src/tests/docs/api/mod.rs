@@ -6,5 +6,6 @@
 //! tests in the same module.
 
 mod convert_files;
+mod convert_strings;
 mod index;
 mod set_safe_mode;
