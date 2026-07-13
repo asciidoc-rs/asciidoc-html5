@@ -1,0 +1,105 @@
+= Load and Convert AsciiDoc Strings Using the API
+:navtitle: Load and Convert Strings
+:description: How to load an AsciiDoc string into a document model and convert an AsciiDoc string to HTML5 with the asciidoc_html5 Rust API.
+
+This page explains how to load and convert AsciiDoc strings using the API. A
+string is the bare AsciiDoc content -- often the contents of a file you have
+already read into memory.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The API calls it shows are
+normative: they are verified against the implementation, so the documented
+behavior is guaranteed.
+====
+
+== Load an AsciiDoc string
+
+Loading parses the source into a document model without converting it.
+`asciidoc-html5` relies on https://crates.io/crates/asciidoc-parser[`asciidoc-parser`]
+for this step, which returns an
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.html[`asciidoc_parser::Document`]
+carrying the document's full block structure.
+
+To parse an AsciiDoc string into that document model, call `load`:
+
+[,rust]
+----
+let doc = asciidoc_html5::load("*This* is Asciidoctor.");
+----
+
+Using the `doc` value, you can inspect the parsed document -- for example, count
+its top-level blocks:
+
+[,rust]
+----
+use asciidoc_parser::blocks::IsBlock;
+
+assert!(doc.nested_blocks().next().is_some());
+----
+
+If you hold the source in a file rather than in memory, read the file and pass
+its contents to `load`, or call `load_file` to read and parse it in one step.
+
+Once you have a loaded document, render it to HTML5 with `convert_document`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert_document(&doc);
+----
+
+However, if you're only interested in converting the AsciiDoc source, then it's
+better to use the `convert` entry point.
+
+== Convert an AsciiDoc string
+
+Converting parses and renders the source in a single step. To convert an
+AsciiDoc string directly to HTML5, call `convert`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert("*This* is Asciidoctor.");
+----
+
+The rendered HTML contains the converted body:
+
+[,html]
+----
+<div class="paragraph">
+<p><strong>This</strong> is Asciidoctor.</p>
+</div>
+----
+
+If your source is in a file, call `convert_file`, which reads the file, parses
+it, and returns the rendered HTML5 as a `String`:
+
+[,rust]
+----
+let html = asciidoc_html5::convert_file("document.adoc")?;
+----
+
+== Standalone output
+
+Whichever entry point you use, `asciidoc-html5` returns a complete, standalone
+HTML5 document: a `<!DOCTYPE html>` declaration followed by `<html>`, a `<head>`,
+and a `<body>` whose content mirrors Asciidoctor's default `html5` backend. The
+converted body shown above is nested inside that document, within its
+`<div id="content">`.
+
+[NOTE]
+.Known limitation
+====
+When Asciidoctor converts a string, it produces an _embedded_ document by default
+-- just the converted body, with no header or footer frame -- and gates a
+standalone document behind its `:standalone` option. `asciidoc-html5` has no
+embedded output: every entry point returns a complete, standalone HTML5 document.
+Embedded (body-only) output is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/68[issue #68].
+
+Asciidoctor can also return the inline markup only (its `doctype: 'inline'`
+option) and convert to other backends such as DocBook. This renderer models only
+the `article` doctype and produces HTML5 only, so inline-only output is not
+available, and DocBook and the other Asciidoctor backends are not planned.
+====
+
+That covers the basics of loading and converting AsciiDoc strings using the API.

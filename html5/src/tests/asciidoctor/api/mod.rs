@@ -7,5 +7,6 @@
 //! tracked as non-normative.
 
 mod convert_files;
+mod convert_strings;
 mod index;
 mod set_safe_mode;
