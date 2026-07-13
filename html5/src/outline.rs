@@ -302,4 +302,46 @@ mod tests {
         assert!(outline.contains("the site</a></li>"));
         assert!(!outline.contains("https://example.org"));
     }
+
+    #[test]
+    fn sectnumlevels_option_caps_the_numbered_levels() {
+        let doc = load("= Title\n:sectnums:\n\n== First\n\n=== Nested\n\n== Second\n");
+
+        // Capping `sectnumlevels` at 1 numbers only the top-level sections; the
+        // nested level-2 section falls back to its plain title, matching
+        // Asciidoctor's `convert_outline` with the same option.
+        let expected = "\
+<ul class=\"sectlevel1\">
+<li><a href=\"#_first\">1. First</a>
+<ul class=\"sectlevel2\">
+<li><a href=\"#_nested\">Nested</a></li>
+</ul>
+</li>
+<li><a href=\"#_second\">2. Second</a></li>
+</ul>";
+        assert_eq!(
+            convert_outline_with(&doc, &OutlineOptions::new().sectnumlevels(1)),
+            expected
+        );
+    }
+
+    #[test]
+    fn an_unset_sectnumlevels_attribute_uses_the_default() {
+        // With `sectnumlevels` explicitly unset, there is no attribute value to
+        // read, so the generator falls back to its default depth (3) — which
+        // still numbers both of these levels.
+        let doc = load("= Title\n:sectnums:\n:sectnumlevels!:\n\n== First\n\n=== Nested\n");
+        let outline = convert_outline(&doc);
+        assert!(outline.contains(">1. First</a>"));
+        assert!(outline.contains(">1.1. Nested</a>"));
+    }
+
+    #[test]
+    fn drop_anchor_tags_removes_only_real_anchors() {
+        // A real `<a …>`/`</a>` pair is reduced to its text, while a tag whose
+        // name merely starts with `a` (like `<abbr>`) is left intact — the word
+        // boundary in Asciidoctor's `DropAnchorRx`.
+        let input = r##"<a href="#x">link</a> and <abbr>HTML</abbr>"##;
+        assert_eq!(super::drop_anchor_tags(input), "link and <abbr>HTML</abbr>");
+    }
 }
