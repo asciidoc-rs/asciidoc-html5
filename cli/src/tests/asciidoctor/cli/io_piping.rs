@@ -234,7 +234,8 @@ To resolve this problem, you should specify an absolute base directory using the
 // The `docdir` alternative is a divergence: `adoc` resolves piped includes with
 // the base directory (`-B`) alone, so this passage carries no rule to verify.
 // (`adoc` does accept `-a docdir=…` and surface the attribute; it just does not
-// redirect include resolution.)
+// redirect include resolution.) Tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/73.
 non_normative!(
     r#"
 Alternately, you can set an artificial document directory by passing an absolute path to the `docdir` attribute:
