@@ -106,7 +106,7 @@ Here's an example of what this method produces:
     );
 
     let doc = sample_doc();
-    assert_eq!(convert_outline(&doc).as_deref(), Some(EXPECTED_OUTLINE));
+    assert_eq!(convert_outline(&doc), EXPECTED_OUTLINE);
 }
 
 // Reaching `convert_outline` through the loaded document's converter. This is a
@@ -202,7 +202,7 @@ html_toc = document.converter.convert_outline document, toclevels: 1
 <li><a href=\"#_section_c\">Section C</a></li>
 </ul>";
     assert_eq!(
-        convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)).as_deref(),
-        Some(expected)
+        convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)),
+        expected
     );
 }

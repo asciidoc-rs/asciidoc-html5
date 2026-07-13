@@ -45,10 +45,10 @@ non_normative!(
 :description: How to generate a standalone HTML table of contents from a document with the asciidoc_html5 Rust API.
 
 `asciidoc-html5` can generate the HTML table of contents -- a document's section
-_outline_ -- on its own, apart from rendering the whole document. This is the
-counterpart to Asciidoctor's `convert_outline` method: it walks the document's
-section tree and returns the nested `<ul>` list of section links, the same markup
-that appears in a rendered document's TOC.
+_outline_ -- on its own, apart from rendering the whole document. Give it a
+loaded document and it returns the nested `<ul>` list of section links, the same
+markup that appears in a rendered document's TOC, ready to embed in a page
+template.
 
 [NOTE]
 ====
@@ -61,7 +61,7 @@ behavior is guaranteed.
 );
 
 // The core example: `convert_outline` on a loaded document returns the nested
-// section list, as `Some(html)` for a document with sections.
+// section list.
 #[test]
 fn convert_outline_returns_the_section_list() {
     verifies!(
@@ -91,9 +91,9 @@ Pass the loaded document to `convert_outline`:
 let toc = asciidoc_html5::convert_outline(&doc);
 ----
 
-`convert_outline` returns an `Option<String>`: `Some(html)` when the document has
-at least one section, or `None` when it has none, since there is then no TOC to
-build. For the document above it returns the nested section list:
+`convert_outline` returns a `String` holding the nested section list, or an empty
+`String` when the document has no sections, since there is then no TOC to build.
+For the document above it returns:
 
 [,html]
 ----
@@ -112,7 +112,7 @@ build. For the document above it returns the nested section list:
     );
 
     let doc = sample_doc();
-    assert_eq!(convert_outline(&doc).as_deref(), Some(EXPECTED_OUTLINE));
+    assert_eq!(convert_outline(&doc), EXPECTED_OUTLINE);
 }
 
 non_normative!(
@@ -168,8 +168,8 @@ section renders as a leaf item:
 <li><a href=\"#_section_c\">Section C</a></li>
 </ul>";
     assert_eq!(
-        convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)).as_deref(),
-        Some(expected)
+        convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)),
+        expected
     );
 }
 
@@ -178,17 +178,6 @@ non_normative!(
 `OutlineOptions` also carries `sectnumlevels`, the depth to which numbered
 sections (those under the `sectnums` attribute) show their section number in the
 TOC. Any option left unset falls back to the document's own attribute value.
-
-== Known limitation
-
-Asciidoctor exposes `convert_outline` as a method on its HTML5 converter, and its
-documentation shows several Ruby-specific ways to reach it: resolving a converter
-with `Asciidoctor::Converter.create`, going through `document.converter`, running
-the composite converter chain with `convert(document, 'outline')`, and calling it
-from a Slim, Haml, or ERB template. `asciidoc-html5` models none of that converter
-machinery. It offers the outline as a single free function -- `convert_outline`,
-with `convert_outline_with` for options -- which is the one call all of those Ruby
-idioms ultimately make.
 
 That covers generating an HTML table of contents using the API.
 "#

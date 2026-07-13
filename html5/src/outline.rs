@@ -67,20 +67,22 @@ impl OutlineOptions {
     }
 }
 
-/// Generates the HTML TOC for `document` under `options`, or `None` when the
-/// document has no sections.
+/// Generates the HTML TOC for `document` under `options`, returning an empty
+/// `String` when the document has no sections.
 ///
 /// This is the entry point behind
 /// [`convert_outline`](crate::convert_outline)/
 /// [`convert_outline_with`](crate::convert_outline_with); see those for the
 /// full contract.
-pub(crate) fn render_outline(document: &Document<'_>, options: &OutlineOptions) -> Option<String> {
+pub(crate) fn render_outline(document: &Document<'_>, options: &OutlineOptions) -> String {
     let toclevels = options.toclevels.unwrap_or_else(|| document.toc_levels());
     let sectnumlevels = options
         .sectnumlevels
         .unwrap_or_else(|| attribute_usize(document, "sectnumlevels", 3));
 
-    outline_level(document.nested_blocks(), 0, toclevels, sectnumlevels)
+    // A document with no sections has no outline; `outline_level` signals that
+    // with `None`, which the public API surfaces as an empty string.
+    outline_level(document.nested_blocks(), 0, toclevels, sectnumlevels).unwrap_or_default()
 }
 
 /// Emits one `<ul class="sectlevelN">` list for the sections among `blocks`,
@@ -245,7 +247,7 @@ mod tests {
     #[test]
     fn outline_matches_asciidoctor() {
         let doc = load(SAMPLE);
-        assert_eq!(convert_outline(&doc).as_deref(), Some(EXPECTED));
+        assert_eq!(convert_outline(&doc), EXPECTED);
     }
 
     #[test]
@@ -261,15 +263,15 @@ mod tests {
 <li><a href=\"#_section_c\">Section C</a></li>
 </ul>";
         assert_eq!(
-            convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)).as_deref(),
-            Some(expected)
+            convert_outline_with(&doc, &OutlineOptions::new().toclevels(1)),
+            expected
         );
     }
 
     #[test]
-    fn a_document_without_sections_has_no_outline() {
+    fn a_document_without_sections_yields_an_empty_outline() {
         let doc = load("= Title\n\nJust a paragraph.");
-        assert_eq!(convert_outline(&doc), None);
+        assert_eq!(convert_outline(&doc), "");
     }
 
     #[test]
@@ -287,13 +289,13 @@ mod tests {
 </li>
 <li><a href=\"#_second\">2. Second</a></li>
 </ul>";
-        assert_eq!(convert_outline(&doc).as_deref(), Some(expected));
+        assert_eq!(convert_outline(&doc), expected);
     }
 
     #[test]
     fn a_link_in_a_heading_is_flattened() {
         let doc = load("= Title\n\n== See https://example.org[the site]\n");
-        let outline = convert_outline(&doc).expect("sections present");
+        let outline = convert_outline(&doc);
 
         // The section's own anchor remains, but the inline link inside the title
         // is reduced to its text.

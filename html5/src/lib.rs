@@ -399,31 +399,31 @@ pub fn convert_document(document: &Document<'_>) -> String {
     renderer::render_document(document, None)
 }
 
-/// Generates the HTML table of contents (the *outline*) for `document`, or
-/// `None` when the document has no sections.
+/// Generates the HTML table of contents (the *outline*) for `document`.
 ///
-/// This is the standalone TOC generator: it produces only the nested
-/// `<ul class="sectlevel1">…</ul>` list of section links that Asciidoctor's
-/// `html5` backend emits from its `convert_outline` method — not a full
-/// document. Use it to build a table of contents on its own, for example to
-/// embed in a page template, from a [`Document`] you have already
-/// [`load`]ed. The depth follows the document's own `toclevels` attribute
-/// (default `2`); to override it — or the `sectnumlevels` used for numbered
-/// sections — pass [`OutlineOptions`] to [`convert_outline_with`].
+/// This is the standalone TOC generator: give it a [`Document`] you have
+/// already [`load`]ed and it returns the nested `<ul class="sectlevel1">…</ul>`
+/// list of section links on its own — not a full document — so you can build a
+/// table of contents to embed in a page template. The returned `String` is
+/// empty when the document has no sections (there is then no TOC to build). The
+/// depth follows the document's own `toclevels` attribute (default `2`); to
+/// override it — or the `sectnumlevels` used for numbered sections — pass
+/// [`OutlineOptions`] to [`convert_outline_with`].
 ///
-/// The list mirrors Asciidoctor's structure exactly: each section becomes a
-/// `<li><a href="#id">title</a></li>`, and a section with subsections within
-/// the depth nests a child `<ul class="sectlevelN">` before its closing
-/// `</li>`. Discrete (floating) headings are not sections and do not appear.
+/// Each section becomes a `<li><a href="#id">title</a></li>`, and a section
+/// with subsections within the depth nests a child `<ul class="sectlevelN">`
+/// before its closing `</li>`. Discrete (floating) headings are not sections
+/// and do not appear. The markup matches Asciidoctor's default `html5` backend
+/// exactly.
 ///
 /// # Examples
 ///
 /// ```
 /// let doc = asciidoc_html5::load("= Doc\n\n== One\n\n== Two");
-/// let toc = asciidoc_html5::convert_outline(&doc).expect("the document has sections");
+/// let toc = asciidoc_html5::convert_outline(&doc);
 /// assert!(toc.starts_with("<ul class=\"sectlevel1\">"));
 /// ```
-pub fn convert_outline(document: &Document<'_>) -> Option<String> {
+pub fn convert_outline(document: &Document<'_>) -> String {
     outline::render_outline(document, &OutlineOptions::default())
 }
 
@@ -443,11 +443,10 @@ pub fn convert_outline(document: &Document<'_>) -> Option<String> {
 /// let doc = asciidoc_html5::load("= Doc\n\n== One\n\n=== Nested\n\n== Two");
 ///
 /// // Limit the TOC to top-level sections; the nested section is dropped.
-/// let toc = asciidoc_html5::convert_outline_with(&doc, &OutlineOptions::new().toclevels(1))
-///     .expect("the document has sections");
+/// let toc = asciidoc_html5::convert_outline_with(&doc, &OutlineOptions::new().toclevels(1));
 /// assert!(!toc.contains("sectlevel2"));
 /// ```
-pub fn convert_outline_with(document: &Document<'_>, options: &OutlineOptions) -> Option<String> {
+pub fn convert_outline_with(document: &Document<'_>, options: &OutlineOptions) -> String {
     outline::render_outline(document, options)
 }
 
