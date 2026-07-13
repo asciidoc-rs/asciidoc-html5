@@ -250,7 +250,8 @@ Try both approaches to determine which one suits your needs better.
 // The `-e`/`--embedded` embeddable-output mode is a known limitation: `adoc`
 // always writes a standalone HTML5 document and has no body-only mode (nor a
 // `showtitle`-gated header in one), so this section stays non-normative until
-// the feature lands.
+// the feature lands. Tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/71.
 non_normative!(
     r#"
 When piping source from STDIN to STDOUT through the `asciidoctor` command, you often just want the converted body (i.e., embeddable HTML).
