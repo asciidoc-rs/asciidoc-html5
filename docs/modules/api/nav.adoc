@@ -1,4 +1,5 @@
 * xref:index.adoc[Using the API]
 ** xref:convert-files.adoc[Load and Convert Files]
 ** xref:convert-strings.adoc[Load and Convert Strings]
+** xref:generate-html-toc.adoc[Generate an HTML TOC]
 ** xref:set-safe-mode.adoc[Set Safe Mode]
