@@ -7,4 +7,5 @@
 * xref:safe-modes.adoc[Safe Modes]
 * xref:cli:index.adoc[Use the CLI]
 ** xref:cli:set-safe-mode.adoc[Set Safe Mode]
+** xref:cli:output-file.adoc[Specify an Output File]
 ** xref:cli:io-piping.adoc[Pipe Content]

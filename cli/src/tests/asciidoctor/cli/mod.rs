@@ -10,4 +10,5 @@
 
 mod index;
 mod io_piping;
+mod output_file;
 mod set_safe_mode;
