@@ -34,7 +34,7 @@ adoc document.adoc              Convert a file; write the HTML to document.html\
 adoc document.adoc -o out.html  Convert a file; write the HTML to out.html\n  \
 adoc document.adoc -o -         Convert a file; write the HTML to stdout\n  \
 cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n  \
-cat document.adoc | adoc -e      Convert stdin; write just the body (embedded)\n\n\
+cat document.adoc | adoc -e     Convert stdin; write just the body (embedded)\n\n\
 Exit status is 0 on success, or 1 if the input cannot be read or the output \
 cannot be written."
 )]
