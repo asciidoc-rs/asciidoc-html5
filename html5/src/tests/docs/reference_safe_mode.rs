@@ -61,9 +61,16 @@ This document was processed in {safe-mode-name} mode (level {safe-mode-level}).
     // Secure is the API default.
     assert!(convert(line).contains("processed in secure mode (level 20)"));
 
-    // A lower mode resolves to its own name and level.
-    let unsafe_mode = convert_with(line, &Options::new().safe_mode(SafeMode::Unsafe));
-    assert!(unsafe_mode.contains("processed in unsafe mode (level 0)"));
+    // Every lower mode resolves to its own name and level, not just the
+    // `unsafe` extreme.
+    for (mode, name, level) in [
+        (SafeMode::Server, "server", 10),
+        (SafeMode::Safe, "safe", 1),
+        (SafeMode::Unsafe, "unsafe", 0),
+    ] {
+        let html = convert_with(line, &Options::new().safe_mode(mode));
+        assert!(html.contains(&format!("processed in {name} mode (level {level})")));
+    }
 }
 
 // `safe-mode-<name>` is defined only for the active mode, so `ifdef` gates
@@ -92,16 +99,31 @@ to its most restrictive setting, xref:safe-modes.adoc[`secure`].
 "#
     );
 
+    // The exact example the page shows: the `secure` flag emits its line under
+    // `secure` (the API default) and drops it under a lower mode.
     let gated = "= Doc\n\nifdef::safe-mode-secure[]\nLink to chapters instead of including them.\nendif::safe-mode-secure[]\n";
-
-    // Secure (the API default) emits the gated line.
     assert!(convert(gated).contains("Link to chapters instead of including them."));
-
-    // A lower mode drops it.
     assert!(
         !convert_with(gated, &Options::new().safe_mode(SafeMode::Unsafe))
             .contains("Link to chapters instead of including them.")
     );
+
+    // The same gating holds for the intermediate modes, not just the
+    // `secure`/`unsafe` extremes: each `safe-mode-<name>` flag is present under
+    // its own mode and absent otherwise, so an `ifdef` on an intermediate mode
+    // cannot silently become a no-op.
+    for (mode, name) in [(SafeMode::Safe, "safe"), (SafeMode::Server, "server")] {
+        let doc = format!(
+            "= Doc\n\nifdef::safe-mode-{name}[]\nGated for {name}.\nendif::safe-mode-{name}[]\n"
+        );
+        let shown = format!("Gated for {name}.");
+
+        // Present under its own mode.
+        assert!(convert_with(&doc, &Options::new().safe_mode(mode)).contains(&shown));
+
+        // Absent under a different mode (here the `secure` default).
+        assert!(!convert(&doc).contains(&shown));
+    }
 }
 
 non_normative!(
