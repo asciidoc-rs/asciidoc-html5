@@ -442,15 +442,20 @@ impl Renderer<'_> {
 
             if let Some(revision) = revision_line {
                 if let Some(revnumber) = revision.revnumber() {
-                    // Asciidoctor prints "version <n>" and appends a comma when
-                    // a revision date follows.
+                    // The revision-number label is the `version-label`
+                    // attribute (default "Version"), downcased — Asciidoctor
+                    // localizes it this way, printing e.g. "version 1.0". A
+                    // comma is appended when a revision date follows.
+                    let version_label = attribute_str(document, "version-label")
+                        .unwrap_or_else(|| "Version".to_string())
+                        .to_lowercase();
                     let comma = if revision.revdate().is_empty() {
                         ""
                     } else {
                         ","
                     };
                     self.line(&format!(
-                        "<span id=\"revnumber\">version {revnumber}{comma}</span>"
+                        "<span id=\"revnumber\">{version_label} {revnumber}{comma}</span>"
                     ));
                 }
                 if !revision.revdate().is_empty() {

@@ -8,4 +8,5 @@ mod api;
 mod convert_your_first_file;
 mod generate_html;
 mod index;
+mod localization_support;
 mod safe_modes;

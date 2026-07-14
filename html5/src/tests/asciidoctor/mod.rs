@@ -13,6 +13,7 @@ mod docbook_backend;
 mod get_started;
 mod html_backend;
 mod index;
+mod localization_support;
 mod manpage_backend;
 mod reference_safe_mode;
 mod safe_modes;
