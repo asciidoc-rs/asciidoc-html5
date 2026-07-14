@@ -6,6 +6,7 @@
 
 mod api;
 mod convert_your_first_file;
+mod docinfo;
 mod generate_html;
 mod index;
 mod safe_modes;
