@@ -48,8 +48,12 @@ One module per Ruby file (e.g. [`preamble_test.rs`](preamble_test.rs)), which:
 
 `preamble_test.rs` ports 4 of the 12 Ruby tests (the `html5` preamble cases) and
 tracks the other 8 as `non_normative!`: the DocBook-backend tests (this crate
-targets only `html5`), the `book`/`partintro`/`toc` cases (not yet rendered),
-and one test that needs the general `preceding::` XPath axis (see *Limitations*).
+targets only `html5`), the `book`/`partintro` cases (not yet rendered), the
+`toc` case ([#86] — TOC rendering not wired up yet), and one test that needs the
+general `preceding::` XPath axis ([#87] — see *Limitations*).
+
+[#86]: https://github.com/asciidoc-rs/asciidoc-html5/issues/86
+[#87]: https://github.com/asciidoc-rs/asciidoc-html5/issues/87
 
 ### Driving the renderer
 
@@ -105,7 +109,7 @@ positional `[N]` (1-indexed, per context node).
 ### Limitations (grow the engine as pages need it)
 
 - The general `preceding::` / `following::` / `ancestor::` axes are not
-  implemented (only the `*-sibling::` axes are).
+  implemented (only the `*-sibling::` axes are). Tracked in [#87].
 - Boolean expressions (`count(...) = N`), `normalize-space()`, `contains()`, and
   `starts-with()` predicates are not implemented.
 - `text()` compares against an element's *direct* text only (matching XPath's

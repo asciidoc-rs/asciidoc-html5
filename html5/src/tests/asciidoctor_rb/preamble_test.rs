@@ -7,10 +7,12 @@
 //! the counterpart to the Ruby suite's standalone `convert_string`.
 //!
 //! Not ported (kept `non_normative!`): the DocBook-backend tests (this crate
-//! targets only the `html5` backend), the `book` doctype / `partintro` and
-//! `toc` cases (not yet rendered here), and the one test that relies on the
-//! general `preceding::` XPath axis, which the minimal engine in
-//! `crate::tests::assert_html` does not implement.
+//! targets only the `html5` backend), the `book` doctype / `partintro` cases
+//! (not yet rendered here), the `toc` case (TOC rendering is not wired up yet —
+//! see <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>), and the one
+//! test that relies on the general `preceding::` XPath axis, which the minimal
+//! engine in `crate::tests::assert_html` does not implement (see
+//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/87>).
 
 use crate::{
     convert_with,
