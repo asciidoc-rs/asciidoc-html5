@@ -119,8 +119,10 @@ Find the first paragraph and read where it starts:
 
 [,rust]
 ----
-use asciidoc_parser::HasSpan;
-use asciidoc_parser::blocks::{FindBlocks, IsBlock};
+use asciidoc_parser::{
+    blocks::{FindBlocks, IsBlock},
+    HasSpan,
+};
 
 let paragraph = doc
     .descendant_blocks()
@@ -171,9 +173,11 @@ file under `SafeMode::Safe` (the counterpart to Asciidoctor's `safe: :safe`):
 
 [,rust]
 ----
-use asciidoc_parser::blocks::{FindBlocks, IsBlock};
-use asciidoc_parser::parser::SourceLine;
-use asciidoc_parser::{HasSpan, SafeMode};
+use asciidoc_parser::{
+    blocks::{FindBlocks, IsBlock},
+    parser::SourceLine,
+    HasSpan, SafeMode,
+};
 
 // doc.adoc holds `include::partials/section.adoc[]`, and the section file's
 // first paragraph is on its own line 3.
