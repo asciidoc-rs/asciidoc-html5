@@ -387,18 +387,23 @@ fn soft_toggle_attributes_yield_to_the_document() {
     ));
 }
 
-/// When the output file cannot be written (its parent directory does not
-/// exist), adoc fails with a nonzero exit status and an `adoc:`-prefixed error,
-/// writing nothing to standard output.
+/// When the output file cannot be written, adoc fails with a nonzero exit
+/// status and an `adoc:`-prefixed error, writing nothing to standard output.
+///
+/// adoc creates a missing output directory (matching Asciidoctor), so a merely
+/// absent parent is not an error. To force a genuine failure, the output path's
+/// parent is a regular file here, which cannot be turned into a directory.
 #[test]
 fn reports_failure_when_output_cannot_be_written() {
     let input =
         std::env::temp_dir().join(format!("adoc-cli-badout-in-{}.adoc", std::process::id()));
-    // A destination inside a directory that does not exist, so the write fails.
-    let unwritable = std::env::temp_dir()
-        .join(format!("adoc-cli-missing-dir-{}", std::process::id()))
-        .join("out.html");
+
+    // A regular file standing where the output's parent directory would need to
+    // be, so creating that directory (and thus the write) fails.
+    let blocker = std::env::temp_dir().join(format!("adoc-cli-blocker-{}", std::process::id()));
+    let unwritable = blocker.join("out.html");
     fs::write(&input, "= Hello\n\nWorld.").expect("write temp input");
+    fs::write(&blocker, "not a directory").expect("write blocker file");
 
     let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
         .arg(&input)
@@ -407,6 +412,7 @@ fn reports_failure_when_output_cannot_be_written() {
         .output()
         .expect("run the adoc binary");
     let _ = fs::remove_file(&input);
+    let _ = fs::remove_file(&blocker);
 
     assert!(
         !output.status.success(),
