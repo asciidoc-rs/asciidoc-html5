@@ -3,18 +3,19 @@
 //! sources to convert (files, expanded globs, or standard input), and
 //! `expand_glob`, which it calls to match a pattern. The page-driven suites
 //! exercise the common file and glob cases; these cover the edges they do not:
-//! a `-` mixed in with file arguments, and a pattern that is not valid UTF-8.
+//! a `-` mixed in with file arguments, a glob that matches a directory, and a
+//! pattern that is not valid UTF-8 or is otherwise malformed.
 
 use std::path::PathBuf;
 
 use crate::{expand_glob, resolve_inputs};
 
-// A lone `-` (or no argument at all) reads standard input, but a `-` alongside
-// other arguments is just one more source in the list: `adoc` resolves it to a
-// standard-input source in place, leaving the surrounding file arguments
-// intact.
+// Standard input is read only when `-` is the sole argument. A `-` mixed in
+// with other inputs is an extra argument: `adoc` ignores it (matching
+// Asciidoctor, which warns and skips it), rather than reading standard input a
+// second time and converting the resulting empty document.
 #[test]
-fn a_dash_among_file_arguments_is_a_stdin_source() {
+fn a_dash_among_file_arguments_is_ignored() {
     let dir = std::env::temp_dir().join(format!("adoc-cli-dash-among-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create dir");
@@ -24,10 +25,16 @@ fn a_dash_among_file_arguments_is_a_stdin_source() {
     let sources = resolve_inputs(&[file.clone(), PathBuf::from("-")]).expect("resolve inputs");
     let _ = std::fs::remove_dir_all(&dir);
 
-    // The file resolves to itself, and the `-` resolves to standard input.
-    assert_eq!(sources.len(), 2);
+    // Only the file resolves; the stray `-` produces no source at all, so no
+    // empty standard-input document is converted.
+    assert_eq!(sources.len(), 1);
     assert_eq!(sources[0].file(), Some(file.as_path()));
-    assert_eq!(sources[1].file(), None);
+
+    // With every argument a `-`, none is the sole input, so all are ignored and
+    // nothing is converted — the same as Asciidoctor emitting no document.
+    let sources =
+        resolve_inputs(&[PathBuf::from("-"), PathBuf::from("-")]).expect("resolve inputs");
+    assert!(sources.is_empty());
 }
 
 // `expand_glob` needs a UTF-8 pattern to hand to the glob matcher, so an

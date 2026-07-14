@@ -274,6 +274,11 @@ impl InputSource {
 /// on every platform regardless of what the shell would expand. A pattern that
 /// matches nothing is kept as-is, so it surfaces as a missing-file error when
 /// the conversion tries to read it, again matching Asciidoctor.
+///
+/// Standard input is read only when `-` is the *sole* argument. A `-` mixed in
+/// with other inputs is an extra argument — Asciidoctor warns about it and
+/// ignores it rather than reading standard input a second time (which would
+/// yield an empty document at end-of-stream), so `adoc` does the same.
 fn resolve_inputs(inputs: &[PathBuf]) -> io::Result<Vec<InputSource>> {
     // No input argument, or a single `-`, reads standard input — the same two
     // spellings the single-file path already treats as stdin.
@@ -284,7 +289,13 @@ fn resolve_inputs(inputs: &[PathBuf]) -> io::Result<Vec<InputSource>> {
     let mut sources = Vec::new();
     for arg in inputs {
         if arg.as_os_str() == "-" {
-            sources.push(InputSource::Stdin);
+            // A `-` here is not the sole argument, so it is an extra one: warn
+            // and skip it, matching Asciidoctor, rather than reading standard
+            // input again.
+            eprintln!(
+                "adoc: ignoring extra '-' argument; standard input is read only \
+                 when it is the only input"
+            );
         } else if arg.is_file() {
             // An argument naming an existing file is taken literally; Asciidoctor
             // only globs when the file is not found.
