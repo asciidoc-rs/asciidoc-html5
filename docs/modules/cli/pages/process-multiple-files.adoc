@@ -1,0 +1,70 @@
+= Process Multiple Source Files
+:navtitle: Process Multiple Files
+:description: How to convert several AsciiDoc files in one adoc invocation, and how adoc expands quoted glob patterns portably.
+
+The `adoc` command can convert several AsciiDoc files in a single invocation. Pass
+more than one source file, or a glob pattern, and `adoc` converts each file in
+turn.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Convert several files at once
+
+Suppose the current directory holds two AsciiDoc files, [.path]_a.adoc_ and
+[.path]_b.adoc_. Pass both to `adoc` in one command:
+
+ $ adoc a.adoc b.adoc
+
+`adoc` converts each in turn, writing [.path]_a.adoc_ to [.path]_a.html_ and
+[.path]_b.adoc_ to [.path]_b.html_. As when converting a single file, each output
+name is derived from its input by swapping the extension for `.html`, and the
+file is written alongside its input.
+
+== Match files with a glob pattern
+
+To save typing, use the glob operator (`*`) to match every AsciiDoc file in the
+current directory with a single argument:
+
+ $ adoc *.adoc
+
+Written this way, your shell expands the pattern before `adoc` runs, so the
+command is really just the `adoc a.adoc b.adoc` from above. Shell globbing varies
+from platform to platform, though, and most shells expand `*` only within a
+single directory.
+
+== Let adoc expand the glob
+
+To make the command portable, let `adoc` expand the glob itself. Quote the
+pattern so the shell passes it through untouched:
+
+ $ adoc '*.adoc'
+
+`adoc` then performs the matching with the same portable, Ruby-style rules on
+every platform. Two more patterns follow from that:
+
+ $ adoc '*/*.adoc'
+
+matches AsciiDoc files in direct subfolders, and the double-glob operator (`**`)
+matches the current folder and subfolders at any depth -- something most shells
+will not expand for you:
+
+ $ adoc '**/*.adoc'
+
+We always recommend quoting a glob pattern, so `adoc` expands it the same way
+everywhere.
+
+[NOTE]
+.Known limitations
+====
+An argument is treated as a glob pattern only when it does not name an existing
+file, mirroring Asciidoctor. A pattern that matches nothing is left as-is, so it
+surfaces as a missing-file error, exactly as a misspelled filename would.
+====
+
+You can also set the xref:cli:set-safe-mode.adoc[safe mode from the CLI], which
+governs how far each converted document may reach when resolving includes.
