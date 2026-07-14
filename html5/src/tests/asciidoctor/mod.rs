@@ -10,6 +10,7 @@
 
 mod api;
 mod docbook_backend;
+mod docinfo;
 mod get_started;
 mod html_backend;
 mod index;
