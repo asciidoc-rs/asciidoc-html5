@@ -43,14 +43,14 @@ Asciidoctor's `html5` backend.
 "#
     );
 
-    // The file-based path returns a complete, standalone HTML5 document...
+    // The file-based path returns a complete, standalone HTML5 document ...
     let standalone = convert_with("= Hello\n\nWorld.", &Options::new().standalone(true));
     assert!(standalone.starts_with("<!DOCTYPE html>"));
     assert!(standalone.contains("<title>Hello</title>"));
     assert!(standalone.contains("<p>World.</p>"));
     assert!(standalone.trim_end().ends_with("</body>\n</html>"));
 
-    // ...while the string `convert` returns embeddable body output.
+    // ... while the string `convert` returns embeddable body output.
     let embedded = convert("= Hello\n\nWorld.");
     assert!(embedded.contains("<p>World.</p>"));
     assert!(!embedded.starts_with("<!DOCTYPE html>"));
