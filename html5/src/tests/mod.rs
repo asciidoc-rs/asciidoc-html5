@@ -7,5 +7,8 @@
 
 mod sdd;
 
+mod assert_html;
+
 mod asciidoctor;
+mod asciidoctor_rb;
 mod docs;

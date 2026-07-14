@@ -12,3 +12,4 @@ version = "0.1.2"
 
 [workspace.dependencies]
 asciidoc-parser = "0.22.1"
+scraper = "0.23"
