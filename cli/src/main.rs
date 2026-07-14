@@ -245,6 +245,7 @@ fn convert_source(
 
 /// A single resolved source for `adoc` to convert: an on-disk file, or standard
 /// input.
+#[derive(Debug)]
 enum InputSource {
     /// A file named on the command line (or matched by a glob pattern).
     File(PathBuf),
