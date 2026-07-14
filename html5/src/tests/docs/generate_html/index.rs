@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{convert, convert_file, tests::sdd::*};
+use crate::{convert, convert_file, convert_with, tests::sdd::*, Options};
 
 track_file!("docs/modules/generate-html/pages/index.adoc");
 
@@ -34,18 +34,26 @@ fn html5_is_the_only_output() {
         r#"
 HTML5 is the only output format `asciidoc-html5` produces.
 Whether you use the `adoc` command or the Rust API, converting an AsciiDoc
-document gives you back a complete, standalone HTML5 document.
+document gives you back HTML5.
+The `adoc` command and the file-based `convert_file` return a complete, standalone
+document; the string `convert` returns embeddable body output by default.
 This page explains how to generate that HTML5 and how the renderer relates to
 Asciidoctor's `html5` backend.
 
 "#
     );
 
-    let html = convert("= Hello\n\nWorld.");
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
-    assert!(html.contains("<p>World.</p>"));
-    assert!(html.trim_end().ends_with("</body>\n</html>"));
+    // The file-based path returns a complete, standalone HTML5 document ...
+    let standalone = convert_with("= Hello\n\nWorld.", &Options::new().standalone(true));
+    assert!(standalone.starts_with("<!DOCTYPE html>"));
+    assert!(standalone.contains("<title>Hello</title>"));
+    assert!(standalone.contains("<p>World.</p>"));
+    assert!(standalone.trim_end().ends_with("</body>\n</html>"));
+
+    // ... while the string `convert` returns embeddable body output.
+    let embedded = convert("= Hello\n\nWorld.");
+    assert!(embedded.contains("<p>World.</p>"));
+    assert!(!embedded.starts_with("<!DOCTYPE html>"));
 }
 
 non_normative!(
@@ -173,7 +181,7 @@ let html = asciidoc_html5::convert_file("my-document.adoc")?;
     let html = convert_file(&path).expect("convert_file reads and renders");
     let _ = fs::remove_file(&path);
 
-    assert_eq!(html, convert(source));
+    assert_eq!(html, convert_with(source, &Options::new().standalone(true)));
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>The Dangers of Wolpertingers</title>"));
     assert!(html.trim_end().ends_with("</body>\n</html>"));

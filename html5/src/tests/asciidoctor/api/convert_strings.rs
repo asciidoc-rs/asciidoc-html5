@@ -2,7 +2,7 @@ use std::fs;
 
 use asciidoc_parser::blocks::IsBlock;
 
-use crate::{convert, convert_document, convert_file, load, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, convert_with, load, tests::sdd::*, Options};
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/convert-strings.adoc");
 
@@ -16,26 +16,26 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/convert-strings.adoc");
 // `convert_file` is the file counterpart the page reaches for after
 // `File.read`.
 //
-// The page's second half describes behavior this crate deliberately does not
-// share, so it is non-normative. Asciidoctor makes an *embedded* document the
-// default for string conversion and gates a standalone document behind the
-// `:standalone` option; this crate has no embedded output at all — every entry
-// point returns a complete, standalone HTML5 document — so the "Embedded
-// output" and "Standalone output" sections, the `:standalone`/`:to_file`
-// options, and the embedded-by-default statement are all non-normative. Adding
-// embedded output is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/68. The remaining two
-// sections describe outputs this crate does not produce either: `doctype:
-// 'inline'` (this renderer models only the `article` doctype) and the DocBook
-// backend (HTML5 is the only backend; DocBook is not planned). The Ruby `safe:`
-// option has no bearing on loading or converting here.
+// Asciidoctor makes an *embedded* document the default for string conversion
+// and gates a standalone document behind the `:standalone` option. This crate
+// now matches that default: the string entry points (`convert`,
+// `convert_document`) return embedded, body-only output, while `convert_file`
+// returns a standalone document, and `Options::standalone`/`embedded` choose
+// the mode explicitly — so the embedded-by-default statement, the "Embedded
+// output" intro, and the `:standalone` opt-in in "Standalone output" are
+// verified below. The pieces the page describes that this crate does not (yet)
+// produce stay non-normative: the TOC and footnotes an embedded document may
+// include (neither is rendered yet), the `:to_file` option, `doctype: 'inline'`
+// (this renderer models only the `article` doctype), and the DocBook backend
+// (HTML5 is the only backend; DocBook is not planned). The Ruby `safe:` option
+// has no bearing on loading or converting here.
 
 // The bare AsciiDoc string used throughout the page.
 const SAMPLE: &str = "*This* is Asciidoctor.";
 
-// The converted body the page shows as Asciidoctor's embedded output. This
-// crate wraps the same fragment in a standalone shell rather than returning it
-// on its own, so the fragment appears *within* every `convert` result.
+// The converted body the page shows as Asciidoctor's embedded output. Matching
+// Asciidoctor, this crate's string `convert` returns exactly this fragment;
+// `convert_file` wraps the same fragment in a standalone shell.
 const FRAGMENT: &str =
     "<div class=\"paragraph\">\n<p><strong>This</strong> is Asciidoctor.</p>\n</div>";
 
@@ -138,11 +138,9 @@ However, if you're only interested in converting the AsciiDoc source when using 
 );
 
 // `Asciidoctor.convert` parses and converts a string directly. This crate's
-// `convert` is the direct analog. The page shows Asciidoctor's *embedded*
-// output — just the converted body — whereas `convert` returns a complete
-// standalone document; the same body fragment appears within it, so we verify
-// the fragment is present. (The embedded-vs-standalone difference is the
-// subject of the non-normative sections that follow.)
+// `convert` is the direct analog, and — matching Asciidoctor — it returns the
+// same *embedded* output the page shows: just the converted body. (The
+// embedded-vs-standalone default is the subject of the sections that follow.)
 #[test]
 fn convert_renders_a_string_to_html() {
     verifies!(
@@ -203,25 +201,30 @@ html = Asciidoctor.convert asciidoc, safe: :safe
     assert!(html.contains(FRAGMENT));
 }
 
-// The embedded-by-default statement. This crate always outputs a standalone
-// document, so it has no embedded default to explain; the span is
-// non-normative. Adding embedded output is tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/68.
-non_normative!(
-    r#"
+// The embedded-by-default statement — this crate now matches it: converting a
+// string returns embedded output, not a standalone document.
+#[test]
+fn a_string_converts_to_embedded_output_by_default() {
+    verifies!(
+        r#"
 When converting a string, Asciidoctor _does not_ output a standalone document by default.
 Instead, it generates embedded output.
 Let's learn why that is and how to control it.
 
 "#
-);
+    );
 
-// The "Embedded output" section describes the embedded document this crate does
-// not produce — the `:standalone` option, the pieces an embedded document
-// includes, and its intended use in a template. All non-normative here (see
-// issue #68).
-non_normative!(
-    r#"
+    let html = convert(SAMPLE);
+    assert!(html.contains(FRAGMENT));
+    assert!(!html.starts_with("<!DOCTYPE html>"));
+}
+
+// The "Embedded output" intro: a string conversion returns only the converted
+// content, with no header/footer frame. This crate matches it.
+#[test]
+fn embedded_output_returns_only_the_converted_content() {
+    verifies!(
+        r#"
 == Embedded output
 
 When you pass an AsciiDoc string to `Asciidoctor.convert` to convert it to a backend format, such as HTML, the `:standalone` option is `false` by default.
@@ -230,6 +233,22 @@ This content does not include the frame around that content (i.e., the header an
 In other words, it makes an _embedded_ document.
 This default was chosen to make Asciidoctor consistent with other lightweight markup processors like Markdown.
 
+"#
+    );
+
+    let html = convert(SAMPLE);
+    assert_eq!(html.trim_end(), FRAGMENT);
+    assert!(!html.contains("id=\"header\""));
+    assert!(!html.contains("id=\"footer\""));
+}
+
+// The rest of the "Embedded output" section lists the pieces an embedded
+// document includes and its intended use in a template. The doctitle-under-
+// `showtitle` and converted-body pieces are exercised elsewhere, but the TOC
+// and footnotes are not rendered yet, and the author/revision and template
+// prose carry no rule to test — so this span stays non-normative.
+non_normative!(
+    r#"
 Here's what's included in an embedded document:
 
 * The document title if the `showtitle` attribute is set
@@ -246,12 +265,13 @@ That template is responsible for providing the styles and library integrations n
 "#
 );
 
-// The "Standalone output" section is framed around opting *in* to a standalone
-// document with `:standalone`, and around the `:to_file` option — neither of
-// which this crate has, since a standalone document is all it produces. The
-// section (and its `toc::[]` note) is non-normative.
-non_normative!(
-    r#"
+// The "Standalone output" section: opting *in* to a standalone document by
+// setting `:standalone` to `true`. This crate matches it with
+// `Options::standalone(true)`; without it, a string conversion is embedded.
+#[test]
+fn standalone_output_is_opt_in_for_a_string() {
+    verifies!(
+        r#"
 == Standalone output
 
 You can still generate a standalone document when converting a string.
@@ -266,6 +286,28 @@ Now you'll get a complete HTML file.
 The standalone output provides the framing around the content, which includes the styling and all the library integrations the content needs to properly render (e.g., the default stylesheet, MathJax, etc.).
 If you don't set the `:standalone` option to `true`, you only get the embedded document (i.e., body content).
 
+"#
+    );
+
+    // Explicitly opting in gives a complete HTML file, with the converted body
+    // framed inside it.
+    let standalone = convert_with(SAMPLE, &Options::new().standalone(true));
+    assert!(standalone.starts_with("<!DOCTYPE html>"));
+    assert!(standalone.contains(FRAGMENT));
+
+    // Without it, a string conversion is the embedded document (body content).
+    let embedded = convert(SAMPLE);
+    assert_eq!(embedded.trim_end(), FRAGMENT);
+    assert!(!embedded.starts_with("<!DOCTYPE html>"));
+}
+
+// The remainder of the "Standalone output" section is about writing to a file:
+// the `:to_file` option, the file-input standalone default, and the `toc::[]`
+// macro. `:to_file` and the TOC macro have no counterpart here (the library
+// renders to a `String`; file output is the CLI's job, and the TOC is not
+// rendered yet), so this span stays non-normative.
+non_normative!(
+    r#"
 When the input or output is a file, the `:standalone` option is enabled by default.
 Thus, to instruct Asciidoctor to write standalone HTML to a file from an AsciiDoc string, the `:to_file` option is mandatory.
 

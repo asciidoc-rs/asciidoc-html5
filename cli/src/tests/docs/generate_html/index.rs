@@ -23,7 +23,9 @@ non_normative!(
 
 HTML5 is the only output format `asciidoc-html5` produces.
 Whether you use the `adoc` command or the Rust API, converting an AsciiDoc
-document gives you back a complete, standalone HTML5 document.
+document gives you back HTML5.
+The `adoc` command and the file-based `convert_file` return a complete, standalone
+document; the string `convert` returns embeddable body output by default.
 This page explains how to generate that HTML5 and how the renderer relates to
 Asciidoctor's `html5` backend.
 

@@ -78,24 +78,35 @@ it, and returns the rendered HTML5 as a `String`:
 let html = asciidoc_html5::convert_file("document.adoc")?;
 ----
 
-== Standalone output
+== Embedded and standalone output
 
-Whichever entry point you use, `asciidoc-html5` returns a complete, standalone
-HTML5 document: a `<!DOCTYPE html>` declaration followed by `<html>`, a `<head>`,
-and a `<body>` whose content mirrors Asciidoctor's default `html5` backend. The
-converted body shown above is nested inside that document, within its
-`<div id="content">`.
+Matching Asciidoctor, the output mode follows the entry point. The string entry
+points -- `convert` and `convert_document` -- return _embedded_ output: just the
+converted body shown above, with no `+++<!DOCTYPE>+++`, `<head>`, stylesheet, or
+header/footer frame. This is what you want when the HTML is destined for a
+surrounding template. The file entry point `convert_file` returns a _standalone_
+document instead: a complete `+++<!DOCTYPE html>+++` file with `<html>`, a
+`<head>`, and a `<body>` whose content mirrors Asciidoctor's default `html5`
+backend.
+
+To choose the mode explicitly, build an `Options` and convert with `convert_with`:
+`Options::standalone(true)` returns a complete document from a string, and
+`Options::embedded(true)` returns body-only output from a file. When the document
+has a title, embedded output includes its `<h1>` only if the `showtitle`
+attribute is set.
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().standalone(true);
+let html = convert_with("*This* is Asciidoctor.", &opts);
+assert!(html.starts_with("<!DOCTYPE html>"));
+----
 
 [NOTE]
 .Known limitation
 ====
-When Asciidoctor converts a string, it produces an _embedded_ document by default
--- just the converted body, with no header or footer frame -- and gates a
-standalone document behind its `:standalone` option. `asciidoc-html5` has no
-embedded output: every entry point returns a complete, standalone HTML5 document.
-Embedded (body-only) output is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/68[issue #68].
-
 Asciidoctor can also return the inline markup only (its `doctype: 'inline'`
 option) and convert to other backends such as DocBook. This renderer models only
 the `article` doctype and produces HTML5 only, so inline-only output is not

@@ -48,12 +48,21 @@ resolution when piping. `adoc` accepts `-a docdir=…` and surfaces the attribut
 to the document, but it does not redirect include resolution — use `-B` for that.
 ====
 
-== Known limitation: no embeddable-output mode
+== Embeddable output
 
-Asciidoctor's `-e`/`--embedded` flag produces just the converted body (embeddable
-HTML) rather than a standalone document. `adoc` does not support this mode yet; it
-always writes a standalone HTML5 document. This is a known limitation to be lifted
-in a future release.
+When piping through `adoc`, you often just want the converted body -- embeddable
+HTML to drop into a surrounding template -- rather than a standalone document. Add
+the `-e` flag (short for `--embedded`) to produce that:
+
+ $ echo 'content' | adoc -e -
+
+Embeddable output omits the doctitle by default. To include it as a leading
+`<h1>`, set the `showtitle` attribute:
+
+ $ printf '= Document Title\n\ncontent\n' | adoc -e -a showtitle -
+
+Without `-e`, `adoc` writes a standalone HTML5 document, matching Asciidoctor's
+command, which is standalone even when piping.
 
 You can also set the xref:cli:set-safe-mode.adoc[safe mode from the CLI], which
 governs how far a piped document may reach when resolving includes.

@@ -241,17 +241,28 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
-/// Renders a parsed [`Document`] to a standalone HTML5 document string.
+/// Renders a parsed [`Document`] to an HTML5 string.
+///
+/// `standalone` selects the output mode: `true` emits the complete
+/// document — the `<!DOCTYPE>`/`<html>`/`<head>`/`<body>` shell around the
+/// header, content, and footer — while `false` emits embedded, body-only output
+/// (the converted body, with the doctitle `<h1>` only when `showtitle` is set).
 ///
 /// `custom_stylesheet` is the CSS to embed when the document selects a custom
 /// stylesheet that is *embedded* rather than linked (see
 /// [`Options::stylesheet_content`](crate::Options::stylesheet_content)); it is
 /// `None` for callers that cannot supply it, such as the string-only
-/// [`convert`](crate::convert) entry point.
-pub(crate) fn render_document(document: &Document<'_>, custom_stylesheet: Option<&str>) -> String {
+/// [`convert`](crate::convert) entry point. It is ignored in embedded output,
+/// which emits no stylesheet.
+pub(crate) fn render_document(
+    document: &Document<'_>,
+    custom_stylesheet: Option<&str>,
+    standalone: bool,
+) -> String {
     let mut renderer = Renderer {
         out: String::new(),
         custom_stylesheet,
+        standalone,
     };
     renderer.document(document);
     renderer.out
@@ -264,6 +275,10 @@ struct Renderer<'a> {
     /// The CSS to embed for a custom, embedded stylesheet, if the caller
     /// supplied any.
     custom_stylesheet: Option<&'a str>,
+
+    /// Whether to emit the standalone document shell (`true`) or embedded,
+    /// body-only output (`false`).
+    standalone: bool,
 }
 
 impl Renderer<'_> {
@@ -274,9 +289,16 @@ impl Renderer<'_> {
         self.out.push('\n');
     }
 
-    /// Emits the complete standalone document: the `<head>` preamble, the
-    /// `<div id="header">`, the `<div id="content">` body, and the footer.
+    /// Emits the document. In standalone mode this is the complete document —
+    /// the `<head>` preamble, the `<div id="header">`, the `<div id="content">`
+    /// body, and the footer; in embedded mode it is the body-only output
+    /// emitted by [`embedded_document`](Self::embedded_document).
     fn document(&mut self, document: &Document<'_>) {
+        if !self.standalone {
+            self.embedded_document(document);
+            return;
+        }
+
         // `lang` and the doctype (which drives `<body class>`) come from
         // resolved document attributes, defaulting to Asciidoctor's `en` /
         // `article`. The footer's "Last updated" timestamp still needs a
@@ -345,6 +367,24 @@ impl Renderer<'_> {
 
         self.line("</body>");
         self.line("</html>");
+    }
+
+    /// Emits embedded, body-only output: the converted document body with no
+    /// shell, stylesheet, or header/footer frame.
+    ///
+    /// Matching Asciidoctor's embeddable output, the doctitle is emitted as a
+    /// bare `<h1>` only when the `showtitle` attribute is set — never wrapped
+    /// in `<div id="header">` and never accompanied by the author or
+    /// revision details, which an embedded document does not show. The body
+    /// itself is not wrapped in `<div id="content">`.
+    fn embedded_document(&mut self, document: &Document<'_>) {
+        if document.is_attribute_set("showtitle") {
+            if let Some(title) = document.doctitle() {
+                self.line(&format!("<h1>{title}</h1>"));
+            }
+        }
+
+        self.blocks(document.nested_blocks());
     }
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
@@ -715,7 +755,26 @@ impl Renderer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{convert, convert_with, Options, SafeMode};
+    use crate::{Options, SafeMode};
+
+    // These renderer tests assert the standalone document shell (the
+    // `<!DOCTYPE>`/`<head>`/`<body>` frame, the header, and the footer), so they
+    // render in standalone mode explicitly. The string entry points now default
+    // to embedded, body-only output, so `convert`/`convert_with` are shadowed
+    // here to force `standalone(true)`; the handful of embedded-output checks
+    // call `crate::convert_with` directly instead.
+
+    /// Converts `source` to a standalone document under the default safe mode —
+    /// the standalone counterpart of [`crate::convert`].
+    fn convert(source: &str) -> String {
+        crate::convert_with(source, &Options::new().standalone(true))
+    }
+
+    /// Converts `source` to a standalone document under `options` — the
+    /// standalone counterpart of [`crate::convert_with`].
+    fn convert_with(source: &str, options: &Options) -> String {
+        crate::convert_with(source, &options.clone().standalone(true))
+    }
 
     /// Converts `source` with the given docinfo files (name → content) written
     /// to a fresh temp directory, under `Safe` safe mode with a primary file of

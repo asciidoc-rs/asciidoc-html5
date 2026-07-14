@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::{convert, convert_document, convert_file, load, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, convert_with, load, tests::sdd::*, Options};
 
 track_file!("docs/modules/ROOT/pages/index.adoc");
 
@@ -109,8 +109,9 @@ gives you back a complete HTML5 document you can publish.
     );
 
     // The simplest case: `convert_file` reads the document from disk and returns
-    // a complete, standalone HTML5 document — the same result the in-memory
-    // `convert` entry point produces for the same source.
+    // a complete, standalone HTML5 document — the same result a standalone
+    // string conversion produces for the same source. (The plain string
+    // `convert` is embedded by default, so we compare against a standalone one.)
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "asciidoc-html5-introduction-basic-usage-{}.adoc",
@@ -120,7 +121,7 @@ gives you back a complete HTML5 document you can publish.
     let html = convert_file(&path).expect("convert_file reads and renders");
     let _ = fs::remove_file(&path);
 
-    assert_eq!(html, convert(source));
+    assert_eq!(html, convert_with(source, &Options::new().standalone(true)));
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>Hello</title>"));
     assert!(html.trim_end().ends_with("</body>\n</html>"));
@@ -134,10 +135,14 @@ Pass `--help` to the CLI to see every option:
 
 == API examples
 
-The Rust API's three conversion entry points each return a complete, standalone
-HTML5 document. The file-based `convert_file` shown above is the most common; the
-other two are `convert`, for AsciiDoc you already hold in memory, and
-`convert_document`, for a document you have already parsed.
+The Rust API has three conversion entry points. Matching Asciidoctor, they
+differ in their default output: the file-based `convert_file` shown above returns
+a complete, standalone HTML5 document, while the string entry points — `convert`,
+for AsciiDoc you already hold in memory, and `convert_document`, for a document
+you have already parsed — return embedded (body-only) output: the converted body
+with no `+++<!DOCTYPE>+++`, `<head>`, or footer frame, ready to drop into a
+surrounding template. Pass `Options::standalone(true)` to a string entry point
+when you want a full document instead.
 
 "#
 );
@@ -157,13 +162,11 @@ let html = asciidoc_html5::convert("= Hello\n\nWorld.");
 "#
     );
 
-    // `convert` renders in-memory AsciiDoc to a complete HTML5 document.
+    // `convert` renders in-memory AsciiDoc to embedded, body-only output.
     let html = convert("= Hello\n\nWorld.");
 
-    assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<title>Hello</title>"));
     assert!(html.contains("<div class=\"paragraph\">\n<p>World.</p>\n</div>"));
-    assert!(html.trim_end().ends_with("</body>\n</html>"));
+    assert!(!html.starts_with("<!DOCTYPE html>"));
 }
 
 non_normative!(
@@ -190,13 +193,13 @@ let html = asciidoc_html5::convert_document(&doc);
     );
 
     // `load` parses the document separately; rendering it with `convert_document`
-    // gives the same result as `convert` of the same source.
+    // gives the same embedded output as `convert` of the same source.
     let source = "= Hello\n\nWorld.";
     let doc = load(source);
     let html = convert_document(&doc);
 
     assert_eq!(html, convert(source));
-    assert!(html.contains("<title>Hello</title>"));
+    assert!(html.contains("<p>World.</p>"));
 }
 
 non_normative!(

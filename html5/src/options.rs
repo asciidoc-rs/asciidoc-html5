@@ -38,8 +38,11 @@
 //! ```
 //! use asciidoc_html5::{convert_with, Options};
 //!
-//! // Override: the API value wins over the document header.
-//! let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+//! // Override: the API value wins over the document header. (`webfonts` is a
+//! // standalone-document `<head>` feature, so render standalone here.)
+//! let opts = Options::new()
+//!     .standalone(true)
+//!     .attribute("webfonts", "Ubuntu+Mono:400");
 //! let html = convert_with("= Doc\n:webfonts: ignored\n\nBody.", &opts);
 //! assert!(html.contains("family=Ubuntu+Mono:400"));
 //! ```
@@ -71,7 +74,10 @@ use crate::{docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFil
 /// ```
 /// use asciidoc_html5::{convert_with, Options};
 ///
-/// let opts = Options::new().set("linkcss").unset("webfonts");
+/// let opts = Options::new()
+///     .standalone(true)
+///     .set("linkcss")
+///     .unset("webfonts");
 /// let html = convert_with("= Doc\n\nBody.", &opts);
 /// assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
 /// ```
@@ -102,6 +108,14 @@ pub struct Options {
     /// [`convert_file_with`](crate::convert_file_with) and by
     /// [`input_file`](Self::input_file).
     primary_file: Option<PathBuf>,
+
+    /// Whether to render a standalone document (the full `<!DOCTYPE>`/`<head>`/
+    /// `<body>` shell) or embedded, body-only output. `None` defers to the
+    /// entry point's default — embedded for the string entry points,
+    /// standalone for the file entry points — matching Asciidoctor's
+    /// `:standalone` option. See [`standalone`](Self::standalone) /
+    /// [`embedded`](Self::embedded).
+    standalone: Option<bool>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -178,13 +192,68 @@ impl Options {
     /// use asciidoc_html5::{convert_with, Options, SafeMode};
     ///
     /// // A mode below `Secure` embeds the default stylesheet inline.
-    /// let opts = Options::new().safe_mode(SafeMode::Server);
+    /// let opts = Options::new().standalone(true).safe_mode(SafeMode::Server);
     /// let html = convert_with("= Doc\n\nBody.", &opts);
     /// assert!(html.contains("<style>"));
     /// ```
     pub fn safe_mode(mut self, safe: SafeMode) -> Self {
         self.safe_mode = Some(safe);
         self
+    }
+
+    /// Selects standalone output (`true`) or embedded, body-only output
+    /// (`false`).
+    ///
+    /// This is Asciidoctor's `:standalone` option. A *standalone* document is
+    /// the complete HTML5 file — the `<!DOCTYPE html>` declaration, `<html>`, a
+    /// `<head>` (with the default stylesheet), and a `<body>` framing the
+    /// header, content, and footer. *Embedded* output is the converted body
+    /// on its own, with no shell, stylesheet, or header/footer frame —
+    /// meant to be dropped into a surrounding template.
+    ///
+    /// When left unset, the output mode follows the entry point, matching
+    /// Asciidoctor: the string entry points ([`convert`](crate::convert),
+    /// [`convert_with`](crate::convert_with)) default to *embedded*, while the
+    /// file entry points ([`convert_file`](crate::convert_file),
+    /// [`convert_file_with`](crate::convert_file_with)) default to
+    /// *standalone*. Setting this explicitly overrides that default for
+    /// either kind of entry point.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_with, Options};
+    ///
+    /// // The string API is embedded by default; opt in to a full document.
+    /// let opts = Options::new().standalone(true);
+    /// let html = convert_with("= Doc\n\nBody.", &opts);
+    /// assert!(html.starts_with("<!DOCTYPE html>"));
+    /// ```
+    pub fn standalone(mut self, yes: bool) -> Self {
+        self.standalone = Some(yes);
+        self
+    }
+
+    /// Selects embedded, body-only output (`true`) or standalone output
+    /// (`false`) — the inverse of [`standalone`](Self::standalone).
+    ///
+    /// This is the spelling Asciidoctor's `-e`/`--embedded` CLI flag reaches
+    /// for. `options.embedded(true)` is equivalent to
+    /// `options.standalone(false)`. See [`standalone`](Self::standalone)
+    /// for what each mode emits and how the unset default follows the entry
+    /// point.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_file_with, Options};
+    ///
+    /// // The file API is standalone by default; opt in to body-only output.
+    /// let opts = Options::new().embedded(true);
+    /// # let _ = &opts;
+    /// ```
+    pub fn embedded(self, yes: bool) -> Self {
+        self.standalone(!yes)
     }
 
     /// Supplies the CSS to embed when the document selects a *custom*
@@ -209,6 +278,7 @@ impl Options {
     /// use asciidoc_html5::{convert_with, Options, SafeMode};
     ///
     /// let opts = Options::new()
+    ///     .standalone(true)
     ///     .safe_mode(SafeMode::Unsafe)
     ///     .attribute("stylesheet", "my-theme.css")
     ///     .stylesheet_content("body { color: #ff0000; }");
@@ -585,6 +655,26 @@ impl Options {
         self.safe_mode.unwrap_or(SafeMode::Secure)
     }
 
+    /// Whether to render a standalone document, resolving the unset default to
+    /// *embedded* (`false`) — the string entry points' default. The file entry
+    /// points pre-fill `Some(true)` with
+    /// [`default_standalone`](Self::default_standalone) before conversion,
+    /// so this returns `true` for them unless the caller opted into
+    /// embedded output.
+    pub(crate) fn is_standalone(&self) -> bool {
+        self.standalone.unwrap_or(false)
+    }
+
+    /// Fills in *standalone* as the output mode when the caller has not chosen
+    /// one — the file entry points' default. A caller who set the mode
+    /// explicitly (including [`embedded(true)`](Self::embedded)) keeps their
+    /// choice, so `convert_file` stays standalone by default while still
+    /// honoring an explicit request for embedded output.
+    pub(crate) fn default_standalone(mut self) -> Self {
+        self.standalone.get_or_insert(true);
+        self
+    }
+
     /// The [`Action`] of the last directive naming `name` (already lowercased),
     /// or `None` when no directive names it. This is the value [`apply`] leaves
     /// in force, since it replays the directives in order and a later one for
@@ -663,7 +753,26 @@ fn canonicalize_or(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use crate::{convert, convert_with, Options, SafeMode};
+    use crate::{Options, SafeMode};
+
+    // These option tests assert the standalone document shell (its stylesheet
+    // and web-font links, the header, and the footer), so they render in
+    // standalone mode explicitly. The string entry points now default to
+    // embedded output, so `convert`/`convert_with` are shadowed here to force
+    // `standalone(true)`, keeping these tests focused on attribute and
+    // safe-mode behavior.
+
+    /// Converts `source` to a standalone document under the default safe mode —
+    /// the standalone counterpart of [`crate::convert`].
+    fn convert(source: &str) -> String {
+        crate::convert_with(source, &Options::new().standalone(true))
+    }
+
+    /// Converts `source` to a standalone document under `options` — the
+    /// standalone counterpart of [`crate::convert_with`].
+    fn convert_with(source: &str, options: &Options) -> String {
+        crate::convert_with(source, &options.clone().standalone(true))
+    }
 
     // The default web-font family, present when `webfonts` is set with no value.
     const DEFAULT_FAMILY: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";

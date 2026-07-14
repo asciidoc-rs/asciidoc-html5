@@ -2,7 +2,7 @@ use std::fs;
 
 use asciidoc_parser::blocks::IsBlock;
 
-use crate::{convert, convert_document, convert_file, load, tests::sdd::*};
+use crate::{convert, convert_document, convert_file, convert_with, load, tests::sdd::*, Options};
 
 track_file!("docs/modules/api/pages/convert-strings.adoc");
 
@@ -16,8 +16,9 @@ track_file!("docs/modules/api/pages/convert-strings.adoc");
 // The bare AsciiDoc string used throughout the page.
 const SAMPLE: &str = "*This* is Asciidoctor.";
 
-// The converted body the page shows. `convert`/`convert_document` return a
-// complete standalone document with this fragment nested inside it.
+// The converted body the page shows. The string entry points `convert` and
+// `convert_document` return exactly this embedded fragment; `convert_file`
+// returns a standalone document with the fragment nested inside it.
 const FRAGMENT: &str =
     "<div class=\"paragraph\">\n<p><strong>This</strong> is Asciidoctor.</p>\n</div>";
 
@@ -187,27 +188,72 @@ let html = asciidoc_html5::convert_file("document.adoc")?;
     assert!(html.contains(FRAGMENT));
 }
 
-// Every entry point returns a complete standalone document, with the converted
-// body nested inside its `<div id="content">`.
+// The output mode follows the entry point: the string entry points return
+// embedded (body-only) output, `convert_file` returns a standalone document,
+// and `Options::standalone`/`embedded` choose the mode explicitly.
 #[test]
-fn convert_returns_a_standalone_document() {
+fn embedded_and_standalone_output() {
     verifies!(
         r#"
-== Standalone output
+== Embedded and standalone output
 
-Whichever entry point you use, `asciidoc-html5` returns a complete, standalone
-HTML5 document: a `<!DOCTYPE html>` declaration followed by `<html>`, a `<head>`,
-and a `<body>` whose content mirrors Asciidoctor's default `html5` backend. The
-converted body shown above is nested inside that document, within its
-`<div id="content">`.
+Matching Asciidoctor, the output mode follows the entry point. The string entry
+points -- `convert` and `convert_document` -- return _embedded_ output: just the
+converted body shown above, with no `+++<!DOCTYPE>+++`, `<head>`, stylesheet, or
+header/footer frame. This is what you want when the HTML is destined for a
+surrounding template. The file entry point `convert_file` returns a _standalone_
+document instead: a complete `+++<!DOCTYPE html>+++` file with `<html>`, a
+`<head>`, and a `<body>` whose content mirrors Asciidoctor's default `html5`
+backend.
+
+To choose the mode explicitly, build an `Options` and convert with `convert_with`:
+`Options::standalone(true)` returns a complete document from a string, and
+`Options::embedded(true)` returns body-only output from a file. When the document
+has a title, embedded output includes its `<h1>` only if the `showtitle`
+attribute is set.
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().standalone(true);
+let html = convert_with("*This* is Asciidoctor.", &opts);
+assert!(html.starts_with("<!DOCTYPE html>"));
+----
 
 "#
     );
 
-    let html = convert(SAMPLE);
+    // The string entry points return embedded output: exactly the fragment.
+    let embedded = convert(SAMPLE);
+    assert_eq!(embedded.trim_end(), FRAGMENT);
+    assert!(!embedded.starts_with("<!DOCTYPE html>"));
+
+    // `convert_file` returns a standalone document with the fragment inside.
+    let path = std::env::temp_dir().join(format!(
+        "asciidoc-html5-docs-convert-strings-modes-{}.adoc",
+        std::process::id()
+    ));
+    fs::write(&path, SAMPLE).expect("write temp input");
+    let standalone_file = convert_file(&path).expect("convert_file reads and renders");
+    let _ = fs::remove_file(&path);
+    assert!(standalone_file.starts_with("<!DOCTYPE html>"));
+    assert!(standalone_file.contains(FRAGMENT));
+
+    // The exact example from the page: `standalone(true)` forces a full document.
+    let opts = Options::new().standalone(true);
+    let html = convert_with(SAMPLE, &opts);
     assert!(html.starts_with("<!DOCTYPE html>"));
-    assert!(html.contains("<div id=\"content\">"));
-    assert!(html.contains(FRAGMENT));
+
+    // `embedded(true)` forces body-only output for a file, too.
+    let forced_embedded = convert_with(SAMPLE, &Options::new().embedded(true));
+    assert!(!forced_embedded.starts_with("<!DOCTYPE html>"));
+
+    // With a title, embedded output shows the doctitle `<h1>` only under
+    // `showtitle`.
+    let with_title = convert_with("= Doc\n\nBody.", &Options::new().set("showtitle"));
+    assert!(with_title.contains("<h1>Doc</h1>"));
+    assert!(!convert("= Doc\n\nBody.").contains("<h1>"));
 }
 
 non_normative!(
@@ -215,13 +261,6 @@ non_normative!(
 [NOTE]
 .Known limitation
 ====
-When Asciidoctor converts a string, it produces an _embedded_ document by default
--- just the converted body, with no header or footer frame -- and gates a
-standalone document behind its `:standalone` option. `asciidoc-html5` has no
-embedded output: every entry point returns a complete, standalone HTML5 document.
-Embedded (body-only) output is tracked in
-https://github.com/asciidoc-rs/asciidoc-html5/issues/68[issue #68].
-
 Asciidoctor can also return the inline markup only (its `doctype: 'inline'`
 option) and convert to other backends such as DocBook. This renderer models only
 the `article` doctype and produces HTML5 only, so inline-only output is not

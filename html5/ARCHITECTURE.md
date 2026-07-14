@@ -147,15 +147,39 @@ the heading. Discrete headings ([`SectionType::Discrete`]) render as a bare
 
 ### The document skeleton and header
 
-`document()` emits the standalone shell: `<!DOCTYPE html>`, `<html lang>`,
-a `<head>` (charset, `X-UA-Compatible`, viewport, generator, `<title>`),
-`<body class="article">`, the header, `<div id="content">`, and the footer.
+`document()` branches on the output mode (see [Standalone vs. embedded
+output](#standalone-vs-embedded-output)). In **standalone** mode it emits the
+full shell: `<!DOCTYPE html>`, `<html lang>`, a `<head>` (charset,
+`X-UA-Compatible`, viewport, generator, `<title>`, stylesheet), `<body
+class="article">`, the header, `<div id="content">`, and the footer.
 
 `header()` emits `<div id="header">` with the `<h1>` doctitle and, when present,
 a `<div class="details">` block carrying `<span id="author">` / `<span
 id="email">` (numbered for co-authors) and `<span id="revnumber/revdate/
 revremark">`, matching the shapes asserted in
 [`ref/asciidoctor/test/document_test.rb`](../ref/asciidoctor/test/document_test.rb).
+
+### Standalone vs. embedded output
+
+`render_document` takes a `standalone: bool`. When it is `false`, `document()`
+delegates to `embedded_document()`, which emits **body-only** output: the block
+walk with no `<!DOCTYPE>`/`<head>`/`<body>` shell, no stylesheet, and no
+`#header`/`#content`/`#footer` frame — the converted body ready to drop into a
+surrounding template. The doctitle appears as a bare `<h1>` (never the `#header`
+`<div>`, and never the author/revision details) only when the `showtitle`
+attribute is set. The block-walk methods (`blocks`/`block`/`paragraph`/…) are
+shared unchanged between the two modes.
+
+The mode follows Asciidoctor's `:standalone` option, threaded in through
+`Options`. `Options` carries `standalone: Option<bool>` (`None` = defer to the
+entry point): the **string** entry points (`convert`, `convert_with`,
+`convert_document`) default to embedded, and the **file** entry points
+(`convert_file*`, which pre-fill the default with `Options::default_standalone`)
+default to standalone. `Options::standalone(bool)` / `Options::embedded(bool)`
+set it explicitly. The `adoc` CLI sets it explicitly too — standalone by default,
+embedded under `-e`/`--embedded` — matching Asciidoctor's command, which is
+standalone even when piping. Embedded output emits no stylesheet, so the
+`copycss` file copy is suppressed in that mode.
 
 ## Content models, ids, roles, titles
 
@@ -195,10 +219,12 @@ Several skeleton decisions depend on document attributes — `lang`, `doctype`
 [`Document::is_attribute_set`], so `convert_document(&Document)` is fully
 self-contained. The baseline reads `lang` and `doctype` from those accessors
 (defaulting to Asciidoctor's `en` / `article`) and gates the header, the doctitle
-`<h1>`, and the footer on `noheader` / `notitle` / `nofooter`. Two skeleton
-details remain deliberately deferred: the footer's "Last updated" text needs a
-caller-supplied `docdatetime`, and `<body class>` currently carries just the bare
-doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
+`<h1>`, and the footer on `noheader` / `notitle` / `nofooter` in standalone
+output. In embedded output the doctitle `<h1>` is instead gated on `showtitle`
+(see [Standalone vs. embedded output](#standalone-vs-embedded-output)). Two
+skeleton details remain deliberately deferred: the footer's "Last updated" text
+needs a caller-supplied `docdatetime`, and `<body class>` currently carries just
+the bare doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
 
 ## Safe mode and the default stylesheet
 

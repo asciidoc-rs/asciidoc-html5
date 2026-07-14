@@ -1,7 +1,18 @@
 use crate::{
-    asset_writer::RecordingAssetWriter, convert, convert_file_with_writer, convert_with,
-    convert_with_writer, tests::sdd::*, DirAssetWriter, Options, SafeMode,
+    asset_writer::RecordingAssetWriter, convert_file_with_writer, convert_with_writer,
+    tests::sdd::*, DirAssetWriter, Options, SafeMode,
 };
+
+// These tests assert the standalone document shell, so they render in
+// standalone mode explicitly. The string entry points default to embedded,
+// body-only output.
+fn convert(source: &str) -> String {
+    crate::convert_with(source, &Options::new().standalone(true))
+}
+
+fn convert_with(source: &str, options: &Options) -> String {
+    crate::convert_with(source, &options.clone().standalone(true))
+}
 
 track_file!("docs/modules/generate-html/pages/stylesheet-modes.adoc");
 
@@ -258,7 +269,10 @@ it.
     let mut writer = RecordingAssetWriter::default();
     let html = convert_with_writer(
         "= My Document\n:!copycss:\n\nHello.",
-        &Options::new().safe_mode(SafeMode::Safe).set("linkcss"),
+        &Options::new()
+            .standalone(true)
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss"),
         &mut writer,
     )
     .expect("convert");

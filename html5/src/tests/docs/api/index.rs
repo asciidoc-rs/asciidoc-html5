@@ -53,7 +53,7 @@ https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.
 (the parsing itself is handled by
 https://crates.io/crates/asciidoc-parser[`asciidoc-parser`]).
 
-convert:: The document model is rendered to a complete HTML5 document.
+convert:: The document model is rendered to HTML5.
 
 You can run both steps together with `convert` (for a string) or `convert_file`
 (for a file), or run them separately -- `load` (or `load_file`) to parse, then
@@ -69,7 +69,8 @@ You can run both steps together with `convert` (for a string) or `convert_file`
 fn steps_together_and_separately() {
     verifies!(
         r#"
-Run the two steps together with `convert`:
+Run the two steps together with `convert` (this returns embedded, body-only
+output -- see <<output-modes>>):
 
 [,rust]
 ----
@@ -101,10 +102,11 @@ Both paths produce the same HTML5 for the same source.
     let doc = load(source);
     let separately = convert_document(&doc);
 
-    // Both paths produce the same HTML5 for the same source.
+    // Both paths produce the same HTML5 for the same source — embedded,
+    // body-only output, since this is a string conversion.
     assert_eq!(together, separately);
-    assert!(together.starts_with("<!DOCTYPE html>"));
-    assert!(together.contains("<title>Hello</title>"));
+    assert!(together.contains("<p>World.</p>"));
+    assert!(!together.starts_with("<!DOCTYPE html>"));
 }
 
 // The five entry points: `convert`/`convert_file` parse and render to a
@@ -121,12 +123,13 @@ for each input, plus `convert_document` to render a document you already hold.
 Each parsing entry point also has an option-aware `_with` variant, described
 below.
 
-The convert entry points parse and render in one call, each returning a complete,
-standalone HTML5 document as a `String`:
+The convert entry points parse and render in one call, returning the HTML as a
+`String`:
 
-`asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to HTML5.
+`asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to embedded
+(body-only) HTML5.
 `asciidoc_html5::convert_file`:: reads an AsciiDoc file, parses it, and renders it
-to HTML5, returning the HTML as a `String`.
+to a standalone HTML5 document, returning the HTML as a `String`.
 
 The load entry points parse only, returning an `asciidoc_parser::Document` you can
 inspect or transform before rendering:
@@ -137,18 +140,17 @@ inspect or transform before rendering:
 And `convert_document` renders a document you already hold:
 
 `asciidoc_html5::convert_document`:: renders an already-parsed
-`asciidoc_parser::Document` to HTML5.
+`asciidoc_parser::Document` to embedded (body-only) HTML5.
 
 "#
     );
 
     let source = "= Hello\n\nWorld.";
 
-    // `convert`: string in, complete standalone HTML5 document out.
+    // `convert`: string in, embedded (body-only) HTML5 out.
     let from_string = convert(source);
-    assert!(from_string.starts_with("<!DOCTYPE html>"));
-    assert!(from_string.contains("<title>Hello</title>"));
-    assert!(from_string.trim_end().ends_with("</body>\n</html>"));
+    assert!(from_string.contains("<p>World.</p>"));
+    assert!(!from_string.starts_with("<!DOCTYPE html>"));
 
     // Write the source to a temp file for the `_file` entry points.
     let path = std::env::temp_dir().join(format!(
@@ -157,9 +159,11 @@ And `convert_document` renders a document you already hold:
     ));
     std::fs::write(&path, source).expect("write temp input");
 
-    // `convert_file`: reads a file and returns the rendered HTML as a `String`.
+    // `convert_file`: reads a file and returns a standalone document as a
+    // `String`.
     let from_file: String = convert_file(&path).expect("convert_file reads and renders");
-    assert_eq!(from_file, from_string);
+    assert!(from_file.starts_with("<!DOCTYPE html>"));
+    assert!(from_file.contains("<p>World.</p>"));
 
     // `load`: parses a string into a document (parse only).
     let doc = load(source);
@@ -169,10 +173,65 @@ And `convert_document` renders a document you already hold:
     let doc_from_file = load_file(&path).expect("load_file reads and parses");
     assert_eq!(doc_from_file.doctitle(), Some("Hello"));
 
-    // `convert_document`: renders an already-parsed document to the same HTML5.
+    // `convert_document`: renders an already-parsed document to the same
+    // embedded HTML5 as the string `convert`.
     assert_eq!(convert_document(&doc), from_string);
 
     let _ = std::fs::remove_file(&path);
+}
+
+// The output-mode section: string entry points default to embedded output and
+// file entry points to standalone, and `Options::standalone`/`embedded` choose
+// the mode explicitly; embedded output shows the doctitle only under
+// `showtitle`.
+#[test]
+fn embedded_and_standalone_output() {
+    verifies!(
+        r#"
+[#output-modes]
+== Embedded and standalone output
+
+Matching Asciidoctor, the default output mode follows the input. The string entry
+points (`convert`, `convert_document`) return _embedded_ output: the converted
+body on its own, with no `+++<!DOCTYPE>+++`, `<head>`, stylesheet, or footer
+frame -- ready to drop into a surrounding template. The file entry point
+(`convert_file`) returns a _standalone_ document: the complete HTML5 file.
+
+To choose the mode explicitly, set it on the `Options` and convert with a `_with`
+entry point: `Options::standalone(true)` forces a complete document, and
+`Options::embedded(true)` forces body-only output. When a document title is
+present, embedded output includes its `<h1>` only if the `showtitle` attribute is
+set.
+
+"#
+    );
+
+    // The string default is embedded (body-only); the file default is standalone.
+    let embedded = convert("= Doc\n\nBody.");
+    assert!(!embedded.starts_with("<!DOCTYPE html>"));
+    assert!(embedded.contains("<p>Body.</p>"));
+
+    let path = std::env::temp_dir().join(format!(
+        "asciidoc-html5-docs-api-modes-{}.adoc",
+        std::process::id()
+    ));
+    std::fs::write(&path, "= Doc\n\nBody.").expect("write temp input");
+    let standalone_file = convert_file(&path).expect("convert_file reads and renders");
+    let _ = std::fs::remove_file(&path);
+    assert!(standalone_file.starts_with("<!DOCTYPE html>"));
+
+    // `standalone(true)` forces a complete document; `embedded(true)` forces
+    // body-only output — for either kind of entry point.
+    let forced_standalone = convert_with("= Doc\n\nBody.", &Options::new().standalone(true));
+    assert!(forced_standalone.starts_with("<!DOCTYPE html>"));
+    let forced_embedded = convert_with("= Doc\n\nBody.", &Options::new().embedded(true));
+    assert!(!forced_embedded.starts_with("<!DOCTYPE html>"));
+
+    // Embedded output shows the doctitle `<h1>` only under `showtitle`.
+    let with_title = convert_with("= Doc\n\nBody.", &Options::new().set("showtitle"));
+    assert!(with_title.contains("<h1>Doc</h1>"));
+    let without_title = convert("= Doc\n\nBody.");
+    assert!(!without_title.contains("<h1>"));
 }
 
 non_normative!(
@@ -204,7 +263,9 @@ fn supplying_document_attributes() {
 ----
 use asciidoc_html5::{convert_with, Options};
 
-let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+// `webfonts` affects the standalone document's `<head>`, so opt into a
+// standalone document to see it.
+let opts = Options::new().standalone(true).attribute("webfonts", "Ubuntu+Mono:400");
 let html = convert_with("= Doc\n\nBody.", &opts);
 assert!(html.contains("family=Ubuntu+Mono:400"));
 ----
@@ -218,28 +279,44 @@ or off, matching Asciidoctor's `name` and `name!`.
 "#
     );
 
-    // The exact example from the page.
-    let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+    // The exact example from the page. (`webfonts` is a `<head>` feature, so the
+    // example renders a standalone document.)
+    let opts = Options::new()
+        .standalone(true)
+        .attribute("webfonts", "Ubuntu+Mono:400");
     let html = convert_with("= Doc\n\nBody.", &opts);
     assert!(html.contains("family=Ubuntu+Mono:400"));
 
     // An override wins over a document-header assignment of the same name.
     let header = "= Doc\n:webfonts: from-header\n\nBody.";
-    let overridden = convert_with(header, &Options::new().attribute("webfonts", "from-api"));
+    let overridden = convert_with(
+        header,
+        &Options::new()
+            .standalone(true)
+            .attribute("webfonts", "from-api"),
+    );
     assert!(overridden.contains("family=from-api"));
     assert!(!overridden.contains("family=from-header"));
 
     // A soft-set default yields to the document-header assignment instead.
     let softened = convert_with(
         header,
-        &Options::new().attribute_default("webfonts", "from-api"),
+        &Options::new()
+            .standalone(true)
+            .attribute_default("webfonts", "from-api"),
     );
     assert!(softened.contains("family=from-header"));
 
     // `set` turns an attribute on, `unset` turns it off.
-    let linked = convert_with("= Doc\n\nBody.", &Options::new().set("linkcss"));
+    let linked = convert_with(
+        "= Doc\n\nBody.",
+        &Options::new().standalone(true).set("linkcss"),
+    );
     assert!(linked.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
-    let unfonted = convert_with("= Doc\n\nBody.", &Options::new().unset("webfonts"));
+    let unfonted = convert_with(
+        "= Doc\n\nBody.",
+        &Options::new().standalone(true).unset("webfonts"),
+    );
     assert!(!unfonted.contains("<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com"));
 }
 

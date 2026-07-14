@@ -1,4 +1,16 @@
-use crate::{convert, convert_file_with, convert_with, tests::sdd::*, Options, SafeMode};
+use crate::{convert_file_with, tests::sdd::*, Options, SafeMode};
+
+// These tests assert the standalone document shell (its stylesheet linking), so
+// they render the string entry points in standalone mode explicitly, which
+// default to embedded, body-only output. `convert_file_with` is standalone by
+// default and is used directly.
+fn convert(source: &str) -> String {
+    crate::convert_with(source, &Options::new().standalone(true))
+}
+
+fn convert_with(source: &str, options: &Options) -> String {
+    crate::convert_with(source, &options.clone().standalone(true))
+}
 
 track_file!("docs/modules/api/pages/set-safe-mode.adoc");
 

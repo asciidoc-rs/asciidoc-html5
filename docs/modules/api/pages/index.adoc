@@ -39,13 +39,14 @@ https://docs.rs/asciidoc-parser/latest/asciidoc_parser/document/struct.Document.
 (the parsing itself is handled by
 https://crates.io/crates/asciidoc-parser[`asciidoc-parser`]).
 
-convert:: The document model is rendered to a complete HTML5 document.
+convert:: The document model is rendered to HTML5.
 
 You can run both steps together with `convert` (for a string) or `convert_file`
 (for a file), or run them separately -- `load` (or `load_file`) to parse, then
 `convert_document` to render the document you get back.
 
-Run the two steps together with `convert`:
+Run the two steps together with `convert` (this returns embedded, body-only
+output -- see <<output-modes>>):
 
 [,rust]
 ----
@@ -71,12 +72,13 @@ for each input, plus `convert_document` to render a document you already hold.
 Each parsing entry point also has an option-aware `_with` variant, described
 below.
 
-The convert entry points parse and render in one call, each returning a complete,
-standalone HTML5 document as a `String`:
+The convert entry points parse and render in one call, returning the HTML as a
+`String`:
 
-`asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to HTML5.
+`asciidoc_html5::convert`:: parses an AsciiDoc string and renders it to embedded
+(body-only) HTML5.
 `asciidoc_html5::convert_file`:: reads an AsciiDoc file, parses it, and renders it
-to HTML5, returning the HTML as a `String`.
+to a standalone HTML5 document, returning the HTML as a `String`.
 
 The load entry points parse only, returning an `asciidoc_parser::Document` you can
 inspect or transform before rendering:
@@ -87,12 +89,27 @@ inspect or transform before rendering:
 And `convert_document` renders a document you already hold:
 
 `asciidoc_html5::convert_document`:: renders an already-parsed
-`asciidoc_parser::Document` to HTML5.
+`asciidoc_parser::Document` to embedded (body-only) HTML5.
 
 Use the `_file` entry points when your source is a file on disk and the string
 forms when you already hold it in memory. Reach for `load` (or `load_file`)
 followed by `convert_document` when you want to analyze or transform the document
 before rendering it.
+
+[#output-modes]
+== Embedded and standalone output
+
+Matching Asciidoctor, the default output mode follows the input. The string entry
+points (`convert`, `convert_document`) return _embedded_ output: the converted
+body on its own, with no `+++<!DOCTYPE>+++`, `<head>`, stylesheet, or footer
+frame -- ready to drop into a surrounding template. The file entry point
+(`convert_file`) returns a _standalone_ document: the complete HTML5 file.
+
+To choose the mode explicitly, set it on the `Options` and convert with a `_with`
+entry point: `Options::standalone(true)` forces a complete document, and
+`Options::embedded(true)` forces body-only output. When a document title is
+present, embedded output includes its `<h1>` only if the `showtitle` attribute is
+set.
 
 == Supplying document attributes
 
@@ -105,7 +122,9 @@ file on disk):
 ----
 use asciidoc_html5::{convert_with, Options};
 
-let opts = Options::new().attribute("webfonts", "Ubuntu+Mono:400");
+// `webfonts` affects the standalone document's `<head>`, so opt into a
+// standalone document to see it.
+let opts = Options::new().standalone(true).attribute("webfonts", "Ubuntu+Mono:400");
 let html = convert_with("= Doc\n\nBody.", &opts);
 assert!(html.contains("family=Ubuntu+Mono:400"));
 ----
