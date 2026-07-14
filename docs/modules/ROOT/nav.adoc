@@ -5,6 +5,7 @@
 ** xref:generate-html:stylesheet-modes.adoc[Stylesheet Modes]
 ** xref:generate-html:custom-stylesheet.adoc[Custom Stylesheet]
 * xref:safe-modes.adoc[Safe Modes]
+** xref:reference-safe-mode.adoc[Safe Mode Specific Content]
 * xref:cli:index.adoc[Use the CLI]
 ** xref:cli:set-safe-mode.adoc[Set Safe Mode]
 ** xref:cli:io-piping.adoc[Pipe Content]

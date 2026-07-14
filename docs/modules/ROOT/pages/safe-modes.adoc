@@ -80,6 +80,7 @@ document cannot change them itself.
 
 Most of what a safe mode governs in Asciidoctor concerns features this renderer
 does not surface yet -- include directives, icons, `data-uri`, source
-highlighting, `docinfo`, and backend locking. Today the safe mode's observable
-effect is the stylesheet link-versus-embed choice described above; as those
-other features arrive, they will honor the safe mode too.
+highlighting, and backend locking. Two of the features it governs already work:
+the stylesheet link-versus-embed choice described above, and `docinfo` (a
+`secure` document drops docinfo without reading the files). As the other
+features arrive, they will honor the safe mode too.
