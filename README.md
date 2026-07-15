@@ -13,6 +13,8 @@ As of July 2026, this project is in its infancy and should not be expected to be
 
 This project targets HTML5 output only. Asciidoctor's other backends are out of scope; in particular, **DocBook and man page output are not planned**, and the renderer emits HTML5 syntax only — **Asciidoctor's XHTML syntax (the `xhtml`/`xhtml5` backends) is not supported.** If you need to generate DocBook, man pages, or XHTML from AsciiDoc, use [Asciidoctor](https://asciidoctor.org) itself. Neither the library nor the `adoc` CLI reads over the network: **fetching a remote resource to embed it (for example, a remote stylesheet via `allow-uri-read`) is not planned** — a remote reference is linked, never inlined.
 
+**An extension mechanism is not planned for 1.0**, but may be considered for a later version. Asciidoctor exposes an [extension API](https://docs.asciidoctor.org/asciidoctor/latest/extensions/) with a range of extension points (preprocessors, tree processors, postprocessors, block and macro processors, and more); this renderer does not implement any of them yet, and none is part of the 1.0 scope.
+
 ## Why do this?
 
 Most of all this is a fun project that exercises different architectural and project design skills from my [day job](https://opensource.contentauthenticity.org). As part of that work, I write [technical standards for the Creator Assertions Working Group](https://cawg.io/specs/) in Asciidoc and [Antora](https://antora.org).
