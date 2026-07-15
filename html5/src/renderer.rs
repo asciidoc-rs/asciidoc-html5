@@ -373,10 +373,17 @@ impl Renderer<'_> {
     /// shell, stylesheet, or header/footer frame.
     ///
     /// Matching Asciidoctor's embeddable output, the doctitle is emitted as a
-    /// bare `<h1>` only when the `showtitle` attribute is set — never wrapped
-    /// in `<div id="header">` and never accompanied by the author or
-    /// revision details, which an embedded document does not show. The body
-    /// itself is not wrapped in `<div id="content">`.
+    /// bare `<h1>` only when the title is enabled — never wrapped in
+    /// `<div id="header">` and never accompanied by the author or revision
+    /// details, which an embedded document does not show. The body itself is
+    /// not wrapped in `<div id="content">`.
+    ///
+    /// The title toggle is the resolved `showtitle` attribute, which defaults
+    /// off for embedded output. `asciidoc-parser` links `showtitle` and
+    /// `notitle` as inverse spellings of the same toggle (its port of
+    /// Asciidoctor's linkage), so unsetting `notitle` (`:!notitle:`) enables
+    /// the title just as `:showtitle:` does, and when both are given the last
+    /// assignment wins — reading `showtitle` alone captures all of it.
     fn embedded_document(&mut self, document: &Document<'_>) {
         if document.is_attribute_set("showtitle") {
             if let Some(title) = document.doctitle() {
@@ -927,6 +934,74 @@ mod tests {
     fn nofooter_suppresses_the_footer() {
         let html = convert("= Doc\n:nofooter:\n\nBody.");
         assert!(!html.contains("<div id=\"footer\">"));
+    }
+
+    // Embedded, body-only output shows the doctitle `<h1>` only when the title
+    // toggle is enabled, and never emits the header or footer frame. The toggle
+    // is the resolved `showtitle` attribute (off by default for embedded
+    // output); because `asciidoc-parser` links `showtitle` and `notitle` as
+    // inverse spellings of it, unsetting `notitle` enables the title too, and
+    // when both are given the last assignment wins. These call
+    // `crate::convert_with` directly — the module's `convert`/`convert_with` are
+    // shadowed to force standalone output.
+
+    /// Whether embedded output for `source` emits the doctitle `<h1>`,
+    /// asserting along the way that neither the header nor the footer frame
+    /// appears.
+    fn embedded_shows_title(source: &str) -> bool {
+        let html = crate::convert_with(source, &Options::new());
+        assert!(
+            !html.contains("id=\"header\""),
+            "embedded has no header: {html}"
+        );
+        assert!(
+            !html.contains("id=\"footer\""),
+            "embedded has no footer: {html}"
+        );
+        html.contains("<h1>Doc</h1>")
+    }
+
+    #[test]
+    fn embedded_hides_the_title_by_default() {
+        assert!(!embedded_shows_title("= Doc\n\nBody."));
+    }
+
+    #[test]
+    fn embedded_shows_the_title_under_showtitle() {
+        assert!(embedded_shows_title("= Doc\n:showtitle:\n\nBody."));
+    }
+
+    #[test]
+    fn embedded_shows_the_title_when_notitle_is_unset() {
+        // `:!notitle:` is the inverse spelling of `:showtitle:`, so it enables
+        // the embedded title just the same.
+        assert!(embedded_shows_title("= Doc\n:!notitle:\n\nBody."));
+    }
+
+    #[test]
+    fn embedded_hides_the_title_under_notitle() {
+        assert!(!embedded_shows_title("= Doc\n:notitle:\n\nBody."));
+    }
+
+    #[test]
+    fn embedded_title_toggle_honors_the_last_assignment() {
+        // The two attributes track one toggle, so the last assignment wins.
+        assert!(embedded_shows_title(
+            "= Doc\n:notitle:\n:showtitle:\n\nBody."
+        ));
+        assert!(!embedded_shows_title(
+            "= Doc\n:showtitle:\n:notitle:\n\nBody."
+        ));
+    }
+
+    #[test]
+    fn embedded_title_responds_to_the_notitle_api_toggle() {
+        // The linkage also applies to API-supplied attributes: unsetting
+        // `notitle` from the API enables the title, setting it hides it.
+        let shown = crate::convert_with("= Doc\n\nBody.", &Options::new().unset("notitle"));
+        assert!(shown.contains("<h1>Doc</h1>"));
+        let hidden = crate::convert_with("= Doc\n\nBody.", &Options::new().set("notitle"));
+        assert!(!hidden.contains("<h1>"));
     }
 
     #[test]
