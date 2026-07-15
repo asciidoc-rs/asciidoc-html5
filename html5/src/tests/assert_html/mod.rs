@@ -183,6 +183,20 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "malformed XPath node test")]
+    fn xpath_stray_closing_bracket_panics() {
+        // `p]` must not be accepted as a tag named "p]" (a silent zero-match).
+        assert_xpath(FRAGMENT, "//p]", 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "malformed XPath node test")]
+    fn xpath_trailing_text_after_predicate_panics() {
+        // Junk after the predicate must fail, not be dropped.
+        assert_xpath(FRAGMENT, r#"//p[@id="x"]oops"#, 0);
+    }
+
+    #[test]
     fn xpath_class_predicate_is_exact_not_token() {
         // XPath `@class="v"` is exact equality, so a multi-class element is not
         // matched by a single-token value (unlike CSS `.paragraph`).

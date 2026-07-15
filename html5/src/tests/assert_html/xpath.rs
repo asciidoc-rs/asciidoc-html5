@@ -383,11 +383,26 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
 }
 
 /// Parses a node test of the form `tag`, `*`, or `tag[pred][pred]…`.
+///
+/// # Panics
+///
+/// Panics on a malformed node test — a name containing predicate punctuation
+/// (e.g. a stray `]` as in `p]`), an unterminated `[`, or any leftover text
+/// after the predicates. Silently accepting these would evaluate a different
+/// selector than written (a false pass); see [`parse_predicate`].
 fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
     let (base, mut rest) = match s.find('[') {
         Some(i) => (&s[..i], &s[i..]),
         None => (s, ""),
     };
+
+    // The name is a bare tag or `*`; predicate punctuation here (most often an
+    // unmatched `]`) means the path is malformed.
+    assert!(
+        !base.contains([']', '@']),
+        "malformed XPath node test `{s}`: unexpected `{base}` as an element name. \
+         See html5/src/tests/asciidoctor_rb/README.md."
+    );
 
     let name = if base.is_empty() || base == "*" {
         NameTest::Any
@@ -397,19 +412,26 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
 
     let mut preds = Vec::new();
     let mut index = None;
-    while let Some(open) = rest.find('[') {
-        let Some(rel_close) = rest[open..].find(']') else {
-            // An opening `[` with no closing `]` is a malformed expression.
-            // Dropping the predicate here would silently evaluate the step
-            // without its filter (a false pass), so fail loudly instead.
+    while !rest.is_empty() {
+        // Every remaining chunk must be a `[…]` predicate. Anything else —
+        // trailing junk after the last predicate, or a stray `]` — is a
+        // malformed path, and dropping it would silently evaluate the step
+        // without the intended filter (a false pass).
+        let Some(after_open) = rest.strip_prefix('[') else {
+            panic!(
+                "malformed XPath node test `{s}`: unexpected `{rest}` where a \
+                 `[predicate]` was expected. \
+                 See html5/src/tests/asciidoctor_rb/README.md."
+            );
+        };
+        let Some(rel_close) = after_open.find(']') else {
             panic!(
                 "unterminated XPath predicate in `{s}`: `[` without a closing `]`. \
                  Fix the expression — see html5/src/tests/asciidoctor_rb/README.md."
             );
         };
-        let close = open + rel_close;
-        parse_predicate(rest[open + 1..close].trim(), &mut preds, &mut index);
-        rest = &rest[close + 1..];
+        parse_predicate(after_open[..rel_close].trim(), &mut preds, &mut index);
+        rest = after_open[rel_close + 1..].trim_start();
     }
 
     (name, preds, index)
