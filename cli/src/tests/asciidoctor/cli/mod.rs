@@ -10,6 +10,7 @@
 
 mod index;
 mod io_piping;
+mod options;
 mod output_file;
 mod process_multiple_files;
 mod set_safe_mode;
