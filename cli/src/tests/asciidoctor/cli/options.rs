@@ -8,6 +8,10 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/options.adoc");
 // on the task-specific pages of this crate's own `cli` documentation module
 // (and listed by `adoc --help`), so the entire page is tracked as non-normative
 // here.
+//
+// TODO (https://github.com/asciidoc-rs/asciidoc-html5/issues/94): Once `adoc`
+// grows a man(1) page and its option catalog, promote any lines that become
+// reproducible from non_normative! to verifies!.
 
 non_normative!(
     r#"
