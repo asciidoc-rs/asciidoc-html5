@@ -8,4 +8,5 @@ mod sdd;
 
 mod asciidoctor;
 mod docs;
+mod input_resolution;
 mod path_helpers;
