@@ -12,15 +12,11 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/output-file.adoc");
 // writes it beside the input; `-o` names the output file (a relative path
 // resolved against the current directory, so specifying it also fixes the
 // companion-file directory); `-D` names the output directory while the file
-// name defaults; and a piped document writes to standard output unless `-o`
-// names a file. Each invocation drives `adoc`'s own routing (`Cli` plus the
-// private `output_target`/`output_dir` helpers), and the file-writing cases are
+// name defaults (and, routed per input, governs a multi-file invocation too);
+// and a piped document writes to standard output unless `-o` names a file. Each
+// invocation drives `adoc`'s own routing (`Cli` plus the private
+// `output_target`/`output_dir` helpers), and the file-writing cases are
 // confirmed end to end.
-//
-// One passage stays non-normative: `asciidoctor -D build *.adoc` converts many
-// input files in one run. `adoc` converts a single document per invocation, so
-// it has no matching multi-input behavior to verify; the divergence is noted
-// where the passage appears.
 
 /// The output file `adoc` would write this invocation's HTML to, or `None` when
 /// it writes to standard output.
@@ -261,17 +257,55 @@ If you only want to specify the output directory, but let the filename be defaul
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// Divergence: Asciidoctor's `-D` also applies when several input files are
-// given at once. `adoc` converts a single document per invocation, so it has no
-// multi-input form to verify; run `adoc -D <dir>` once per file instead.
-non_normative!(
-    r#"
+// `-D` also governs a multi-file invocation: `adoc` converts each input in turn
+// and writes each one's derived name into the destination directory.
+// Asciidoctor relies on the shell to expand `*.adoc` into several files; `adoc`
+// accepts several files directly and also expands a quoted glob itself, and
+// either way each output lands in the `-D` directory.
+#[test]
+fn destination_dir_applies_to_multiple_input_files() {
+    verifies!(
+        r#"
 The `-D` option can also be used when processing multiple input files:
 
  $ asciidoctor -D build *.adoc
 
 "#
-);
+    );
+
+    // Routed per input, each source's derived name is placed in the `-D`
+    // directory.
+    assert_eq!(
+        output_file(&["adoc", "-D", "build", "a.adoc"]),
+        Some(PathBuf::from("build/a.html"))
+    );
+    assert_eq!(
+        output_file(&["adoc", "-D", "build", "b.adoc"]),
+        Some(PathBuf::from("build/b.html"))
+    );
+
+    // End to end, converting several files at once with `-D` writes each derived
+    // name into the destination directory.
+    let dir = sandbox("destination-dir-multi");
+    std::fs::write(dir.join("a.adoc"), "= A\n\nAlpha.\n").expect("write a");
+    std::fs::write(dir.join("b.adoc"), "= B\n\nBravo.\n").expect("write b");
+    let build = dir.join("build");
+    let stdout = run_argv(&[
+        "adoc",
+        "-D",
+        build.to_str().unwrap(),
+        dir.join("a.adoc").to_str().unwrap(),
+        dir.join("b.adoc").to_str().unwrap(),
+    ]);
+    assert!(stdout.is_empty(), "adoc wrote to stdout instead of files");
+    assert!(std::fs::read_to_string(build.join("a.html"))
+        .expect("read a output")
+        .contains("Alpha."));
+    assert!(std::fs::read_to_string(build.join("b.html"))
+        .expect("read b output")
+        .contains("Bravo."));
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 // When piping, `adoc` writes to standard output by default; to capture the
 // output in a file you must name one with `-o`, just as with Asciidoctor.

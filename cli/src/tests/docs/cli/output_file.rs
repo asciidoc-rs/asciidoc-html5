@@ -11,14 +11,11 @@ track_file!("docs/modules/cli/pages/output-file.adoc");
 // beside the input; `-o` names the output file (a relative path resolved
 // against the current directory, which also fixes the companion-file
 // directory); `-D` names the output directory while the file name defaults, and
-// a relative `-o` is then resolved inside it; and a piped document writes to
-// standard output unless `-o` names a file. Each invocation is verified through
-// `adoc`'s own routing (`Cli` plus the private `output_target`/`output_dir`
-// helpers) and, for the file-writing cases, end to end.
-//
-// The page's "Known limitation" note — that `adoc` converts one input document
-// per invocation, rather than a glob like `asciidoctor -D build *.adoc` — is
-// non-normative: it records a divergence with no matching behavior to verify.
+// a relative `-o` is then resolved inside it; `-D` applies per input, so it
+// also governs a multi-file conversion; and a piped document writes to standard
+// output unless `-o` names a file. Each invocation is verified through `adoc`'s
+// own routing (`Cli` plus the private `output_target`/`output_dir` helpers)
+// and, for the file-writing cases, end to end.
 
 /// The output file `adoc` would write this invocation's HTML to, or `None` when
 /// it writes to standard output.
@@ -209,7 +206,8 @@ linked stylesheet) are written to.
 
 // `-D` names the output directory while the file name defaults to the derived
 // `.html` name; a relative `-o` is then resolved inside that directory, while
-// an absolute `-o` path is left unchanged.
+// an absolute `-o` path is left unchanged. Because the destination applies per
+// input, `-D` with several files writes each derived name into that directory.
 #[test]
 fn the_destination_dir_option_defaults_the_filename() {
     verifies!(
@@ -224,6 +222,13 @@ use the `-D` (longhand `--destination-dir`) option. `adoc` writes the derived
 
 When you also pass `-o` with a relative path, it is resolved inside the `-D`
 directory; an absolute `-o` path is used unchanged.
+
+`-D` also applies when you xref:cli:process-multiple-files.adoc[convert several
+files at once]: each input's derived `.html` name is written into the destination
+directory. So this command converts every `.adoc` file in the current directory
+into [.path]_build_:
+
+ $ adoc -D build '*.adoc'
 
 "#
     );
@@ -263,6 +268,27 @@ directory; an absolute `-o` path is used unchanged.
     assert!(stdout.is_empty(), "adoc wrote to stdout instead of a file");
     let html = std::fs::read_to_string(build.join("mydoc.html")).expect("read derived output");
     assert!(html.contains("<p>Body.</p>"));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // End to end with a glob: `-D build '*.adoc'` converts every input in the
+    // directory, writing each derived name into `build`.
+    let dir = sandbox("destination-dir-glob");
+    std::fs::write(dir.join("a.adoc"), "= A\n\nAlpha.\n").expect("write a");
+    std::fs::write(dir.join("b.adoc"), "= B\n\nBravo.\n").expect("write b");
+    let build = dir.join("build");
+    let stdout = run_argv(&[
+        "adoc",
+        "-D",
+        build.to_str().unwrap(),
+        dir.join("*.adoc").to_str().unwrap(),
+    ]);
+    assert!(stdout.is_empty(), "adoc wrote to stdout instead of files");
+    assert!(std::fs::read_to_string(build.join("a.html"))
+        .expect("read a output")
+        .contains("Alpha."));
+    assert!(std::fs::read_to_string(build.join("b.html"))
+        .expect("read b output")
+        .contains("Bravo."));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -308,14 +334,5 @@ output (STDOUT). To write to a file in that case, you have to name one with `-o`
 non_normative!(
     r#"
 See xref:io-piping.adoc[] to learn more.
-
-[NOTE]
-.Known limitation
-====
-`adoc` converts a single input document per invocation, so it does not accept
-several input files at once the way `asciidoctor -D build *.adoc` does. To convert
-many files into one directory, run `adoc -D build` once per file (for example, in
-a shell loop).
-====
 "#
 );

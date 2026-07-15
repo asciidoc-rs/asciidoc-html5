@@ -51,6 +51,13 @@ use the `-D` (longhand `--destination-dir`) option. `adoc` writes the derived
 When you also pass `-o` with a relative path, it is resolved inside the `-D`
 directory; an absolute `-o` path is used unchanged.
 
+`-D` also applies when you xref:cli:process-multiple-files.adoc[convert several
+files at once]: each input's derived `.html` name is written into the destination
+directory. So this command converts every `.adoc` file in the current directory
+into [.path]_build_:
+
+ $ adoc -D build '*.adoc'
+
 == Write a file when piping
 
 When you pipe content to `adoc`, the default is to write the output to standard
@@ -59,12 +66,3 @@ output (STDOUT). To write to a file in that case, you have to name one with `-o`
  $ cat mydoc.adoc | adoc -o build/mydoc.html -
 
 See xref:io-piping.adoc[] to learn more.
-
-[NOTE]
-.Known limitation
-====
-`adoc` converts a single input document per invocation, so it does not accept
-several input files at once the way `asciidoctor -D build *.adoc` does. To convert
-many files into one directory, run `adoc -D build` once per file (for example, in
-a shell loop).
-====

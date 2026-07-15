@@ -1,9 +1,13 @@
 //! `adoc` — a command-line AsciiDoc to HTML5 converter.
 //!
-//! Reads AsciiDoc from a file (or standard input) and writes the rendered
-//! HTML5 to a file or to standard output. Given a file and no `-o`/`--output`,
-//! the output file name is derived from the input by swapping its extension for
-//! `.html`, matching `asciidoctor document.adoc` producing `document.html`.
+//! Reads AsciiDoc from one or more files (or standard input) and writes the
+//! rendered HTML5 to a file or to standard output. Given a file and no
+//! `-o`/`--output`, the output file name is derived from the input by swapping
+//! its extension for `.html`, matching `asciidoctor document.adoc` producing
+//! `document.html`. Several files can be converted in a single invocation, each
+//! to its own derived output, and a quoted glob pattern (`'*.adoc'`) is
+//! expanded by `adoc` itself the way `asciidoctor` does, so it works the same
+//! on every platform.
 
 use std::{
     fs,
@@ -31,23 +35,32 @@ backend.",
     after_help = "Use -h for a short summary or --help for the full description.",
     after_long_help = "Examples:\n  \
 adoc document.adoc              Convert a file; write the HTML to document.html\n  \
+adoc a.adoc b.adoc              Convert several files, each to its own .html\n  \
+adoc '*.adoc'                   Convert every .adoc file in the directory\n  \
 adoc document.adoc -o out.html  Convert a file; write the HTML to out.html\n  \
 adoc document.adoc -D build     Convert a file; write the HTML to build/document.html\n  \
 adoc document.adoc -o -         Convert a file; write the HTML to stdout\n  \
 cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n  \
 cat document.adoc | adoc -e     Convert stdin; write just the body (embedded)\n\n\
-Exit status is 0 on success, or 1 if the input cannot be read or the output \
+Exit status is 0 on success, or 1 if any input cannot be read or its output \
 cannot be written."
 )]
 struct Cli {
-    /// AsciiDoc input file (omit or use `-` to read stdin)
+    /// AsciiDoc input files or glob patterns (omit or use `-` to read stdin)
     #[arg(
         value_name = "FILE",
-        long_help = "Path to the AsciiDoc document to convert.\n\n\
+        long_help = "Paths to the AsciiDoc documents to convert.\n\n\
+Pass several files to convert each in turn, writing each to its own output \
+(derived, or the single -o target). An argument that names no existing file is \
+treated as a glob pattern and expanded by adoc itself — the same portable, \
+Ruby-style matching asciidoctor performs — so `'*.adoc'` converts every .adoc \
+file in the directory and `'**/*.adoc'` recurses into subdirectories at any \
+depth. Quote the pattern so the shell passes it through rather than expanding \
+it first.\n\n\
 When omitted, or given as a single dash (`-`), adoc reads the document from \
 standard input instead, so it can sit at the end of a pipeline."
     )]
-    input: Option<PathBuf>,
+    inputs: Vec<PathBuf>,
 
     /// Write HTML to this file (`-` for stdout; default: derived from input)
     #[arg(
@@ -167,8 +180,9 @@ fn main() -> ExitCode {
 
 /// Reads the AsciiDoc input, converts it, and writes the HTML5 out.
 ///
-/// The destination follows [`output_target`]: a file named by `-o`/`--output`,
-/// a file whose name is derived from the input, or `stdout`. Threading the
+/// The destination follows [`output_target_for`]: a file named by
+/// `-o`/`--output`, a file whose name is derived from the input, or `stdout`.
+/// Threading the
 /// standard-output writer in as a parameter keeps the conversion pipeline
 /// testable without spawning the binary. Reads from the process's standard
 /// input; [`run_with_input`] is the same pipeline with an injectable reader, so
@@ -178,22 +192,52 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     run_with_input(cli, &mut stdin, stdout)
 }
 
-/// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or a named
-/// file, converts it, and writes the HTML5 out — the testable core of [`run`].
+/// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
+/// files, converts each, and writes the HTML5 out — the testable core of
+/// [`run`].
+///
+/// The command's positional arguments are first resolved into a list of
+/// [`InputSource`]s by [`resolve_inputs`], expanding any glob patterns the way
+/// Asciidoctor does. Each source is then converted in turn: several files in
+/// one invocation each produce their own output. Options shared across every
+/// source (the attributes, safe mode, and standalone/embedded choice) are built
+/// once; the per-source base directory and input file are layered on top for
+/// each.
 fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
-    let mut options = build_options(&cli.attribute)?.safe_mode(resolve_safe_mode(cli)?);
-    options = apply_base_dir(cli, options)?;
-
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document — matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
-    options = options.standalone(!cli.embedded);
+    let base_options = build_options(&cli.attribute)?
+        .safe_mode(resolve_safe_mode(cli)?)
+        .standalone(!cli.embedded);
 
-    let source = read_input(cli.input.as_deref(), stdin)?;
+    for source in resolve_inputs(&cli.inputs)? {
+        convert_source(cli, &base_options, &source, stdin, stdout)?;
+    }
 
-    match output_target(cli) {
+    Ok(())
+}
+
+/// Converts one [`InputSource`] and writes its HTML5 to the destination
+/// [`output_target_for`] picks for it.
+///
+/// The shared `base_options` are cloned and the source's own base directory and
+/// input file are applied, so a file's top-level `include::` targets resolve
+/// against its own directory and each file gets its own derived output name.
+fn convert_source(
+    cli: &Cli,
+    base_options: &Options,
+    source: &InputSource,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    let input = source.file();
+    let options = apply_base_dir(cli, base_options.clone(), input)?;
+    let source_text = read_input(input, stdin)?;
+
+    match output_target_for(cli, input) {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
@@ -211,7 +255,7 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
                 inner: DirAssetWriter::new(dir),
                 output: path.clone(),
             };
-            let html = asciidoc_html5::convert_with_writer(&source, &options, &mut writer)?;
+            let html = asciidoc_html5::convert_with_writer(&source_text, &options, &mut writer)?;
             fs::write(path, html)
         }
 
@@ -219,10 +263,118 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
         // `copycss` is inert here — again matching Asciidoctor, which skips the
         // copy unless there is an output file.
         OutputTarget::Stdout => {
-            let html = asciidoc_html5::convert_with(&source, &options);
+            let html = asciidoc_html5::convert_with(&source_text, &options);
             stdout.write_all(html.as_bytes())
         }
     }
+}
+
+/// A single resolved source for `adoc` to convert: an on-disk file, or standard
+/// input.
+#[derive(Debug)]
+enum InputSource {
+    /// A file named on the command line (or matched by a glob pattern).
+    File(PathBuf),
+
+    /// Standard input, selected by a lone `-` or no input argument at all.
+    Stdin,
+}
+
+impl InputSource {
+    /// The file this source reads from, or `None` when it reads standard input.
+    fn file(&self) -> Option<&Path> {
+        match self {
+            InputSource::File(path) => Some(path),
+            InputSource::Stdin => None,
+        }
+    }
+}
+
+/// Resolves the command's positional arguments into the ordered list of sources
+/// to convert, mirroring how the Asciidoctor CLI treats its input arguments.
+///
+/// With no arguments, or a lone `-`, `adoc` reads standard input. Otherwise
+/// each argument names a file to convert, except that an argument matching no
+/// existing file is expanded as a glob pattern — the same portable, Ruby-style
+/// matching Asciidoctor performs, so `'*.adoc'` and `'**/*.adoc'` work the same
+/// on every platform regardless of what the shell would expand. A pattern that
+/// matches nothing is kept as-is, so it surfaces as a missing-file error when
+/// the conversion tries to read it, again matching Asciidoctor.
+///
+/// Standard input is read only when `-` is the *sole* argument. A `-` mixed in
+/// with other inputs is an extra argument — Asciidoctor warns about it and
+/// ignores it rather than reading standard input a second time (which would
+/// yield an empty document at end-of-stream), so `adoc` does the same.
+fn resolve_inputs(inputs: &[PathBuf]) -> io::Result<Vec<InputSource>> {
+    // No input argument, or a single `-`, reads standard input — the same two
+    // spellings the single-file path already treats as stdin.
+    if inputs.is_empty() || (inputs.len() == 1 && inputs[0].as_os_str() == "-") {
+        return Ok(vec![InputSource::Stdin]);
+    }
+
+    let mut sources = Vec::new();
+    for arg in inputs {
+        if arg.as_os_str() == "-" {
+            // A `-` here is not the sole argument, so it is an extra one: warn
+            // and skip it, matching Asciidoctor, rather than reading standard
+            // input again.
+            eprintln!(
+                "adoc: ignoring extra '-' argument; standard input is read only \
+                 when it is the only input"
+            );
+        } else if arg.is_file() {
+            // An argument naming an existing file is taken literally; Asciidoctor
+            // only globs when the file is not found.
+            sources.push(InputSource::File(arg.clone()));
+        } else {
+            let matches = expand_glob(arg)?;
+            if matches.is_empty() {
+                // No matches: keep the literal argument so the read step reports
+                // it as missing, exactly as a plain misspelled filename would.
+                sources.push(InputSource::File(arg.clone()));
+            } else {
+                sources.extend(matches.into_iter().map(InputSource::File));
+            }
+        }
+    }
+
+    Ok(sources)
+}
+
+/// Expands `pattern` as a glob, returning the matching files in sorted order.
+///
+/// Matching follows the `glob` crate, whose `*`, `?`, `**`, and `[…]` semantics
+/// line up with the Ruby `Dir.glob` rules Asciidoctor uses — including `**`,
+/// which spans directories at any depth (and zero depth, so `**/*.adoc` also
+/// matches files in the current directory). Only files are returned; directory
+/// matches are dropped so a pattern never tries to convert a directory. The
+/// results are sorted so the conversion order is deterministic across
+/// platforms.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `pattern` is not valid
+/// UTF-8 or is not a valid glob pattern.
+fn expand_glob(pattern: &Path) -> io::Result<Vec<PathBuf>> {
+    let pattern = pattern.to_str().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid input path {}: not valid UTF-8", pattern.display()),
+        )
+    })?;
+
+    let paths = glob::glob(pattern)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err.to_string()))?;
+
+    // Keep only readable file matches, discarding entries the glob crate could
+    // not stat and any directories it matched.
+    let mut matches: Vec<PathBuf> = paths
+        .filter_map(Result::ok)
+        .filter(|path| path.is_file())
+        .collect();
+
+    matches.sort();
+    Ok(matches)
 }
 
 /// An [`AssetWriter`] wrapping a [`DirAssetWriter`] that refuses to write a
@@ -274,38 +426,45 @@ fn output_dir(path: &Path) -> PathBuf {
     }
 }
 
-/// Records the base directory and primary file on `options`, mirroring
-/// Asciidoctor's `-B`/`--base-dir`.
+/// Records the base directory and the given `input` file on `options`,
+/// mirroring Asciidoctor's `-B`/`--base-dir`.
 ///
 /// An explicit `-B` sets the base directory. Otherwise it is left to the
 /// library to derive from the input file's directory, except when the document
-/// is read from standard input — there is no file to derive from, so the
-/// current directory is used, matching Asciidoctor. In every case the input
-/// file (when there is one) is recorded so its top-level `include::` directives
-/// resolve against its own directory.
+/// is read from standard input (`input` is `None`) — there is no file to derive
+/// from, so the current directory is used, matching Asciidoctor. In every case
+/// the input file (when there is one) is recorded so its top-level `include::`
+/// directives resolve against its own directory.
 ///
 /// # Errors
 ///
 /// Returns an [`io::Error`] when the current directory is needed but cannot be
 /// determined.
-fn apply_base_dir(cli: &Cli, mut options: Options) -> io::Result<Options> {
+fn apply_base_dir(cli: &Cli, mut options: Options, input: Option<&Path>) -> io::Result<Options> {
     if let Some(dir) = &cli.base_dir {
         options = options.base_dir(dir.clone());
-    } else if input_file(cli).is_none() {
+    } else if input.is_none() {
         options = options.base_dir(std::env::current_dir()?);
     }
 
-    if let Some(path) = input_file(cli) {
+    if let Some(path) = input {
         options = options.input_file(path.to_path_buf());
     }
 
     Ok(options)
 }
 
-/// Returns the input file path when `adoc` reads from a real file, or `None`
-/// when it reads from standard input (no `input`, or the conventional `-`).
+/// Returns the input file path when `adoc` reads from a single real file, or
+/// `None` when it reads from standard input (no input argument, or the
+/// conventional `-`).
+///
+/// This reports the *first* input for the invocation, which is all the
+/// stdin-versus-file distinction needs; the multi-file conversion loop resolves
+/// each source's own file through [`resolve_inputs`]. It is a convenience for
+/// the tests, which exercise `adoc`'s single-input routing.
+#[cfg(test)]
 fn input_file(cli: &Cli) -> Option<&Path> {
-    match cli.input.as_deref() {
+    match cli.inputs.first() {
         Some(path) if path.as_os_str() != "-" => Some(path),
         _ => None,
     }
@@ -441,30 +600,44 @@ enum OutputTarget {
     Stdout,
 }
 
-/// Decides where to write the HTML5, mirroring Asciidoctor's default behavior.
+/// Decides where to write the HTML5 for the invocation's first input, mirroring
+/// Asciidoctor's default behavior.
+///
+/// A convenience over [`output_target_for`] that reads the first input through
+/// [`input_file`]; the multi-file conversion loop calls [`output_target_for`]
+/// once per source instead. Used by the tests, which exercise `adoc`'s
+/// single-input routing.
+#[cfg(test)]
+fn output_target(cli: &Cli) -> OutputTarget {
+    output_target_for(cli, input_file(cli))
+}
+
+/// Decides where to write the HTML5 for the source reading from `input`,
+/// mirroring Asciidoctor's default behavior.
 ///
 /// With `-o`/`--output`, the value names the destination directly, except that
 /// the conventional `-` selects standard output. Without it, the output file
-/// name is derived from the input by replacing its extension with `.html`, so
-/// `adoc document.adoc` writes `document.html`. When the input comes from
-/// standard input there is no name to derive from, so the HTML5 goes to
+/// name is derived from `input` by replacing its extension with `.html`, so
+/// `adoc document.adoc` writes `document.html`, and each file in a multi-file
+/// invocation lands in its own `.html`. When the source is standard input
+/// (`input` is `None`) there is no name to derive from, so the HTML5 goes to
 /// standard output.
 ///
 /// The `-D`/`--destination-dir` directory, when given, holds the output: a
-/// relative `-o` path (or the derived name) is placed inside it, while an
+/// relative `-o` path (or a derived name) is placed inside it, while an
 /// absolute `-o` path is used unchanged. Without `-D`, an `-o` path is taken as
 /// given (a relative one relative to the current directory) and a derived name
-/// is written alongside the input.
-fn output_target(cli: &Cli) -> OutputTarget {
+/// is written alongside its input. Because the destination applies to whichever
+/// `input` this is called for, `-D build` with several inputs writes each
+/// derived name into `build`.
+fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
     let dir = cli.destination_dir.as_deref();
     match cli.output.as_deref() {
         Some(path) if path.as_os_str() == "-" => OutputTarget::Stdout,
         Some(path) => OutputTarget::File(resolve_in_dir(dir, path)),
-        None => match cli.input.as_deref() {
-            Some(input) if input.as_os_str() != "-" => {
-                OutputTarget::File(derive_output_path(input, dir))
-            }
-            _ => OutputTarget::Stdout,
+        None => match input {
+            Some(input) => OutputTarget::File(derive_output_path(input, dir)),
+            None => OutputTarget::Stdout,
         },
     }
 }

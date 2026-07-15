@@ -11,4 +11,5 @@
 mod index;
 mod io_piping;
 mod output_file;
+mod process_multiple_files;
 mod set_safe_mode;
