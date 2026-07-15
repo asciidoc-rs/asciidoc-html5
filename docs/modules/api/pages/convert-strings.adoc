@@ -92,8 +92,9 @@ backend.
 To choose the mode explicitly, build an `Options` and convert with `convert_with`:
 `Options::standalone(true)` returns a complete document from a string, and
 `Options::embedded(true)` returns body-only output from a file. When the document
-has a title, embedded output includes its `<h1>` only if the `showtitle`
-attribute is set.
+has a title, embedded output includes its `<h1>` only when the title is enabled --
+by setting `showtitle`, or equivalently by unsetting `notitle`, which Asciidoctor
+links to `showtitle` as its inverse.
 
 [,rust]
 ----

@@ -108,8 +108,9 @@ frame -- ready to drop into a surrounding template. The file entry point
 To choose the mode explicitly, set it on the `Options` and convert with a `_with`
 entry point: `Options::standalone(true)` forces a complete document, and
 `Options::embedded(true)` forces body-only output. When a document title is
-present, embedded output includes its `<h1>` only if the `showtitle` attribute is
-set.
+present, embedded output includes its `<h1>` only when the title is enabled --
+by setting `showtitle`, or equivalently by unsetting `notitle`, which Asciidoctor
+links to `showtitle` as its inverse.
 
 == Supplying document attributes
 
