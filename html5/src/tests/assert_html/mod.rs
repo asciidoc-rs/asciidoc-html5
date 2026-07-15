@@ -140,6 +140,19 @@ mod tests {
     }
 
     #[test]
+    fn xpath_general_preceding_and_following_axes() {
+        // `preceding::` sees earlier elements but not the context's ancestors.
+        assert_xpath(FRAGMENT, r#"//h2[@id="_first_section"]/preceding::p"#, 1);
+        // The first paragraph's only earlier elements are its ancestors.
+        assert_xpath(FRAGMENT, r#"//p[text()="Preamble."]/preceding::*"#, 0);
+
+        // `following::` sees later elements but not the context's descendants.
+        assert_xpath(FRAGMENT, r#"//*[@id="preamble"]/following::p"#, 1);
+        // `#content` is the outermost element, so nothing follows it.
+        assert_xpath(FRAGMENT, r#"//*[@id="content"]/following::*"#, 0);
+    }
+
+    #[test]
     fn xpath_positional_and_text() {
         assert_xpath(FRAGMENT, r#"//div[@class="paragraph"]/p"#, 2);
         assert_xpath(FRAGMENT, r#"//p[text()="Preamble."]"#, 1);

@@ -46,14 +46,12 @@ One module per Ruby file (e.g. [`preamble_test.rs`](preamble_test.rs)), which:
 4. Leaves everything else — scaffolding, and tests for behavior out of scope
    here — in `non_normative!`.
 
-`preamble_test.rs` ports 4 of the 12 Ruby tests (the `html5` preamble cases) and
-tracks the other 8 as `non_normative!`: the DocBook-backend tests (this crate
-targets only `html5`), the `book`/`partintro` cases (not yet rendered), the
-`toc` case ([#86] — TOC rendering not wired up yet), and one test that needs the
-general `preceding::` XPath axis ([#87] — see *Limitations*).
+`preamble_test.rs` ports 5 of the 12 Ruby tests (the `html5` preamble cases) and
+tracks the other 7 as `non_normative!`: the DocBook-backend tests (this crate
+targets only `html5`), the `book`/`partintro` cases (not yet rendered), and the
+`toc` case ([#86] — TOC rendering not wired up yet).
 
 [#86]: https://github.com/asciidoc-rs/asciidoc-html5/issues/86
-[#87]: https://github.com/asciidoc-rs/asciidoc-html5/issues/87
 
 ### Driving the renderer
 
@@ -102,14 +100,17 @@ which queries the parse tree instead.
 ### Supported XPath subset
 
 `//tag`, `/tag`, `//*`, `/*`; chained child (`a/b`) and descendant (`a//b`)
-steps; the `following-sibling::` and `preceding-sibling::` axes; predicates
-`[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`, and the
-positional `[N]` (1-indexed, per context node).
+steps; the `following-sibling::` / `preceding-sibling::` sibling axes and the
+general `following::` / `preceding::` document-order axes; predicates `[@id="x"]`,
+`[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`, and the positional
+`[N]` (1-indexed, per context node).
 
 ### Limitations (grow the engine as pages need it)
 
-- The general `preceding::` / `following::` / `ancestor::` axes are not
-  implemented (only the `*-sibling::` axes are). Tracked in [#87].
+- The `ancestor::` / `descendant::` named axes are not implemented.
+- A positional predicate *on* a reverse axis (e.g. `preceding::p[1]`) is not
+  modeled: the general axes return matches in document order, whereas XPath
+  orders a reverse axis in reverse. The suite does not use that combination.
 - Boolean expressions (`count(...) = N`), `normalize-space()`, `contains()`, and
   `starts-with()` predicates are not implemented.
 - `text()` compares against an element's *direct* text only (matching XPath's

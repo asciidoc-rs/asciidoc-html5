@@ -8,11 +8,8 @@
 //!
 //! Not ported (kept `non_normative!`): the DocBook-backend tests (this crate
 //! targets only the `html5` backend), the `book` doctype / `partintro` cases
-//! (not yet rendered here), the `toc` case (TOC rendering is not wired up yet —
-//! see <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>), and the one
-//! test that relies on the general `preceding::` XPath axis, which the minimal
-//! engine in `crate::tests::assert_html` does not implement (see
-//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/87>).
+//! (not yet rendered here), and the `toc` case (TOC rendering is not wired up
+//! yet — see <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
 
 use crate::{
     convert_with,
@@ -206,8 +203,10 @@ fn title_and_section_without_preamble() {
     assert_xpath(&html, r#"//h2[@id="_first_section"]"#, 1);
 }
 
-non_normative!(
-    r#"
+#[test]
+fn no_title_with_preamble_and_section() {
+    verifies!(
+        r#"
   test 'no title with preamble and section' do
     input = <<~'EOS'
     Preamble paragraph 1.
@@ -222,6 +221,18 @@ non_normative!(
     assert_xpath '//h2[@id="_first_section"]/preceding::p', result, 1
   end
 
+"#
+    );
+
+    let input = "Preamble paragraph 1.\n\n== First Section\n\nSection paragraph 1.\n";
+    let html = convert_with(input, &Options::new().standalone(true));
+    assert_xpath(&html, "//p", 2);
+    assert_xpath(&html, r#"//*[@id="preamble"]"#, 0);
+    assert_xpath(&html, r#"//h2[@id="_first_section"]/preceding::p"#, 1);
+}
+
+non_normative!(
+    r#"
   test 'preamble in book doctype' do
       input = <<~'EOS'
       = Book

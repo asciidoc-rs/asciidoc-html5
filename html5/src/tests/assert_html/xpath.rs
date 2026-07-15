@@ -8,13 +8,20 @@
 //! - `a/b`, `a//b` — child and descendant combinators, chained
 //! - `foo/following-sibling::*`, `foo/preceding-sibling::tag` — the sibling
 //!   axes
+//! - `foo/preceding::tag`, `foo/following::tag` — the general document-order
+//!   axes (excluding ancestors / descendants respectively)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
 //!   `[text()="x"]`, and the positional `[N]` (1-indexed, per context node)
 //!
-//! Anything outside this subset (the general `preceding::`/`ancestor::` axes,
+//! Anything outside this subset (the `ancestor::`/`descendant::` named axes,
 //! boolean `count(...)` expressions, `normalize-space()`, `contains()`, …) is
 //! deliberately unsupported: a page that needs one keeps the corresponding
 //! Ruby test `non_normative!` until the engine grows to cover it.
+//!
+//! Note: the general axes return matches in document order. XPath orders a
+//! reverse axis (`preceding::`) in reverse document order, which would matter
+//! for a positional predicate *on that axis* (e.g. `preceding::p[1]`); the
+//! suite does not use that combination, so the harness does not model it.
 
 use super::dom::VirtualNode;
 
@@ -39,6 +46,14 @@ pub(super) fn query<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNod
                     .filter(|c| step.matches(c))
                     .collect(),
                 Axis::PrecedingSibling => preceding_siblings(root, node)
+                    .into_iter()
+                    .filter(|c| step.matches(c))
+                    .collect(),
+                Axis::Following => following(root, node)
+                    .into_iter()
+                    .filter(|c| step.matches(c))
+                    .collect(),
+                Axis::Preceding => preceding(root, node)
                     .into_iter()
                     .filter(|c| step.matches(c))
                     .collect(),
@@ -97,6 +112,86 @@ fn preceding_siblings<'a>(root: &'a VirtualNode, target: &VirtualNode) -> Vec<&'
     }
 }
 
+/// Returns the elements on the `preceding::` axis of `target`: every element
+/// that starts before `target` in document order, excluding `target`'s own
+/// ancestors. Results are in document order (their relative order does not
+/// affect matching or counting, the only things the harness asks of the axis).
+fn preceding<'a>(root: &'a VirtualNode, target: &VirtualNode) -> Vec<&'a VirtualNode> {
+    let ancestors = ancestors(root, target);
+    let mut before = Vec::new();
+    let mut reached = false;
+    collect_preorder_before(root, target, &mut before, &mut reached);
+    before
+        .into_iter()
+        .filter(|n| !ancestors.iter().any(|a| std::ptr::eq(*a, *n)))
+        .collect()
+}
+
+/// Returns the elements on the `following::` axis of `target`: every element
+/// that starts after `target`'s subtree ends in document order (which, by
+/// construction, excludes `target`'s descendants and ancestors).
+fn following<'a>(root: &'a VirtualNode, target: &VirtualNode) -> Vec<&'a VirtualNode> {
+    let mut after = Vec::new();
+    let mut found = false;
+    collect_following(root, target, &mut after, &mut found);
+    after
+}
+
+/// The ancestors of `target`, from its parent up to (and including) `root`.
+fn ancestors<'a>(root: &'a VirtualNode, target: &VirtualNode) -> Vec<&'a VirtualNode> {
+    let mut chain = Vec::new();
+    let mut current: &VirtualNode = target;
+    while let Some(parent) = find_parent(root, current) {
+        chain.push(parent);
+        current = parent;
+    }
+    chain
+}
+
+/// Pre-order walk collecting every element visited before `target`, stopping as
+/// soon as `target` is reached. Ancestors of `target` are collected here (they
+/// precede it in the walk) and filtered out by the caller.
+fn collect_preorder_before<'a>(
+    node: &'a VirtualNode,
+    target: &VirtualNode,
+    out: &mut Vec<&'a VirtualNode>,
+    reached: &mut bool,
+) {
+    for child in &node.children {
+        if *reached {
+            return;
+        }
+        if std::ptr::eq(child, target) {
+            *reached = true;
+            return;
+        }
+        out.push(child);
+        collect_preorder_before(child, target, out, reached);
+    }
+}
+
+/// Pre-order walk collecting every element after `target` in document order.
+/// `target`'s subtree is skipped entirely (its descendants are not
+/// "following"); once `found` flips, every later element — later siblings, and
+/// the later subtrees of ancestors — is collected.
+fn collect_following<'a>(
+    node: &'a VirtualNode,
+    target: &VirtualNode,
+    out: &mut Vec<&'a VirtualNode>,
+    found: &mut bool,
+) {
+    for child in &node.children {
+        if std::ptr::eq(child, target) {
+            *found = true;
+            continue;
+        }
+        if *found {
+            out.push(child);
+        }
+        collect_following(child, target, out, found);
+    }
+}
+
 /// Finds the parent of `target` by walking from `root` and comparing node
 /// identity (the nodes are all borrows into one owned tree).
 fn find_parent<'a>(node: &'a VirtualNode, target: &VirtualNode) -> Option<&'a VirtualNode> {
@@ -125,6 +220,8 @@ enum Axis {
     Descendant,
     FollowingSibling,
     PrecedingSibling,
+    Following,
+    Preceding,
 }
 
 /// A node test: a specific tag name, or `*` (any element).
@@ -241,6 +338,10 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
         (Axis::FollowingSibling, rest)
     } else if let Some(rest) = token.strip_prefix("preceding-sibling::") {
         (Axis::PrecedingSibling, rest)
+    } else if let Some(rest) = token.strip_prefix("following::") {
+        (Axis::Following, rest)
+    } else if let Some(rest) = token.strip_prefix("preceding::") {
+        (Axis::Preceding, rest)
     } else {
         let axis = match comb {
             Combinator::Child => Axis::Child,
