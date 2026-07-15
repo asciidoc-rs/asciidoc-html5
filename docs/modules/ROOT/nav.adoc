@@ -9,3 +9,4 @@
 * xref:cli:index.adoc[Use the CLI]
 ** xref:cli:set-safe-mode.adoc[Set Safe Mode]
 ** xref:cli:io-piping.adoc[Pipe Content]
+** xref:cli:process-multiple-files.adoc[Process Multiple Files]
