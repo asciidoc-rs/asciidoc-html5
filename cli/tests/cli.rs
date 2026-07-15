@@ -387,18 +387,23 @@ fn soft_toggle_attributes_yield_to_the_document() {
     ));
 }
 
-/// When the output file cannot be written (its parent directory does not
-/// exist), adoc fails with a nonzero exit status and an `adoc:`-prefixed error,
-/// writing nothing to standard output.
+/// When the output file cannot be written, adoc fails with a nonzero exit
+/// status and an `adoc:`-prefixed error, writing nothing to standard output.
+///
+/// adoc creates a missing output directory (matching Asciidoctor), so a merely
+/// absent parent is not an error. To force a genuine failure, the output path's
+/// parent is a regular file here, which cannot be turned into a directory.
 #[test]
 fn reports_failure_when_output_cannot_be_written() {
     let input =
         std::env::temp_dir().join(format!("adoc-cli-badout-in-{}.adoc", std::process::id()));
-    // A destination inside a directory that does not exist, so the write fails.
-    let unwritable = std::env::temp_dir()
-        .join(format!("adoc-cli-missing-dir-{}", std::process::id()))
-        .join("out.html");
+
+    // A regular file standing where the output's parent directory would need to
+    // be, so creating that directory (and thus the write) fails.
+    let blocker = std::env::temp_dir().join(format!("adoc-cli-blocker-{}", std::process::id()));
+    let unwritable = blocker.join("out.html");
     fs::write(&input, "= Hello\n\nWorld.").expect("write temp input");
+    fs::write(&blocker, "not a directory").expect("write blocker file");
 
     let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
         .arg(&input)
@@ -407,6 +412,7 @@ fn reports_failure_when_output_cannot_be_written() {
         .output()
         .expect("run the adoc binary");
     let _ = fs::remove_file(&input);
+    let _ = fs::remove_file(&blocker);
 
     assert!(
         !output.status.success(),
@@ -769,4 +775,54 @@ fn copycss_is_inert_when_writing_to_stdout() {
     );
     let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
     assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+}
+
+/// With `-D`, inputs from different directories that share a base name derive
+/// the same output name and collapse onto one file: `adoc` writes them in
+/// order, so the last one wins, with no error.
+///
+/// This is deliberate parity, not an oversight. Asciidoctor 2.0.26 — this
+/// crate's output oracle — flattens every input into the destination directory
+/// by its derived base name with no source-tree preservation (it has no
+/// `--source-dir`), so `asciidoctor -D build a/guide.adoc b/guide.adoc`
+/// likewise exits 0 and leaves a single `build/guide.html` holding the second
+/// document. Warning or erroring on the collision would diverge from that
+/// oracle.
+#[test]
+fn destination_dir_same_basename_inputs_last_one_wins() {
+    let root = std::env::temp_dir().join(format!("adoc-cli-dcollide-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("a")).expect("create dir a");
+    fs::create_dir_all(root.join("b")).expect("create dir b");
+    fs::write(root.join("a/guide.adoc"), "= A\n\nFrom directory A.").expect("write a");
+    fs::write(root.join("b/guide.adoc"), "= B\n\nFrom directory B.").expect("write b");
+    let build = root.join("build");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("-D")
+        .arg(&build)
+        .arg(root.join("a/guide.adoc"))
+        .arg(root.join("b/guide.adoc"))
+        .output()
+        .expect("run the adoc binary");
+
+    let entries: Vec<_> = fs::read_dir(&build)
+        .expect("read build dir")
+        .map(|e| e.expect("dir entry").file_name())
+        .collect();
+    let html = fs::read_to_string(build.join("guide.html")).unwrap_or_default();
+    let _ = fs::remove_dir_all(&root);
+
+    assert!(
+        output.status.success(),
+        "adoc exited with {}",
+        output.status
+    );
+
+    // Both inputs collapsed onto the single derived name, and the second wins.
+    assert_eq!(entries, [std::ffi::OsString::from("guide.html")]);
+    assert!(
+        html.contains("From directory B."),
+        "the last input should win, got: {html}"
+    );
 }

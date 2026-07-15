@@ -38,6 +38,7 @@ adoc document.adoc              Convert a file; write the HTML to document.html\
 adoc a.adoc b.adoc              Convert several files, each to its own .html\n  \
 adoc '*.adoc'                   Convert every .adoc file in the directory\n  \
 adoc document.adoc -o out.html  Convert a file; write the HTML to out.html\n  \
+adoc document.adoc -D build     Convert a file; write the HTML to build/document.html\n  \
 adoc document.adoc -o -         Convert a file; write the HTML to stdout\n  \
 cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n  \
 cat document.adoc | adoc -e     Convert stdin; write just the body (embedded)\n\n\
@@ -70,9 +71,27 @@ standard input instead, so it can sit at the end of a pipeline."
 When omitted, adoc derives the output file name from the input file by replacing \
 its extension with .html and writing alongside it. Pass a single dash (`-`) to \
 write to standard output instead. When the input is read from standard input, \
-there is no name to derive from, so adoc writes to standard output."
+there is no name to derive from, so adoc writes to standard output.\n\n\
+A relative path is resolved against the current directory (or the -D destination \
+directory, when one is given), not against the input file's directory."
     )]
     output: Option<PathBuf>,
+
+    /// Write output to this directory (default: the input file's directory)
+    #[arg(
+        short = 'D',
+        long = "destination-dir",
+        value_name = "DIR",
+        long_help = "Set the output directory, the way Asciidoctor's -D option does.\n\n\
+Write the rendered HTML5 (and any companion files, such as a linked stylesheet) \
+into this directory instead of alongside the input file. The output file keeps \
+its derived name unless -o names one; a relative -o path is resolved inside this \
+directory, while an absolute -o path is used unchanged. The directory is created \
+if it does not exist.\n\n\
+When omitted, output goes to the input file's directory, or to the location -o \
+names."
+    )]
+    destination_dir: Option<PathBuf>,
 
     /// Set a document attribute (`name`, `name=value`, or `name!` to unset)
     #[arg(
@@ -220,13 +239,20 @@ fn convert_source(
 
     match output_target_for(cli, input) {
         OutputTarget::File(path) => {
+            let dir = output_dir(&path);
+
+            // Create the output directory if it is missing, matching Asciidoctor,
+            // which makes the destination directory (named by `-D`, or embedded
+            // in an `-o` path like `build/out.html`) before writing to it.
+            fs::create_dir_all(&dir)?;
+
             // Write any companion stylesheet (`copycss`) into the output file's
             // directory, so a linked stylesheet lands next to the HTML that
             // references it — matching Asciidoctor, which copies only when
             // converting to a file. The guard keeps the copy from clobbering the
             // output file itself when the two paths coincide.
             let mut writer = OutputGuard {
-                inner: DirAssetWriter::new(output_dir(&path)),
+                inner: DirAssetWriter::new(dir),
                 output: path.clone(),
             };
             let html = asciidoc_html5::convert_with_writer(&source_text, &options, &mut writer)?;
@@ -591,26 +617,52 @@ fn output_target(cli: &Cli) -> OutputTarget {
 ///
 /// With `-o`/`--output`, the value names the destination directly, except that
 /// the conventional `-` selects standard output. Without it, the output file
-/// name is derived from `input` by replacing its extension with `.html` and
-/// writing alongside it, so `adoc document.adoc` writes `document.html`, and
-/// each file in a multi-file invocation lands in its own `.html`. When the
-/// source is standard input (`input` is `None`) there is no name to derive
-/// from, so the HTML5 goes to standard output.
+/// name is derived from `input` by replacing its extension with `.html`, so
+/// `adoc document.adoc` writes `document.html`, and each file in a multi-file
+/// invocation lands in its own `.html`. When the source is standard input
+/// (`input` is `None`) there is no name to derive from, so the HTML5 goes to
+/// standard output.
+///
+/// The `-D`/`--destination-dir` directory, when given, holds the output: a
+/// relative `-o` path (or a derived name) is placed inside it, while an
+/// absolute `-o` path is used unchanged. Without `-D`, an `-o` path is taken as
+/// given (a relative one relative to the current directory) and a derived name
+/// is written alongside its input. Because the destination applies to whichever
+/// `input` this is called for, `-D build` with several inputs writes each
+/// derived name into `build`.
 fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
+    let dir = cli.destination_dir.as_deref();
     match cli.output.as_deref() {
         Some(path) if path.as_os_str() == "-" => OutputTarget::Stdout,
-        Some(path) => OutputTarget::File(path.to_path_buf()),
+        Some(path) => OutputTarget::File(resolve_in_dir(dir, path)),
         None => match input {
-            Some(input) => OutputTarget::File(derive_output_path(input)),
+            Some(input) => OutputTarget::File(derive_output_path(input, dir)),
             None => OutputTarget::Stdout,
         },
     }
 }
 
-/// Derives the output file path from the input path by swapping its extension
-/// for `.html`, matching how `asciidoctor` names its output file.
-fn derive_output_path(input: &Path) -> PathBuf {
-    input.with_extension("html")
+/// Resolves an explicit `-o` output `file` against the `-D` destination `dir`:
+/// a relative file lands inside the directory, while an absolute file (or the
+/// absence of `-D`) is taken unchanged. So a bare relative `-o` with no `-D`
+/// stays relative to the current working directory.
+fn resolve_in_dir(dir: Option<&Path>, file: &Path) -> PathBuf {
+    match dir {
+        Some(dir) if file.is_relative() => dir.join(file),
+        _ => file.to_path_buf(),
+    }
+}
+
+/// Derives the default output path for `input` by swapping its extension for
+/// `.html`, matching how `asciidoctor` names its output file. With a `-D`
+/// destination `dir`, the derived name is placed in that directory; otherwise
+/// it is written alongside the input.
+fn derive_output_path(input: &Path, dir: Option<&Path>) -> PathBuf {
+    let derived = input.with_extension("html");
+    match (dir, derived.file_name()) {
+        (Some(dir), Some(name)) => dir.join(name),
+        _ => derived,
+    }
 }
 
 /// Reads AsciiDoc source from `path`, or from `stdin` when `path` is `None` or
