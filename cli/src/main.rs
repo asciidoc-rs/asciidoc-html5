@@ -432,9 +432,12 @@ fn output_dir(path: &Path) -> PathBuf {
 /// An explicit `-B` sets the base directory. Otherwise it is left to the
 /// library to derive from the input file's directory, except when the document
 /// is read from standard input (`input` is `None`) — there is no file to derive
-/// from, so the current directory is used, matching Asciidoctor. In every case
-/// the input file (when there is one) is recorded so its top-level `include::`
-/// directives resolve against its own directory.
+/// from, so the current directory is used, matching Asciidoctor. That standard-
+/// input fallback yields to an explicit `-a docdir=…`, which Asciidoctor treats
+/// as a second way to anchor a piped document's relative includes and which the
+/// library honors on its own; forcing the current directory here would mask it.
+/// In every case the input file (when there is one) is recorded so its
+/// top-level `include::` directives resolve against its own directory.
 ///
 /// # Errors
 ///
@@ -443,7 +446,7 @@ fn output_dir(path: &Path) -> PathBuf {
 fn apply_base_dir(cli: &Cli, mut options: Options, input: Option<&Path>) -> io::Result<Options> {
     if let Some(dir) = &cli.base_dir {
         options = options.base_dir(dir.clone());
-    } else if input.is_none() {
+    } else if input.is_none() && !has_explicit_docdir(cli) {
         options = options.base_dir(std::env::current_dir()?);
     }
 
@@ -452,6 +455,28 @@ fn apply_base_dir(cli: &Cli, mut options: Options, input: Option<&Path>) -> io::
     }
 
     Ok(options)
+}
+
+/// Whether the `-a`/`--attribute` specs explicitly assign a `docdir` *value*
+/// (`docdir=…`), as opposed to setting, unsetting, or not mentioning it.
+///
+/// Such a value seeds include resolution inside the library, so the standard-
+/// input base-directory fallback in [`apply_base_dir`] must defer to it rather
+/// than pinning the base directory to the current directory. The parsing
+/// mirrors [`apply_attribute_spec`]: a trailing `@` is a soft-default marker,
+/// the key is everything before the first `=`, a leading or trailing `!` on the
+/// key makes it an unset (not a value), and attribute names are matched
+/// case-insensitively (the library lowercases them).
+fn has_explicit_docdir(cli: &Cli) -> bool {
+    cli.attribute.iter().any(|spec| {
+        let body = spec.strip_suffix('@').unwrap_or(spec);
+        match body.split_once('=') {
+            Some((key, _)) => {
+                !key.starts_with('!') && !key.ends_with('!') && key.eq_ignore_ascii_case("docdir")
+            }
+            None => false,
+        }
+    })
 }
 
 /// Returns the input file path when `adoc` reads from a single real file, or

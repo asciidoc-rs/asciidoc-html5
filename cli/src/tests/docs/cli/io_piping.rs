@@ -9,15 +9,12 @@ track_file!("docs/modules/cli/pages/io-piping.adoc");
 
 // This crate's "Pipe Content Through the CLI" page. It documents how `adoc`
 // pipes: `-` (or no input file) reads standard input, output goes to standard
-// output by default, `-o` names a file (`-o -` names standard output), and `-B`
-// supplies the base directory a piped document's relative `include::` targets
-// resolve against. Each invocation is verified through `adoc`'s own option
+// output by default, `-o` names a file (`-o -` names standard output), and both
+// `-B` and an explicit `-a docdir=…` supply the base directory a piped
+// document's relative `include::` targets resolve against (with `-B` winning
+// when both are given). Each invocation is verified through `adoc`'s own option
 // parsing (`Cli` plus the private `input_file`/`output_target` routing) and,
-// for conversion and include resolution, end to end.
-//
-// The page also documents an `adoc`-specific fact about an Asciidoctor feature
-// it diverges from: `-a docdir=…` sets and surfaces the `docdir` attribute but
-// does not redirect include resolution (only `-B` does). Its `-e`/`--embedded`
+// for conversion and include resolution, end to end. Its `-e`/`--embedded`
 // embeddable-output section is verified end to end.
 
 /// Whether `adoc` would read this invocation's source from standard input
@@ -224,61 +221,79 @@ against it:
     assert!(html.contains("Included body text."));
 }
 
-// `adoc` accepts `-a docdir=…` and surfaces the attribute to the document, but
-// — unlike Asciidoctor — the `docdir` value does not redirect include
-// resolution; only the base directory (`-B`) does. This divergence is tracked
-// in https://github.com/asciidoc-rs/asciidoc-html5/issues/73.
+// `adoc` also honors `-a docdir=…` as a second way to anchor a piped document's
+// relative includes, matching Asciidoctor: an explicit `docdir` seeds the base
+// directory when `-B` is absent, and `-B` wins when both are given. This closes
+// the divergence tracked in
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/73.
 #[test]
-fn docdir_is_surfaced_but_does_not_redirect_includes() {
+fn docdir_resolves_piped_includes_and_yields_to_base_dir() {
     verifies!(
         r#"
-[NOTE]
-====
-Asciidoctor also lets you set an artificial `docdir` attribute to fix include
-resolution when piping. `adoc` accepts `-a docdir=…` and surfaces the attribute
-to the document, but it does not redirect include resolution — use `-B` for that.
-====
+Alternately, set the `docdir` attribute to an absolute path. `adoc` treats it as
+an artificial document directory that piped includes resolve against, just as `-B`
+does — matching Asciidoctor, which offers the same two routes:
+
+ $ echo 'content' | adoc -a docdir=/path/to/docdir -o output.html -
+
+When you pass both, `-B` wins: it sets the base directory, and an explicit
+`docdir` only seeds the base directory when `-B` is absent.
 
 "#
     );
 
-    // `-a docdir=…` sets the attribute, and the document sees the value.
-    let (stdout, input) = run_adoc(
-        "docdir",
-        &["-a", "docdir=/artificial/dir", "-o", "-"],
-        "= Doc\n\ndir={docdir}\n",
-    );
-    let _ = std::fs::remove_file(&input);
-    let html = String::from_utf8(stdout).expect("adoc output is UTF-8");
-    assert!(html.contains("dir=/artificial/dir"));
+    // Pointing `-a docdir=…` at a directory that holds the include resolves it,
+    // driven end to end through the CLI's stdin path — the same route that was
+    // previously anchored to the current directory, ignoring `docdir`.
+    let docdir =
+        std::env::temp_dir().join(format!("adoc-docs-io-piping-docdir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&docdir);
+    std::fs::create_dir_all(&docdir).expect("create docdir");
+    std::fs::write(docdir.join("part.adoc"), "Body via docdir.\n").expect("write include");
+    let docdir_str = docdir.to_str().expect("docdir path is UTF-8");
 
-    // But `docdir` does not redirect includes: with `docdir` pointed at a
-    // directory that holds the include, yet a base directory that does not, the
-    // relative include stays unresolved. (Pointing `-B` there would resolve it,
-    // as verified above.)
-    let target = std::env::temp_dir().join(format!(
-        "adoc-docs-io-piping-docdir-target-{}",
-        std::process::id()
-    ));
+    let source = "= Doc\n\ninclude::part.adoc[]\n";
+    let html = run_piped(
+        &[
+            "adoc",
+            "-S",
+            "safe",
+            "-a",
+            &format!("docdir={docdir_str}"),
+            "-",
+        ],
+        source,
+    );
+    assert!(html.contains("Body via docdir."), "{html}");
+
+    // When both are given, `-B` wins: with `-B` pointed at a directory holding a
+    // different include, that copy resolves and the `docdir` copy does not.
     let base = std::env::temp_dir().join(format!(
         "adoc-docs-io-piping-docdir-base-{}",
         std::process::id()
     ));
-    let _ = std::fs::remove_dir_all(&target);
     let _ = std::fs::remove_dir_all(&base);
-    std::fs::create_dir_all(&target).expect("create docdir target");
     std::fs::create_dir_all(&base).expect("create base directory");
-    std::fs::write(target.join("part.adoc"), "Body via docdir.\n").expect("write include");
+    std::fs::write(base.join("part.adoc"), "Body via base dir.\n").expect("write include");
+    let base_str = base.to_str().expect("base path is UTF-8");
 
-    let source = "= Doc\n\ninclude::part.adoc[]\n";
-    let options = Options::new()
-        .safe_mode(SafeMode::Safe)
-        .base_dir(&base)
-        .attribute("docdir", target.to_str().expect("docdir path is UTF-8"));
-    let html = convert_with(source, &options);
-    let _ = std::fs::remove_dir_all(&target);
+    let html = run_piped(
+        &[
+            "adoc",
+            "-S",
+            "safe",
+            "-B",
+            base_str,
+            "-a",
+            &format!("docdir={docdir_str}"),
+            "-",
+        ],
+        source,
+    );
+    let _ = std::fs::remove_dir_all(&docdir);
     let _ = std::fs::remove_dir_all(&base);
-    assert!(!html.contains("Body via docdir."));
+    assert!(html.contains("Body via base dir."), "{html}");
+    assert!(!html.contains("Body via docdir."), "{html}");
 }
 
 // The `-e`/`--embedded` embeddable-output mode: `adoc -e` writes just the

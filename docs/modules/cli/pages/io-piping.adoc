@@ -41,12 +41,14 @@ against it:
 
  $ echo 'content' | adoc -B /path/to/basedir -o output.html -
 
-[NOTE]
-====
-Asciidoctor also lets you set an artificial `docdir` attribute to fix include
-resolution when piping. `adoc` accepts `-a docdir=…` and surfaces the attribute
-to the document, but it does not redirect include resolution — use `-B` for that.
-====
+Alternately, set the `docdir` attribute to an absolute path. `adoc` treats it as
+an artificial document directory that piped includes resolve against, just as `-B`
+does — matching Asciidoctor, which offers the same two routes:
+
+ $ echo 'content' | adoc -a docdir=/path/to/docdir -o output.html -
+
+When you pass both, `-B` wins: it sets the base directory, and an explicit
+`docdir` only seeds the base directory when `-B` is absent.
 
 == Embeddable output
 

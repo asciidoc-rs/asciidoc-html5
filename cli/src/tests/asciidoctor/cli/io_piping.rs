@@ -16,12 +16,11 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/io-piping.adoc");
 // option parsing (`Cli` plus the private `input_file`/`output_target` routing),
 // and the conversion and base-directory behaviors are confirmed end to end.
 //
-// The `docdir` attribute stays non-normative: Asciidoctor offers it as a second
-// way to fix include resolution when piping; `adoc` accepts `-a docdir=…` and
-// surfaces the attribute, but include resolution is governed by the base
-// directory (`-B`) alone, so there is no matching rule to verify here. The
-// `-e`/`--embedded` embeddable-output mode is now supported and is verified
-// below.
+// The `docdir` attribute is honored too: Asciidoctor offers it as a second way
+// to fix include resolution when piping, and `adoc` matches — an explicit
+// `-a docdir=…` seeds the include base directory just as `-B` does (with `-B`
+// winning when both are given), so that passage is now verified below. The
+// `-e`/`--embedded` embeddable-output mode is supported and is verified below.
 
 /// Whether `adoc` would read this invocation's source from standard input
 /// rather than from a named input file.
@@ -251,13 +250,16 @@ To resolve this problem, you should specify an absolute base directory using the
     assert!(html.contains("Included body text."));
 }
 
-// The `docdir` alternative is a divergence: `adoc` resolves piped includes with
-// the base directory (`-B`) alone, so this passage carries no rule to verify.
-// (`adoc` does accept `-a docdir=…` and surface the attribute; it just does not
-// redirect include resolution.) Tracked in
+// The `docdir` alternative: `adoc` matches Asciidoctor here, treating an
+// explicit `-a docdir=/abs/dir` as a second way to anchor a piped document's
+// relative includes — equivalent to `-B` when it stands alone. Setting the
+// attribute to a directory that holds the include resolves it end to end
+// through the CLI's stdin path. Closes
 // https://github.com/asciidoc-rs/asciidoc-html5/issues/73.
-non_normative!(
-    r#"
+#[test]
+fn the_docdir_attribute_resolves_piped_includes() {
+    verifies!(
+        r#"
 Alternately, you can set an artificial document directory by passing an absolute path to the `docdir` attribute:
 
  $ echo 'content' | asciidoctor -a docdir=/path/to/docdir -o output.html -
@@ -265,7 +267,32 @@ Alternately, you can set an artificial document directory by passing an absolute
 Try both approaches to determine which one suits your needs better.
 
 "#
-);
+    );
+
+    let dir =
+        std::env::temp_dir().join(format!("adoc-cli-io-piping-docdir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create docdir");
+    std::fs::write(dir.join("part.adoc"), "Included via docdir.\n").expect("write include");
+    let dir_str = dir.to_str().expect("docdir path is UTF-8");
+
+    // Drive the real stdin path: `-a docdir=<dir>` seeds the base directory, so a
+    // relative include sitting inside it resolves — the same outcome `-B <dir>`
+    // produces above.
+    let html = run_piped(
+        &[
+            "adoc",
+            "-S",
+            "safe",
+            "-a",
+            &format!("docdir={dir_str}"),
+            "-",
+        ],
+        "= Doc\n\ninclude::part.adoc[]\n",
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(html.contains("Included via docdir."), "{html}");
+}
 
 // The `-e`/`--embedded` embeddable-output mode: `adoc -e` writes just the
 // converted body, and `-a showtitle` adds the doctitle back as a leading
