@@ -1,0 +1,68 @@
+= Specify an Output File
+:navtitle: Specify an Output File
+:description: How to choose the output file or directory for the HTML5 that the adoc command writes.
+
+By default, the `adoc` command writes the converted HTML5 to the same directory
+as the input file, deriving the output file name from the input by replacing its
+file extension with `.html`. So `adoc mydoc.adoc` writes [.path]_mydoc.html_
+alongside the input.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+You can instruct `adoc` to write the output to a different file or directory.
+That is useful when you want to give the output a different name (perhaps
+appending a version string), write it to a different directory, or capture piped
+content, which has no input file name to derive an output name from.
+
+== Name the output file
+
+To choose the output file, use the `-o` (longhand `--output`) option. For
+example, to convert [.path]_mydoc.adoc_ and write the output to a name that
+includes a version string:
+
+ $ adoc -o mydoc-v2.html mydoc.adoc
+
+You can write it to another directory by prefixing the output file with a folder
+name; `adoc` creates the directory if it does not exist:
+
+ $ adoc -o build/mydoc-v2.html mydoc.adoc
+
+[CAUTION]
+====
+If you specify the output file as a relative path, it is resolved relative to the
+current working directory, not the directory of the input file. Specifying the
+output file therefore also sets the directory that companion files (such as a
+linked stylesheet) are written to.
+====
+
+== Set the output directory
+
+If you only want to choose the output directory and let the file name default,
+use the `-D` (longhand `--destination-dir`) option. `adoc` writes the derived
+`.html` name into that directory, creating it if necessary:
+
+ $ adoc -D build mydoc.adoc
+
+When you also pass `-o` with a relative path, it is resolved inside the `-D`
+directory; an absolute `-o` path is used unchanged.
+
+`-D` also applies when you xref:cli:process-multiple-files.adoc[convert several
+files at once]: each input's derived `.html` name is written into the destination
+directory. So this command converts every `.adoc` file in the current directory
+into [.path]_build_:
+
+ $ adoc -D build '*.adoc'
+
+== Write a file when piping
+
+When you pipe content to `adoc`, the default is to write the output to standard
+output (STDOUT). To write to a file in that case, you have to name one with `-o`:
+
+ $ cat mydoc.adoc | adoc -o build/mydoc.html -
+
+See xref:io-piping.adoc[] to learn more.
