@@ -1,19 +1,18 @@
 //! Port of Asciidoctor's `paragraphs_test.rb`.
 //!
-//! This crate renders normal, literal, and listing paragraphs — including their
-//! block titles, the `[normal]` style that strips a literal paragraph's indent,
-//! `[subs=…]` overrides, `[%hardbreaks]`, and the way each terminates at a
-//! block attribute list or a list continuation — so those tests port directly,
-//! driven through `convert` (embedded, the counterpart to
-//! `convert_string_to_embedded`) or `convert_with(..standalone(true)..)` (the
-//! counterpart to `convert_string`).
+//! This crate renders normal, literal, listing, source, open, quote, verse, and
+//! admonition paragraphs, so those tests port directly, driven through
+//! `convert` (embedded, the counterpart to `convert_string_to_embedded`) or
+//! `convert_with(..standalone(true)..)` (the counterpart to `convert_string`).
 //!
-//! Kept `non_normative!` are the tests for constructs this crate does not
-//! render yet — open blocks, quote/verse blocks, admonitions, sidebars, and
-//! styled open paragraphs — the DocBook-backend tests (this crate targets only
-//! the `html5` backend), the source-highlighting structure (`<pre
-//! class="highlight"><code>`) and its parser-model assertions, the inline
-//! doctype, and the logging-behavior tests (this crate has no logger).
+//! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
+//! DocBook-backend tests (this crate targets only the `html5` backend); the
+//! verse escaped-brace subs test (`\{` is not unescaped by `asciidoc-parser`
+//! yet); the preprocessor-conditional test (it needs `ifdef` handling and the
+//! `asciidoctor-version` attribute); the inline doctype; and the custom-style
+//! logging tests (this crate has no logger). The `[source]` parser-model
+//! assertions (`block_from_string`) test `asciidoc-parser` internals; only the
+//! rendered HTML of those tests is re-expressed here.
 
 use crate::{
     convert, convert_with,
@@ -268,10 +267,10 @@ mod normal {
         assert_css(&html, ".literalblock:root", 1);
     }
 
-    // The renderer does not yet render open blocks (`--`), so it cannot show a
-    // normal paragraph terminating at one.
-    non_normative!(
-        r#"
+    #[test]
+    fn normal_paragraph_terminates_at_block_delimiter() {
+        verifies!(
+            r#"
     test 'normal paragraph terminates at block delimiter' do
       input = <<~'EOS'
       normal text
@@ -285,7 +284,12 @@ mod normal {
     end
 
 "#
-    );
+        );
+
+        let html = convert("normal text\n--\ntext in open block\n--\n");
+        assert_css(&html, ".paragraph:root", 1);
+        assert_css(&html, ".openblock:root", 1);
+    }
 
     #[test]
     fn normal_paragraph_terminates_at_list_continuation() {
@@ -660,11 +664,10 @@ mod literal {
         );
     }
 
-    // The `[source]` tests assert both parser-model attributes and the
-    // syntax-highlighting structure (`<pre class="highlight"><code>`); this
-    // crate renders a source paragraph as a plain listing block.
-    non_normative!(
-        r#"
+    #[test]
+    fn source_paragraph() {
+        verifies!(
+            r#"
     test 'source paragraph' do
       input = <<~'EOS'
       [source]
@@ -679,6 +682,23 @@ mod literal {
       assert_xpath %(/*[@class="listingblock"]//pre[@class="highlight"]/code[text()="use the source, luke!"]), output, 1
     end
 
+"#
+        );
+
+        // The `block_from_string` parser-model assertions test `asciidoc-parser`
+        // internals, not this crate; only the HTML output is re-expressed here.
+        let html = convert("[source]\nuse the source, luke!\n");
+        assert_xpath(
+            &html,
+            r#"/*[@class="listingblock"]//pre[@class="highlight"]/code[text()="use the source, luke!"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn source_code_paragraph_with_language() {
+        verifies!(
+            r#"
     test 'source code paragraph with language' do
       input = <<~'EOS'
       [source, perl]
@@ -694,7 +714,17 @@ mod literal {
     end
 
 "#
-    );
+        );
+
+        // As above, only the rendered HTML is checked, not the parser-model
+        // attributes the Ruby test also asserts.
+        let html = convert("[source, perl]\ndie 'zomg perl is tough';\n");
+        assert_xpath(
+            &html,
+            r#"/*[@class="listingblock"]//pre[@class="highlight"]/code[@class="language-perl"][@data-lang="perl"][text()="die 'zomg perl is tough';"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn literal_paragraph_terminates_at_block_attribute_list() {
@@ -720,10 +750,10 @@ mod literal {
         assert_xpath(&html, r#"/*[@class="paragraph"]"#, 1);
     }
 
-    // Terminating at an open block delimiter needs open-block rendering, which
-    // this crate does not do yet.
-    non_normative!(
-        r#"
+    #[test]
+    fn literal_paragraph_terminates_at_block_delimiter() {
+        verifies!(
+            r#"
     test 'literal paragraph terminates at block delimiter' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -738,7 +768,12 @@ mod literal {
     end
 
 "#
-    );
+        );
+
+        let html = convert(" literal text\n--\nnormal text\n--\n");
+        assert_xpath(&html, r#"/*[@class="literalblock"]"#, 1);
+        assert_xpath(&html, r#"/*[@class="openblock"]"#, 1);
+    }
 
     #[test]
     fn literal_paragraph_terminates_at_list_continuation() {
@@ -778,14 +813,19 @@ mod literal {
     );
 }
 
-// Quote and verse paragraphs are not rendered yet (they emit an `unsupported`
-// placeholder), so every test in this context stays non-normative.
 mod quote {
     use super::*;
 
     non_normative!(
-        r##"
+        r#"
   context 'Quote' do
+"#
+    );
+
+    #[test]
+    fn single_line_quote_paragraph() {
+        verifies!(
+            r#"
     test "single-line quote paragraph" do
       input = <<~'EOS'
       [quote]
@@ -797,6 +837,23 @@ mod quote {
       assert_xpath '//*[@class = "quoteblock"]//*[contains(text(), "Famous quote.")]', output, 1
     end
 
+"#
+        );
+
+        let html = convert_with("[quote]\nFamous quote.\n", &Options::new().standalone(true));
+        assert_xpath(&html, r#"//*[@class = "quoteblock"]"#, 1);
+        assert_xpath(&html, r#"//*[@class = "quoteblock"]//p"#, 0);
+        assert_xpath(
+            &html,
+            r#"//*[@class = "quoteblock"]//*[contains(text(), "Famous quote.")]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn quote_paragraph_terminates_at_list_continuation() {
+        verifies!(
+            r#"
     test 'quote paragraph terminates at list continuation' do
       input = <<~'EOS'
       [quote]
@@ -809,6 +866,19 @@ mod quote {
       assert_xpath %(/*[@class="paragraph"]/p[text() = "+"]), output, 1
     end
 
+"#
+        );
+
+        let html = convert("[quote]\nA famouse quote.\n+\n");
+        assert_css(&html, ".quoteblock:root", 1);
+        assert_css(&html, ".paragraph:root", 1);
+        assert_xpath(&html, r#"/*[@class="paragraph"]/p[text() = "+"]"#, 1);
+    }
+
+    #[test]
+    fn verse_paragraph() {
+        verifies!(
+            r#"
     test "verse paragraph" do
       output = convert_string("[verse]\nFamous verse.")
       assert_xpath '//*[@class = "verseblock"]', output, 1
@@ -817,6 +887,24 @@ mod quote {
       assert_xpath '//*[@class = "verseblock"]/pre[normalize-space(text()) = "Famous verse."]', output, 1
     end
 
+"#
+        );
+
+        let html = convert_with("[verse]\nFamous verse.", &Options::new().standalone(true));
+        assert_xpath(&html, r#"//*[@class = "verseblock"]"#, 1);
+        assert_xpath(&html, r#"//*[@class = "verseblock"]/pre"#, 1);
+        assert_xpath(&html, r#"//*[@class = "verseblock"]//p"#, 0);
+        assert_xpath(
+            &html,
+            r#"//*[@class = "verseblock"]/pre[normalize-space(text()) = "Famous verse."]"#,
+            1,
+        );
+    }
+
+    // `\{group-id\}` should render as `{group-id}`, but `asciidoc-parser` does
+    // not yet unescape `\{`, so the expected substitution output differs.
+    non_normative!(
+        r##"
     test 'should perform normal subs on a verse paragraph' do
       input = <<~'EOS'
       [verse]
@@ -827,6 +915,13 @@ mod quote {
       assert_includes output, '<pre class="content"><em>GET /groups/<a href="#group-id">{group-id}</a></em></pre>'
     end
 
+"##
+    );
+
+    #[test]
+    fn quote_paragraph_should_honor_explicit_subs_list() {
+        verifies!(
+            r#"
     test 'quote paragraph should honor explicit subs list' do
       input = <<~'EOS'
       [subs="specialcharacters"]
@@ -837,38 +932,109 @@ mod quote {
       output = convert_string_to_embedded input
       assert_includes output, '*Hey Jude*'
     end
+"#
+        );
+
+        let html = convert("[subs=\"specialcharacters\"]\n[quote]\n*Hey Jude*\n");
+        assert!(html.contains("*Hey Jude*"));
+    }
+
+    non_normative!(
+        r#"
   end
 
-"##
+"#
     );
 }
 
 mod special {
     use super::*;
 
-    // Admonitions, sidebars, and preprocessor conditionals are not rendered
-    // yet.
+    // Asciidoctor::ADMONITION_STYLES, as (style, css-name) pairs.
+    const ADMONITION_STYLES: [(&str, &str); 5] = [
+        ("NOTE", "note"),
+        ("TIP", "tip"),
+        ("IMPORTANT", "important"),
+        ("WARNING", "warning"),
+        ("CAUTION", "caution"),
+    ];
+
     non_normative!(
-        r##"
+        r#"
   context "special" do
+"#
+    );
+
+    #[test]
+    fn note_multiline_syntax() {
+        verifies!(
+            r#"
     test "note multiline syntax" do
       Asciidoctor::ADMONITION_STYLES.each do |style|
         assert_xpath "//div[@class='admonitionblock #{style.downcase}']", convert_string("[#{style}]\nThis is a winner.")
       end
     end
 
+"#
+        );
+
+        for (style, name) in ADMONITION_STYLES {
+            let html = convert_with(
+                &format!("[{style}]\nThis is a winner."),
+                &Options::new().standalone(true),
+            );
+            assert_xpath(&html, &format!("//div[@class='admonitionblock {name}']"), 1);
+        }
+    }
+
+    #[test]
+    fn note_block_syntax() {
+        verifies!(
+            r#"
     test "note block syntax" do
       Asciidoctor::ADMONITION_STYLES.each do |style|
         assert_xpath "//div[@class='admonitionblock #{style.downcase}']", convert_string("[#{style}]\n====\nThis is a winner.\n====")
       end
     end
 
+"#
+        );
+
+        for (style, name) in ADMONITION_STYLES {
+            let html = convert_with(
+                &format!("[{style}]\n====\nThis is a winner.\n===="),
+                &Options::new().standalone(true),
+            );
+            assert_xpath(&html, &format!("//div[@class='admonitionblock {name}']"), 1);
+        }
+    }
+
+    #[test]
+    fn note_inline_syntax() {
+        verifies!(
+            r##"
     test "note inline syntax" do
       Asciidoctor::ADMONITION_STYLES.each do |style|
         assert_xpath "//div[@class='admonitionblock #{style.downcase}']", convert_string("#{style}: This is important, fool!")
       end
     end
 
+"##
+        );
+
+        for (style, name) in ADMONITION_STYLES {
+            let html = convert_with(
+                &format!("{style}: This is important, fool!"),
+                &Options::new().standalone(true),
+            );
+            assert_xpath(&html, &format!("//div[@class='admonitionblock {name}']"), 1);
+        }
+    }
+
+    // Requires `ifdef` preprocessing and the `asciidoctor-version` attribute,
+    // neither of which this stack provides.
+    non_normative!(
+        r#"
     test 'should process preprocessor conditional in paragraph content' do
       input = <<~'EOS'
       ifdef::asciidoctor-version[]
@@ -893,14 +1059,13 @@ mod special {
       assert_equal expected, result
     end
 
-"##
+"#
     );
 
-    // Styled paragraphs assert DocBook output and open-block conversion, both
-    // out of scope here.
     mod styled_paragraphs {
         use super::*;
 
+        // DocBook output is out of scope.
         non_normative!(
             r#"
     context 'Styled Paragraphs' do
@@ -944,6 +1109,13 @@ mod special {
         assert_css 'chapter > simpara', output, 1
       end
 
+"#
+        );
+
+        #[test]
+        fn should_convert_open_paragraph_to_open_block() {
+            verifies!(
+                r#"
       test 'should convert open paragraph to open block' do
         input = <<~'EOS'
         [open]
@@ -955,6 +1127,17 @@ mod special {
         assert_css '.openblock p', output, 0
       end
 
+"#
+            );
+
+            let html = convert("[open]\nMake it what you want.\n");
+            assert_css(&html, ".openblock", 1);
+            assert_css(&html, ".openblock p", 0);
+        }
+
+        // DocBook output is out of scope.
+        non_normative!(
+            r#"
       test 'should wrap text in simpara for styled paragraphs with title when converted to DocBook' do
         input = <<~'EOS'
         = Book
@@ -1005,6 +1188,11 @@ mod special {
         assert_xpath '//blockquote/title[text() = "Quote title"]', output, 1
         assert_css 'blockquote > title + simpara', output, 1
       end
+"#
+        );
+
+        non_normative!(
+            r#"
     end
 
 "#

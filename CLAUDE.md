@@ -64,10 +64,11 @@ cat input.adoc | cargo run --bin adoc          # read from stdin, write to stdou
 ```
 
 > Note: the renderer is at an early **baseline** — it renders the document
-> skeleton, header, paragraphs, sections, the preamble, verbatim blocks, and
-> thematic and page breaks; other constructs emit a visible `<!-- unsupported … -->`
-> comment for now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the
-> design and roadmap.
+> skeleton, header, paragraphs, sections, the preamble, verbatim blocks (listing,
+> literal, source), open/quote/verse/admonition blocks, and thematic and page
+> breaks; other constructs emit a visible `<!-- unsupported … -->` comment for
+> now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the design and
+> roadmap.
 
 ## Porting an Asciidoctor doc page ("page port")
 

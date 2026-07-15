@@ -28,7 +28,10 @@
 use std::slice::Iter;
 
 use asciidoc_parser::{
-    blocks::{Block, Break, BreakType, IsBlock, SectionBlock, SectionType, SimpleBlockStyle},
+    blocks::{
+        AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel, IsBlock,
+        QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
+    },
     document::{DocinfoLocation, Header, InterpretedValue},
     Document, SafeMode,
 };
@@ -625,10 +628,15 @@ impl Renderer<'_> {
     fn block<'src>(&mut self, block: &'src Block<'src>) {
         match block {
             Block::Simple(simple) => match simple.style() {
-                SimpleBlockStyle::Paragraph => self.paragraph(block),
-                SimpleBlockStyle::Listing | SimpleBlockStyle::Source => {
-                    self.verbatim(block, "listingblock")
-                }
+                // A styled paragraph can convert to a different block: `[open]`
+                // over a paragraph becomes an open block (an empty content div
+                // around the paragraph's text).
+                SimpleBlockStyle::Paragraph => match block.declared_style() {
+                    Some("open") => self.open_block(block),
+                    _ => self.paragraph(block),
+                },
+                SimpleBlockStyle::Listing => self.verbatim(block, "listingblock"),
+                SimpleBlockStyle::Source => self.source(block),
                 SimpleBlockStyle::Literal => self.verbatim(block, "literalblock"),
             },
             Block::Section(section) => self.section(block, section),
@@ -639,6 +647,12 @@ impl Renderer<'_> {
                 "literal" => self.verbatim(block, "literalblock"),
                 other => self.unsupported(other),
             },
+            Block::CompoundDelimited(compound) => match compound.context_kind() {
+                CompoundDelimitedContext::Open => self.open_block(block),
+                other => self.unsupported(other.as_str()),
+            },
+            Block::Quote(quote) => self.quote(block, quote),
+            Block::Admonition(admonition) => self.admonition(block, admonition),
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -668,6 +682,149 @@ impl Renderer<'_> {
         self.line(&format!("<pre>{content}</pre>"));
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// A source block: like a listing block, but the `<pre>` carries the
+    /// `highlight` class and wraps the code in a `<code>` element that names
+    /// the language (`class="language-…" data-lang="…"`) when one is
+    /// declared. This matches Asciidoctor's default output even when no
+    /// syntax highlighter is active.
+    fn source<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "listingblock");
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        let content = block.rendered_content().unwrap_or_default();
+
+        // The language is the second positional attribute of `[source, lang]`
+        // (the first is the `source` style itself), or an explicit `language=`.
+        let language = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_or_positional_attribute("language", 2))
+            .map(|attr| attr.value());
+
+        match language {
+            Some(language) => {
+                let language = escape_attribute(language);
+                self.line(&format!(
+                    "<pre class=\"highlight\"><code class=\"language-{language}\" \
+                     data-lang=\"{language}\">{content}</code></pre>"
+                ));
+            }
+            None => self.line(&format!(
+                "<pre class=\"highlight\"><code>{content}</code></pre>"
+            )),
+        }
+
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// An open block: `<div class="openblock"><div
+    /// class="content">…</div></div>`. Used for the `--` delimited form and for
+    /// a paragraph carrying the `[open]` style.
+    fn open_block<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "openblock");
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+        self.wrapped_content(block);
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// A quote block (`<div
+    /// class="quoteblock"><blockquote>…</blockquote>…</div>`) or a verse
+    /// block (`<div class="verseblock"><pre class="content">…</pre>…</
+    /// div>`), distinguished by the block's quote type. A verse preserves
+    /// line breaks inside a `<pre>`; a quote wraps prose in a
+    /// `<blockquote>`. Both render an optional attribution footer.
+    fn quote<'src>(&mut self, block: &'src Block<'src>, quote: &'src QuoteBlock<'src>) {
+        match quote.type_() {
+            QuoteType::Quote => {
+                self.open_block_wrapper(block, "quoteblock");
+                self.block_title(block);
+                self.line("<blockquote>");
+                self.wrapped_content(block);
+                self.line("</blockquote>");
+            }
+            QuoteType::Verse => {
+                self.open_block_wrapper(block, "verseblock");
+                self.block_title(block);
+                let content = block.rendered_content().unwrap_or_default();
+                self.line(&format!("<pre class=\"content\">{content}</pre>"));
+            }
+        }
+
+        self.attribution(quote);
+        self.line("</div>");
+    }
+
+    /// The `<div class="attribution">` footer of a quote or verse block,
+    /// emitted only when an attribution or citation title is present.
+    fn attribution(&mut self, quote: &QuoteBlock<'_>) {
+        let attribution = quote.attribution();
+        let citetitle = quote.citetitle();
+        if attribution.is_none() && citetitle.is_none() {
+            return;
+        }
+
+        self.line("<div class=\"attribution\">");
+        match (attribution, citetitle) {
+            (Some(attribution), Some(citetitle)) => {
+                self.line(&format!("&#8212; {attribution}<br>"));
+                self.line(&format!("<cite>{citetitle}</cite>"));
+            }
+            (Some(attribution), None) => self.line(&format!("&#8212; {attribution}")),
+            (None, Some(citetitle)) => self.line(&format!("<cite>{citetitle}</cite>")),
+            (None, None) => unreachable!(),
+        }
+        self.line("</div>");
+    }
+
+    /// An admonition block: Asciidoctor's icon-less default renders a two-cell
+    /// table, the first cell holding the caption label and the second the
+    /// content, wrapped in `<div class="admonitionblock <name>">`.
+    fn admonition<'src>(
+        &mut self,
+        block: &'src Block<'src>,
+        admonition: &'src AdmonitionBlock<'src>,
+    ) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(
+                &format!("admonitionblock {}", admonition.name()),
+                &block.roles()
+            )
+        ));
+        self.line("<table>");
+        self.line("<tr>");
+        self.line("<td class=\"icon\">");
+        self.line(&format!(
+            "<div class=\"title\">{}</div>",
+            admonition.label()
+        ));
+        self.line("</td>");
+        self.line("<td class=\"content\">");
+        self.block_title(block);
+        self.wrapped_content(block);
+        self.line("</td>");
+        self.line("</tr>");
+        self.line("</table>");
+        self.line("</div>");
+    }
+
+    /// Emits the inner content shared by wrapper blocks (open, quote,
+    /// admonition): a compound block recurses over its nested blocks, while a
+    /// simple block emits its rendered content on its own line, unwrapped (no
+    /// `<p>`), matching Asciidoctor.
+    fn wrapped_content<'src>(&mut self, block: &'src Block<'src>) {
+        if block.content_model() == ContentModel::Compound {
+            self.blocks(block.nested_blocks());
+        } else {
+            let content = block.rendered_content().unwrap_or_default();
+            self.line(content);
+        }
     }
 
     /// A section: `<div class="sectN"><hM id>title</hM>…</div>`. Level-1
@@ -1082,6 +1239,87 @@ mod tests {
     fn delimited_passthrough_is_unsupported_for_now() {
         let html = convert("++++\nraw\n++++");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
+    }
+
+    // The block shapes below are byte-checked against Asciidoctor 2.0.26's
+    // default `html5` output (the parity oracle).
+
+    #[test]
+    fn source_block_wraps_code_in_a_highlight_pre() {
+        let html = convert("[source]\nuse the source, luke!");
+        assert!(html.contains(
+            "<div class=\"listingblock\">\n<div class=\"content\">\n\
+             <pre class=\"highlight\"><code>use the source, luke!</code></pre>\n\
+             </div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn source_block_names_its_language() {
+        let html = convert("[source, perl]\ndie 'zomg perl is tough';");
+        assert!(html.contains(
+            "<pre class=\"highlight\"><code class=\"language-perl\" data-lang=\"perl\">\
+             die 'zomg perl is tough';</code></pre>"
+        ));
+    }
+
+    #[test]
+    fn open_paragraph_and_delimited_open_block_render() {
+        let paragraph = convert("[open]\nMake it what you want.");
+        assert!(paragraph.contains(
+            "<div class=\"openblock\">\n<div class=\"content\">\n\
+             Make it what you want.\n</div>\n</div>"
+        ));
+        let delimited = convert("--\ntext in open block\n--");
+        assert!(delimited.contains(
+            "<div class=\"openblock\">\n<div class=\"content\">\n\
+             <div class=\"paragraph\">\n<p>text in open block</p>\n</div>\n</div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn quote_paragraph_renders_a_blockquote() {
+        let html = convert("[quote]\nFamous quote.");
+        assert!(html.contains(
+            "<div class=\"quoteblock\">\n<blockquote>\nFamous quote.\n</blockquote>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn quote_renders_its_attribution_footer() {
+        let html = convert("[quote,Albert Einstein,Sidebar]\nA clever quote.");
+        assert!(html.contains(
+            "<blockquote>\nA clever quote.\n</blockquote>\n\
+             <div class=\"attribution\">\n&#8212; Albert Einstein<br>\n\
+             <cite>Sidebar</cite>\n</div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn verse_paragraph_preserves_content_in_a_pre() {
+        let html = convert("[verse]\nFamous verse.");
+        assert!(html.contains(
+            "<div class=\"verseblock\">\n<pre class=\"content\">Famous verse.</pre>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn admonition_renders_the_icon_less_table() {
+        let html = convert("NOTE: This is important, fool!");
+        assert!(html.contains(
+            "<div class=\"admonitionblock note\">\n<table>\n<tr>\n\
+             <td class=\"icon\">\n<div class=\"title\">Note</div>\n</td>\n\
+             <td class=\"content\">\nThis is important, fool!\n</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn admonition_wraps_compound_content() {
+        let html = convert("[NOTE]\n====\nThis is a winner.\n====");
+        assert!(html.contains(
+            "<td class=\"content\">\n<div class=\"paragraph\">\n<p>This is a winner.</p>\n\
+             </div>\n</td>"
+        ));
     }
 
     #[test]

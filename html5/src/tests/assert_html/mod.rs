@@ -243,6 +243,30 @@ mod tests {
     }
 
     #[test]
+    fn xpath_contains_and_normalize_space_text() {
+        let html = r#"<div class="quoteblock"><blockquote>
+Famous quote.
+</blockquote></div>
+<div class="verseblock"><pre class="content">Famous   verse.</pre></div>"#;
+        // `contains(text(), …)` matches an element whose direct text includes
+        // the substring (the blockquote's text has surrounding newlines).
+        assert_xpath(
+            html,
+            r#"//*[@class="quoteblock"]//*[contains(text(), "Famous quote.")]"#,
+            1,
+        );
+        assert_xpath(html, r#"//blockquote[contains(text(), "nope")]"#, 0);
+        // `normalize-space(text())` collapses internal whitespace before the
+        // comparison.
+        assert_xpath(
+            html,
+            r#"//pre[normalize-space(text()) = "Famous verse."]"#,
+            1,
+        );
+        assert_xpath(html, r#"//pre[text() = "Famous verse."]"#, 0);
+    }
+
+    #[test]
     fn css_root_matches_fragment_top_level() {
         // `:root` pins to a fragment's top-level elements, mirroring Nokogiri —
         // `scraper`'s wrapper `<html>` would otherwise make it match nothing.
@@ -298,9 +322,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "unsupported XPath predicate")]
     fn xpath_unsupported_predicate_panics() {
-        // `contains(...)` is not implemented; it must fail loudly, not be
+        // `starts-with(...)` is not implemented; it must fail loudly, not be
         // silently ignored (which would drop the predicate and over-match).
-        assert_xpath(FRAGMENT, r#"//p[contains(text(),"Pre")]"#, 1);
+        assert_xpath(FRAGMENT, r#"//p[starts-with(text(),"Pre")]"#, 1);
     }
 
     #[test]

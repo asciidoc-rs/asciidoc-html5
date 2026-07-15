@@ -11,7 +11,8 @@
 //! - `foo/preceding::tag`, `foo/following::tag` — the general document-order
 //!   axes (excluding ancestors / descendants respectively)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
-//!   `[text()="x"]`, and the positional `[N]` (1-indexed, per context node)
+//!   `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) =
+//!   "x"]`, and the positional `[N]` (1-indexed, per context node)
 //! - a leading grouped path `(subpath)[N]…/rest` — the parenthesized subpath is
 //!   evaluated first, then a positional predicate on the *group* selects the
 //!   Nth match in document order across the whole set (not per context, the way
@@ -332,6 +333,8 @@ enum Pred {
     Attr(String, String),
     AttrExists(String),
     Text(String),
+    ContainsText(String),
+    NormalizeSpaceText(String),
 }
 
 impl Pred {
@@ -352,8 +355,23 @@ impl Pred {
                 _ => node.attributes.contains_key(k),
             },
             Pred::Text(v) => node.text.as_deref() == Some(v.as_str()),
+            // `contains(text(), "v")`: the element's direct text contains `v`.
+            Pred::ContainsText(v) => node.text.as_deref().is_some_and(|t| t.contains(v.as_str())),
+            // `normalize-space(text()) = "v"`: the element's direct text, with
+            // leading/trailing whitespace trimmed and internal runs collapsed to
+            // a single space, equals `v`.
+            Pred::NormalizeSpaceText(v) => node
+                .text
+                .as_deref()
+                .is_some_and(|t| normalize_space(t) == *v),
         }
     }
+}
+
+/// Collapses each run of whitespace in `s` to a single space and trims the
+/// ends, mirroring XPath's `normalize-space()`.
+fn normalize_space(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// One location step: an axis, a node test, its (non-positional) predicates,
@@ -560,6 +578,28 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
     if let Some(after) = inner.strip_prefix("text()") {
         if let Some(value) = after.trim_start().strip_prefix('=') {
             preds.push(Pred::Text(unquote(value.trim())));
+            return;
+        }
+    }
+
+    if let Some(args) = inner.strip_prefix("contains(") {
+        let args = args
+            .strip_suffix(')')
+            .unwrap_or_else(|| panic!("malformed `contains(…)` predicate `[{inner}]`"));
+        let (target, value) = args
+            .split_once(',')
+            .unwrap_or_else(|| panic!("`contains(…)` needs two arguments in `[{inner}]`"));
+        assert!(
+            target.trim() == "text()",
+            "assert_html `contains()` supports only `text()` as its first argument (got `[{inner}]`)"
+        );
+        preds.push(Pred::ContainsText(unquote(value.trim())));
+        return;
+    }
+
+    if let Some(after) = inner.strip_prefix("normalize-space(text())") {
+        if let Some(value) = after.trim_start().strip_prefix('=') {
+            preds.push(Pred::NormalizeSpaceText(unquote(value.trim())));
             return;
         }
     }
