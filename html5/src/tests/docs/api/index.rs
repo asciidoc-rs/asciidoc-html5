@@ -200,8 +200,9 @@ frame -- ready to drop into a surrounding template. The file entry point
 To choose the mode explicitly, set it on the `Options` and convert with a `_with`
 entry point: `Options::standalone(true)` forces a complete document, and
 `Options::embedded(true)` forces body-only output. When a document title is
-present, embedded output includes its `<h1>` only if the `showtitle` attribute is
-set.
+present, embedded output includes its `<h1>` only when the title is enabled --
+by setting `showtitle`, or equivalently by unsetting `notitle`, which Asciidoctor
+links to `showtitle` as its inverse.
 
 "#
     );
@@ -227,9 +228,12 @@ set.
     let forced_embedded = convert_with("= Doc\n\nBody.", &Options::new().embedded(true));
     assert!(!forced_embedded.starts_with("<!DOCTYPE html>"));
 
-    // Embedded output shows the doctitle `<h1>` only under `showtitle`.
+    // Embedded output shows the doctitle `<h1>` only when the title is enabled:
+    // by `showtitle`, or equivalently by unsetting `notitle` (its inverse).
     let with_title = convert_with("= Doc\n\nBody.", &Options::new().set("showtitle"));
     assert!(with_title.contains("<h1>Doc</h1>"));
+    let via_notitle = convert_with("= Doc\n\nBody.", &Options::new().unset("notitle"));
+    assert!(via_notitle.contains("<h1>Doc</h1>"));
     let without_title = convert("= Doc\n\nBody.");
     assert!(!without_title.contains("<h1>"));
 }
