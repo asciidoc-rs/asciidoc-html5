@@ -616,17 +616,33 @@ impl Options {
     }
 
     /// The base directory that anchors include and docinfo resolution, or
-    /// `None` when there is nothing to anchor (neither a base directory nor
-    /// a primary file).
+    /// `None` when there is nothing to anchor (no base directory, no explicit
+    /// `docdir`, and no primary file).
     ///
-    /// An explicit [`base_dir`](Self::base_dir) wins; otherwise the primary
-    /// file's directory is used (an empty directory component — a bare file
-    /// name — means the current directory). The result is canonicalized when it
-    /// exists on disk, so the handler's jail comparisons and the primary file's
-    /// name share one absolute form.
+    /// An explicit [`base_dir`](Self::base_dir) (Asciidoctor's `-B`) wins;
+    /// failing that, a caller-supplied `docdir` attribute (Asciidoctor's
+    /// `-a docdir=…`) seeds the base directory, so a piped or string document
+    /// with no file on disk can still resolve relative `include::` targets;
+    /// failing both, the primary file's directory is used (an empty directory
+    /// component — a bare file name — means the current directory). The result
+    /// is canonicalized when it exists on disk, so the handler's jail
+    /// comparisons and the primary file's name share one absolute form.
+    ///
+    /// `-B` outranking `docdir` mirrors Asciidoctor, which resolves the base
+    /// directory from the `base_dir` option first and only falls back to the
+    /// `docdir` attribute when that option is absent.
     pub(crate) fn effective_base_dir(&self) -> Option<PathBuf> {
         if let Some(base) = &self.base_dir {
             return Some(canonicalize_or(base));
+        }
+
+        // With no explicit base directory, an explicitly set `docdir` attribute
+        // stands in for it — the same attribute this crate otherwise *derives*
+        // from the base directory. This closes Asciidoctor's second route for
+        // fixing include resolution when piping (`-a docdir=/abs/dir`), which
+        // Asciidoctor treats as equivalent to `-B /abs/dir`.
+        if let Some(docdir) = self.last_value("docdir") {
+            return Some(canonicalize_or(Path::new(docdir)));
         }
 
         let primary = self.primary_file.as_deref()?;
@@ -1247,6 +1263,63 @@ mod tests {
         );
 
         assert!(html.contains("<p>dir=virtual/directory</p>"), "{html}");
+    }
+
+    #[test]
+    fn a_caller_supplied_docdir_resolves_relative_includes() {
+        // With no primary file and no base directory, an explicitly set
+        // `docdir` anchors a relative `include::` target — Asciidoctor's second
+        // route (`-a docdir=/abs/dir`) for fixing include resolution when
+        // piping, treated as equivalent to a base directory.
+        let dir = std::env::temp_dir().join(format!(
+            "adoc-options-docdir-include-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create docdir");
+        std::fs::write(dir.join("part.adoc"), "Included body text.\n").expect("write include");
+
+        let html = convert_with(
+            "= Doc\n\ninclude::part.adoc[]\n",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .attribute("docdir", dir.to_string_lossy()),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(html.contains("Included body text."), "{html}");
+    }
+
+    #[test]
+    fn an_explicit_base_dir_outranks_docdir_for_includes() {
+        // When both are supplied, the base directory (`-B`) wins over `docdir`,
+        // mirroring Asciidoctor's resolution order: the `base_dir` option first,
+        // the `docdir` attribute only as a fallback. Each directory holds a
+        // different `part.adoc`, so the resolved include reveals which won.
+        let base =
+            std::env::temp_dir().join(format!("adoc-options-basedir-{}", std::process::id()));
+        let doc = std::env::temp_dir().join(format!("adoc-options-docdir-{}", std::process::id()));
+        for dir in [&base, &doc] {
+            let _ = std::fs::remove_dir_all(dir);
+            std::fs::create_dir_all(dir).expect("create dir");
+        }
+        std::fs::write(base.join("part.adoc"), "From base directory.\n")
+            .expect("write base include");
+        std::fs::write(doc.join("part.adoc"), "From docdir.\n").expect("write docdir include");
+
+        let html = convert_with(
+            "= Doc\n\ninclude::part.adoc[]\n",
+            &Options::new()
+                .safe_mode(SafeMode::Safe)
+                .base_dir(base.clone())
+                .attribute("docdir", doc.to_string_lossy()),
+        );
+        for dir in [&base, &doc] {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+
+        assert!(html.contains("From base directory."), "{html}");
+        assert!(!html.contains("From docdir."), "{html}");
     }
 
     #[test]
