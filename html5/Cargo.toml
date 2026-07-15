@@ -12,3 +12,6 @@ version.workspace = true
 
 [dependencies]
 asciidoc-parser.workspace = true
+
+[dev-dependencies]
+scraper.workspace = true
