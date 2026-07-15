@@ -55,14 +55,27 @@ impl VirtualNode {
 }
 
 /// Projects a parsed `scraper` document into a [`VirtualNode`] tree rooted at a
-/// synthetic `#root`, whose sole child is the document's root `<html>` element.
+/// synthetic `#root`.
 ///
 /// Anchoring queries at `#root` means a leading-`//` XPath (a descendant
 /// search) sees every element in the document, matching how Asciidoctor's tests
 /// query a parsed fragment.
-pub(super) fn from_html(html: &Html) -> VirtualNode {
+///
+/// `is_fragment` distinguishes the two parses because `scraper` wraps a parsed
+/// fragment in a synthetic `<html>`, whereas Nokogiri — the oracle — models a
+/// fragment with no wrapper, so its top-level elements *are* the document
+/// roots. For a fragment we therefore hoist the wrapper's children directly
+/// under `#root`, so a leading-`/` XPath (a child step from the root) matches
+/// the fragment's top-level elements the way Nokogiri does. For a full document
+/// the `<html>` element is the real root and stays in place.
+pub(super) fn from_html(html: &Html, is_fragment: bool) -> VirtualNode {
     let mut root = VirtualNode::new("#root");
-    root.children.push(convert(html.root_element()));
+    let document_element = convert(html.root_element());
+    if is_fragment {
+        root.children = document_element.children;
+    } else {
+        root.children.push(document_element);
+    }
     root
 }
 

@@ -12,6 +12,11 @@
 //!   axes (excluding ancestors / descendants respectively)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
 //!   `[text()="x"]`, and the positional `[N]` (1-indexed, per context node)
+//! - a leading grouped path `(subpath)[N]…/rest` — the parenthesized subpath is
+//!   evaluated first, then a positional predicate on the *group* selects the
+//!   Nth match in document order across the whole set (not per context, the way
+//!   a bare `//tag[N]` does), optionally followed by filter predicates and a
+//!   trailing relative path
 //!
 //! Anything outside this subset (the `ancestor::`/`descendant::` named axes,
 //! boolean `count(...)` expressions, `normalize-space()`, `contains()`, …) is
@@ -33,10 +38,95 @@ use super::dom::VirtualNode;
 /// Evaluates `path` against `root`, returning the matched nodes in document
 /// order with duplicates removed.
 pub(super) fn query<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNode> {
-    let steps = parse_path(path);
-    let mut context: Vec<&VirtualNode> = vec![root];
+    let path = path.trim();
+    if path.starts_with('(') {
+        return query_grouped(root, path);
+    }
 
-    for step in &steps {
+    let steps = parse_path(path);
+    run_steps(root, vec![root], &steps)
+}
+
+/// Evaluates a grouped path — `(subpath)[N]…/rest` — where the parentheses
+/// force the positional predicate to apply across the whole match set in
+/// document order, not per context node.
+fn query_grouped<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNode> {
+    let close = find_matching_paren(path);
+    let inner = &path[1..close];
+    let mut nodes = query(root, inner);
+
+    // Predicates directly after the `)` apply to the group as a whole: a numeric
+    // one selects the Nth match globally, a filter one keeps the matches that
+    // satisfy it.
+    let mut rest = path[close + 1..].trim_start();
+    while let Some(after_open) = rest.strip_prefix('[') {
+        let end = find_predicate_close(after_open)
+            .unwrap_or_else(|| panic!("unterminated group predicate in XPath `{path}`"));
+        apply_group_predicate(after_open[..end].trim(), &mut nodes);
+        rest = after_open[end + 1..].trim_start();
+    }
+
+    if rest.is_empty() {
+        return nodes;
+    }
+
+    // Whatever follows is a relative path evaluated from the group's result set.
+    assert!(
+        rest.starts_with('/'),
+        "expected `/` or a predicate after a grouped XPath expression in `{path}`"
+    );
+    let steps = parse_path(rest);
+    run_steps(root, nodes, &steps)
+}
+
+/// Applies one group predicate (the text between `[` and `]`) to `nodes`
+/// in place: a bare integer selects the Nth match globally (1-indexed), any
+/// other predicate filters the set.
+fn apply_group_predicate(body: &str, nodes: &mut Vec<&VirtualNode>) {
+    if let Ok(n) = body.parse::<usize>() {
+        let picked = n.checked_sub(1).and_then(|i| nodes.get(i)).copied();
+        nodes.clear();
+        nodes.extend(picked);
+        return;
+    }
+
+    let mut preds = Vec::new();
+    let mut index = None;
+    parse_predicate(body, &mut preds, &mut index);
+    nodes.retain(|node| preds.iter().all(|p| p.matches(node)));
+}
+
+/// Finds the index of the `)` that closes the `(` at the start of `s`, ignoring
+/// parentheses inside a `[…]` predicate.
+fn find_matching_paren(s: &str) -> usize {
+    let bytes = s.as_bytes();
+    let mut depth = 0i32;
+    let mut bracket = 0i32;
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'[' => bracket += 1,
+            b']' => bracket -= 1,
+            b'(' if bracket == 0 => depth += 1,
+            b')' if bracket == 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    return i;
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("unbalanced parentheses in XPath `{s}`");
+}
+
+/// Walks `context` through each of `steps`, returning the final node set in
+/// document order with duplicates removed.
+fn run_steps<'a>(
+    root: &'a VirtualNode,
+    mut context: Vec<&'a VirtualNode>,
+    steps: &[Step],
+) -> Vec<&'a VirtualNode> {
+    for step in steps {
         let mut next: Vec<&VirtualNode> = Vec::new();
         for &node in &context {
             let mut matched: Vec<&VirtualNode> = match step.axis {
@@ -424,7 +514,7 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
                  See html5/src/tests/asciidoctor_rb/README.md."
             );
         };
-        let Some(rel_close) = after_open.find(']') else {
+        let Some(rel_close) = find_predicate_close(after_open) else {
             panic!(
                 "unterminated XPath predicate in `{s}`: `[` without a closing `]`. \
                  Fix the expression — see html5/src/tests/asciidoctor_rb/README.md."
@@ -479,6 +569,29 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
          not implemented. Extend `xpath.rs` (with a unit test) rather than avoiding \
          it — see html5/src/tests/asciidoctor_rb/README.md."
     );
+}
+
+/// Finds the index within `s` of the `]` that closes a predicate, skipping any
+/// `]` that sits inside a single- or double-quoted string literal. An XPath
+/// value may legitimately contain brackets (e.g. `text()="image::foo[]"`), so a
+/// naive search for the first `]` would cut the predicate short.
+fn find_predicate_close(s: &str) -> Option<usize> {
+    let mut quote: Option<u8> = None;
+    for (i, &b) in s.as_bytes().iter().enumerate() {
+        match quote {
+            Some(q) => {
+                if b == q {
+                    quote = None;
+                }
+            }
+            None => match b {
+                b'\'' | b'"' => quote = Some(b),
+                b']' => return Some(i),
+                _ => {}
+            },
+        }
+    }
+    None
 }
 
 /// Strips one layer of matching single or double quotes from an XPath string

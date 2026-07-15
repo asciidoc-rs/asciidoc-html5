@@ -81,7 +81,13 @@ which queries the parse tree instead.
 - **`assert_css` uses `scraper`'s native selector engine** (Servo's
   `selectors`). It already supports every selector idiom the Ruby suite uses
   (`>`, descendant, `:nth-child`, `:last-of-type`, `[attr*="…"]`, `:not`,
-  `:empty`, …), so there is no reason to reimplement CSS.
+  `:empty`, …), so there is no reason to reimplement CSS. The one exception is
+  `:root`: Nokogiri models an embedded fragment with no wrapper, so `:root`
+  there pins to the fragment's *top-level* elements (e.g. `.paragraph:root`),
+  whereas `scraper` wraps a fragment in a synthetic `<html>` and would match
+  nothing. `assert_css` rewrites a leading-compound `:root` on a fragment to the
+  equivalent wrapper-anchored selector (`html > …`) to recover Nokogiri's
+  meaning.
 - **`assert_xpath` uses a small hand-rolled XPath subset** ([`xpath.rs`](../assert_html/xpath.rs))
   over a lightweight [`VirtualNode`](../assert_html/dom.rs) projection of the
   parsed tree. `scraper` has no XPath support. A faithful XPath engine over real
@@ -113,11 +119,25 @@ which queries the parse tree instead.
 steps; the `following-sibling::` / `preceding-sibling::` sibling axes and the
 general `following::` / `preceding::` document-order axes; predicates `[@id="x"]`,
 `[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`, and the positional
-`[N]` (1-indexed, per context node).
+`[N]` (1-indexed, per context node); and a leading grouped path
+`(subpath)[N]…/rest` (see below).
+
+A leading `/` is a child step from the fragment's own top level. Because
+Nokogiri models an embedded fragment without a wrapper element, its top-level
+elements are the document roots; the [`VirtualNode`](../assert_html/dom.rs)
+projection drops `scraper`'s synthetic `<html>` for a fragment so `/*[@class="…"]`
+matches those top-level elements the way Nokogiri does.
+
+A **grouped** expression `(subpath)[N]…` evaluates `subpath` first, then applies
+a positional predicate across the *whole* match set in document order — unlike a
+bare `//tag[N]`, which is per-context. Filter predicates and a trailing relative
+path (`(//p)[1]/preceding-sibling::*[@class="title"]`) may follow the group.
 
 `[@class="x"]` is **exact** string equality on the class attribute (matching
 XPath / Nokogiri), so it does not match a multi-class element like
-`class="x y"`. For CSS-style token containment, use `assert_css` with `.x`.
+`class="x y"`. For CSS-style token containment, use `assert_css` with `.x`. A
+predicate value may contain brackets (`[text()="image::x[]"]`); the parser skips
+`]` inside quotes when scanning for the predicate's close.
 
 ### Not yet implemented (add on first use)
 
