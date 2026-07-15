@@ -266,6 +266,14 @@ non_normative!(
       assert_xpath %{//*[@id="preamble"]//p[text() = "Back then#{decode_char 8230}#{decode_char 8203}"]}, output, 1
   end
 
+"#
+);
+
+// The `toc-placement: preamble` test below stays `non_normative!` until this
+// crate renders the table of contents (`<div id="preamble">/<div id="toc">`);
+// tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>.
+non_normative!(
+    r#"
   test 'should output table of contents in preamble if toc-placement attribute value is preamble' do
     input = <<~'EOS'
     = Article
@@ -287,6 +295,11 @@ non_normative!(
     assert_xpath '//*[@id="preamble"]/*[@id="toc"]', output, 1
   end
 
+"#
+);
+
+non_normative!(
+    r#"
   test 'should move abstract in implicit preface to info tag when converting to DocBook' do
     input = <<~'EOS'
     = Document Title
