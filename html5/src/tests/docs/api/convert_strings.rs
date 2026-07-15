@@ -209,8 +209,9 @@ backend.
 To choose the mode explicitly, build an `Options` and convert with `convert_with`:
 `Options::standalone(true)` returns a complete document from a string, and
 `Options::embedded(true)` returns body-only output from a file. When the document
-has a title, embedded output includes its `<h1>` only if the `showtitle`
-attribute is set.
+has a title, embedded output includes its `<h1>` only when the title is enabled --
+by setting `showtitle`, or equivalently by unsetting `notitle`, which Asciidoctor
+links to `showtitle` as its inverse.
 
 [,rust]
 ----
@@ -249,10 +250,12 @@ assert!(html.starts_with("<!DOCTYPE html>"));
     let forced_embedded = convert_with(SAMPLE, &Options::new().embedded(true));
     assert!(!forced_embedded.starts_with("<!DOCTYPE html>"));
 
-    // With a title, embedded output shows the doctitle `<h1>` only under
-    // `showtitle`.
+    // With a title, embedded output shows the doctitle `<h1>` only when the
+    // title is enabled: by `showtitle`, or equivalently by unsetting `notitle`.
     let with_title = convert_with("= Doc\n\nBody.", &Options::new().set("showtitle"));
     assert!(with_title.contains("<h1>Doc</h1>"));
+    let via_notitle = convert_with("= Doc\n\nBody.", &Options::new().unset("notitle"));
+    assert!(via_notitle.contains("<h1>Doc</h1>"));
     assert!(!convert("= Doc\n\nBody.").contains("<h1>"));
 }
 
