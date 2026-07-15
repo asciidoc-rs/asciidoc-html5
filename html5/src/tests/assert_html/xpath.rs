@@ -15,10 +15,13 @@
 //!
 //! Anything outside this subset (the `ancestor::`/`descendant::` named axes,
 //! boolean `count(...)` expressions, `normalize-space()`, `contains()`, …) is
-//! simply not built yet. The next test that needs one should **extend this
-//! engine** (with unit tests) rather than defer the test — a missing harness
-//! feature is never a reason to mark a Ruby test `non_normative!`. See
-//! `crate::tests::asciidoctor_rb`'s README for the rationale.
+//! simply not built yet. An unsupported predicate or axis **panics** rather
+//! than being silently ignored — a silently dropped predicate would make a step
+//! match more broadly than intended (a false pass). The next test that needs
+//! one should **extend this engine** (with unit tests) rather than defer the
+//! test — a missing harness feature is never a reason to mark a Ruby test
+//! `non_normative!`. See `crate::tests::asciidoctor_rb`'s README for the
+//! rationale.
 //!
 //! Note: the general axes return matches in document order. XPath orders a
 //! reverse axis (`preceding::`) in reverse document order, which would matter
@@ -345,6 +348,18 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
     } else if let Some(rest) = token.strip_prefix("preceding::") {
         (Axis::Preceding, rest)
     } else {
+        // A `::` still in the node-test name (before any predicate) is an axis
+        // the engine does not implement. Fail loudly rather than treating, say,
+        // `ancestor::div` as a tag literally named "ancestor::div" — which would
+        // silently match nothing and could make a "count 0" assertion pass.
+        let name = token.split('[').next().unwrap_or(token);
+        assert!(
+            !name.contains("::"),
+            "unsupported XPath axis in `{token}`: this axis is not implemented in \
+             assert_html. Extend `xpath.rs` (with a unit test) — see \
+             html5/src/tests/asciidoctor_rb/README.md."
+        );
+
         let axis = match comb {
             Combinator::Child => Axis::Child,
             Combinator::Descendant => Axis::Descendant,
@@ -389,6 +404,14 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
 }
 
 /// Parses a single predicate body (the text between `[` and `]`).
+///
+/// # Panics
+///
+/// Panics on any predicate the engine does not implement. A silently ignored
+/// predicate would make the step match more broadly than the test intends — a
+/// false pass — so an unsupported construct must fail loudly. Per the harness
+/// rule (`asciidoctor_rb/README.md`), the fix is to extend this parser (with
+/// unit tests), never to work around the panic.
 fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>) {
     if let Ok(n) = inner.parse::<usize>() {
         *index = Some(n);
@@ -413,8 +436,15 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
     if let Some(after) = inner.strip_prefix("text()") {
         if let Some(value) = after.trim_start().strip_prefix('=') {
             preds.push(Pred::Text(unquote(value.trim())));
+            return;
         }
     }
+
+    panic!(
+        "unsupported XPath predicate `[{inner}]` in assert_html: this construct is \
+         not implemented. Extend `xpath.rs` (with a unit test) rather than avoiding \
+         it — see html5/src/tests/asciidoctor_rb/README.md."
+    );
 }
 
 /// Strips one layer of matching single or double quotes from an XPath string

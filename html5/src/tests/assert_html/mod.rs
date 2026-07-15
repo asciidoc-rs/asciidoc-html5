@@ -161,6 +161,20 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "unsupported XPath predicate")]
+    fn xpath_unsupported_predicate_panics() {
+        // `contains(...)` is not implemented; it must fail loudly, not be
+        // silently ignored (which would drop the predicate and over-match).
+        assert_xpath(FRAGMENT, r#"//p[contains(text(),"Pre")]"#, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "unsupported XPath axis")]
+    fn xpath_unsupported_axis_panics() {
+        assert_xpath(FRAGMENT, "//p/ancestor::div", 1);
+    }
+
+    #[test]
     fn standalone_document_is_parsed() {
         let doc = "<!DOCTYPE html>\n<html><head><title>t</title></head><body>\
                    <div id=\"content\"><div class=\"paragraph\"><p>Hi.</p></div></div>\

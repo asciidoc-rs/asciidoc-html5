@@ -118,8 +118,11 @@ general `following::` / `preceding::` document-order axes; predicates `[@id="x"]
 ### Not yet implemented (add on first use)
 
 The engine covers what the ported pages have needed so far; the following are
-simply not built yet. Per the harness rule above, the next test that needs one
-**adds it** (with unit tests) — it is not a reason to defer the test:
+simply not built yet. Reaching one **panics** — an unsupported predicate or axis
+fails loudly rather than being silently ignored (a silently dropped predicate
+would over-match and pass falsely). Per the harness rule above, the next test
+that needs one **adds it** (with unit tests) — it is not a reason to defer the
+test:
 
 - The `ancestor::` / `descendant::` named axes.
 - A positional predicate *on* a reverse axis (e.g. `preceding::p[1]`): the
