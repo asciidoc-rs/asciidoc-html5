@@ -759,12 +759,35 @@ fn document_name(path: &str, suffix: &str) -> String {
     base
 }
 
-/// Canonicalizes `path` to its absolute form, falling back to the path as given
-/// when it cannot be canonicalized (for example, when it does not exist on
-/// disk). A canonical base directory keeps the include and docinfo handlers'
-/// jail comparisons on the same footing as the paths the parser reports.
+/// Resolves `path` to an absolute form for anchoring the include and docinfo
+/// handlers.
+///
+/// When `path` exists on disk it is canonicalized, so the handlers' jail
+/// comparisons — which test a canonicalized (absolute) target against the base
+/// directory — sit on the same footing as the paths the parser reports. When it
+/// does not exist (so `canonicalize` fails), it is instead made absolute
+/// against the process's current directory; only when even that is unavailable
+/// is it returned as given. Keeping the result absolute upholds
+/// [`FsIncludeFileHandler`](crate::include_handler::FsIncludeFileHandler)'s
+/// invariant that the base directory is absolute, so a relative `base_dir` or
+/// `docdir` that names a directory not present on disk cannot leave the
+/// handlers with a relative jail root.
 fn canonicalize_or(path: &Path) -> PathBuf {
-    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+    path.canonicalize()
+        .ok()
+        .or_else(|| absolutize(path))
+        .unwrap_or_else(|| path.to_path_buf())
+}
+
+/// Makes `path` absolute by joining a relative one onto the current directory,
+/// or returns `None` when the current directory cannot be determined. An
+/// already-absolute path is returned unchanged.
+fn absolutize(path: &Path) -> Option<PathBuf> {
+    if path.is_absolute() {
+        Some(path.to_path_buf())
+    } else {
+        std::env::current_dir().ok().map(|cwd| cwd.join(path))
+    }
 }
 
 #[cfg(test)]
@@ -1320,6 +1343,28 @@ mod tests {
 
         assert!(html.contains("From base directory."), "{html}");
         assert!(!html.contains("From docdir."), "{html}");
+    }
+
+    #[test]
+    fn a_relative_docdir_yields_an_absolute_base_directory() {
+        // The include and docinfo handlers require an absolute base directory. A
+        // relative `docdir` (or `-B`) naming a directory not on disk must still
+        // resolve to an absolute jail root rather than reaching the handlers as
+        // a relative path, so the jailed comparison against a canonicalized
+        // target stays sound.
+        let cwd = std::env::current_dir().expect("cwd");
+
+        let from_docdir = Options::new()
+            .attribute("docdir", "no/such/dir")
+            .effective_base_dir()
+            .expect("docdir seeds the base directory");
+        assert_eq!(from_docdir, cwd.join("no/such/dir"));
+
+        let from_base = Options::new()
+            .base_dir("no/such/dir")
+            .effective_base_dir()
+            .expect("base_dir sets the base directory");
+        assert_eq!(from_base, cwd.join("no/such/dir"));
     }
 
     #[test]
