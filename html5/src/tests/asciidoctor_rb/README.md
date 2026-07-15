@@ -40,11 +40,19 @@ One module per Ruby file (e.g. [`preamble_test.rs`](preamble_test.rs)), which:
    or added line (even a blank) misaligns everything after it. Bind each
    boundary blank line to the block it *follows* (a block starts on its first
    line of content and carries the trailing blank).
-3. For each Ruby `test '…' do … end` we port, wraps those lines in a
+3. **Mirrors the Ruby file's `context` structure with Rust modules.** Each
+   nested `context '…' do` becomes a nested `mod` (named after the context), so
+   the Rust module tree matches the suite's own partitioning. The file's
+   top-level `context` corresponds to the module itself, so it needs no extra
+   `mod`. (`preamble_test.rb` has a single top-level `context`, so no nested
+   module is introduced.)
+4. For each Ruby `test '…' do … end` we port, wraps those lines in a
    `verifies!` block inside a `#[test]` and re-expresses the Ruby assertions in
    Rust against this crate's output.
-4. Leaves everything else — scaffolding, and tests for behavior out of scope
-   here — in `non_normative!`.
+5. Leaves in `non_normative!` only what this crate genuinely does not produce —
+   scaffolding, and tests for behavior that is out of scope (other backends) or
+   not yet rendered. A gap in the *XPath assertion harness* is never a reason to
+   defer a test; see the harness rule below.
 
 `preamble_test.rs` ports 5 of the 12 Ruby tests (the `html5` preamble cases) and
 tracks the other 7 as `non_normative!`: the DocBook-backend tests (this crate
@@ -96,6 +104,15 @@ which queries the parse tree instead.
   allows omitting the count ("at least one") and passing a boolean (for
   `count(...)` expressions); those are added as sibling helpers when a ported
   page first needs them.
+- **XPath-harness gaps are fixed, not deferred.** When a Ruby `assert_xpath`
+  uses a construct the engine does not yet support, **extend the engine** — add
+  the axis/predicate to [`xpath.rs`](../assert_html/xpath.rs) with unit tests —
+  and port the test. Do **not** mark a test `non_normative!` to sidestep a
+  missing harness feature. `non_normative!` is reserved for behavior this crate
+  does not produce (other backends, features not yet rendered), never for a
+  limitation of the test harness itself. (This is why the general
+  `preceding::`/`following::` axes were added rather than deferring the "no title
+  with preamble and section" test.)
 
 ### Supported XPath subset
 
@@ -105,19 +122,20 @@ general `following::` / `preceding::` document-order axes; predicates `[@id="x"]
 `[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`, and the positional
 `[N]` (1-indexed, per context node).
 
-### Limitations (grow the engine as pages need it)
+### Not yet implemented (add on first use)
 
-- The `ancestor::` / `descendant::` named axes are not implemented.
-- A positional predicate *on* a reverse axis (e.g. `preceding::p[1]`) is not
-  modeled: the general axes return matches in document order, whereas XPath
-  orders a reverse axis in reverse. The suite does not use that combination.
+The engine covers what the ported pages have needed so far; the following are
+simply not built yet. Per the harness rule above, the next test that needs one
+**adds it** (with unit tests) — it is not a reason to defer the test:
+
+- The `ancestor::` / `descendant::` named axes.
+- A positional predicate *on* a reverse axis (e.g. `preceding::p[1]`): the
+  general axes return matches in document order, whereas XPath orders a reverse
+  axis in reverse. The suite does not use that combination.
 - Boolean expressions (`count(...) = N`), `normalize-space()`, `contains()`, and
-  `starts-with()` predicates are not implemented.
+  `starts-with()` predicates.
 - `text()` compares against an element's *direct* text only (matching XPath's
   `text()` node test), not its full descendant text.
-
-A Ruby test that needs an unsupported construct stays `non_normative!` until the
-engine grows to cover it — that is the honest, `sdd`-visible way to defer it.
 
 ## Dependencies
 

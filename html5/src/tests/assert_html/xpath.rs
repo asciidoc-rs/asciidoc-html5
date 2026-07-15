@@ -15,8 +15,10 @@
 //!
 //! Anything outside this subset (the `ancestor::`/`descendant::` named axes,
 //! boolean `count(...)` expressions, `normalize-space()`, `contains()`, …) is
-//! deliberately unsupported: a page that needs one keeps the corresponding
-//! Ruby test `non_normative!` until the engine grows to cover it.
+//! simply not built yet. The next test that needs one should **extend this
+//! engine** (with unit tests) rather than defer the test — a missing harness
+//! feature is never a reason to mark a Ruby test `non_normative!`. See
+//! `crate::tests::asciidoctor_rb`'s README for the rationale.
 //!
 //! Note: the general axes return matches in document order. XPath orders a
 //! reverse axis (`preceding::`) in reverse document order, which would matter
