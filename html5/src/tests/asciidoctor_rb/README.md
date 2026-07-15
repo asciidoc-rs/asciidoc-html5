@@ -54,13 +54,6 @@ One module per Ruby file (e.g. [`preamble_test.rs`](preamble_test.rs)), which:
    not yet rendered. A gap in the *XPath assertion harness* is never a reason to
    defer a test; see the harness rule below.
 
-`preamble_test.rs` ports 5 of the 12 Ruby tests (the `html5` preamble cases) and
-tracks the other 7 as `non_normative!`: the DocBook-backend tests (this crate
-targets only `html5`), the `book`/`partintro` cases (not yet rendered), and the
-`toc` case ([#86] — TOC rendering not wired up yet).
-
-[#86]: https://github.com/asciidoc-rs/asciidoc-html5/issues/86
-
 ### Driving the renderer
 
 The Ruby helpers map to this crate as:
