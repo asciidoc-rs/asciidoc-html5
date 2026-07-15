@@ -175,6 +175,25 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "unterminated XPath predicate")]
+    fn xpath_unterminated_predicate_panics() {
+        // A typo — `[` with no closing `]` — must fail, not silently evaluate
+        // as `//p` without the predicate.
+        assert_xpath(FRAGMENT, r#"//p[text()="Preamble."#, 1);
+    }
+
+    #[test]
+    fn xpath_class_predicate_is_exact_not_token() {
+        // XPath `@class="v"` is exact equality, so a multi-class element is not
+        // matched by a single-token value (unlike CSS `.paragraph`).
+        let html = r#"<div class="paragraph lead"><p>x</p></div>
+<div class="paragraph"><p>y</p></div>"#;
+        assert_xpath(html, r#"//div[@class="paragraph"]"#, 1);
+        assert_xpath(html, r#"//div[@class="paragraph lead"]"#, 1);
+        assert_xpath(html, r#"//div[@class="lead"]"#, 0);
+    }
+
+    #[test]
     fn standalone_document_is_parsed() {
         let doc = "<!DOCTYPE html>\n<html><head><title>t</title></head><body>\
                    <div id=\"content\"><div class=\"paragraph\"><p>Hi.</p></div></div>\

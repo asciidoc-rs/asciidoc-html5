@@ -115,6 +115,10 @@ general `following::` / `preceding::` document-order axes; predicates `[@id="x"]
 `[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`, and the positional
 `[N]` (1-indexed, per context node).
 
+`[@class="x"]` is **exact** string equality on the class attribute (matching
+XPath / Nokogiri), so it does not match a multi-class element like
+`class="x y"`. For CSS-style token containment, use `assert_css` with `.x`.
+
 ### Not yet implemented (add on first use)
 
 The engine covers what the ported pages have needed so far; the following are

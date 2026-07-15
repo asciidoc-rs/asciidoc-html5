@@ -248,7 +248,13 @@ impl Pred {
     fn matches(&self, node: &VirtualNode) -> bool {
         match self {
             Pred::Id(v) => node.id.as_deref() == Some(v.as_str()),
-            Pred::Class(v) => node.classes.iter().any(|c| c == v),
+            // XPath `@class="v"` is exact string equality on the class
+            // attribute, not CSS token containment: `[@class="paragraph"]` must
+            // not match `class="paragraph lead"` (that is what CSS `.paragraph`,
+            // via `assert_css`, is for). The projection split the attribute on
+            // whitespace, so rejoin with a single space to compare — faithful
+            // for the renderer's single-space-separated class lists.
+            Pred::Class(v) => node.classes.join(" ") == *v,
             Pred::Attr(k, v) => node.attributes.get(k).map(String::as_str) == Some(v.as_str()),
             Pred::AttrExists(k) => match k.as_str() {
                 "id" => node.id.is_some(),
@@ -393,7 +399,13 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
     let mut index = None;
     while let Some(open) = rest.find('[') {
         let Some(rel_close) = rest[open..].find(']') else {
-            break;
+            // An opening `[` with no closing `]` is a malformed expression.
+            // Dropping the predicate here would silently evaluate the step
+            // without its filter (a false pass), so fail loudly instead.
+            panic!(
+                "unterminated XPath predicate in `{s}`: `[` without a closing `]`. \
+                 Fix the expression — see html5/src/tests/asciidoctor_rb/README.md."
+            );
         };
         let close = open + rel_close;
         parse_predicate(rest[open + 1..close].trim(), &mut preds, &mut index);
