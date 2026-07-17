@@ -56,6 +56,14 @@ use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
 
 use crate::{docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFileHandler};
 
+/// The Asciidoctor release this crate targets for output parity, reported
+/// through the `asciidoctor-version` intrinsic attribute. It matches the
+/// version pinned in `ref/asciidoctor` and named as the parity oracle in
+/// `CLAUDE.md`; documents that gate Asciidoctor-only markup on
+/// `ifdef::asciidoctor-version[]` then behave as they would under that
+/// Asciidoctor.
+const ASCIIDOCTOR_COMPAT_VERSION: &str = "2.0.26";
+
 /// The options to supply to a conversion from outside the document source: a
 /// set of document attributes and the [safe mode](SafeMode).
 ///
@@ -116,6 +124,13 @@ pub struct Options {
     /// `:standalone` option. See [`standalone`](Self::standalone) /
     /// [`embedded`](Self::embedded).
     standalone: Option<bool>,
+
+    /// The document type (`doctype`) to convert under. `None` pins the
+    /// intrinsic to `article`, the only structural doctype this renderer
+    /// models. The one other value it honors is `inline` — the single-paragraph
+    /// mode used to convert a fragment of inline markup. See
+    /// [`doctype`](Self::doctype).
+    doctype: Option<String>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -231,6 +246,39 @@ impl Options {
     /// ```
     pub fn standalone(mut self, yes: bool) -> Self {
         self.standalone = Some(yes);
+        self
+    }
+
+    /// Selects the document type — Asciidoctor's `doctype` API option.
+    ///
+    /// This renderer models the `article` doctype structurally, so `article`
+    /// (the default) is the value the document is pinned to and the one the
+    /// full document skeleton is built around. The other value it honors is
+    /// `inline`: a fragment-conversion mode that formats and emits only the
+    /// inline content of the document's *first* block — a paragraph, verbatim,
+    /// or raw block — with no block wrapper and no document shell, matching
+    /// Asciidoctor's inline doctype. (Asciidoctor also defines the `book` and
+    /// `manpage` doctypes, which are out of scope here.)
+    ///
+    /// Supplying a doctype here overrides any `:doctype:` set in the document,
+    /// matching the way the `backend` and `doctype` intrinsics are otherwise
+    /// locked against the document.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_with, Options};
+    ///
+    /// // The inline doctype converts just the first block's inline markup.
+    /// let opts = Options::new().doctype("inline");
+    /// let html = convert_with("http://example.org[Docs] is _here_.", &opts);
+    /// assert_eq!(
+    ///     html,
+    ///     "<a href=\"http://example.org\">Docs</a> is <em>here</em>.\n"
+    /// );
+    /// ```
+    pub fn doctype<S: Into<String>>(mut self, doctype: S) -> Self {
+        self.doctype = Some(doctype.into());
         self
     }
 
@@ -577,21 +625,49 @@ impl Options {
             ModificationContext::ApiOnly,
         );
 
-        // `article` is the only doctype this renderer models, so `doctype` is
-        // pinned to `article` in *every* safe mode and locked against the
-        // document, mirroring the `backend` pin above. Seeding it as a *silent*
-        // `ApiOnly` intrinsic drops any document `:doctype:` (e.g. `book`,
-        // `manpage`) with no warning; running after the directive loop makes it
-        // win over an API `doctype` directive or a *soft* API default too. This
-        // goes further than Asciidoctor — whose SERVER "disallows the document
-        // from setting attributes that would affect conversion" (doctype among
-        // them) while lower modes honor a document `:doctype:` — precisely
-        // because non-`article` doctypes are out of scope here: the `{doctype}`
-        // intrinsic (and the `<body class>` it drives) always reflects what is
-        // actually rendered.
+        // `article` is the structural doctype this renderer models, so
+        // `doctype` is pinned to it by default in *every* safe mode and locked
+        // against the document, mirroring the `backend` pin above. Seeding it
+        // as a *silent* `ApiOnly` intrinsic drops any document `:doctype:`
+        // (e.g. `book`, `manpage`) with no warning; running after the directive
+        // loop makes the pin win over an API `doctype` directive or a *soft*
+        // API default too. This goes further than Asciidoctor — whose SERVER
+        // "disallows the document from setting attributes that would affect
+        // conversion" (doctype among them) while lower modes honor a document
+        // `:doctype:` — precisely because non-`article` structural doctypes are
+        // out of scope here: the `{doctype}` intrinsic (and the `<body class>`
+        // it drives) always reflects what is actually rendered.
+        //
+        // The one exception is a doctype the caller sets through
+        // [`Options::doctype`], which stands in for the pinned `article`: this
+        // is how the `inline` doctype (a fragment-conversion mode) is selected.
+        // A caller-set doctype still overrides and locks out the document, so
+        // the intrinsic remains API-controlled either way.
+        let doctype = self.doctype.as_deref().unwrap_or("article");
         parser = parser.with_intrinsic_attribute_silent(
             "doctype",
-            "article",
+            doctype,
+            ModificationContext::ApiOnly,
+        );
+
+        // Seed the processor-version intrinsics documents use to detect the
+        // toolchain converting them. `asciidoctor-version` names the
+        // Asciidoctor release whose output this crate targets for parity (see
+        // CLAUDE.md), so a document guarding Asciidoctor-only markup with
+        // `ifdef::asciidoctor-version[]` behaves as it would under that
+        // Asciidoctor. `asciidoc-html5-version` names *this* crate's release,
+        // drawn from Cargo build metadata rather than hard-coded, so it always
+        // reflects the actual renderer. Both are locked (`ApiOnly`) and seeded
+        // silently so a document cannot reassign them and re-seeding raises no
+        // lock warning.
+        parser = parser.with_intrinsic_attribute_silent(
+            "asciidoctor-version",
+            ASCIIDOCTOR_COMPAT_VERSION,
+            ModificationContext::ApiOnly,
+        );
+        parser = parser.with_intrinsic_attribute_silent(
+            "asciidoc-html5-version",
+            env!("CARGO_PKG_VERSION"),
             ModificationContext::ApiOnly,
         );
 
@@ -976,6 +1052,37 @@ mod tests {
                 "{mode:?} should not link"
             );
         }
+    }
+
+    // The processor-version intrinsics are seeded for `ifdef`-based toolchain
+    // detection: `asciidoctor-version` carries the parity-target release and
+    // `asciidoc-html5-version` this crate's own version (from Cargo metadata).
+    // Both are locked against the document.
+    #[test]
+    fn version_intrinsics_are_seeded_and_locked() {
+        let html = convert_with(
+            "= Doc\n:asciidoctor-version: 9.9.9\n:asciidoc-html5-version: 9.9.9\n\n\
+             adoc={asciidoctor-version} html5={asciidoc-html5-version}",
+            &Options::new(),
+        );
+
+        // The document's attempts to reassign them are ignored (locked).
+        assert!(
+            html.contains(&format!("adoc=2.0.26 html5={}", env!("CARGO_PKG_VERSION"))),
+            "{html}"
+        );
+        assert!(!html.contains("9.9.9"), "{html}");
+    }
+
+    // A document guarding markup on `ifdef::asciidoctor-version[]` sees the
+    // attribute defined, so the guarded content is included.
+    #[test]
+    fn asciidoctor_version_enables_ifdef_guarded_content() {
+        let html = convert_with(
+            "ifdef::asciidoctor-version[Guarded content.]",
+            &Options::new(),
+        );
+        assert!(html.contains("Guarded content."), "{html}");
     }
 
     // Under `Secure`, `linkcss` is locked on: a document `:linkcss!:` cannot
