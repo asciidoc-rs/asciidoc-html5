@@ -41,16 +41,45 @@ use scraper::{Html, Selector};
 
 /// Parses `html` into a `scraper` tree, choosing a document or fragment parse
 /// by sniffing for a leading doctype / `<html>` (the standalone case) versus an
-/// embedded body fragment.
-fn parse(html: &str) -> Html {
+/// embedded body fragment. The returned flag is `true` for a fragment parse —
+/// the callers need it because scraper wraps a fragment in a synthetic `<html>`
+/// that shifts what "the root" means (see [`dom::from_html`] and
+/// [`rewrite_root_for_fragment`]).
+fn parse(html: &str) -> (Html, bool) {
     let head = html.trim_start();
     if head.len() >= 5 && head[..5].eq_ignore_ascii_case("<html")
         || head.len() >= 9 && head[..9].eq_ignore_ascii_case("<!doctype")
     {
-        Html::parse_document(html)
+        (Html::parse_document(html), false)
     } else {
-        Html::parse_fragment(html)
+        (Html::parse_fragment(html), true)
     }
+}
+
+/// Rewrites a `:root` selector for a fragment parse.
+///
+/// The Ruby suite uses `:root` to pin an assertion to a *top-level* element of
+/// the embedded fragment (e.g. `.paragraph:root`). Nokogiri — the oracle —
+/// models a fragment with no wrapper element, so those top-level elements are
+/// the document roots and match `:root`. `scraper` instead wraps every fragment
+/// in a synthetic `<html>`, so the same elements are that wrapper's direct
+/// children and `:root` matches nothing. Anchor the selector under the wrapper
+/// (`html > …`) and drop `:root` to recover Nokogiri's meaning.
+///
+/// Only a `:root` on the leading compound is supported — the sole form the
+/// suite uses; anything else fails loudly rather than silently matching the
+/// wrong set.
+fn rewrite_root_for_fragment(selector: &str) -> String {
+    let idx = selector
+        .find(":root")
+        .expect("selector must contain `:root`");
+    assert!(
+        !selector[..idx].contains([' ', '>', '+', '~', ',']),
+        "assert_css supports `:root` only on the leading compound selector (got `{selector}`)"
+    );
+    let stripped = selector.replacen(":root", "", 1);
+
+    format!("html > {stripped}")
 }
 
 /// Asserts that `selector` matches exactly `expected` elements in `html`.
@@ -61,7 +90,19 @@ fn parse(html: &str) -> Html {
 /// valid CSS selector.
 #[track_caller]
 pub(crate) fn assert_css(html: &str, selector: &str, expected: usize) {
-    let document = parse(html);
+    let (document, is_fragment) = parse(html);
+
+    // `scraper`'s selector engine treats a fragment's synthetic `<html>` wrapper
+    // as the root, so `:root` never matches a fragment's top-level elements the
+    // way Nokogiri does; rewrite it to the equivalent wrapper-anchored selector.
+    let rewritten;
+    let selector = if is_fragment && selector.contains(":root") {
+        rewritten = rewrite_root_for_fragment(selector);
+        &rewritten
+    } else {
+        selector
+    };
+
     let compiled = Selector::parse(selector)
         .unwrap_or_else(|e| panic!("invalid CSS selector `{selector}`: {e:?}"));
     let count = document.select(&compiled).count();
@@ -81,8 +122,8 @@ pub(crate) fn assert_css(html: &str, selector: &str, expected: usize) {
 /// Panics if the match count differs from `expected`.
 #[track_caller]
 pub(crate) fn assert_xpath(html: &str, xpath: &str, expected: usize) {
-    let document = parse(html);
-    let root = dom::from_html(&document);
+    let (document, is_fragment) = parse(html);
+    let root = dom::from_html(&document, is_fragment);
     let count = xpath::query(&root, xpath).len();
 
     assert_eq!(
@@ -127,6 +168,135 @@ mod tests {
         assert_xpath(FRAGMENT, r#"//*[@id="content"]/*[@class="sect1"]"#, 1);
     }
 
+    // Two top-level sibling paragraphs, the first with a block title — the
+    // shape the paragraphs suite asserts against with grouped and `:root`
+    // selectors.
+    const SIBLINGS: &str = r#"<div class="paragraph">
+<div class="title">Titled</div>
+<p>Paragraph.</p>
+</div>
+<div class="paragraph">
+<p>Winning.</p>
+</div>"#;
+
+    #[test]
+    fn xpath_leading_slash_matches_fragment_top_level() {
+        // A leading `/` is a child step from the (wrapperless) fragment root, so
+        // it matches the fragment's own top-level elements — not scraper's
+        // synthetic `<html>`.
+        assert_xpath(SIBLINGS, r#"/*[@class="paragraph"]"#, 2);
+        assert_xpath(SIBLINGS, r#"/*[@class="paragraph"]/p"#, 2);
+        assert_xpath(FRAGMENT, r#"/*[@id="content"]"#, 1);
+    }
+
+    #[test]
+    fn xpath_grouped_positional_is_global() {
+        // `(//p)[N]` picks the Nth paragraph across the whole document, unlike a
+        // per-context `//p[N]`.
+        assert_xpath(SIBLINGS, r#"(//p)[1][text()="Paragraph."]"#, 1);
+        assert_xpath(SIBLINGS, r#"(//p)[2][text()="Winning."]"#, 1);
+        assert_xpath(SIBLINGS, r#"(//p)[2][text()="Paragraph."]"#, 0);
+
+        // A trailing relative path runs from the group's positional result.
+        assert_xpath(
+            SIBLINGS,
+            r#"(//p)[1]/preceding-sibling::*[@class="title"]"#,
+            1,
+        );
+        assert_xpath(
+            SIBLINGS,
+            r#"(//p)[1]/preceding-sibling::*[@class="title"][text()="Titled"]"#,
+            1,
+        );
+        // The second paragraph has no title sibling.
+        assert_xpath(
+            SIBLINGS,
+            r#"(//p)[2]/preceding-sibling::*[@class="title"]"#,
+            0,
+        );
+
+        // A grouped child path, then a positional pick, then a further step.
+        assert_xpath(
+            SIBLINGS,
+            r#"(/*[@class="paragraph"])[1]/p[text()="Paragraph."]"#,
+            1,
+        );
+        assert_xpath(
+            SIBLINGS,
+            r#"(/*[@class="paragraph"])[2]/p[text()="Winning."]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn xpath_grouped_predicate_value_may_contain_brackets_and_parens() {
+        // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding the
+        // group's closing `)`; otherwise a legitimate predicate value throws off
+        // the counters and the query panics.
+        let html = r#"<p>x]y(z</p>
+<p>plain</p>"#;
+        assert_xpath(html, r#"(//p[text()="x]y(z"])[1]"#, 1);
+        assert_xpath(html, r#"(//p[text()="x]y(z"])[2]"#, 0);
+    }
+
+    #[test]
+    fn xpath_text_value_may_contain_brackets() {
+        // A `]` inside a quoted predicate value must not be read as the end of
+        // the predicate (verbatim blocks routinely contain `[]`).
+        let html =
+            r#"<div class="literalblock"><div class="content"><pre>image::x[]</pre></div></div>"#;
+        assert_xpath(
+            html,
+            r#"/*[@class="literalblock"]//pre[text()="image::x[]"]"#,
+            1,
+        );
+        assert_xpath(html, r#"//pre[text()="image::x[]"]"#, 1);
+    }
+
+    #[test]
+    fn xpath_contains_and_normalize_space_text() {
+        let html = r#"<div class="quoteblock"><blockquote>
+Famous quote.
+</blockquote></div>
+<div class="verseblock"><pre class="content">Famous   verse.</pre></div>"#;
+        // `contains(text(), …)` matches an element whose direct text includes
+        // the substring (the blockquote's text has surrounding newlines).
+        assert_xpath(
+            html,
+            r#"//*[@class="quoteblock"]//*[contains(text(), "Famous quote.")]"#,
+            1,
+        );
+        assert_xpath(html, r#"//blockquote[contains(text(), "nope")]"#, 0);
+        // `normalize-space(text())` collapses internal whitespace before the
+        // comparison.
+        assert_xpath(
+            html,
+            r#"//pre[normalize-space(text()) = "Famous verse."]"#,
+            1,
+        );
+        assert_xpath(html, r#"//pre[text() = "Famous verse."]"#, 0);
+    }
+
+    #[test]
+    fn css_root_matches_fragment_top_level() {
+        // `:root` pins to a fragment's top-level elements, mirroring Nokogiri —
+        // `scraper`'s wrapper `<html>` would otherwise make it match nothing.
+        assert_css(SIBLINGS, ".paragraph:root", 2);
+        assert_css(SIBLINGS, ".paragraph:root > p", 2);
+        // A nested paragraph is not a root, so it does not match.
+        assert_css(FRAGMENT, ".paragraph:root", 0);
+        assert_css(FRAGMENT, ".sect1:root", 0);
+        assert_css(FRAGMENT, "#content:root", 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "leading compound")]
+    fn css_root_on_inner_compound_panics() {
+        // `:root` on anything but the leading compound is unsupported; it must
+        // fail loudly rather than anchor the wrong element.
+        assert_css(FRAGMENT, "#content .paragraph:root", 0);
+    }
+
     #[test]
     fn xpath_following_sibling_axis() {
         // The preamble's following sibling is the section, which contains the h2.
@@ -163,9 +333,9 @@ mod tests {
     #[test]
     #[should_panic(expected = "unsupported XPath predicate")]
     fn xpath_unsupported_predicate_panics() {
-        // `contains(...)` is not implemented; it must fail loudly, not be
+        // `starts-with(...)` is not implemented; it must fail loudly, not be
         // silently ignored (which would drop the predicate and over-match).
-        assert_xpath(FRAGMENT, r#"//p[contains(text(),"Pre")]"#, 1);
+        assert_xpath(FRAGMENT, r#"//p[starts-with(text(),"Pre")]"#, 1);
     }
 
     #[test]

@@ -74,11 +74,14 @@ render_document(&Document) -> String
         ├── header()        <div id="header"> — <h1>, authors, revision
         ├── blocks(Iter)    for each sibling block → block()
         └── block(&Block)   ── THE DISPATCH POINT ──
-              ├── Simple  → paragraph() | verbatim()
+              ├── Simple  → paragraph() | open_block() | source() | verbatim()
               ├── Section → section()   → recurses via blocks(nested_blocks())
               ├── Preamble→ preamble()  → recurses
               ├── Break   → break_block()
               ├── RawDelimited → verbatim() (by resolved_context)
+              ├── CompoundDelimited → open_block() (Open) → recurses
+              ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
+              ├── Admonition → admonition() → recurses (compound admonitions)
               └── _       → unsupported()  (visible HTML comment)
 ```
 
@@ -110,7 +113,9 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | Parse node | `resolved_context` | HTML shape (Asciidoctor `html5`) | |
 |---|---|---|---|
 | `Block::Simple` (Paragraph) | `paragraph` | `<div class="paragraph"><p>…</p></div>` | ✅ |
-| `Block::Simple` (Listing/Source) | `listing` | `<div class="listingblock"><div class="content"><pre>…</pre></div></div>` | ✅ |
+| `Block::Simple` (Paragraph, `[open]`) | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
+| `Block::Simple` (Listing) | `listing` | `<div class="listingblock"><div class="content"><pre>…</pre></div></div>` | ✅ |
+| `Block::Simple` (Source) | `listing` | `<div class="listingblock"><div class="content"><pre class="highlight"><code class="language-…">…</code></pre></div></div>` | ✅ |
 | `Block::Simple` (Literal) | `literal` | `<div class="literalblock"><div class="content"><pre>…</pre></div></div>` | ✅ |
 | `Block::Section` | `section` | `<div class="sectN"><hM id>…</hM><div class="sectionbody">…</div></div>` | ✅ |
 | `Block::Preamble` | `preamble` | `<div id="preamble"><div class="sectionbody">…</div></div>` | ✅ |
@@ -123,9 +128,10 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` | ⬜ |
 | `Block::CompoundDelimited` | `example` | `<div class="exampleblock"><div class="content">…</div></div>` | ⬜ |
 | `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">…</div></div>` | ⬜ |
-| `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ⬜ |
-| `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ⬜ |
-| `Block::Quote` | `quote`/`verse` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ⬜ |
+| `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
+| `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ✅ |
+| `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
+| `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ⬜ |
