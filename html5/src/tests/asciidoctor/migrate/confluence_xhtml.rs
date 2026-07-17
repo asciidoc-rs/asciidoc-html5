@@ -1,0 +1,43 @@
+// The Asciidoctor "Migrate from Confluence XHTML to Asciidoctor" page shows how
+// to convert Confluence XHTML exports to AsciiDoc using a third-party Groovy
+// script that drives Pandoc. It documents an external conversion workflow — no
+// rule for this HTML5 renderer to satisfy — so the whole page is tracked as
+// non-normative. See `sdd/README.md`.
+
+use crate::tests::sdd::*;
+
+track_file!("ref/asciidoctor/docs/modules/migrate/pages/confluence-xhtml.adoc");
+
+non_normative!(
+    r#"
+= Migrate from Confluence XHTML to Asciidoctor
+:navtitle: Migrate from Confluence XHTML
+:url-pandoc: https://pandoc.org
+
+You can convert Atlassian Confluence XHTML pages to Asciidoctor using this Groovy script.
+
+The script calls {url-pandoc}[Pandoc^] to convert single or multiple HTML files exported from Confluence to AsciiDoc files.
+You'll need Pandoc installed before running this script.
+If you have trouble running this script, you can use the Pandoc command referenced inside the script to convert XHTML files to AsciiDoc manually.
+
+.convert.groovy
+[,groovy]
+----
+include::example$convert.groovy[]
+----
+
+This script was created by Cédric Champeau (https://gist.github.com/melix[melix^]).
+You can find the source of this script hosted at this https://gist.github.com/melix/6020336[gist^].
+
+The script is designed to be run locally on HTML files or directories containing HTML files exported from Confluence.
+
+== Usage
+
+. Save the script contents to a `convert.groovy` file in a working directory.
+. Make the file executable according to your specific OS requirements.
+. Create an `html` directory for input files and an `asciidoc` directory for output files, both inside the working directory.
+. Place individual files, or a directory containing files, into the aforementioned `html` directory.
+. Run `groovy convert` to convert the files contained inside the `html` directory.
+. Look for the generated output file in the `asciidoc` directory and confirm it meets your requirements.
+"#
+);

@@ -10,5 +10,6 @@ mod convert_strings;
 mod find_blocks;
 mod generate_html_toc;
 mod index;
+mod options;
 mod set_safe_mode;
 mod sourcemap;

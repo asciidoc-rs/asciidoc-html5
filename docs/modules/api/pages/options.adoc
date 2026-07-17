@@ -1,0 +1,117 @@
+= API Options
+:navtitle: API Options
+:description: The options the asciidoc_html5 conversion API accepts, and how they map to Asciidoctor's API options.
+
+Asciidoctor's Ruby API accepts a large table of options. `asciidoc_html5` is a
+focused HTML5 library, so it supports the subset of those options that apply to
+converting AsciiDoc to HTML5. You supply them through the `Options` builder and
+pass it to a `_with` entry point (`convert_with` or `convert_file_with`).
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The API invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Supported options
+
+[cols="1,2,2"]
+|===
+|Asciidoctor option |`Options` method |Summary
+
+|`:attributes`
+|`attribute` / `set` / `unset` (and the `_default` soft-set variants)
+|Supply document attributes from outside the document.
+
+|`:base_dir`
+|`base_dir`
+|The directory relative `include::` targets and docinfo files resolve against.
+
+|`:safe`
+|`safe_mode`
+|The xref:ROOT:safe-modes.adoc[safe mode]; defaults to `secure`.
+
+|`:standalone`
+|`standalone` / `embedded`
+|Whether to emit a full document or body-only output.
+|===
+
+== Set document attributes
+
+`attribute` overrides an attribute, so the API value wins over the document:
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().attribute("myattr", "from-api");
+let html = convert_with("= Doc\n:myattr: from-doc\n\nval={myattr}", &opts);
+assert!(html.contains("val=from-api"));
+----
+
+Use `attribute_default` for a soft value that a document assignment may override:
+
+[,rust]
+----
+let opts = Options::new().attribute_default("myattr", "from-api");
+let html = convert_with("= Doc\n:myattr: from-doc\n\nval={myattr}", &opts);
+assert!(html.contains("val=from-doc"));
+----
+
+The `set` / `unset` methods (and `set_default` / `unset_default`) turn an
+attribute on or off without giving it a value.
+
+== Choose standalone or embedded output
+
+`standalone(true)` emits the full `<!DOCTYPE html>` document, whereas a string
+conversion is body-only by default:
+
+[,rust]
+----
+let opts = Options::new().standalone(true);
+let html = convert_with("= Doc\n\nBody.", &opts);
+assert!(html.starts_with("<!DOCTYPE html>"));
+
+// A plain string conversion is embedded (body-only) by default.
+let embedded = asciidoc_html5::convert("= Doc\n\nBody.");
+assert!(!embedded.starts_with("<!DOCTYPE html>"));
+----
+
+`embedded(true)` is the inverse spelling. Converting a file is standalone by
+default.
+
+== Set the base directory
+
+`base_dir` anchors relative `include::` targets and docinfo lookups; the safe
+mode governs whether those reads are allowed:
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options, SafeMode};
+
+let opts = Options::new()
+    .safe_mode(SafeMode::Safe)
+    .base_dir("/path/to/docs");
+let html = convert_with("= Doc\n\ninclude::part.adoc[]\n", &opts);
+----
+
+See xref:ROOT:safe-modes.adoc[Safe Modes] for how the safe mode restricts those
+reads.
+
+== Options without a counterpart
+
+Many Asciidoctor API options do not apply to this library:
+
+* *Backend and doctype.* `asciidoc_html5` always renders the `html5` backend and
+  the `article` doctype, so `:backend` and `:doctype` are fixed.
+* *Source mapping.* `:sourcemap` has no toggle because source locations are
+  always tracked; see xref:sourcemap.adoc[Source Locations].
+* *Ruby and template machinery.* `:converter`, `:eruby`, `:extensions`,
+  `:extension_registry`, `:logger`, the `:template_*` options, and `:timings`
+  are specific to Asciidoctor's Ruby runtime and template engines.
+* *Output writing.* `:to_file`, `:to_dir`, and `:mkdirs` do not apply because
+  the library returns a `String`; the xref:cli:options.adoc[`adoc` CLI] handles
+  output paths.
+* *Not yet implemented.* `:catalog_assets`, `:parse_header_only`, and `:parse`
+  (deferred parsing) are tracked for future work.
