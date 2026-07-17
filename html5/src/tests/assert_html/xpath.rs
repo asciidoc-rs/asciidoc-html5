@@ -98,23 +98,36 @@ fn apply_group_predicate(body: &str, nodes: &mut Vec<&VirtualNode>) {
 }
 
 /// Finds the index of the `)` that closes the `(` at the start of `s`, ignoring
-/// parentheses inside a `[…]` predicate.
+/// parentheses inside a `[…]` predicate or inside a quoted string literal.
+///
+/// Quotes are skipped so that a predicate value may itself contain `(`, `)`,
+/// `[`, or `]` (e.g. `(//p[text()="a]b"])[1]`) without throwing off the
+/// bracket/paren counters — matching [`find_predicate_close`].
 fn find_matching_paren(s: &str) -> usize {
     let bytes = s.as_bytes();
     let mut depth = 0i32;
     let mut bracket = 0i32;
+    let mut quote: Option<u8> = None;
     for (i, &b) in bytes.iter().enumerate() {
-        match b {
-            b'[' => bracket += 1,
-            b']' => bracket -= 1,
-            b'(' if bracket == 0 => depth += 1,
-            b')' if bracket == 0 => {
-                depth -= 1;
-                if depth == 0 {
-                    return i;
+        match quote {
+            Some(q) => {
+                if b == q {
+                    quote = None;
                 }
             }
-            _ => {}
+            None => match b {
+                b'\'' | b'"' => quote = Some(b),
+                b'[' => bracket += 1,
+                b']' => bracket -= 1,
+                b'(' if bracket == 0 => depth += 1,
+                b')' if bracket == 0 => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return i;
+                    }
+                }
+                _ => {}
+            },
         }
     }
     panic!("unbalanced parentheses in XPath `{s}`");
