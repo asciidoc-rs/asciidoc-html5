@@ -769,14 +769,14 @@ impl Renderer<'_> {
         }
 
         self.line("<div class=\"attribution\">");
-        match (attribution, citetitle) {
-            (Some(attribution), Some(citetitle)) => {
-                self.line(&format!("&#8212; {attribution}<br>"));
-                self.line(&format!("<cite>{citetitle}</cite>"));
-            }
-            (Some(attribution), None) => self.line(&format!("&#8212; {attribution}")),
-            (None, Some(citetitle)) => self.line(&format!("<cite>{citetitle}</cite>")),
-            (None, None) => unreachable!(),
+        if let Some(attribution) = attribution {
+            // When a citation title follows on its own `<cite>` line, the
+            // attribution line ends with a `<br>`.
+            let line_break = if citetitle.is_some() { "<br>" } else { "" };
+            self.line(&format!("&#8212; {attribution}{line_break}"));
+        }
+        if let Some(citetitle) = citetitle {
+            self.line(&format!("<cite>{citetitle}</cite>"));
         }
         self.line("</div>");
     }
@@ -1241,6 +1241,16 @@ mod tests {
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
     }
 
+    #[test]
+    fn compound_example_and_sidebar_blocks_are_unsupported_for_now() {
+        // Open is the only compound-delimited context rendered so far; example
+        // (`====`) and sidebar (`****`) still emit the placeholder comment.
+        let example = convert("====\ncontent\n====");
+        assert!(example.contains("<!-- asciidoc-html5: unsupported block context 'example' -->"));
+        let sidebar = convert("****\ncontent\n****");
+        assert!(sidebar.contains("<!-- asciidoc-html5: unsupported block context 'sidebar' -->"));
+    }
+
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
     // default `html5` output (the parity oracle).
 
@@ -1293,6 +1303,18 @@ mod tests {
              <div class=\"attribution\">\n&#8212; Albert Einstein<br>\n\
              <cite>Sidebar</cite>\n</div>\n</div>"
         ));
+    }
+
+    #[test]
+    fn quote_attribution_without_citetitle_has_no_cite() {
+        let html = convert("[quote,Gaius]\nVeni, vidi, vici.");
+        assert!(html.contains("<div class=\"attribution\">\n&#8212; Gaius\n</div>"));
+    }
+
+    #[test]
+    fn quote_citetitle_without_attribution_renders_only_the_cite() {
+        let html = convert("[quote,,Almanac]\nA stitch in time.");
+        assert!(html.contains("<div class=\"attribution\">\n<cite>Almanac</cite>\n</div>"));
     }
 
     #[test]
