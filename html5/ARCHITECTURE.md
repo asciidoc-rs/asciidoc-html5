@@ -74,12 +74,12 @@ render_document(&Document) -> String
         ├── header()        <div id="header"> — <h1>, authors, revision
         ├── blocks(Iter)    for each sibling block → block()
         └── block(&Block)   ── THE DISPATCH POINT ──
-              ├── Simple  → paragraph() | open_block() | source() | verbatim()
+              ├── Simple  → paragraph() | open_block()/sidebar()/example() | source() | verbatim()
               ├── Section → section()   → recurses via blocks(nested_blocks())
               ├── Preamble→ preamble()  → recurses
               ├── Break   → break_block()
               ├── RawDelimited → verbatim() (by resolved_context)
-              ├── CompoundDelimited → open_block() (Open) → recurses
+              ├── CompoundDelimited → open_block()/sidebar()/example() (by context_kind) → recurses
               ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
               ├── Admonition → admonition() → recurses (compound admonitions)
               └── _       → unsupported()  (visible HTML comment)
@@ -90,8 +90,8 @@ variant alone is ambiguous (a `RawDelimitedBlock` is listing *or* literal *or*
 passthrough), it dispatches on [`IsBlock::resolved_context`] — the parser's
 resolved block "type" string (`"listing"`, `"sidebar"`, `"example"`, …).
 
-Compound blocks (sections, the preamble, and later lists, tables, and the
-delimited example/sidebar/open blocks) recurse back into `blocks()` over their
+Compound blocks (sections, the preamble, the delimited example/sidebar/open
+blocks, and later lists and tables) recurse back into `blocks()` over their
 [`IsBlock::nested_blocks`]. That is the whole recursion: one dispatch function,
 one `nested_blocks` iterator, and the tree walks itself. Adding a construct is
 adding one match arm and one `render_*` method.
@@ -126,8 +126,8 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ⬜ |
 | `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ⬜ |
 | `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` | ⬜ |
-| `Block::CompoundDelimited` | `example` | `<div class="exampleblock"><div class="content">…</div></div>` | ⬜ |
-| `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">…</div></div>` | ⬜ |
+| `Block::CompoundDelimited` | `example` | `<div class="exampleblock">[<div class="title">Example N. …</div>]<div class="content">…</div></div>` | ✅ |
+| `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">[<div class="title">…</div>]…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
 | `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ✅ |
 | `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
@@ -232,6 +232,17 @@ skeleton details remain deliberately deferred: the footer's "Last updated" text
 needs a caller-supplied `docdatetime`, and `<body class>` currently carries just
 the bare doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
 
+The `doctype` attribute is normally pinned to `article` — the only structural
+doctype this renderer models — and locked against the document. The one value a
+caller can select through [`Options::doctype`] is `inline`: `document()` then
+takes the `inline_document` path, emitting only the *first* block's inline
+content (a paragraph, verbatim, or raw block) with no block wrapper and no
+document shell, matching Asciidoctor's inline doctype. `Options::apply` also
+seeds two processor-version intrinsics documents use for `ifdef`-based toolchain
+detection: `asciidoctor-version` (the Asciidoctor release this crate targets for
+parity) and `asciidoc-html5-version` (this crate's own version, from Cargo build
+metadata).
+
 ## Safe mode and the default stylesheet
 
 The [safe mode](https://docs.asciidoctor.org/asciidoc/latest/safe-modes/) is a
@@ -299,8 +310,9 @@ returned HTML is byte-identical to the writer-less path.
    verbatim blocks, thematic and page breaks, the dispatch/recursion machinery,
    and the attribute-driven skeleton (`lang`, `doctype`,
    `notitle`/`noheader`/`nofooter`).
-2. **Block coverage:** lists (un/ordered/description/callout), the delimited
-   example/sidebar/open blocks, admonitions, quotes/verses, images.
+2. **Block coverage:** the delimited example/sidebar/open blocks, admonitions,
+   and quotes/verses are done; lists (un/ordered/description/callout) and images
+   are still to come.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`), the full
    `<body class>` (TOC classes), TOC, footnotes, the default stylesheet.

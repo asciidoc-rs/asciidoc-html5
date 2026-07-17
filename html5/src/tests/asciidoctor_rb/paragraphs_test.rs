@@ -5,14 +5,18 @@
 //! `convert` (embedded, the counterpart to `convert_string_to_embedded`) or
 //! `convert_with(..standalone(true)..)` (the counterpart to `convert_string`).
 //!
+//! This crate also renders sidebar and example blocks and supports the inline
+//! doctype (via [`Options::doctype`]), so those tests port too — as does the
+//! preprocessor-conditional test, since `asciidoc-parser` handles `ifdef` and
+//! this crate seeds the `asciidoctor-version`/`backend` intrinsics it gates on.
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); the
 //! verse escaped-brace subs test (`\{` is not unescaped by `asciidoc-parser`
-//! yet); the preprocessor-conditional test (it needs `ifdef` handling and the
-//! `asciidoctor-version` attribute); the inline doctype; and the custom-style
-//! logging tests (this crate has no logger). The `[source]` parser-model
-//! assertions (`block_from_string`) test `asciidoc-parser` internals; only the
-//! rendered HTML of those tests is re-expressed here.
+//! yet); the inline-doctype nil/warn test and the custom-style logging tests
+//! (this crate has no logger). The `[source]` parser-model assertions
+//! (`block_from_string`) test `asciidoc-parser` internals; only the rendered
+//! HTML of those tests is re-expressed here.
 
 use crate::{
     convert, convert_with,
@@ -1031,10 +1035,13 @@ mod special {
         }
     }
 
-    // Requires `ifdef` preprocessing and the `asciidoctor-version` attribute,
-    // neither of which this stack provides.
-    non_normative!(
-        r#"
+    // `ifdef` preprocessing is handled by `asciidoc-parser`, and this crate
+    // seeds the `asciidoctor-version` and `backend` intrinsics the conditionals
+    // gate on, so the sidebar is emitted with both `ifdef` branches resolved.
+    #[test]
+    fn should_process_preprocessor_conditional_in_paragraph_content() {
+        verifies!(
+            r#"
     test 'should process preprocessor conditional in paragraph content' do
       input = <<~'EOS'
       ifdef::asciidoctor-version[]
@@ -1060,7 +1067,20 @@ mod special {
     end
 
 "#
-    );
+        );
+
+        let input = "ifdef::asciidoctor-version[]\n[sidebar]\nFirst line of sidebar.\n\
+                     ifdef::backend[The backend is {backend}.]\nLast line of sidebar.\n\
+                     endif::[]\n";
+
+        // The Ruby `expected` is `.chop`ped (no trailing newline); this crate's
+        // embedded output — matching the `asciidoctor` CLI — carries the usual
+        // single trailing newline.
+        let expected = "<div class=\"sidebarblock\">\n<div class=\"content\">\n\
+                        First line of sidebar.\nThe backend is html5.\nLast line of sidebar.\n\
+                        </div>\n</div>\n";
+        assert_eq!(convert(input), expected);
+    }
 
     mod styled_paragraphs {
         use super::*;
@@ -1199,19 +1219,48 @@ mod special {
         );
     }
 
-    // The inline doctype is not supported.
     mod inline_doctype {
         use super::*;
 
         non_normative!(
             r#"
     context 'Inline doctype' do
+"#
+        );
+
+        // The inline doctype converts a fragment: only the first block's inline
+        // markup, with no wrapper. Selected here through `Options::doctype`.
+        #[test]
+        fn should_only_format_and_output_text_in_first_paragraph_when_doctype_is_inline() {
+            verifies!(
+                r#"
       test 'should only format and output text in first paragraph when doctype is inline' do
         input = "http://asciidoc.org[AsciiDoc] is a _lightweight_ markup language...\n\nignored"
         output = convert_string input, doctype: 'inline'
         assert_equal '<a href="http://asciidoc.org">AsciiDoc</a> is a <em>lightweight</em> markup language&#8230;&#8203;', output
       end
 
+"#
+            );
+
+            let output = convert_with(
+                "http://asciidoc.org[AsciiDoc] is a _lightweight_ markup language...\n\nignored",
+                &Options::new().doctype("inline"),
+            );
+
+            // The Ruby API returns the fragment with no trailing newline; this
+            // crate — matching the `asciidoctor` CLI — appends the usual one.
+            assert_eq!(
+                output,
+                "<a href=\"http://asciidoc.org\">AsciiDoc</a> is a <em>lightweight</em> \
+                 markup language&#8230;&#8203;\n"
+            );
+        }
+
+        // The nil/warn path needs a logger this crate does not have: it emits
+        // empty output (no candidate) but cannot assert the WARN message.
+        non_normative!(
+            r#"
       test 'should output nil and warn if first block is not a paragraph' do
         input = '* bullet'
         using_memory_logger do |logger|

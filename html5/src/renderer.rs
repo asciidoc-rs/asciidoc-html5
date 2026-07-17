@@ -297,6 +297,14 @@ impl Renderer<'_> {
     /// body, and the footer; in embedded mode it is the body-only output
     /// emitted by [`embedded_document`](Self::embedded_document).
     fn document(&mut self, document: &Document<'_>) {
+        // The `inline` doctype converts a fragment, not a document: it emits
+        // only the first block's inline content, ignoring the standalone /
+        // embedded distinction entirely.
+        if attribute_str(document, "doctype").as_deref() == Some("inline") {
+            self.inline_document(document);
+            return;
+        }
+
         if !self.standalone {
             self.embedded_document(document);
             return;
@@ -395,6 +403,29 @@ impl Renderer<'_> {
         }
 
         self.blocks(document.nested_blocks());
+    }
+
+    /// Emits the output for the `inline` doctype: the inline content of the
+    /// document's *first* block, on its own line, with no block wrapper and no
+    /// document shell.
+    ///
+    /// This mirrors Asciidoctor's inline doctype, which "converts a single
+    /// paragraph, verbatim, or raw block" — the block kinds that expose
+    /// rendered inline content ([`IsBlock::rendered_content`]). When the first
+    /// block is one of those, its content (already substituted by the parser)
+    /// is emitted directly; when it is anything else — a compound block, a
+    /// list, a section — there is no inline candidate, and this emits nothing.
+    /// (Asciidoctor additionally logs a warning and returns `nil` in that case;
+    /// this crate has no logger, so it produces the empty output without the
+    /// warning.) Any blocks after the first are ignored, as in Asciidoctor.
+    fn inline_document(&mut self, document: &Document<'_>) {
+        if let Some(content) = document
+            .nested_blocks()
+            .next()
+            .and_then(|block| block.rendered_content())
+        {
+            self.line(content);
+        }
     }
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
@@ -633,6 +664,8 @@ impl Renderer<'_> {
                 // around the paragraph's text).
                 SimpleBlockStyle::Paragraph => match block.declared_style() {
                     Some("open") => self.open_block(block),
+                    Some("sidebar") => self.sidebar(block),
+                    Some("example") => self.example(block),
                     _ => self.paragraph(block),
                 },
                 SimpleBlockStyle::Listing => self.verbatim(block, "listingblock"),
@@ -649,7 +682,8 @@ impl Renderer<'_> {
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
                 CompoundDelimitedContext::Open => self.open_block(block),
-                other => self.unsupported(other.as_str()),
+                CompoundDelimitedContext::Sidebar => self.sidebar(block),
+                CompoundDelimitedContext::Example => self.example(block),
             },
             Block::Quote(quote) => self.quote(block, quote),
             Block::Admonition(admonition) => self.admonition(block, admonition),
@@ -726,6 +760,35 @@ impl Renderer<'_> {
     fn open_block<'src>(&mut self, block: &'src Block<'src>) {
         self.open_block_wrapper(block, "openblock");
         self.block_title(block);
+        self.line("<div class=\"content\">");
+        self.wrapped_content(block);
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// A sidebar block: `<div class="sidebarblock"><div
+    /// class="content">…</div></div>`. Used for the `****` delimited form and
+    /// for a paragraph carrying the `[sidebar]` style. Unlike most blocks, the
+    /// title sits *inside* the content div (before the content), matching
+    /// Asciidoctor.
+    fn sidebar<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "sidebarblock");
+        self.line("<div class=\"content\">");
+        self.block_title(block);
+        self.wrapped_content(block);
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// An example block: `<div class="exampleblock">[<div
+    /// class="title">…</div>]<div class="content">…</div></div>`. Used for the
+    /// `====` delimited form and for a paragraph carrying the `[example]`
+    /// style. A titled example is *captioned* — its title div carries the
+    /// block's caption prefix (`Example N. `) ahead of the title text; an
+    /// untitled example has no title div at all.
+    fn example<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "exampleblock");
+        self.captioned_title(block);
         self.line("<div class=\"content\">");
         self.wrapped_content(block);
         self.line("</div>");
@@ -905,6 +968,20 @@ impl Renderer<'_> {
     fn block_title<'src>(&mut self, block: &'src Block<'src>) {
         if let Some(title) = block.title() {
             self.line(&format!("<div class=\"title\">{title}</div>"));
+        }
+    }
+
+    /// Emits a *captioned* block's `<div class="title">…</div>`, if it has a
+    /// title: the caption prefix (a ready-made `"Example 1. "` label from the
+    /// parser, including its trailing separator and space) is placed ahead of
+    /// the title text. A block with a caption but no title emits nothing, and a
+    /// titled block with no caption falls back to the bare title — matching
+    /// [`block_title`](Self::block_title). Both the caption and the title have
+    /// already had substitutions applied by the parser.
+    fn captioned_title<'src>(&mut self, block: &'src Block<'src>) {
+        if let Some(title) = block.title() {
+            let caption = block.caption().unwrap_or_default();
+            self.line(&format!("<div class=\"title\">{caption}{title}</div>"));
         }
     }
 
@@ -1241,16 +1318,6 @@ mod tests {
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
     }
 
-    #[test]
-    fn compound_example_and_sidebar_blocks_are_unsupported_for_now() {
-        // Open is the only compound-delimited context rendered so far; example
-        // (`====`) and sidebar (`****`) still emit the placeholder comment.
-        let example = convert("====\ncontent\n====");
-        assert!(example.contains("<!-- asciidoc-html5: unsupported block context 'example' -->"));
-        let sidebar = convert("****\ncontent\n****");
-        assert!(sidebar.contains("<!-- asciidoc-html5: unsupported block context 'sidebar' -->"));
-    }
-
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
     // default `html5` output (the parity oracle).
 
@@ -1342,6 +1409,114 @@ mod tests {
             "<td class=\"content\">\n<div class=\"paragraph\">\n<p>This is a winner.</p>\n\
              </div>\n</td>"
         ));
+    }
+
+    // A sidebar block places its title *inside* the content div (before the
+    // content), unlike most blocks; the delimited `****` form nests its
+    // children, while the `[sidebar]` styled paragraph drops its text into the
+    // content div unwrapped (no `<p>`).
+    #[test]
+    fn sidebar_delimited_wraps_nested_content() {
+        let html = convert("****\nContent here.\n****");
+        assert!(html.contains(
+            "<div class=\"sidebarblock\">\n<div class=\"content\">\n\
+             <div class=\"paragraph\">\n<p>Content here.</p>\n</div>\n</div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn sidebar_title_sits_inside_the_content_div() {
+        let html = convert(".Sidebar Title\n****\nContent here.\n****");
+        assert!(html.contains(
+            "<div class=\"sidebarblock\">\n<div class=\"content\">\n\
+             <div class=\"title\">Sidebar Title</div>\n\
+             <div class=\"paragraph\">\n<p>Content here.</p>\n</div>\n</div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn sidebar_styled_paragraph_emits_unwrapped_content() {
+        let html = convert("[sidebar]\nJust some text.");
+        assert!(html.contains(
+            "<div class=\"sidebarblock\">\n<div class=\"content\">\n\
+             Just some text.\n</div>\n</div>"
+        ));
+    }
+
+    // An example block places a *captioned* title (`Example N. `) before the
+    // content div, or no title div at all when untitled; the number increments
+    // per titled example in document order.
+    #[test]
+    fn example_untitled_has_no_title_div() {
+        let html = convert("====\nContent here.\n====");
+        assert!(html.contains(
+            "<div class=\"exampleblock\">\n<div class=\"content\">\n\
+             <div class=\"paragraph\">\n<p>Content here.</p>\n</div>\n</div>\n</div>"
+        ));
+        assert!(!html.contains("<div class=\"title\">"));
+    }
+
+    #[test]
+    fn example_titled_carries_a_numbered_caption() {
+        let html = convert(".An Example\n====\nContent here.\n====");
+        assert!(html.contains(
+            "<div class=\"exampleblock\">\n\
+             <div class=\"title\">Example 1. An Example</div>\n<div class=\"content\">\n\
+             <div class=\"paragraph\">\n<p>Content here.</p>\n</div>\n</div>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn titled_examples_are_numbered_in_document_order() {
+        let html = convert(".First\n====\none\n====\n\n.Second\n====\ntwo\n====");
+        assert!(html.contains("<div class=\"title\">Example 1. First</div>"));
+        assert!(html.contains("<div class=\"title\">Example 2. Second</div>"));
+    }
+
+    #[test]
+    fn example_styled_paragraph_emits_unwrapped_content() {
+        let html = convert("[example]\nJust text.");
+        assert!(html.contains(
+            "<div class=\"exampleblock\">\n<div class=\"content\">\n\
+             Just text.\n</div>\n</div>"
+        ));
+
+        // A titled styled example is captioned the same as the delimited form.
+        let titled = convert(".Titled\n[example]\nJust text.");
+        assert!(titled.contains(
+            "<div class=\"exampleblock\">\n\
+             <div class=\"title\">Example 1. Titled</div>\n<div class=\"content\">\n\
+             Just text.\n</div>\n</div>"
+        ));
+    }
+
+    // The `inline` doctype (selected via `Options::doctype`) converts a
+    // fragment: it emits only the first block's inline content, with no block
+    // wrapper and no document shell — ignoring the standalone/embedded mode
+    // (these use the module's `convert_with`, which forces standalone). The
+    // output carries the crate's usual single trailing newline.
+    #[test]
+    fn inline_doctype_emits_only_the_first_blocks_inline_content() {
+        let html = convert_with(
+            "http://x[Y] is _z_\n\nignored",
+            &Options::new().doctype("inline"),
+        );
+        assert_eq!(html, "<a href=\"http://x\">Y</a> is <em>z</em>\n");
+    }
+
+    #[test]
+    fn inline_doctype_takes_a_verbatim_first_block() {
+        let html = convert_with("----\ncode &<\n----", &Options::new().doctype("inline"));
+        assert_eq!(html, "code &amp;&lt;\n");
+    }
+
+    #[test]
+    fn inline_doctype_emits_nothing_without_an_inline_candidate() {
+        // A list is not a paragraph/verbatim/raw block, so there is no inline
+        // candidate; Asciidoctor warns and returns nil, and this crate (having
+        // no logger) produces empty output.
+        let html = convert_with("* bullet", &Options::new().doctype("inline"));
+        assert_eq!(html, "");
     }
 
     #[test]
