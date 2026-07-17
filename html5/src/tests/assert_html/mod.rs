@@ -229,6 +229,17 @@ mod tests {
     }
 
     #[test]
+    fn xpath_grouped_predicate_value_may_contain_brackets_and_parens() {
+        // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding the
+        // group's closing `)`; otherwise a legitimate predicate value throws off
+        // the counters and the query panics.
+        let html = r#"<p>x]y(z</p>
+<p>plain</p>"#;
+        assert_xpath(html, r#"(//p[text()="x]y(z"])[1]"#, 1);
+        assert_xpath(html, r#"(//p[text()="x]y(z"])[2]"#, 0);
+    }
+
+    #[test]
     fn xpath_text_value_may_contain_brackets() {
         // A `]` inside a quoted predicate value must not be read as the end of
         // the predicate (verbatim blocks routinely contain `[]`).
