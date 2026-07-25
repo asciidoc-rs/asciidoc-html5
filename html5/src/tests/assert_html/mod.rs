@@ -338,9 +338,44 @@ Famous quote.
     #[test]
     #[should_panic(expected = "unsupported XPath predicate")]
     fn xpath_unsupported_predicate_panics() {
-        // `starts-with(...)` is not implemented; it must fail loudly, not be
-        // silently ignored (which would drop the predicate and over-match).
-        assert_xpath(FRAGMENT, r#"//p[starts-with(text(),"Pre")]"#, 1);
+        // `last()` is not implemented; it must fail loudly, not be silently
+        // ignored (which would drop the predicate and over-match).
+        assert_xpath(FRAGMENT, r#"//p[last()]"#, 1);
+    }
+
+    #[test]
+    fn xpath_following_sibling_text_node_and_starts_with() {
+        // A link followed by trailing punctuation: the punctuation is a text
+        // node on the link's `following-sibling::text()` axis, and
+        // `starts-with(., "…")` filters to it. This is the shape the Links suite
+        // uses to assert that a bare URL does not absorb its trailing character.
+        let html = r#"<p>See <a href="https://example.org">https://example.org</a>.)</p>"#;
+        assert_xpath(html, r#"//a[@href="https://example.org"]"#, 1);
+        assert_xpath(
+            html,
+            r#"//a[@href="https://example.org"]/following-sibling::text()[starts-with(., ".)")]"#,
+            1,
+        );
+        // The preceding "See " text is not on the following axis.
+        assert_xpath(
+            html,
+            r#"//a[@href="https://example.org"]/following-sibling::text()[starts-with(., "See")]"#,
+            0,
+        );
+        // `text()` addresses only character data, `*` only elements: the `<p>`
+        // holds two text runs ("See " and ".)") around the single `<a>`.
+        assert_xpath(html, r#"//p/text()"#, 2);
+        assert_xpath(html, r#"//p/*"#, 1);
+    }
+
+    #[test]
+    fn xpath_child_text_axis() {
+        // An empty anchor has no `child::text()`; one with text has exactly one.
+        let html = r#"<a id="empty"></a><a id="full">label</a>"#;
+        assert_xpath(html, r#"//a[@id="empty"]/child::text()"#, 0);
+        assert_xpath(html, r#"//a[@id="full"]/child::text()"#, 1);
+        // `child::` is the default child step for an element test, too.
+        assert_xpath(html, r#"/child::a"#, 2);
     }
 
     #[test]

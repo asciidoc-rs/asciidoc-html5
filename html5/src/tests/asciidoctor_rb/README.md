@@ -117,11 +117,12 @@ which queries the parse tree instead.
 
 `//tag`, `/tag`, `//*`, `/*`; chained child (`a/b`) and descendant (`a//b`)
 steps; the `following-sibling::` / `preceding-sibling::` sibling axes and the
-general `following::` / `preceding::` document-order axes; predicates `[@id="x"]`,
-`[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[text()="x"]`,
-`[contains(text(), "x")]`, `[normalize-space(text()) = "x"]`, and the positional
-`[N]` (1-indexed, per context node); and a leading grouped path
-`(subpath)[N]…/rest` (see below).
+general `following::` / `preceding::` document-order axes; the `text()` node
+test on those axes (`a/following-sibling::text()`), addressing a character-data
+run; predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
+`[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) = "x"]`,
+`[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per context node);
+and a leading grouped path `(subpath)[N]…/rest` (see below).
 
 A leading `/` is a child step from the fragment's own top level. Because
 Nokogiri models an embedded fragment without a wrapper element, its top-level
@@ -153,11 +154,13 @@ test:
 - A positional predicate *on* a reverse axis (e.g. `preceding::p[1]`): the
   general axes return matches in document order, whereas XPath orders a reverse
   axis in reverse. The suite does not use that combination.
-- Boolean expressions (`count(...) = N`) and the `starts-with()` predicate.
-  `contains(text(), …)` and `normalize-space(text()) = …` are supported; both
-  operate on an element's direct text only.
+- Boolean expressions (`count(...) = N`), `last()`, and `position()`.
+  `contains(text(), …)`, `normalize-space(text()) = …`, and
+  `starts-with(., …)` are supported; all operate on the context node's direct
+  text only.
 - `text()` compares against an element's *direct* text only (matching XPath's
-  `text()` node test), not its full descendant text.
+  `text()` node test), not its full descendant text. As a node test on a
+  sibling axis it addresses each character-data run individually.
 
 ## Dependencies
 
