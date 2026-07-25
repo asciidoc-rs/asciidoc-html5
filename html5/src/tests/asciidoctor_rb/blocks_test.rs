@@ -28,7 +28,10 @@
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
 
-use asciidoc_parser::warnings::WarningType;
+use asciidoc_parser::{
+    blocks::{FindBlocks, IsBlock},
+    warnings::WarningType,
+};
 
 use crate::{
     convert, convert_with, load,
@@ -419,10 +422,19 @@ mod comments {
 "#
         );
 
-        // Only the rendered claim is re-expressed here; `d.blocks.size` is an
-        // `asciidoc-parser` model assertion.
-        let output = convert("paragraph\n\n////\nblock comment\n////\n\n\n");
-        assert_xpath(&output, "//p", 1);
+        // Inspect the parsed `Document` to confirm the trailing newlines create
+        // no spurious empty paragraph. This crate's parser *retains* comment
+        // blocks in the model (unlike Asciidoctor, whose `d.blocks.size` is 1),
+        // so the document holds exactly two blocks — the paragraph and the
+        // comment — and no third, empty paragraph.
+        let input = "paragraph\n\n////\nblock comment\n////\n\n\n";
+        let contexts: Vec<String> = load(input)
+            .child_blocks()
+            .map(|b| b.resolved_context().to_string())
+            .collect();
+        assert_eq!(contexts, ["paragraph", "comment"]);
+
+        assert_xpath(&convert(input), "//p", 1);
     }
 
     #[test]
