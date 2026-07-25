@@ -16,6 +16,13 @@
 //! catalog claim is checked against the loaded document rather than deferred to
 //! the parser crate.
 //!
+//! A Ruby logger claim ports the same way: `assert_message logger, :INFO,
+//! 'possible invalid reference: …'` and `assert_empty logger` are checked
+//! against [`Document::warnings`](crate::Document::warnings) — a possible-
+//! invalid-reference message maps to `WarningType::PossibleInvalidReference`.
+//! (This crate collects that warning unconditionally, whereas Asciidoctor emits
+//! it only under the verbose mode the Ruby tests enter with `in_verbose_mode`.)
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); tests
 //! for inline behavior `asciidoc-parser` diverges on (compat-mode xref
@@ -24,9 +31,10 @@
 //! table cell (tables are not rendered yet); and the tests that inject or
 //! resolve `catalog[:includes]` state, which need an include processed against
 //! a real fixture file (or hand-set catalog state this crate cannot inject).
-//! Where a test also carries a logger assertion this crate has no logger for,
-//! that part is noted. Every such divergence (DocBook aside) cites the issue
-//! tracking the work to make it compatible (#124–#128).
+//! Every such divergence (DocBook aside) cites the issue tracking the work to
+//! make it compatible (#124–#128).
+
+use asciidoc_parser::warnings::WarningType;
 
 use crate::{
     convert, convert_document, convert_with, load, load_with,
@@ -2319,8 +2327,7 @@ fn xref_using_angled_bracket_syntax_with_quoted_label() {
 
 // Compat-mode xref-target handling is an `asciidoc-parser` inline concern
 // this crate does not drive; the parser renders the inter-document form
-// instead (a divergence), and the test also asserts a verbose-logger message
-// this crate has no logger for. Tracked by #124.
+// instead of the plain internal reference — a divergence. Tracked by #124.
 non_normative!(
     r###"
   test 'should not interpret path sans extension in xref with angled bracket syntax in compat mode' do
@@ -2689,8 +2696,7 @@ fn xref_using_angled_bracket_syntax_with_path_and_extension_with_fragment() {
 
 // Compat-mode xref-target handling is an `asciidoc-parser` inline concern
 // this crate does not drive; the parser renders the inter-document form
-// instead (a divergence), and the test also asserts a verbose-logger message
-// this crate has no logger for. Tracked by #124.
+// instead of the plain internal reference — a divergence. Tracked by #124.
 non_normative!(
     r###"
   test 'xref using macro syntax with path and extension in compat mode' do
@@ -3248,13 +3254,22 @@ fn should_warn_and_create_link_if_verbose_flag_is_set_and_reference_is_not_found
 "###
     );
 
+    // The reference does not resolve: it renders as a broken link, and the
+    // document records a `possible invalid reference` warning — the
+    // counterpart to the Ruby test's `assert_message logger, :INFO, …`.
+    // (This crate always collects the warning; Asciidoctor gates it on
+    // verbose mode, which the Ruby test enters via `in_verbose_mode`.)
     let input = "[#foobar]\n== Foobar\n\n== Section B\n\nSee <<foobaz>>.\n";
-    let output = convert(input);
+    let doc = load(input);
+    let output = convert_document(&doc);
     assert_xpath(
         &output,
         r####"//a[@href="#foobaz"][text() = "[foobaz]"]"####,
         1,
     );
+    assert!(doc
+        .warnings()
+        .any(|w| w.warning == WarningType::PossibleInvalidReference("foobaz".to_string())));
 }
 
 #[test]
@@ -3282,15 +3297,18 @@ fn should_not_warn_if_verbose_flag_is_set_and_reference_is_found_in_compat_mode(
 "###
     );
 
-    // The compat-mode setup and the verbose-logger assertion are not modeled;
-    // the rendered resolution (foobar → its title) holds regardless.
+    // In compat mode the block anchor `[[foobar]]` gives the section its id,
+    // so `<<foobar>>` resolves and no warning is recorded — the counterpart
+    // to `assert_empty logger`.
     let input = "[[foobar]]\n== Foobar\n\n== Section B\n\nSee <<foobar>>.\n";
-    let output = convert(input);
+    let doc = load_with(input, &Options::new().attribute("compat-mode", ""));
+    let output = convert_document(&doc);
     assert_xpath(
         &output,
         r####"//a[@href="#foobar"][text() = "Foobar"]"####,
         1,
     );
+    assert_eq!(doc.warnings().count(), 0);
 }
 
 #[test]
@@ -3319,12 +3337,16 @@ fn should_warn_and_create_link_if_verbose_flag_is_set_and_reference_using_notati
     );
 
     let input = "[#foobar]\n== Foobar\n\n== Section B\n\nSee <<#foobaz>>.\n";
-    let output = convert(input);
+    let doc = load(input);
+    let output = convert_document(&doc);
     assert_xpath(
         &output,
         r####"//a[@href="#foobaz"][text() = "[foobaz]"]"####,
         1,
     );
+    assert!(doc
+        .warnings()
+        .any(|w| w.warning == WarningType::PossibleInvalidReference("foobaz".to_string())));
 }
 
 // Depends on include processing against test fixtures (`fixturedir`) and
