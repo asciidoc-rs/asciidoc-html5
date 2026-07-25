@@ -29,7 +29,8 @@
 use asciidoc_parser::{
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel,
-        FindBlocks, IsBlock, QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
+        FindBlocks, IsBlock, ListBlock, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
+        SimpleBlockStyle,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
     Document, SafeMode,
@@ -272,6 +273,29 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
+/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
+/// for an olist: an explicit numbering keyword from the block's declared style
+/// (`[loweralpha]`, `[upperroman]`, …) wins, otherwise the style implied by the
+/// first item's marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to
+/// `arabic`, which a bare `.` marker also yields.
+fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
+    const ORDERED_LIST_STYLES: [&str; 5] = [
+        "arabic",
+        "loweralpha",
+        "lowerroman",
+        "upperalpha",
+        "upperroman",
+    ];
+
+    if let Some(style) = block.declared_style() {
+        if ORDERED_LIST_STYLES.contains(&style) {
+            return style;
+        }
+    }
+
+    list.marker_style().unwrap_or("arabic")
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -294,6 +318,7 @@ pub(crate) fn render_document(
         out: String::new(),
         custom_stylesheet,
         standalone,
+        icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
     };
     renderer.document(document);
     renderer.out
@@ -310,6 +335,10 @@ struct Renderer<'a> {
     /// Whether to emit the standalone document shell (`true`) or embedded,
     /// body-only output (`false`).
     standalone: bool,
+
+    /// Whether the document sets `:icons: font`, which selects Font Awesome
+    /// checkbox glyphs for interactive-less checklists (matching Asciidoctor).
+    icons_font: bool,
 }
 
 impl Renderer<'_> {
@@ -711,6 +740,10 @@ impl Renderer<'_> {
             Block::Preamble(_) => self.preamble(block),
             Block::Break(brk) => self.break_block(brk),
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
+                // A `[source]`-styled delimited listing renders like a source
+                // block (the `<pre class="highlight"><code …>` shape), matching
+                // Asciidoctor; a plain `----` listing is a verbatim block.
+                "listing" if block.declared_style() == Some("source") => self.source(block),
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
                 other => self.unsupported(other),
@@ -722,6 +755,16 @@ impl Renderer<'_> {
             },
             Block::Quote(quote) => self.quote(block, quote),
             Block::Admonition(admonition) => self.admonition(block, admonition),
+            Block::List(list) => match list.type_() {
+                ListType::Unordered => self.ulist(block, list),
+                ListType::Ordered => self.olist(block, list),
+
+                // Description and callout lists are not rendered yet; see
+                // ARCHITECTURE.md for the roadmap.
+                ListType::Description | ListType::Callout => {
+                    self.unsupported(&block.resolved_context())
+                }
+            },
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -910,6 +953,179 @@ impl Renderer<'_> {
         self.line("</tr>");
         self.line("</table>");
         self.line("</div>");
+    }
+
+    /// An unordered list: `<div class="ulist …"><ul …><li>…</li>…</ul></div>`,
+    /// matching Asciidoctor's `convert_ulist`.
+    ///
+    /// The wrapper `<div>` carries the `ulist` class, then (for a checklist) a
+    /// `checklist` class, then the list's declared style (`square`, `circle`,
+    /// `none`, …) and any roles. The inner `<ul>` carries `class="checklist"`
+    /// for a checklist, otherwise the declared style as its class, or no class
+    /// at all for a plain bullet list.
+    fn ulist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let checklist = list.is_checklist();
+        let style = block.declared_style();
+
+        // `['ulist', ('checklist')?, style, *roles]` — the checklist class sits
+        // right after `ulist`, ahead of the style and roles.
+        let mut base = String::from("ulist");
+        if checklist {
+            base.push_str(" checklist");
+        }
+        if let Some(style) = style {
+            base.push(' ');
+            base.push_str(style);
+        }
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&base, &block.roles())
+        ));
+        self.block_title(block);
+
+        // A checklist's `<ul>` always carries `class="checklist"`; otherwise a
+        // declared style becomes the `<ul>` class, and a plain list gets none.
+        let ul_class = if checklist {
+            " class=\"checklist\"".to_string()
+        } else if let Some(style) = style {
+            format!(" class=\"{}\"", escape_attribute(style))
+        } else {
+            String::new()
+        };
+        self.line(&format!("<ul{ul_class}>"));
+
+        let interactive = block.has_option("interactive");
+        for item in list.child_blocks() {
+            self.list_item(item, checklist, interactive);
+        }
+
+        self.line("</ul>");
+        self.line("</div>");
+    }
+
+    /// An ordered list: `<div class="olist <style>"><ol
+    /// class="<style>" …><li>…</li>…</ol></div>`, matching Asciidoctor's
+    /// `convert_olist`.
+    ///
+    /// The numbering style (`arabic`, `loweralpha`, `lowerroman`, `upperalpha`,
+    /// `upperroman`) names both the wrapper `<div>` class and the `<ol>` class;
+    /// the `<ol>` additionally carries an HTML `type` for the alphabetic and
+    /// roman styles, a `start` when `[start=N]` is set, and a bare `reversed`
+    /// under the `%reversed` option.
+    fn olist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let style = olist_style(block, list);
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&format!("olist {style}"), &block.roles())
+        ));
+        self.block_title(block);
+
+        // The HTML `type` mirrors Asciidoctor's `ORDERED_LIST_KEYWORDS`: arabic
+        // needs none, the others carry the matching numbering letter.
+        let type_attr = match style {
+            "loweralpha" => " type=\"a\"",
+            "lowerroman" => " type=\"i\"",
+            "upperalpha" => " type=\"A\"",
+            "upperroman" => " type=\"I\"",
+            _ => "",
+        };
+
+        // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor emits
+        // its value verbatim (an explicit first marker like `7.` does not).
+        let start_attr = list
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("start"))
+            .map(|attr| format!(" start=\"{}\"", escape_attribute(attr.value())))
+            .unwrap_or_default();
+
+        let reversed_attr = if block.has_option("reversed") {
+            " reversed"
+        } else {
+            ""
+        };
+
+        self.line(&format!(
+            "<ol class=\"{}\"{type_attr}{start_attr}{reversed_attr}>",
+            escape_attribute(style)
+        ));
+
+        for item in list.child_blocks() {
+            self.list_item(item, false, false);
+        }
+
+        self.line("</ol>");
+        self.line("</div>");
+    }
+
+    /// Emits one `<li>…</li>` for a list item: the principal text as a bare
+    /// `<p>`, followed by any attached blocks (continuation paragraphs, nested
+    /// lists), matching Asciidoctor's `convert_ulist`/`convert_olist` item
+    /// loop.
+    ///
+    /// An item's own id/roles decorate the `<li>`. When `checklist` is set and
+    /// the item carries a checkbox, the principal text is prefixed with the
+    /// checkbox marker selected by [`checkbox_marker`](Self::checkbox_marker).
+    fn list_item<'src>(&mut self, item: &'src Block<'src>, checklist: bool, interactive: bool) {
+        let Block::ListItem(list_item) = item else {
+            return;
+        };
+
+        // `<li id="…" class="…">`, `<li class="…">`, or a bare `<li>`, following
+        // Asciidoctor: the id (if any) comes first, then the item's roles.
+        let li_open = if let Some(id) = item.id() {
+            format!(
+                "<li id=\"{}\"{}>",
+                escape_attribute(id),
+                class_attribute("", &item.roles())
+            )
+        } else if !item.roles().is_empty() {
+            format!("<li{}>", class_attribute("", &item.roles()))
+        } else {
+            "<li>".to_string()
+        };
+        self.line(&li_open);
+
+        // The first attached block is the item's principal text, emitted as a
+        // bare `<p>`; the remainder render as ordinary nested blocks.
+        let mut blocks = list_item.child_blocks();
+        let principal = blocks
+            .next()
+            .and_then(|block| block.rendered_content())
+            .unwrap_or_default();
+
+        match (checklist, list_item.checkbox()) {
+            (true, Some(checked)) => {
+                let marker = self.checkbox_marker(checked, interactive);
+                self.line(&format!("<p>{marker}{principal}</p>"));
+            }
+            _ => self.line(&format!("<p>{principal}</p>")),
+        }
+
+        for block in blocks {
+            self.block(block);
+        }
+
+        self.line("</li>");
+    }
+
+    /// The checkbox glyph that prefixes a checklist item's text, mirroring
+    /// Asciidoctor's `convert_ulist`: an interactive `<input>` under the
+    /// `%interactive` option, a Font Awesome icon when `:icons: font` is set,
+    /// and the plain-text ballot-box entities otherwise. The trailing space is
+    /// part of the marker.
+    fn checkbox_marker(&self, checked: bool, interactive: bool) -> &'static str {
+        match (interactive, self.icons_font, checked) {
+            (true, _, true) => "<input type=\"checkbox\" data-item-complete=\"1\" checked> ",
+            (true, _, false) => "<input type=\"checkbox\" data-item-complete=\"0\"> ",
+            (false, true, true) => "<i class=\"fa fa-check-square-o\"></i> ",
+            (false, true, false) => "<i class=\"fa fa-square-o\"></i> ",
+            (false, false, true) => "&#10003; ",
+            (false, false, false) => "&#10063; ",
+        }
     }
 
     /// Emits the inner content shared by wrapper blocks (open, quote,
@@ -1154,8 +1370,26 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        let html = convert("* one\n* two");
+        // Description lists are not rendered yet, so they still emit the
+        // placeholder marker (unordered/ordered lists now render).
+        let html = convert("term:: definition");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    }
+
+    #[test]
+    fn unordered_list_renders_ulist() {
+        let html = convert("* one\n* two");
+        assert!(html.contains(
+            "<div class=\"ulist\">\n<ul>\n<li>\n<p>one</p>\n</li>\n<li>\n<p>two</p>\n</li>\n</ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn ordered_list_renders_olist_with_style() {
+        let html = convert(". one\n. two");
+        assert!(html.contains(
+            "<div class=\"olist arabic\">\n<ol class=\"arabic\">\n<li>\n<p>one</p>\n</li>"
+        ));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
