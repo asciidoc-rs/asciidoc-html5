@@ -17,10 +17,8 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - deferred features, each tracked by an issue: verbatim `indent` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>),
-//!   `tabsize` (#111), `nowrap`/`prewrap` (#112), example captions/counters
-//!   (#113), collapsible examples (#114), `listing-caption` (#115), verbatim
-//!   blank-line strip (#118).
+//! - deferred features, each tracked by an issue: example captions/counters (<https://github.com/asciidoc-rs/asciidoc-html5/issues/113>),
+//!   collapsible examples (#114), `listing-caption` (#115).
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -2391,11 +2389,10 @@ mod preformatted_blocks {
         }
     }
 
-    // Stripping leading/trailing blank lines (plus `subs=attributes` expanding
-    // `{empty}`) on verbatim blocks is not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/118>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_strip_leading_and_trailing_blank_lines_when_converting_verbatim_block() {
+        verifies!(
+            r#"
     test 'should strip leading and trailing blank lines when converting verbatim block' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2420,7 +2417,18 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        // The `block.lines` assertion inspects the parser's line buffer (verified
+        // in `asciidoc-parser`); here we drive the rendered output. The
+        // `subs="attributes"` step expands `{empty}` to nothing (the parser's
+        // job), leaving a run of trailing blank lines the renderer then trims
+        // along with the leading ones.
+        let output = convert(
+            "[subs=\"attributes\"]\n....\n\n\n  first line\n\nlast line\n\n{empty}\n\n....\n",
+        );
+        assert_xpath(&output, "//pre[text()=\"  first line\n\nlast line\"]", 1);
+    }
 
     #[test]
     fn should_process_block_with_crlf_line_endings() {
@@ -2451,12 +2459,10 @@ mod preformatted_blocks {
         );
     }
 
-    // The `indent`/`source-indent` attribute (indent removal/normalization) is
-    // not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/110>. Only the
-    // `indent="-1"` (leave-as-is) case matches today and is verified below.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_remove_block_indent_if_indent_attribute_is_0() {
+        verifies!(
+            r#"
     test 'should remove block indent if indent attribute is 0' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2487,7 +2493,18 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output =
+            convert("[indent=\"0\"]\n----\n    def names\n\n      @names.split\n\n    end\n----\n");
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\"def names\n\n  @names.split\n\nend\"]",
+            1,
+        );
+    }
 
     #[test]
     fn should_not_remove_block_indent_if_indent_attribute_is_minus_1() {
@@ -2530,9 +2547,11 @@ mod preformatted_blocks {
         );
     }
 
-    // Indent normalization (`indent="1"` / `source-indent`) — see #110.
-    non_normative!(
-        r#"
+    // Indent normalization (`indent="1"` / `source-indent`).
+    #[test]
+    fn should_set_block_indent_to_value_specified_by_indent_attribute() {
+        verifies!(
+            r#"
     test 'should set block indent to value specified by indent attribute' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2555,6 +2574,27 @@ mod preformatted_blocks {
       assert_equal expected, result
     end
 
+"#
+        );
+
+        // `expected` replaces the four-space block indent with a single space on
+        // each of the five content lines: ` def names`, ``, `   @names.split`,
+        // ``, ` end`.
+        let output =
+            convert("[indent=\"1\"]\n----\n    def names\n\n      @names.split\n\n    end\n----\n");
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\" def names\n\n   @names.split\n\n end\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_block_indent_to_value_specified_by_indent_document_attribute() {
+        verifies!(
+            r#"
     test 'should set block indent to value specified by indent document attribute' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2580,12 +2620,26 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
 
-    // Tab expansion (`tabsize`) is not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/111>.
-    non_normative!(
-        r#"
+        // The `source-indent` document attribute supplies the indent for the
+        // source block, normalizing the four-space indent to one space.
+        let output = convert(
+            ":source-indent: 1\n\n[source,ruby]\n----\n    def names\n\n      @names.split\n\n    end\n----\n",
+        );
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\" def names\n\n   @names.split\n\n end\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_expand_tabs_if_tabsize_attribute_is_positive() {
+        verifies!(
+            r#"
     test 'should expand tabs if tabsize attribute is positive' do
       input = <<~EOS
       :tabsize: 4
@@ -2617,13 +2671,27 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
 
-    // The `nowrap` option / `prewrap` attribute (`pre.nowrap`) is not
-    // implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/112>.
-    non_normative!(
-        r#"
+        // Each leading tab expands to four spaces on the tab stop, then the
+        // `indent=0` normalization removes the resulting four-space block
+        // indent, leaving the second line indented four spaces.
+        let output = convert(
+            ":tabsize: 4\n\n[indent=0]\n----\n\tdef names\n\n\t\t@names.split\n\n\tend\n----\n",
+        );
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\"def names\n\n    @names.split\n\nend\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn literal_block_should_honor_nowrap_option() {
+        verifies!(
+            r#"
     test 'literal block should honor nowrap option' do
       input = <<~'EOS'
       [options="nowrap"]
@@ -2636,6 +2704,18 @@ mod preformatted_blocks {
       assert_css 'pre.nowrap', output, 1
     end
 
+"#
+        );
+
+        let output =
+            convert("[options=\"nowrap\"]\n----\nDo not wrap me if I get too long.\n----\n");
+        assert_css(&output, "pre.nowrap", 1);
+    }
+
+    #[test]
+    fn literal_block_should_set_nowrap_class_if_prewrap_document_attribute_is_disabled() {
+        verifies!(
+            r#"
     test 'literal block should set nowrap class if prewrap document attribute is disabled' do
       input = <<~'EOS'
       :prewrap!:
@@ -2650,7 +2730,11 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert(":prewrap!:\n\n----\nDo not wrap me if I get too long.\n----\n");
+        assert_css(&output, "pre.nowrap", 1);
+    }
 
     #[test]
     fn should_preserve_guard_in_front_of_callout_if_icons_are_not_enabled() {
