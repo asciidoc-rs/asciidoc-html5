@@ -643,6 +643,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn should_clean_crlf_from_end_of_lines() {
             verifies!(
@@ -674,11 +675,13 @@ mod preprocessor_reader {
             assert!(html.contains("source\nwith\nCRLF\nline endings"), "{html}");
             assert!(!html.contains('\r'), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_skip_front_matter_by_default() {
             verifies!(
@@ -711,11 +714,13 @@ mod preprocessor_reader {
             let html = convert("---\nlayout: post\ntitle: Document Title\nauthor: username\ntags: [ first, second ]\n---\n= Document Title\nAuthor Name\n\npreamble\n");
             assert!(html.contains("layout: post"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_skip_front_matter_if_ending_delimiter_is_not_found() {
             verifies!(
@@ -748,11 +753,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("title: Document Title"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_skip_front_matter_if_specified_by_skip_front_matter_attribute() {
             verifies!(
@@ -794,6 +801,7 @@ mod preprocessor_reader {
             assert!(!html.contains("layout: post"), "{html}");
             assert!(html.contains("preamble"), "{html}");
         }
+
         non_normative!(
             r#"
     end
@@ -901,6 +909,7 @@ mod preprocessor_reader {
     context 'Include Directive' do
 "#
         );
+
         #[test]
         fn should_replace_include_directive_with_link_macro_in_default_safe_mode() {
             verifies!(
@@ -920,6 +929,7 @@ mod preprocessor_reader {
             assert_css(&html, "a.include", 1);
             assert_xpath(&html, r#"//a[@href="include-file.adoc"]"#, 1);
         }
+
         non_normative!(
             r#"
 
@@ -932,6 +942,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn should_escape_spaces_in_target_when_generating_link_from_include_directive() {
             verifies!(
@@ -950,6 +961,7 @@ mod preprocessor_reader {
             assert_css(&html, "a.include", 1);
             assert_xpath(&html, r#"//a[@href="foo bar baz.adoc"]"#, 1);
         }
+
         non_normative!(
             r#"
 
@@ -979,6 +991,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn include_directive_is_enabled_when_safe_mode_is_less_than_secure() {
             verifies!(
@@ -996,6 +1009,7 @@ mod preprocessor_reader {
             let html = convert_safe_with_fixtures("include::fixtures/include-file.adoc[]");
             assert!(html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
@@ -1138,6 +1152,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn include_directive_should_process_lines_when_file_extension_of_target_is_asciidoc() {
             verifies!(
@@ -1159,6 +1174,7 @@ mod preprocessor_reader {
             assert!(html.contains("Asciidoctor!"), "{html}");
             assert!(html.contains("last line"), "{html}");
         }
+
         non_normative!(
             r#"
 
@@ -1217,6 +1233,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn unresolved_target_referenced_by_include_directive_is_skipped_when_optional_option_is_set(
         ) {
@@ -1251,11 +1268,13 @@ mod preprocessor_reader {
             assert!(html.contains("trailing content"), "{html}");
             assert!(!html.contains("Unresolved directive"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_skip_include_directive_that_references_missing_file_if_optional_option_is_set() {
             verifies!(
@@ -1287,11 +1306,13 @@ mod preprocessor_reader {
             assert!(html.contains("trailing content"), "{html}");
             assert!(!html.contains("Unresolved directive"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_replace_include_directive_that_references_missing_file_with_message() {
             verifies!(
@@ -1337,6 +1358,7 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
@@ -1509,6 +1531,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn include_directive_supports_selecting_lines_by_line_number() {
             verifies!(
@@ -1542,11 +1565,13 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_supports_line_ranges_separated_by_commas_in_quoted_attribute_value() {
             verifies!(
@@ -1580,11 +1605,13 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_ignores_spaces_between_line_ranges_in_quoted_attribute_value() {
             verifies!(
@@ -1618,11 +1645,13 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_supports_implicit_endless_range() {
             verifies!(
@@ -1651,11 +1680,13 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_ignores_lines_attribute_if_empty() {
             verifies!(
@@ -1679,11 +1710,13 @@ mod preprocessor_reader {
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_ignores_lines_attribute_with_invalid_range() {
             verifies!(
@@ -1708,11 +1741,13 @@ mod preprocessor_reader {
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_supports_selecting_lines_by_tag() {
             verifies!(
@@ -1735,11 +1770,13 @@ mod preprocessor_reader {
             assert!(!html.contains("non-tagged content"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_supports_selecting_lines_by_tags() {
             verifies!(
@@ -1763,11 +1800,13 @@ mod preprocessor_reader {
             assert!(!html.contains("non-tagged content"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_supports_selecting_lines_by_tag_in_language_that_uses_circumfix_comments(
         ) {
@@ -1808,6 +1847,7 @@ mod preprocessor_reader {
                 assert!(html.contains(expect), "{filename}: {html}");
             }
         }
+
         non_normative!(
             r#"
 
@@ -1846,6 +1886,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn include_directive_does_not_select_lines_containing_tag_directives_within_selected_tag_region(
         ) {
@@ -1885,11 +1926,13 @@ mod preprocessor_reader {
                 "nested tag directives should be excluded: {html}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_skips_lines_inside_tag_which_is_negated() {
             verifies!(
@@ -1923,11 +1966,13 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_without_a_tag_directive_when_value_is_double_asterisk(
         ) {
@@ -1967,11 +2012,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_except_lines_inside_tag_which_is_negated_when_value_starts_with_double_asterisk(
         ) {
@@ -2006,11 +2053,13 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_including_lines_inside_nested_tags_except_lines_inside_tag_which_is_negated_when_value_starts_with_double_asterisk(
         ) {
@@ -2047,11 +2096,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_outside_of_tags_when_value_is_double_asterisk_followed_by_negated_wildcard(
         ) {
@@ -2079,11 +2130,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_skips_all_tagged_regions_when_value_of_tags_attribute_is_negated_wildcard(
         ) {
@@ -2108,12 +2161,14 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
+
         non_normative!(
             r#"
 
       # FIXME this is a weird one since we'd expect it to only select the specified tags; but it's always been this way
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_except_for_lines_containing_tag_directive_if_value_is_double_asterisk_followed_by_nested_tag_names(
         ) {
@@ -2153,12 +2208,14 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
       # FIXME this is a weird one since we'd expect it to only select the specified tags; but it's always been this way
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_except_for_lines_containing_tag_directive_when_value_is_double_asterisk_followed_by_outer_tag_name(
         ) {
@@ -2198,11 +2255,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_inside_unspecified_tags_when_value_is_negated_double_asterisk_followed_by_negated_tags(
         ) {
@@ -2235,11 +2294,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_except_tag_which_is_negated_when_value_only_contains_negated_tag(
         ) {
@@ -2274,11 +2335,13 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_all_lines_except_tags_which_are_negated_when_value_only_contains_negated_tags(
         ) {
@@ -2306,11 +2369,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_recognize_tag_wildcard_if_not_at_start_of_tags_list() {
             verifies!(
@@ -2347,11 +2412,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_lines_between_tags_when_value_of_tags_attribute_is_wildcard() {
             verifies!(
@@ -2386,11 +2453,13 @@ mod preprocessor_reader {
                 convert_safe_with_fixtures("----\ninclude::fixtures/tagged-class.rb[tags=*]\n----");
             assert_listing_selection(&html, "  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_lines_inside_tags_when_value_of_tags_attribute_is_wildcard_and_tag_surrounds_content(
         ) {
@@ -2430,11 +2499,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_lines_inside_all_tags_except_tag_which_is_negated_when_value_of_tags_attribute_is_wildcard_followed_by_negated_tag(
         ) {
@@ -2471,11 +2542,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_skips_all_tagged_regions_except_ones_re_enabled_when_value_of_tags_attribute_is_negated_wildcard_followed_by_tag_name(
         ) {
@@ -2513,11 +2586,13 @@ mod preprocessor_reader {
                 );
             }
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_includes_regions_outside_tags_and_inside_specified_tags_when_value_begins_with_negated_wildcard(
         ) {
@@ -2549,11 +2624,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n  end\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_includes_lines_inside_tag_except_for_lines_inside_nested_tags_when_tag_is_followed_by_negated_wildcard(
         ) {
@@ -2584,11 +2661,13 @@ mod preprocessor_reader {
                 assert_listing_selection(&html, "  def bark\n  end");
             }
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_selects_lines_inside_tag_except_for_lines_inside_nested_tags_when_tag_is_preceded_by_negated_double_asterisk_and_negated_wildcard(
         ) {
@@ -2616,11 +2695,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "  def bark\n  end");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_does_not_select_lines_inside_tag_that_has_been_included_then_excluded()
         {
@@ -2648,11 +2729,13 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_only_selects_lines_inside_specified_tag_even_if_proceeded_by_negated_double_asterisk(
         ) {
@@ -2688,6 +2771,7 @@ mod preprocessor_reader {
                 assert_listing_selection(&html, "  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end");
             }
         }
+
         non_normative!(
             r#"
 
@@ -2713,6 +2797,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn should_warn_if_specified_tag_is_not_found_in_include_file() {
             verifies!(
@@ -2735,11 +2820,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_warn_if_specified_negated_tag_is_not_found_in_include_file() {
             verifies!(
@@ -2783,11 +2870,13 @@ mod preprocessor_reader {
                 fixture_warnings(src)
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_specified_tags_are_not_found_in_include_file() {
             verifies!(
@@ -2818,11 +2907,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_warn_if_specified_negated_tags_are_not_found_in_include_file() {
             verifies!(
@@ -2866,11 +2957,13 @@ mod preprocessor_reader {
                 fixture_warnings(src)
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_specified_tag_in_include_file_is_not_closed() {
             verifies!(
@@ -2903,11 +2996,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_end_tag_in_included_file_is_mismatched() {
             verifies!(
@@ -2939,11 +3034,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_unexpected_end_tag_is_found_in_included_file() {
             verifies!(
@@ -2975,11 +3072,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_ignores_tags_attribute_when_empty() {
             verifies!(
@@ -3008,11 +3107,13 @@ mod preprocessor_reader {
                 assert!(html.contains("end::"), "{html}");
             }
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn lines_attribute_takes_precedence_over_tags_attribute_in_include_directive() {
             verifies!(
@@ -3034,11 +3135,13 @@ mod preprocessor_reader {
             assert!(!html.contains("snippetA content"), "{html}");
             assert!(!html.contains("snippetB content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn indent_of_included_file_can_be_reset_to_size_of_indent_attribute() {
             verifies!(
@@ -3061,11 +3164,13 @@ mod preprocessor_reader {
             let html = convert_safe_with_fixtures("[source, xml]\n----\ninclude::fixtures/basic-docinfo.xml[lines=2..3, indent=0]\n----");
             assert!(html.contains("&lt;year&gt;2013&lt;/year&gt;\n&lt;holder&gt;Acme\u{2122}, Inc.&lt;/holder&gt;"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_substitute_attribute_references_in_attrlist() {
             verifies!(
@@ -3093,6 +3198,7 @@ mod preprocessor_reader {
             assert!(!html.contains("non-tagged content"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
@@ -3120,6 +3226,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn leveloffset_attribute_entries_should_be_added_to_content_if_leveloffset_attribute_is_specified(
         ) {
@@ -3154,11 +3261,13 @@ mod preprocessor_reader {
             assert!(html.contains("preamble"), "{html}");
             assert!(html.contains("content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn attributes_are_substituted_in_target_of_include_directive() {
             verifies!(
@@ -3183,11 +3292,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn line_is_skipped_by_default_if_target_of_include_directive_resolves_to_empty() {
             verifies!(
@@ -3210,11 +3321,13 @@ mod preprocessor_reader {
             let html = convert_safe_with_fixtures("include::{blank}[]");
             assert!(html.contains("Unresolved directive"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_is_dropped_if_target_contains_missing_attribute_and_attribute_missing_is_drop_line(
         ) {
@@ -3247,11 +3360,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn line_following_dropped_include_is_not_dropped() {
             verifies!(
@@ -3291,11 +3406,13 @@ mod preprocessor_reader {
             assert!(html.contains("Unresolved directive"), "{html}");
             assert!(html.contains("yo"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn escaped_include_directive_is_left_unprocessed() {
             verifies!(
@@ -3328,11 +3445,13 @@ mod preprocessor_reader {
             );
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_not_at_start_of_line_is_ignored() {
             verifies!(
@@ -3353,11 +3472,13 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_is_disabled_when_max_include_depth_attribute_is_0() {
             verifies!(
@@ -3380,11 +3501,13 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn max_include_depth_cannot_be_set_by_document() {
             verifies!(
@@ -3412,11 +3535,13 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_should_be_disabled_if_max_include_depth_has_been_exceeded() {
             verifies!(
@@ -3451,11 +3576,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_directive_should_be_disabled_if_max_include_depth_set_in_nested_context_has_been_exceeded(
         ) {
@@ -3491,6 +3618,7 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
@@ -3652,6 +3780,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn ifdef_with_defined_attribute_includes_content() {
             verifies!(
@@ -3680,11 +3809,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("There is a holy grail!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_defined_attribute_includes_text_in_brackets() {
             verifies!(
@@ -3718,6 +3849,7 @@ mod preprocessor_reader {
                 "{html}"
             );
         }
+
         non_normative!(
             r#"
 
@@ -3734,6 +3866,7 @@ mod preprocessor_reader {
 
 "#
         );
+
         #[test]
         fn ifdef_attribute_name_is_not_case_sensitive() {
             verifies!(
@@ -3758,11 +3891,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("The script is shown!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_defined_attribute_does_not_include_text_in_brackets() {
             verifies!(
@@ -3793,11 +3928,13 @@ mod preprocessor_reader {
             assert!(!html.contains("There is a holy grail!"), "{html}");
             assert!(html.contains("There was no rejoicing."), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_with_non_matching_nested_exclude() {
             verifies!(
@@ -3827,11 +3964,13 @@ mod preprocessor_reader {
             let html = convert_with_attrs("ifdef::grail[]\nholy\nifdef::swallow[]\nswallow\nendif::swallow[]\ngrail\nendif::grail[]", &[("grail", "")]);
             assert!(html.contains("holy\ngrail"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn nested_excludes_with_same_condition() {
             verifies!(
@@ -3862,11 +4001,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn include_with_nested_exclude_of_inverted_condition() {
             verifies!(
@@ -3896,11 +4037,13 @@ mod preprocessor_reader {
             let html = convert_with_attrs("ifdef::grail[]\nholy\nifndef::grail[]\nnot here\nendif::grail[]\ngrail\nendif::grail[]", &[("grail", "")]);
             assert!(html.contains("holy\ngrail"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn exclude_with_matching_nested_exclude() {
             verifies!(
@@ -3932,11 +4075,13 @@ mod preprocessor_reader {
             let html = convert_with_attrs("poof\nifdef::swallow[]\nno\nifdef::swallow[]\nswallow\nendif::swallow[]\nhere\nendif::swallow[]\ngone", &[("grail", "")]);
             assert!(html.contains("poof\ngone"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn exclude_with_nested_include_using_shorthand_end() {
             verifies!(
@@ -3968,11 +4113,13 @@ mod preprocessor_reader {
             let html = convert_with_attrs("poof\nifndef::grail[]\nno grail\nifndef::swallow[]\nor swallow\nendif::[]\nin here\nendif::[]\ngone", &[("grail", "")]);
             assert!(html.contains("poof\ngone"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_one_alternative_attribute_set_includes_content() {
             verifies!(
@@ -4001,11 +4148,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_no_alternative_attributes_set_does_not_include_content() {
             verifies!(
@@ -4034,11 +4183,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_all_required_attributes_set_includes_content() {
             verifies!(
@@ -4067,11 +4218,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_missing_required_attributes_does_not_include_content() {
             verifies!(
@@ -4100,11 +4253,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_should_permit_leading_trailing_and_repeat_operators() {
             verifies!(
@@ -4146,11 +4301,13 @@ mod preprocessor_reader {
                 }
             }
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_undefined_attribute_includes_block() {
             verifies!(
@@ -4179,11 +4336,13 @@ mod preprocessor_reader {
                 "{html}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_one_alternative_attribute_set_does_not_include_content() {
             verifies!(
@@ -4207,11 +4366,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_both_alternative_attributes_set_does_not_include_content() {
             verifies!(
@@ -4235,11 +4396,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_no_alternative_attributes_set_includes_content() {
             verifies!(
@@ -4263,11 +4426,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_no_required_attributes_set_includes_content() {
             verifies!(
@@ -4291,11 +4456,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_all_required_attributes_set_does_not_include_content() {
             verifies!(
@@ -4319,11 +4486,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifndef_with_at_least_one_required_attributes_set_does_not_include_content() {
             verifies!(
@@ -4347,11 +4516,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_around_empty_line_does_not_introduce_extra_line() {
             verifies!(
@@ -4377,11 +4548,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("before\nafter"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_warning_if_endif_is_unmatched() {
             verifies!(
@@ -4418,11 +4591,13 @@ mod preprocessor_reader {
                 )]
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_warning_if_endif_is_mismatched() {
             verifies!(
@@ -4467,11 +4642,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_warning_if_endif_contains_text() {
             verifies!(
@@ -4508,11 +4685,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn escaped_ifdef_is_unescaped_and_ignored() {
             verifies!(
@@ -4542,11 +4721,13 @@ mod preprocessor_reader {
                 "{html}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_missing_attribute_to_nil_includes_content() {
             verifies!(
@@ -4573,11 +4754,13 @@ mod preprocessor_reader {
                 convert_with_attrs("ifeval::['{foo}' == '']\nNo foo for you!\nendif::[]", &[]);
             assert!(html.contains("No foo for you!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_missing_attribute_to_0_drops_content() {
             verifies!(
@@ -4606,11 +4789,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_running_unsupported_operation_on_missing_attribute_drops_content() {
             verifies!(
@@ -4639,11 +4824,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_running_invalid_operation_drops_content() {
             verifies!(
@@ -4672,11 +4859,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_double_quoted_attribute_to_matching_string_includes_content() {
             verifies!(
@@ -4705,11 +4894,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Asciidoctor it is!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_single_quoted_attribute_to_matching_string_includes_content() {
             verifies!(
@@ -4738,11 +4929,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Asciidoctor it is!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_quoted_attribute_to_non_matching_string_drops_content() {
             verifies!(
@@ -4771,11 +4964,13 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_attribute_to_lower_version_number_includes_content() {
             verifies!(
@@ -4804,11 +4999,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("That version will do!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_comparing_attribute_to_self_includes_content() {
             verifies!(
@@ -4834,11 +5031,13 @@ mod preprocessor_reader {
             let html = convert("ifeval::['{asciidoctor-version}' == '{asciidoctor-version}']\nOf course it's the same!\nendif::[]");
             assert!(html.contains("the same!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_arguments_can_be_transposed() {
             verifies!(
@@ -4867,11 +5066,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("That version will do!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_matching_numeric_equality_includes_content() {
             verifies!(
@@ -4900,11 +5101,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("One ring to rule them all!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifeval_matching_numeric_inequality_includes_content() {
             verifies!(
@@ -4933,11 +5136,13 @@ mod preprocessor_reader {
             );
             assert!(html.contains("One ring to rule them all!"), "{html}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_ifeval_has_target() {
             verifies!(
@@ -4974,11 +5179,13 @@ mod preprocessor_reader {
                 )]
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_ifeval_has_invalid_expression() {
             verifies!(
@@ -5015,11 +5222,13 @@ mod preprocessor_reader {
                 )]
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_warn_if_ifeval_is_missing_expression() {
             verifies!(
@@ -5056,11 +5265,13 @@ mod preprocessor_reader {
                 )]
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn ifdef_with_no_target_is_ignored() {
             verifies!(
@@ -5097,11 +5308,13 @@ mod preprocessor_reader {
                 )]
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_warn_about_invalid_ifdef_preprocessor_directive_if_already_skipping() {
             verifies!(
@@ -5134,11 +5347,13 @@ mod preprocessor_reader {
                 conditional_warnings(src, &[])
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_warn_about_invalid_ifeval_preprocessor_directive_if_already_skipping() {
             verifies!(
@@ -5171,11 +5386,13 @@ mod preprocessor_reader {
                 conditional_warnings(src, &[])
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_error_with_end_position_if_preprocessor_conditional_directive_is_unterminated(
         ) {
@@ -5214,11 +5431,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_error_with_start_location_if_preprocessor_conditional_directive_is_unterminated_and_sourcemap_is_set(
         ) {
@@ -5259,11 +5478,13 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_log_error_if_multiple_preprocessor_conditional_directives_are_unterminated() {
             verifies!(
@@ -5305,11 +5526,13 @@ mod preprocessor_reader {
                 .count();
             assert_eq!(count, 2, "{warnings:?}");
         }
+
         non_normative!(
             r#"
 
 "#
         );
+
         #[test]
         fn should_not_fail_to_process_preprocessor_directive_that_evaluates_to_false_and_has_a_large_number_of_lines(
         ) {
@@ -5346,6 +5569,7 @@ mod preprocessor_reader {
             assert!(html.contains("after"), "{html}");
             assert!(!html.contains("data"), "large block should be dropped");
         }
+
         non_normative!(
             r#"
 
