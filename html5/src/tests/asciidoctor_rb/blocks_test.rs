@@ -17,11 +17,8 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - the verse escaped-brace subs test (`\{` is not unescaped by
-//!   `asciidoc-parser` yet — asciidoc-parser#962);
 //! - deferred features, each tracked by an issue: example captions/counters (<https://github.com/asciidoc-rs/asciidoc-html5/issues/113>),
-//!   collapsible examples (#114), `listing-caption` (#115), leading-period
-//!   block titles (#116).
+//!   collapsible examples (#114), `listing-caption` (#115).
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -1626,11 +1623,10 @@ mod quote_and_verse_blocks {
         assert_warning(input, 5, |w| matches!(w, WarningType::NoCalloutFound(1)));
     }
 
-    // The `\{` escape is not yet unescaped by `asciidoc-parser` (same pending
-    // parser work as the paragraphs port's verse-subs test); tracked upstream in
-    // <https://github.com/asciidoc-rs/asciidoc-parser/issues/962>.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_perform_normal_subs_on_a_verse_block() {
+        verifies!(
+            r##"
     test 'should perform normal subs on a verse block' do
       input = <<~'EOS'
       [verse]
@@ -1645,7 +1641,13 @@ mod quote_and_verse_blocks {
   end
 
 "##
-    );
+        );
+
+        let output = convert("[verse]\n____\n_GET /groups/link:#group-id[\\{group-id\\}]_\n____\n");
+        assert!(output.contains(
+            r##"<pre class="content"><em>GET /groups/<a href="#group-id">{group-id}</a></em></pre>"##
+        ));
+    }
 }
 
 mod example_blocks {
@@ -2894,11 +2896,10 @@ mod preformatted_blocks {
         assert_eq!(output.trim_end(), output2.trim_end());
     }
 
-    // A block title whose first character is a period (`..gitignore`) is not
-    // recognized as a title yet (upstream `asciidoc-parser`); tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/116>.
-    non_normative!(
-        r#"
+    #[test]
+    fn first_character_of_block_title_may_be_a_period_if_not_followed_by_space() {
+        verifies!(
+            r#"
     test 'first character of block title may be a period if not followed by space' do
       input = <<~'EOS'
       ..gitignore
@@ -2914,7 +2915,11 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert("..gitignore\n----\n/.bundle/\n/build/\n/Gemfile.lock\n----\n");
+        assert_xpath(&output, r#"//*[@class="title"][text()=".gitignore"]"#, 1);
+    }
 
     // DocBook-backend output is out of scope (this crate targets only `html5`).
     non_normative!(
