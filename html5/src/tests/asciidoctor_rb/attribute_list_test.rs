@@ -1,0 +1,317 @@
+//! Tracks Asciidoctor's `attribute_list_test.rb`.
+//!
+//! This file is a **parser unit test**: every case builds an
+//! `Asciidoctor::AttributeList` from a raw attrlist string, calls `parse_into`,
+//! and asserts on the resulting positional/named attribute map — the parser's
+//! internal bookkeeping, with no rendered HTML to observe. It exercises the
+//! layer *below* this renderer, so there is nothing here to drive through
+//! `convert`.
+//!
+//! The equivalent behavior is already covered directly, and thoroughly, in the
+//! `asciidoc-parser` crate's own port of this file (against
+//! `Attrlist::parse`) — the correct home for parser-internal tests. This crate
+//! only *consumes* the parsed attribute map (e.g. a quote block's attribution
+//! and citetitle, a source block's language); those rendered manifestations are
+//! covered by the block-level ports, not by re-testing the attrlist parser
+//! here.
+//!
+//! The decisive test for whether a case belongs here is whether its assertion
+//! can be re-expressed as a `convert`-based HTML check this crate satisfies.
+//! None can: every case asserts on position 1 (the block *style* slot, which
+//! renders no visible text) or on structural/rekey bookkeeping, so even a case
+//! whose later positions would reach a quote's attribution/citetitle cannot be
+//! ported faithfully — the assertion also pins position 1 and the map shape,
+//! which have no rendered form.
+//!
+//! The whole file is therefore tracked as `non_normative!`: it is honestly
+//! accounted for as a spec surface, but its claims belong to the parser layer,
+//! not to the HTML5 renderer. See the crate memory
+//! `html5-favor-convert-over-parse` for the convert-over-parse rationale.
+
+use crate::tests::sdd::*;
+
+track_file!("ref/asciidoctor/test/attribute_list_test.rb");
+
+non_normative!(
+    r#"
+# frozen_string_literal: true
+require_relative 'test_helper'
+
+context 'AttributeList' do
+  test 'collect unnamed attribute' do
+    attributes = {}
+    line = 'quote'
+    expected = { 1 => 'quote' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute double-quoted' do
+    attributes = {}
+    line = '"quote"'
+    expected = { 1 => 'quote' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect empty unnamed attribute double-quoted' do
+    attributes = {}
+    line = '""'
+    expected = { 1 => '' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute double-quoted containing escaped quote' do
+    attributes = {}
+    line = '"ba\"zaar"'
+    expected = { 1 => 'ba"zaar' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute single-quoted' do
+    attributes = {}
+    line = '\'quote\''
+    expected = { 1 => 'quote' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect empty unnamed attribute single-quoted' do
+    attributes = {}
+    line = '\'\''
+    expected = { 1 => '' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect isolated single quote positional attribute' do
+    attributes = {}
+    line = '\''
+    expected = { 1 => '\'' }
+    doc = empty_document
+    def doc.apply_subs *args
+      raise 'apply_subs should not be called'
+    end
+    Asciidoctor::AttributeList.new(line, doc).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect isolated single quote attribute value' do
+    attributes = {}
+    line = 'name=\''
+    expected = { 'name' => '\'' }
+    doc = empty_document
+    def doc.apply_subs *args
+      raise 'apply_subs should not be called'
+    end
+    Asciidoctor::AttributeList.new(line, doc).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect attribute value as is if it has only leading single quote' do
+    attributes = {}
+    line = 'name=\'{val}'
+    expected = { 'name' => '\'{val}' }
+    doc = empty_document attributes: { 'val' => 'val' }
+    def doc.apply_subs *args
+      raise 'apply_subs should not be called'
+    end
+    Asciidoctor::AttributeList.new(line, doc).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute single-quoted containing escaped quote' do
+    attributes = {}
+    line = '\'ba\\\'zaar\''
+    expected = { 1 => 'ba\'zaar' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute with dangling delimiter' do
+    attributes = {}
+    line = 'quote , '
+    expected = { 1 => 'quote', 2 => nil }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute in second position after empty attribute' do
+    attributes = {}
+    line = ', John Smith'
+    expected = { 1 => nil, 2 => 'John Smith' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attributes' do
+    attributes = {}
+    line = 'first, second one, third'
+    expected = { 1 => 'first', 2 => 'second one', 3 => 'third' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect blank unnamed attributes' do
+    attributes = {}
+    line = 'first,,third,'
+    expected = { 1 => 'first', 2 => nil, 3 => 'third', 4 => nil }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect unnamed attribute enclosed in equal signs' do
+    attributes = {}
+    line = '=foo='
+    expected = { 1 => '=foo=' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attribute' do
+    attributes = {}
+    line = 'foo=bar'
+    expected = { 'foo' => 'bar' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attribute double-quoted' do
+    attributes = {}
+    line = 'foo="bar"'
+    expected = { 'foo' => 'bar' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attribute with double-quoted empty value' do
+    attributes = {}
+    line = 'height=100,caption="",link="images/octocat.png"'
+    expected = { 'height' => '100', 'caption' => '', 'link' => 'images/octocat.png' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attribute single-quoted' do
+    attributes = {}
+    line = 'foo=\'bar\''
+    expected = { 'foo' => 'bar' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attribute with single-quoted empty value' do
+    attributes = {}
+    line = %(height=100,caption='',link='images/octocat.png')
+    expected = { 'height' => '100', 'caption' => '', 'link' => 'images/octocat.png' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect single named attribute with empty value' do
+    attributes = {}
+    line = 'foo='
+    expected = { 'foo' => '' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect single named attribute with empty value when followed by other attributes' do
+    attributes = {}
+    line = 'foo=,bar=baz'
+    expected = { 'foo' => '', 'bar' => 'baz' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attributes unquoted' do
+    attributes = {}
+    line = 'first=value, second=two, third=3'
+    expected = { 'first' => 'value', 'second' => 'two', 'third' => '3' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attributes quoted' do
+    attributes = {}
+    line = %(first='value', second="value two", third=three)
+    expected = { 'first' => 'value', 'second' => 'value two', 'third' => 'three' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect named attributes quoted containing non-semantic spaces' do
+    attributes = {}
+    line = %(     first    =     'value', second     ="value two"     , third=       three      )
+    expected = { 'first' => 'value', 'second' => 'value two', 'third' => 'three' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect mixed named and unnamed attributes' do
+    attributes = {}
+    line = %(first, second="value two", third=three, Sherlock Holmes)
+    expected = { 1 => 'first', 'second' => 'value two', 'third' => 'three', 4 => 'Sherlock Holmes' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect mixed empty named and blank unnamed attributes' do
+    attributes = {}
+    line = 'first,,third=,,fifth=five'
+    expected = { 1 => 'first', 2 => nil, 'third' => '', 4 => nil, 'fifth' => 'five' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect options attribute' do
+    attributes = {}
+    line = %(quote, options='opt1,,opt2 , opt3')
+    expected = { 1 => 'quote', 'opt1-option' => '', 'opt2-option' => '', 'opt3-option' => '' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect opts attribute as options' do
+    attributes = {}
+    line = %(quote, opts='opt1,,opt2 , opt3')
+    expected = { 1 => 'quote', 'opt1-option' => '', 'opt2-option' => '', 'opt3-option' => '' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'should ignore options attribute if empty' do
+    attributes = {}
+    line = %(quote, opts=)
+    expected = { 1 => 'quote' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes)
+    assert_equal expected, attributes
+  end
+
+  test 'collect and rekey unnamed attributes' do
+    attributes = {}
+    line = 'first, second one, third, fourth'
+    expected = { 1 => 'first', 2 => 'second one', 3 => 'third', 4 => 'fourth', 'a' => 'first', 'b' => 'second one', 'c' => 'third' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes, ['a', 'b', 'c'])
+    assert_equal expected, attributes
+  end
+
+  test 'should not assign nil to attribute mapped to missing positional attribute' do
+    attributes = {}
+    line = 'alt text,,100'
+    expected = { 1 => 'alt text', 2 => nil, 3 => '100', 'alt' => 'alt text', 'height' => '100' }
+    Asciidoctor::AttributeList.new(line).parse_into(attributes, %w(alt width height))
+    assert_equal expected, attributes
+  end
+
+  test 'rekey positional attributes' do
+    attributes = { 1 => 'source', 2 => 'java' }
+    expected = { 1 => 'source', 2 => 'java', 'style' => 'source', 'language' => 'java' }
+    Asciidoctor::AttributeList.rekey(attributes, ['style', 'language', 'linenums'])
+    assert_equal expected, attributes
+  end
+end
+"#
+);
