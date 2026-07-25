@@ -9,6 +9,14 @@
 //! `inline_document` note), not an HTML5-rendering rule (see the crate memory
 //! `html5-favor-convert-over-parse`).
 //!
+//! The decisive test for whether a case belongs here is whether its assertion
+//! can be re-expressed as a `convert`-based HTML check this crate satisfies.
+//! None can: the cases that invoke `convert`/`load` (the `:logger` API option)
+//! still assert on `LoggerManager.logger`, and the one converting a duplicate-
+//! `id` document asserts on the *stderr warning*, not the output — and this
+//! crate emits no warnings at all, so there is no such channel to assert
+//! against.
+//!
 //! Tracked entirely as `non_normative!` so it is honestly accounted for as a
 //! spec surface rather than counted as uncovered.
 

@@ -15,6 +15,14 @@
 //! covered by the block-level ports, not by re-testing the attrlist parser
 //! here.
 //!
+//! The decisive test for whether a case belongs here is whether its assertion
+//! can be re-expressed as a `convert`-based HTML check this crate satisfies.
+//! None can: every case asserts on position 1 (the block *style* slot, which
+//! renders no visible text) or on structural/rekey bookkeeping, so even a case
+//! whose later positions would reach a quote's attribution/citetitle cannot be
+//! ported faithfully — the assertion also pins position 1 and the map shape,
+//! which have no rendered form.
+//!
 //! The whole file is therefore tracked as `non_normative!`: it is honestly
 //! accounted for as a spec surface, but its claims belong to the parser layer,
 //! not to the HTML5 renderer. See the crate memory
