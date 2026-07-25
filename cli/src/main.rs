@@ -153,12 +153,16 @@ equivalent to --safe-mode=safe. Cannot be combined with --safe-mode."
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
+        visible_short_alias = 's',
         long = "embedded",
         long_help = "Produce embedded output, the way Asciidoctor's -e option does.\n\n\
 By default adoc writes a standalone HTML5 document — the full \
 <!DOCTYPE>/<head>/<body> shell around the header, content, and footer. With -e \
 it writes just the converted body, with no document shell, stylesheet, or \
 header/footer frame, suitable for dropping into a surrounding template.\n\n\
+The legacy short -s (Asciidoctor's original --no-header-footer spelling, which \
+-e superseded) is accepted as an alias, so `asciidoctor -s` invocations run \
+unchanged. Note that -s is distinct from -S/--safe-mode.\n\n\
 Embedded output omits the doctitle by default; add `-a showtitle` to include it \
 as a leading <h1>."
     )]
