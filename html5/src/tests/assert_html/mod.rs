@@ -47,9 +47,14 @@ use scraper::{Html, Selector};
 /// [`rewrite_root_for_fragment`]).
 fn parse(html: &str) -> (Html, bool) {
     let head = html.trim_start();
-    if head.len() >= 5 && head[..5].eq_ignore_ascii_case("<html")
-        || head.len() >= 9 && head[..9].eq_ignore_ascii_case("<!doctype")
-    {
+    // Compare on bytes, not a `head[..n]` string slice: an embedded fragment can
+    // begin with a multi-byte character (e.g. `<h1>人</h1>`), and slicing to a
+    // fixed byte length that lands inside such a character would panic.
+    let starts_with_ci = |prefix: &str| {
+        head.len() >= prefix.len()
+            && head.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+    };
+    if starts_with_ci("<html") || starts_with_ci("<!doctype") {
         (Html::parse_document(html), false)
     } else {
         (Html::parse_fragment(html), true)

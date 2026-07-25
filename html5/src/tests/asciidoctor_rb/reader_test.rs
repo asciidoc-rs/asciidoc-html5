@@ -33,7 +33,6 @@
 //!
 //! - compat-mode does not drop the `include` role on the replacement link —
 //!   [#129]
-//! - a UTF-8 BOM is not stripped from an included file — [#130]
 //! - a three-level nested include from a subdirectory leaves the inner include
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
@@ -45,9 +44,10 @@
 //!   unresolved (and warns) instead of falling back to a link macro — [#136]
 //! - leading/trailing blank lines are not trimmed from verbatim content, so the
 //!   tag-selection assertions trim the compared `<pre>` text — [#118]
+//! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
+//!   [#138]
 //!
 //! [#129]: https://github.com/asciidoc-rs/asciidoc-html5/issues/129
-//! [#130]: https://github.com/asciidoc-rs/asciidoc-html5/issues/130
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
@@ -55,6 +55,7 @@
 //! [#110]: https://github.com/asciidoc-rs/asciidoc-html5/issues/110
 //! [#136]: https://github.com/asciidoc-rs/asciidoc-html5/issues/136
 //! [#118]: https://github.com/asciidoc-rs/asciidoc-html5/issues/118
+//! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
 
 use std::path::PathBuf;
 
@@ -130,6 +131,29 @@ fn convert_with_attrs(src: &str, attrs: &[(&str, &str)]) -> String {
         options = options.attribute(*name, *value);
     }
     convert_with(src, &options)
+}
+
+/// Writes `content` to a file named `name` in a fresh temp directory tagged by
+/// `tag`, returning that directory for use as an include `base_dir`. Lets a
+/// test exercise include resolution against a file it fully controls — a space
+/// in the name, CRLF line endings, no trailing newline — without touching the
+/// vendored fixtures (the counterpart to the Ruby suite's `Tempfile` includes).
+fn temp_include_dir(tag: &str, name: &str, content: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("adoc-reader-inc-{}-{tag}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create temp include dir");
+    std::fs::write(dir.join(name), content).expect("write temp include file");
+    dir
+}
+
+/// Converts `src` (embedded) under the `Safe` safe mode with `base_dir` set to
+/// `dir` — the temp-directory counterpart of [`convert_safe_with_fixtures`].
+fn convert_safe_in(dir: &std::path::Path, src: &str) -> String {
+    convert_with(
+        src,
+        &Options::new()
+            .safe_mode(SafeMode::Safe)
+            .base_dir(dir.to_path_buf()),
+    )
 }
 
 /// The inner text of the sole `<pre>…</pre>` in `html`.
@@ -1042,6 +1066,13 @@ mod preprocessor_reader {
         non_normative!(
             r#"
 
+"#
+        );
+
+        #[test]
+        fn should_strip_bom_from_include_file() {
+            verifies!(
+                r#"
       test 'should strip BOM from include file' do
         input = %(:showtitle:\ninclude::fixtures/file-with-utf8-bom.adoc[])
         output = convert_string_to_embedded input, safe: :safe, base_dir: DIRNAME
@@ -1049,6 +1080,21 @@ mod preprocessor_reader {
         assert_css 'h1', output, 1
         assert_match(/<h1>人<\/h1>/, output)
       end
+"#
+            );
+
+            // The UTF-8 BOM at the start of the include file is stripped, so the title
+            // heading renders with its first real character.
+            let html = convert_safe_with_fixtures(
+                ":showtitle:\ninclude::fixtures/file-with-utf8-bom.adoc[]",
+            );
+            assert_css(&html, ".paragraph", 0);
+            assert_css(&html, "h1", 1);
+            assert!(html.contains("<h1>\u{4eba}</h1>"), "{html}");
+        }
+
+        non_normative!(
+            r#"
 
       test 'should include content from a file on the classloader', if: jruby? do
         require fixture_path 'assets.jar'
@@ -1059,6 +1105,13 @@ mod preprocessor_reader {
         assert doc.catalog[:includes]['uri:classloader:/includes-in-jar/include-file']
       end
 
+"#
+        );
+
+        #[test]
+        fn should_not_track_include_in_catalog_for_non_asciidoc_include_files() {
+            verifies!(
+                r#"
       test 'should not track include in catalog for non-AsciiDoc include files' do
         input = <<~'EOS'
         ----
@@ -1069,7 +1122,32 @@ mod preprocessor_reader {
         doc = document_from_string input, safe: :safe, standalone: false, base_dir: DIRNAME
         assert doc.catalog[:includes].empty?
       end
+"#
+            );
 
+            // A non-AsciiDoc include is pulled in but not recorded in the document's
+            // include catalog.
+            let opts = Options::new()
+                .safe_mode(SafeMode::Safe)
+                .base_dir(fixtures_base_dir());
+            // Control: a normal AsciiDoc include *is* tracked (confirms the key form).
+            let adoc = load_with("include::fixtures/include-file.adoc[]", &opts);
+            assert!(adoc.catalog().was_included("fixtures/include-file"));
+            // An .svg pulled into a listing block is not tracked.
+            let svg = load_with("----\ninclude::fixtures/circle.svg[]\n----", &opts);
+            assert!(!svg.catalog().was_included("fixtures/circle"));
+        }
+
+        non_normative!(
+            r#"
+
+"#
+        );
+
+        #[test]
+        fn include_directive_should_resolve_file_with_spaces_in_name() {
+            verifies!(
+                r#"
       test 'include directive should resolve file with spaces in name' do
         input = 'include::fixtures/include file.adoc[]'
         include_file = File.join DIRNAME, 'fixtures', 'include-file.adoc'
@@ -1083,7 +1161,25 @@ mod preprocessor_reader {
           FileUtils.rm include_file_with_sp
         end
       end
+"#
+            );
 
+            // A target whose file name contains a space resolves.
+            let dir = temp_include_dir("spaces", "include file.adoc", "included content\n");
+            let html = convert_safe_in(&dir, "include::include file.adoc[]");
+            assert!(html.contains("included content"), "{html}");
+        }
+
+        non_normative!(
+            r#"
+
+"#
+        );
+
+        #[test]
+        fn include_directive_should_resolve_file_with_sp_in_name() {
+            verifies!(
+                r#"
       test 'include directive should resolve file with {sp} in name' do
         input = 'include::fixtures/include{sp}file.adoc[]'
         include_file = File.join DIRNAME, 'fixtures', 'include-file.adoc'
@@ -1097,6 +1193,17 @@ mod preprocessor_reader {
           FileUtils.rm include_file_with_sp
         end
       end
+"#
+            );
+
+            // `{sp}` in the target resolves to a space, so the spaced file resolves.
+            let dir = temp_include_dir("sp-attr", "include file.adoc", "included content\n");
+            let html = convert_safe_in(&dir, "include::include{sp}file.adoc[]");
+            assert!(html.contains("included content"), "{html}");
+        }
+
+        non_normative!(
+            r#"
 
       test 'include directive should not match if target is empty or starts or ends with space' do
         ['include::[]', 'include:: []', 'include:: not-include[]', 'include::not-include []'].each do |input|
@@ -1207,6 +1314,14 @@ mod preprocessor_reader {
         non_normative!(
             r#"
 
+"#
+        );
+
+        #[test]
+        fn should_only_strip_trailing_newlines_not_trailing_whitespace_if_include_file_is_not_asciidoc(
+        ) {
+            verifies!(
+                r#"
       test 'should only strip trailing newlines, not trailing whitespace, if include file is not AsciiDoc' do
         input = <<~'EOS'
         ....
@@ -1218,6 +1333,17 @@ mod preprocessor_reader {
         assert_equal 1, doc.blocks.size
         assert doc.blocks[0].lines[2].end_with? ?\t
       end
+"#
+            );
+
+            // Only trailing newlines are stripped from a non-AsciiDoc include, not
+            // trailing whitespace: the tab ending the third data line survives.
+            let html = convert_safe_with_fixtures("....\ninclude::fixtures/data.tsv[]\n....");
+            assert!(html.contains("1\t2\t\n"), "{html:?}");
+        }
+
+        non_normative!(
+            r#"
 
       test 'should fail to read include file if not UTF-8 encoded and encoding is not specified' do
         input = <<~'EOS'
@@ -1234,6 +1360,13 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        #[test]
+        fn should_ignore_encoding_attribute_if_value_is_not_a_valid_encoding() {
+            verifies!(
+                r#"
       test 'should ignore encoding attribute if value is not a valid encoding' do
         input = <<~'EOS'
         ....
@@ -1246,6 +1379,22 @@ mod preprocessor_reader {
         assert_equal doc.blocks[0].lines[0].encoding, Encoding::UTF_8
         assert_equal ['Gregory Romé has written an AsciiDoc plugin for the Redmine project management application.'], doc.blocks[0].lines
       end
+"#
+            );
+
+            // The file is UTF-8; an invalid `encoding` value is ignored and it reads
+            // normally (the non-ASCII `romé` tag name resolves too).
+            let html = convert_safe_with_fixtures(
+                "....\ninclude::fixtures/encoding.adoc[tag=rom\u{e9},encoding=iso-1000-1]\n....",
+            );
+            assert!(
+                html.contains("Gregory Rom\u{e9} has written an AsciiDoc plugin"),
+                "{html}"
+            );
+        }
+
+        non_normative!(
+            r#"
 
       test 'should use encoding specified by encoding attribute when reading include file' do
         input = <<~'EOS'
@@ -1880,6 +2029,13 @@ mod preprocessor_reader {
         non_normative!(
             r#"
 
+"#
+        );
+
+        #[test]
+        fn include_directive_supports_selecting_lines_by_tag_in_file_that_has_crlf_line_endings() {
+            verifies!(
+                r#"
       test 'include directive supports selecting lines by tag in file that has CRLF line endings' do
         begin
           tmp_include = Tempfile.new %w(include- .adoc)
@@ -1894,7 +2050,30 @@ mod preprocessor_reader {
           tmp_include.close!
         end
       end
+"#
+            );
 
+            // Tag selection works against an include file with CRLF line endings.
+            let dir = temp_include_dir(
+                "crlf",
+                "include-crlf.adoc",
+                "do not include\r\ntag::include-me[]\r\nincluded line\r\nend::include-me[]\r\ndo not include\r\n",
+            );
+            let html = convert_safe_in(&dir, "include::include-crlf.adoc[tag=include-me]");
+            assert!(html.contains("included line"), "{html}");
+            assert!(!html.contains("do not include"), "{html}");
+        }
+
+        non_normative!(
+            r#"
+
+"#
+        );
+
+        #[test]
+        fn include_directive_finds_closing_tag_on_last_line_of_file_without_a_trailing_newline() {
+            verifies!(
+                r#"
       test 'include directive finds closing tag on last line of file without a trailing newline' do
         begin
           tmp_include = Tempfile.new %w(include- .adoc)
@@ -1912,6 +2091,23 @@ mod preprocessor_reader {
           tmp_include.close!
         end
       end
+"#
+            );
+
+            // The closing tag directive on the last line of a file with no trailing
+            // newline is still recognized.
+            let dir = temp_include_dir(
+                "no-trailing-nl",
+                "include-no-nl.adoc",
+                "line not included\ntag::include-me[]\nline included\nend::include-me[]",
+            );
+            let html = convert_safe_in(&dir, "include::include-no-nl.adoc[tag=include-me]");
+            assert!(html.contains("line included"), "{html}");
+            assert!(!html.contains("line not included"), "{html}");
+        }
+
+        non_normative!(
+            r#"
 
 "#
         );
