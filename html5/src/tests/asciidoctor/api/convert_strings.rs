@@ -1,6 +1,6 @@
 use std::fs;
 
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::FindBlocks;
 
 use crate::{convert, convert_document, convert_file, convert_with, load, tests::sdd::*, Options};
 
@@ -72,7 +72,7 @@ doc = Asciidoctor.load '*This* is Asciidoctor.'
     let doc = load(SAMPLE);
 
     // The parsed document exposes its block structure.
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 // Reading the source from a file and loading it. Asciidoctor reads the file
@@ -105,7 +105,7 @@ doc = Asciidoctor.load asciidoc, safe: :safe
     let _ = fs::remove_file(&path);
 
     let doc = load(&asciidoc);
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 // `doc.convert` renders a document you have already loaded. This crate's

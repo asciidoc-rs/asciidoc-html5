@@ -550,8 +550,8 @@ Therefore, if you're going to be using the block filter to control the traversal
 );
 
 // Walking the tree by hand instead of searching it. Asciidoctor reaches a
-// block's direct children with `blocks`; the analog here is `nested_blocks`
-// (from `IsBlock`), an iterator over the direct child blocks that you can
+// block's direct children with `blocks`; the analog here is `child_blocks`
+// (from `FindBlocks`), an iterator over the direct child blocks that you can
 // recurse into yourself.
 #[test]
 fn custom_traversal_reaches_direct_children() {
@@ -577,7 +577,7 @@ end
     // The document's direct children: the preamble and the two top-level
     // sections.
     let direct: Vec<_> = doc
-        .nested_blocks()
+        .child_blocks()
         .map(|block| block.resolved_context().as_ref().to_string())
         .collect();
     assert_eq!(direct, ["preamble", "section", "section"]);
