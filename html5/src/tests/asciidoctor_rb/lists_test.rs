@@ -28,9 +28,11 @@
 //!   counterpart (`document_from_string` + `find_by(...).level`, the colist
 //!   `.style` check), reproduced but not re-expressed;
 //! - two literal-paragraph tests whose `<pre>` content, and one wrapped
-//!   list-item paragraph, depend on verbatim/continuation common-indent
-//!   handling this crate does not implement yet
-//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>, fixed by #153).
+//!   list-item paragraph, whose first line loses its leading indent because
+//!   `asciidoc-parser` strips it before the renderer sees it (standalone
+//!   verbatim indent was fixed by #153; this list-attached case is a distinct
+//!   parser-side divergence,
+//!   <https://github.com/asciidoc-rs/asciidoc-html5/issues/168>).
 
 use asciidoc_parser::warnings::WarningType;
 
