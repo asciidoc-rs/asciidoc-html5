@@ -14,8 +14,8 @@
 //! concern. [`Renderer::block`] is the dispatch point: it matches on the
 //! [`Block`] variant (and, for delimited blocks, on
 //! [`IsBlock::resolved_context`]) and delegates. Compound blocks recurse back
-//! into [`Renderer::blocks`] over their [`IsBlock::nested_blocks`], so the same
-//! machinery handles arbitrary nesting.
+//! into [`Renderer::blocks`] over their [`FindBlocks::child_blocks`], so the
+//! same machinery handles arbitrary nesting.
 //!
 //! This is a *baseline*: the constructs wired up below (the document skeleton,
 //! header, paragraphs, sections, the preamble, verbatim blocks, and thematic
@@ -25,12 +25,10 @@
 //! coverage gaps are obvious. Adding a construct means adding one arm and one
 //! `render_*` method.
 
-use std::slice::Iter;
-
 use asciidoc_parser::{
     blocks::{
-        AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel, IsBlock,
-        QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
+        AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel,
+        FindBlocks, IsBlock, QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
     Document, SafeMode,
@@ -360,7 +358,7 @@ impl Renderer<'_> {
         }
 
         self.line("<div id=\"content\">");
-        self.blocks(document.nested_blocks());
+        self.blocks(document.child_blocks());
         self.line("</div>");
 
         // The footer is suppressed by `nofooter`. The "Last updated …" text is
@@ -402,7 +400,7 @@ impl Renderer<'_> {
             }
         }
 
-        self.blocks(document.nested_blocks());
+        self.blocks(document.child_blocks());
     }
 
     /// Emits the output for the `inline` doctype: the inline content of the
@@ -420,7 +418,7 @@ impl Renderer<'_> {
     /// warning.) Any blocks after the first are ignored, as in Asciidoctor.
     fn inline_document(&mut self, document: &Document<'_>) {
         if let Some(content) = document
-            .nested_blocks()
+            .child_blocks()
             .next()
             .and_then(|block| block.rendered_content())
         {
@@ -649,7 +647,7 @@ impl Renderer<'_> {
     }
 
     /// Walks a sequence of sibling blocks in document order.
-    fn blocks<'src>(&mut self, blocks: Iter<'src, Block<'src>>) {
+    fn blocks<'src>(&mut self, blocks: impl Iterator<Item = &'src Block<'src>>) {
         for block in blocks {
             self.block(block);
         }
@@ -883,7 +881,7 @@ impl Renderer<'_> {
     /// `<p>`), matching Asciidoctor.
     fn wrapped_content<'src>(&mut self, block: &'src Block<'src>) {
         if block.content_model() == ContentModel::Compound {
-            self.blocks(block.nested_blocks());
+            self.blocks(block.child_blocks());
         } else {
             let content = block.rendered_content().unwrap_or_default();
             self.line(content);
@@ -925,10 +923,10 @@ impl Renderer<'_> {
 
         if level == 1 {
             self.line("<div class=\"sectionbody\">");
-            self.blocks(section.nested_blocks());
+            self.blocks(block.child_blocks());
             self.line("</div>");
         } else {
-            self.blocks(section.nested_blocks());
+            self.blocks(block.child_blocks());
         }
 
         self.line("</div>");
@@ -940,7 +938,7 @@ impl Renderer<'_> {
     fn preamble<'src>(&mut self, block: &'src Block<'src>) {
         self.line("<div id=\"preamble\">");
         self.line("<div class=\"sectionbody\">");
-        self.blocks(block.nested_blocks());
+        self.blocks(block.child_blocks());
         self.line("</div>");
         self.line("</div>");
     }

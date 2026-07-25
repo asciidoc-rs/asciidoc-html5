@@ -16,7 +16,7 @@
 //! configured depth.
 
 use asciidoc_parser::{
-    blocks::{Block, IsBlock, SectionBlock, SectionType},
+    blocks::{Block, FindBlocks, IsBlock, SectionBlock, SectionType},
     document::InterpretedValue,
     Document,
 };
@@ -82,7 +82,7 @@ pub(crate) fn render_outline(document: &Document<'_>, options: &OutlineOptions) 
 
     // A document with no sections has no outline; `outline_level` signals that
     // with `None`, which the public API surfaces as an empty string.
-    outline_level(document.nested_blocks(), 0, toclevels, sectnumlevels).unwrap_or_default()
+    outline_level(document.child_blocks(), 0, toclevels, sectnumlevels).unwrap_or_default()
 }
 
 /// Emits one `<ul class="sectlevelN">` list for the sections among `blocks`,
@@ -91,7 +91,7 @@ pub(crate) fn render_outline(document: &Document<'_>, options: &OutlineOptions) 
 /// is `sectlevel{parent_level + 1}`. Returns `None` when `blocks` holds no
 /// sections, which is what lets a leaf section render without a nested list.
 fn outline_level<'src>(
-    blocks: std::slice::Iter<'src, Block<'src>>,
+    blocks: impl Iterator<Item = &'src Block<'src>>,
     parent_level: usize,
     toclevels: usize,
     sectnumlevels: usize,
@@ -122,7 +122,7 @@ fn outline_level<'src>(
         // the recursion returns `None` when it has no subsections, which drops
         // the section to the leaf form.
         let child = if level < toclevels {
-            outline_level(block.nested_blocks(), level, toclevels, sectnumlevels)
+            outline_level(block.child_blocks(), level, toclevels, sectnumlevels)
         } else {
             None
         };
