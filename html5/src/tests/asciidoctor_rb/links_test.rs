@@ -347,6 +347,7 @@ fn qualified_url_with_label_containing_square_brackets_using_link_macro() {
     assert_match '<a href="http://example.com">[bracket1]</a>', doc.convert, 1
 "###
     );
+
     // Lines 63-64 assert the DocBook rendering of the same input; this crate
     // renders only the html5 backend.
     non_normative!(
@@ -3980,6 +3981,7 @@ fn should_not_match_numeric_character_references_while_searching_for_fragment_in
     let input = "see <<Cub => Tiger>>\n\n== Cub => Tiger\n";
     let output = convert(input);
     assert_xpath(&output, r####"//a[@href="#_cub_tiger"]"####, 1);
+
     // `decode_char 8658` is U+21D2 (⇒), the character the numeric reference
     // `&#8658;` decodes to in the parsed DOM.
     assert_xpath(
