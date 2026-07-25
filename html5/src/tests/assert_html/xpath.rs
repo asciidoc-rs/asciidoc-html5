@@ -12,6 +12,9 @@
 //!   (`foo/child::text()`, equivalent to the default child step)
 //! - `foo/preceding::tag`, `foo/following::tag` — the general document-order
 //!   axes (excluding ancestors / descendants respectively)
+//! - `foo/self::tag` — the self axis: the context node itself, kept only when
+//!   it matches the node test (used to name the type of a positionally-selected
+//!   node, e.g. `((…)[N])/self::div[@class="…"]`)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
 //!   `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) =
 //!   "x"]`, `[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per
@@ -147,6 +150,17 @@ fn run_steps<'a>(
         let mut next: Vec<&VirtualNode> = Vec::new();
         for &node in &context {
             let mut matched: Vec<&VirtualNode> = match step.axis {
+                // The `self::` axis is the context node itself, kept only when it
+                // satisfies the node test and predicates. The suite uses it to
+                // assert the *type* of a node already selected positionally, e.g.
+                // `((//ol/li)[1]/*)[2]/self::div[@class="ulist"]`.
+                Axis::Itself => {
+                    if step.matches(node) {
+                        vec![node]
+                    } else {
+                        vec![]
+                    }
+                }
                 Axis::Child => node.children.iter().filter(|c| step.matches(c)).collect(),
                 Axis::Descendant => {
                     let mut acc = Vec::new();
@@ -328,6 +342,7 @@ fn push_unique<'a>(set: &mut Vec<&'a VirtualNode>, node: &'a VirtualNode) {
 /// The axis a single location step walks.
 #[derive(Clone, Copy)]
 enum Axis {
+    Itself,
     Child,
     Descendant,
     FollowingSibling,
@@ -480,7 +495,12 @@ fn split_steps(s: &str) -> Vec<(Combinator, &str)> {
 /// Parses one step token, honoring an explicit sibling axis prefix; otherwise
 /// the axis comes from the preceding combinator.
 fn parse_step(comb: Combinator, token: &str) -> Step {
-    let (axis, node_test) = if let Some(rest) = token.strip_prefix("child::") {
+    let (axis, node_test) = if let Some(rest) = token.strip_prefix("self::") {
+        // The `self::` axis keeps the context node itself when it matches; the
+        // suite writes it to name the type of a positionally-selected node
+        // (`((…)[N])/self::div[@class="…"]`).
+        (Axis::Itself, rest)
+    } else if let Some(rest) = token.strip_prefix("child::") {
         // The explicit `child::` axis is the same as the default child step; the
         // suite writes it only to reach the `text()` node test
         // (`a/child::text()`).

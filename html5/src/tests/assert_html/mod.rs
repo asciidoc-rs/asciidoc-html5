@@ -364,6 +364,29 @@ Famous quote.
     }
 
     #[test]
+    fn xpath_self_axis_names_a_positionally_selected_node() {
+        // A list item whose element children are a principal `<p>` and a nested
+        // `.ulist` div — the shape the list-continuation suite asserts on with
+        // grouped-positional `self::` steps.
+        let html = r#"<div class="olist"><ol><li>
+<p>one</p>
+<div class="ulist"><ul><li><p>nested</p></li></ul></div>
+</li></ol></div>"#;
+
+        // `self::` keeps the context node only when it matches the node test.
+        assert_xpath(html, r#"((//ol/li)[1]/*)[2]/self::div[@class="ulist"]"#, 1);
+        assert_xpath(html, r#"((//ol/li)[1]/*)[1]/self::p[text()="one"]"#, 1);
+        // The second child is a div, not a p, so `self::p` keeps nothing.
+        assert_xpath(html, r#"((//ol/li)[1]/*)[2]/self::p"#, 0);
+        // A step chained after `self::` continues from the kept node.
+        assert_xpath(
+            html,
+            r#"((//ol/li)[1]/*)[2]/self::div/ul/li/p[text()="nested"]"#,
+            1,
+        );
+    }
+
+    #[test]
     fn xpath_child_text_axis() {
         // An empty anchor has no `child::text()`; one with text has exactly one.
         let html = r#"<a id="empty"></a><a id="full">label</a>"#;
