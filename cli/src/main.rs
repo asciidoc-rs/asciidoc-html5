@@ -219,8 +219,20 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
 
-    for source in resolve_inputs(&cli.inputs)? {
-        convert_source(cli, &base_options, &source, stdin, stdout)?;
+    let sources = resolve_inputs(&cli.inputs)?;
+
+    // The canonical identity of every on-disk input in this invocation, resolved
+    // once. A source's resolved output must not land on any of them — not only on
+    // its own input — or converting one source would truncate another (or itself)
+    // before that source is read.
+    let input_ids: Vec<PathBuf> = sources
+        .iter()
+        .filter_map(InputSource::file)
+        .filter_map(resolve_for_compare)
+        .collect();
+
+    for source in &sources {
+        convert_source(cli, &base_options, source, &input_ids, stdin, stdout)?;
     }
 
     Ok(())
@@ -236,6 +248,7 @@ fn convert_source(
     cli: &Cli,
     base_options: &Options,
     source: &InputSource,
+    input_ids: &[PathBuf],
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
 ) -> io::Result<()> {
@@ -243,12 +256,16 @@ fn convert_source(
     let options = apply_base_dir(cli, base_options.clone(), input)?;
     let target = output_target_for(cli, input);
 
-    // Refuse to convert a file onto itself, matching Asciidoctor: when the
-    // resolved output file (whether named with `-o` or derived, including via an
-    // `outfilesuffix` that lands on the input's own extension) is the input
-    // file, fail before reading or converting rather than truncating the source.
-    if let (OutputTarget::File(path), Some(input)) = (&target, input) {
-        if same_file(path, input) {
+    // Refuse to write the output onto any input file in this invocation, matching
+    // Asciidoctor's refusal to convert a file onto itself — and extending it
+    // across a multi-file run, where one source's resolved output (named with
+    // `-o` or derived, e.g. via an `outfilesuffix` landing on an input's
+    // extension) could otherwise truncate a sibling input before it is read. The
+    // comparison resolves symlinks (see [`resolve_for_compare`]), so an output
+    // that aliases an input through one is caught too. Fail before reading or
+    // converting.
+    if let OutputTarget::File(path) = &target {
+        if resolve_for_compare(path).is_some_and(|out| input_ids.contains(&out)) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "input file and output file cannot be the same",
@@ -428,13 +445,49 @@ impl AssetWriter for OutputGuard {
     }
 }
 
-/// Whether `a` and `b` name the same file, comparing their absolute (but not
-/// symlink-resolved) forms so the check works before either file exists.
+/// Whether `a` and `b` name the same file on disk.
+///
+/// Compares each path in its most resolved form (see [`resolve_for_compare`]),
+/// so symlinks, `..` segments, and parent-directory aliases are accounted for:
+/// an output that aliases the target through a symlink — writing through which
+/// would follow the link and truncate that target — is caught, which a plain
+/// string comparison of the absolute paths would miss. Falls back to the
+/// absolute (non-resolved) comparison when neither path can be resolved on
+/// disk, so the check still works before either file exists.
 fn same_file(a: &Path, b: &Path) -> bool {
+    if let (Some(a), Some(b)) = (resolve_for_compare(a), resolve_for_compare(b)) {
+        return a == b;
+    }
+
     match (std::path::absolute(a), std::path::absolute(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
+}
+
+/// Resolves `path` to a canonical identity suitable for comparing whether two
+/// paths name the same file, even when the file does not exist yet.
+///
+/// An existing path is canonicalized outright, following a symlink to its
+/// target. A path that does not exist is resolved by canonicalizing its parent
+/// directory (so parent-directory symlinks are still accounted for) and
+/// re-attaching the file name; a bare file name resolves against the current
+/// directory. Returns `None` when neither the path nor its parent can be
+/// resolved — an unresolvable output cannot alias an existing input, so callers
+/// treat that as "not the same file".
+fn resolve_for_compare(path: &Path) -> Option<PathBuf> {
+    if let Ok(canonical) = path.canonicalize() {
+        return Some(canonical);
+    }
+
+    let name = path.file_name()?;
+    let parent = path.parent().unwrap_or(Path::new(""));
+    let base = if parent.as_os_str().is_empty() {
+        std::env::current_dir().ok()?
+    } else {
+        parent.canonicalize().ok()?
+    };
+    Some(base.join(name))
 }
 
 /// The directory to root companion-file writes at for an output file `path`:
