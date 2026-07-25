@@ -6,8 +6,10 @@
 //! styles, captions, nested and AsciiDoc cells), so those suites port directly,
 //! driven through `convert` (embedded) / `convert_standalone`.
 //!
-//! What stays `non_normative!` is genuinely out of scope for this crate; the
-//! remainder is tracked by <https://github.com/asciidoc-rs/asciidoc-html5/issues/164>:
+//! Each `non_normative!` block below carries a comment saying why it is out of
+//! scope, with a tracking issue where the gap is schedulable work; the whole
+//! remainder is tracked by
+//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/164>. In brief:
 //!
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - tests whose assertions depend on constructs this renderer does not yet
@@ -15,10 +17,10 @@
 //!   table of contents (#86), footnotes (#162), `cellbgcolor` (#163), and
 //!   font-based admonition icons (#50);
 //! - compat-mode inline emphasis (single-quote `'text'`), unsupported by
-//!   `asciidoc-parser`;
+//!   `asciidoc-parser` (#166);
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
 //!   no rendered-HTML claim, and one whose assertion is the exact cursor of an
-//!   unresolved-include warning raised from a `Tempfile`.
+//!   unresolved-include warning raised from a `Tempfile` (#167).
 //!
 //! Warning assertions (`assert_message @logger, :ERROR/:WARN, …`) are checked
 //! against the document's warnings inventory via [`assert_warning`].
@@ -818,6 +820,8 @@ fn can_assign_autowidth_to_all_columns_even_when_table_has_a_width() {
     assert_css(&output, "table colgroup col[style]", 0);
 }
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'equally distributes remaining column width to autowidth columns in DocBook output' do
@@ -841,6 +845,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'should compute column widths based on pagewidth when width is set on table in DocBook output' do
@@ -1212,6 +1218,8 @@ fn table_with_header_and_footer() {
     assert!(thead < tbody && tbody < tfoot);
 }
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'table with header and footer docbook' do
@@ -1251,6 +1259,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'should set horizontal and vertical alignment when converting to DocBook' do
@@ -1322,6 +1332,8 @@ fn should_normalize_frame_value_topbot_as_ends_when_converting_to_html() {
     assert_css(&output, r#"table.frame-ends"#, 1);
 }
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'should preserve frame value topbot when converting to DocBook' do
@@ -1338,6 +1350,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'should convert frame value ends to topbot when converting to DocBook' do
@@ -1354,6 +1368,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'table with landscape orientation in DocBook' do
@@ -1588,6 +1604,8 @@ fn should_format_first_cell_as_literal_if_there_is_no_implicit_header_row_and_co
     assert_css(&output, r#"tbody p.tableblock"#, 1);
 }
 
+// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
+// cell; unordered/ordered list rendering is not implemented yet (#161).
 non_normative!(
     r#"
     test 'should format first cell as AsciiDoc if there is no implicit header row and column has a style' do
@@ -1636,6 +1654,8 @@ fn should_interpret_leading_indent_if_first_cell_is_asciidoc_and_there_is_no_imp
     assert_css(&output, "tbody p.tableblock", 1);
 }
 
+// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
+// cell; unordered/ordered list rendering is not implemented yet (#161).
 non_normative!(
     r#"
     test 'should format first cell as AsciiDoc if there is no implicit header row and cell has a style' do
@@ -1654,6 +1674,8 @@ non_normative!(
 "#
 );
 
+// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
+// cell; unordered/ordered list rendering is not implemented yet (#161).
 non_normative!(
     r#"
     test 'no implicit header row if AsciiDoc cell in first line spans multiple lines' do
@@ -1808,6 +1830,8 @@ fn styles_not_applied_to_header_cells() {
     assert_css(&output, r#"table > tbody > tr > td > p > em > a"#, 1);
 }
 
+// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
+// cell; unordered/ordered list rendering is not implemented yet (#161).
 non_normative!(
     r#"
     test 'should apply text formatting to cells in implicit header row when column has a style' do
@@ -2277,6 +2301,8 @@ fn supports_repeating_cells() {
     assert_xpath(&output, r#"/table/tbody/tr[3]/td[3]/p[text()="c"]"#, 1);
 }
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'calculates colnames correctly when using implicit column count and single cell with colspan' do
@@ -2299,6 +2325,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'calculates colnames correctly when using implicit column count and cells with mixed colspans' do
@@ -2324,6 +2352,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'assigns unique column names for table with implicit column count and colspans in first row' do
@@ -2864,6 +2894,8 @@ fn should_update_doctype_related_attributes_in_asciidoc_table_cell_when_doctype_
     );
 }
 
+// Asserts a font-based admonition icon (`i.icon-note`); font icons are not
+// implemented yet (#50).
 non_normative!(
     r#"
     test 'should not allow AsciiDoc table cell to set a document attribute that was hard set by the API' do
@@ -3212,6 +3244,8 @@ fn showtitle_can_be_disabled_in_asciidoc_table_cell_if_set_by_api() {
     }
 }
 
+// Asserts on list and description-list rendering (`.ulist`, `div.dlist`)
+// inside AsciiDoc cells; neither is implemented yet (#161, #154).
 non_normative!(
     r#"
     test 'AsciiDoc content' do
@@ -3339,6 +3373,8 @@ fn preprocessor_directive_on_first_line_of_an_asciidoc_table_cell_should_be_proc
     assert!(output.contains("included content"), "{output}");
 }
 
+// Asserts the exact file/line cursor of an unresolved-`include::` warning
+// raised from inside an AsciiDoc cell (via a `Tempfile` include chain) (#167).
 non_normative!(
     r#"
     test 'error about unresolved preprocessor directive on first line of an AsciiDoc table cell should have correct cursor' do
@@ -3539,6 +3575,8 @@ fn should_catalog_anchor_at_start_of_cell_in_first_row() {
     assert!(doc.catalog().contains_id("foo"));
 }
 
+// Asserts on the footnotes block (`#_footnotedef_1`); footnote rendering is
+// not implemented yet (#162).
 non_normative!(
     r#"
     test 'footnotes should not be shared between an AsciiDoc table cell and the main document' do
@@ -3555,6 +3593,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'callout numbers should be globally unique, including AsciiDoc table cells' do
@@ -3608,6 +3648,8 @@ non_normative!(
 "#
 );
 
+// Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
+// not supported by `asciidoc-parser` (#166).
 non_normative!(
     r#"
     test 'compat mode can be activated in AsciiDoc table cell' do
@@ -3627,6 +3669,8 @@ non_normative!(
 "#
 );
 
+// Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
+// not supported by `asciidoc-parser` (#166).
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell inherits from parent document' do
@@ -3655,6 +3699,8 @@ non_normative!(
 "#
 );
 
+// Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
+// not supported by `asciidoc-parser` (#166).
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell can be unset if set in parent document' do
@@ -3763,6 +3809,9 @@ fn can_set_format_of_nested_table_to_psv() {
     );
 }
 
+// Asserts only parser-model state (the `to_dir` option a cell's nested
+// document inherits), with no rendered-HTML claim for `convert` to check; it is
+// covered by the `asciidoc-parser` test suite instead.
 non_normative!(
     r#"
     test 'AsciiDoc table cell should inherit to_dir option from parent document' do
@@ -3781,6 +3830,8 @@ non_normative!(
 "#
 );
 
+// Asserts on the table of contents built from a cell's nested document; TOC
+// rendering is not implemented yet (#86).
 non_normative!(
     r#"
     test 'AsciiDoc table cell should not inherit toc setting from parent document' do
@@ -3806,6 +3857,8 @@ non_normative!(
 "#
 );
 
+// Asserts on the table of contents built from a cell's nested document; TOC
+// rendering is not implemented yet (#86).
 non_normative!(
     r#"
     test 'should be able to enable toc in an AsciiDoc table cell' do
@@ -3833,6 +3886,8 @@ non_normative!(
 "#
 );
 
+// Asserts on the table of contents built from a cell's nested document; TOC
+// rendering is not implemented yet (#86).
 non_normative!(
     r#"
     test 'should be able to enable toc in an AsciiDoc table cell even if hard unset by API' do
@@ -3860,6 +3915,8 @@ non_normative!(
 "#
 );
 
+// Asserts on the table of contents built from a cell's nested document; TOC
+// rendering is not implemented yet (#86).
 non_normative!(
     r#"
     test 'should be able to enable toc in both outer document and in an AsciiDoc table cell' do
@@ -3925,6 +3982,7 @@ fn document_in_an_asciidoc_table_cell_should_not_see_doctitle_of_parent() {
     assert_css(&output, "table > tbody > tr > td .paragraph", 1);
 }
 
+// `cellbgcolor` cell background styling is not implemented yet (#163).
 non_normative!(
     r#"
     test 'cell background color' do
@@ -3985,6 +4043,9 @@ fn should_warn_if_table_block_is_not_terminated() {
     });
 }
 
+// Asserts on a table nested inside a list item (`//ul//table`); list
+// rendering is not implemented yet, so the list — and the table it holds — is
+// not emitted (#161).
 non_normative!(
     r#"
     test 'should show correct line number in warning about unterminated block inside AsciiDoc table cell' do
@@ -4059,6 +4120,8 @@ fn custom_separator_for_an_asciidoc_table_cell() {
     );
 }
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'table with breakable option docbook 5' do
@@ -4077,6 +4140,8 @@ non_normative!(
 "#
 );
 
+// This test targets the DocBook backend; this crate renders only the `html5`
+// backend.
 non_normative!(
     r#"
     test 'table with unbreakable option docbook 5' do
