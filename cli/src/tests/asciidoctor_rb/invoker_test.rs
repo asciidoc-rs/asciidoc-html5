@@ -122,6 +122,9 @@ context 'Invoker' do
 "#
 );
 
+// Ruby-internal: `Asciidoctor::Cli::Options`/`Invoker` accept a pre-built
+// options object. `adoc` has no such object — it parses argv straight into a
+// clap `Cli` — so there is no equivalent construction path to verify.
 non_normative!(
     r#"
   test 'should allow Options to be passed as first argument of constructor' do
@@ -133,6 +136,9 @@ non_normative!(
 "#
 );
 
+// Ruby-internal: same as above for an options `Hash` (`:attributes`,
+// `:doctype`, `:eruby`). These are `Invoker` constructor conveniences with no
+// `adoc` counterpart.
 non_normative!(
     r#"
   test 'should allow options Hash to be passed as first argument of constructor' do
@@ -171,6 +177,9 @@ fn should_parse_options_from_array_passed_as_first_argument_of_constructor() {
     assert_eq!(cli.inputs, vec![PathBuf::from(input_file)]);
 }
 
+// Ruby-internal: the `Invoker.new '-s', file` splat signature. `adoc` parses a
+// single argv slice (verified above via the array form), so the splat variant
+// has no analog.
 non_normative!(
     r#"
   test 'should parse options from multiple arguments passed to constructor' do
@@ -242,6 +251,12 @@ fn should_parse_source_and_convert_to_html5_article_by_default() {
     assert!(output.contains("<h1>Document Title</h1>"));
 }
 
+// Not exposed: the test reads implicit doc-info attributes (`docname`,
+// `docfile`, `docdir`, `docdate`, `doctime`, ...) off the `Document` object.
+// `adoc` returns only rendered HTML, and these attributes surface nowhere in
+// its default output, so there is nothing to assert against. The date/time
+// attributes are tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should set implicit doc info attributes' do
@@ -262,6 +277,9 @@ non_normative!(
 "#
 );
 
+// Not exposed: same as above — overriding `docdate`/`doctime` via `-a` and
+// reading back the derived `docyear`/`docdatetime` off the `Document`. Tracked
+// in <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should allow docdate and doctime to be overridden' do
@@ -424,6 +442,9 @@ fn should_fail_if_input_file_matches_specified_output_file() {
         .contains("input file and output file cannot be the same"));
 }
 
+// Test infrastructure: the test builds a Unix named pipe with `mkfifo` and a
+// writer thread (skipped on Windows). This exercises the Ruby harness's
+// fixture plumbing, not a rendering rule `adoc` states.
 non_normative!(
     r#"
   test 'should accept input from named pipe and output to stdout', unless: windows? do
@@ -503,6 +524,9 @@ fn should_display_version_and_exit() {
     }
 }
 
+// Not implemented: `adoc` has no channel that prints parser warnings to
+// stderr. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should print warnings to stderr by default' do
@@ -521,6 +545,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: `-w`/`--warnings` (here, asserting a clean run emits none)
+// has no `adoc` counterpart. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should not emit any unexpected warnings' do
@@ -532,6 +559,9 @@ non_normative!(
 "#
 );
 
+// Not applicable / not implemented: toggles Ruby's `$VERBOSE` for `-w` script
+// warnings. `adoc` has neither `-w` nor a Ruby VM to make verbose. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should enable script warnings if -w flag is specified' do
@@ -555,6 +585,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: `-q`/`--quiet` silences the warning stream `adoc` does not
+// have. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should silence warnings if -q flag is specified' do
@@ -573,6 +606,8 @@ non_normative!(
 "#
 );
 
+// Not implemented: `-q` again (checking the log level is still consulted).
+// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should not fail to check log level when -q flag is specified' do
@@ -597,6 +632,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: `--failure-level=WARN` turning a warning into a non-zero
+// exit code. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
 non_normative!(
     r#"
   test 'should return non-zero exit code if failure level is reached' do
@@ -614,6 +652,9 @@ non_normative!(
 "#
 );
 
+// Deliberate divergence: with no input file Asciidoctor prints a usage
+// message, whereas `adoc` reads the document from standard input (its piping
+// design), so there is no usage error to assert.
 non_normative!(
     r#"
   test 'should report usage if no input file given' do
@@ -759,6 +800,9 @@ fn should_output_to_file_in_destination_directory_if_set() {
     assert!(dest.join("sample.html").exists());
 }
 
+// Not implemented: `-R`/`--source-dir` recreates the input's subdirectory tree
+// under `-D`. `adoc` has no `-R` and flattens outputs by base name. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/148>.
 non_normative!(
     r#"
   test 'should preserve directory structure in destination directory if source directory is set' do
@@ -810,6 +854,11 @@ fn should_output_to_file_specified() {
     assert!(out.exists());
 }
 
+// Not implemented: asserts the coderay highlighter stylesheet is copied
+// alongside the default one. `adoc` copies the default stylesheet (verified
+// elsewhere) but does no source highlighting, so it has no coderay stylesheet
+// to copy. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/150>.
 non_normative!(
     r#"
   test 'should copy default stylesheet to target directory if linkcss is specified' do
@@ -837,6 +886,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: the negative coderay case (no highlighted blocks, so no
+// coderay stylesheet). Same source-highlighting gap. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/150>.
 non_normative!(
     r#"
   test 'should not copy coderay stylesheet to target directory when no source blocks where highlighted' do
@@ -1210,6 +1262,9 @@ fn should_suppress_header_footer_if_specified() {
     assert!(output.contains(r#"id="preamble""#));
 }
 
+// Out of scope: the manpage backend (`-b manpage`), including writing a `.so`
+// redirect page per alternate manname. This crate renders only the html5
+// backend.
 non_normative!(
     r#"
   test 'should write page for each alternate manname' do
@@ -1273,6 +1328,9 @@ fn should_output_a_trailing_newline_to_stdout() {
     assert!(output.ends_with('\n'));
 }
 
+// Out of scope (flag): `-b html5` selects the backend explicitly. html5 is the
+// only backend `adoc` produces (its default output is verified above), and it
+// exposes no `-b` flag to choose one.
 non_normative!(
     r#"
   test 'should set backend to html5 if specified' do
@@ -1287,6 +1345,8 @@ non_normative!(
 "#
 );
 
+// Out of scope: the DocBook backend (`-b docbook5`). This crate renders only
+// the html5 backend.
 non_normative!(
     r#"
   test 'should set backend to docbook5 if specified' do
@@ -1301,6 +1361,9 @@ non_normative!(
 "#
 );
 
+// Not implemented (flag): `-d article` selects the doctype. `article` is
+// `adoc`'s default (verified above), but it has no `-d`/`--doctype` flag.
+// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
 non_normative!(
     r#"
   test 'should set doctype to article if specified' do
@@ -1314,6 +1377,8 @@ non_normative!(
 "#
 );
 
+// Not implemented: `-d book`, both the flag and book-doctype rendering.
+// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
 non_normative!(
     r#"
   test 'should set doctype to book if specified' do
@@ -1327,6 +1392,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: the `inline` doctype (`-d inline`) and its 'no inline
+// candidate' warning. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
 non_normative!(
     r#"
   test 'should warn if doctype is inline and the first block is not a candidate for inline conversion' do
@@ -1342,6 +1410,8 @@ non_normative!(
 "#
 );
 
+// Not implemented: `inline` doctype, empty-document case. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
 non_normative!(
     r#"
   test 'should not warn if doctype is inline and the document has no blocks' do
@@ -1355,6 +1425,8 @@ non_normative!(
 "#
 );
 
+// Not implemented: `inline` doctype, multi-block case. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
 non_normative!(
     r#"
   test 'should not warn if doctype is inline and the document contains multiple blocks' do
@@ -1368,6 +1440,8 @@ non_normative!(
 "#
 );
 
+// Out of scope: custom template converters located by `-T`/`-E` (haml/slim).
+// `adoc` is a fixed Rust renderer with no template-engine layer.
 non_normative!(
     r#"
   test 'should locate custom templates based on template dir, template engine and backend' do
@@ -1383,6 +1457,8 @@ non_normative!(
 "#
 );
 
+// Out of scope: loading custom templates from multiple `-T` directories. Same
+// template-engine gap as above.
 non_normative!(
     r#"
   test 'should load custom templates from multiple template directories' do
@@ -1510,6 +1586,10 @@ fn should_not_set_attribute_ending_in_at_if_defined_in_document() {
     assert!(output.contains(r#"id="id_section_a""#));
 }
 
+// Not implemented: `-a icons` (bare) selects image-based admonition icons
+// (`<img alt="Note">`). `adoc` accepts the bare-attribute syntax but does not
+// render image icons. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/50>.
 non_normative!(
     r#"
   test 'should set attribute with no value' do
@@ -1621,6 +1701,9 @@ fn should_set_safe_mode_to_specified_level() {
     }
 }
 
+// Not applicable: `--eruby erubi` selects the Ruby eRuby template engine used
+// by Asciidoctor's converters. `adoc` has no eRuby, so the option is
+// meaningless here.
 non_normative!(
     r#"
   test 'should set eRuby impl if specified' do
@@ -1665,6 +1748,9 @@ fn should_force_default_external_encoding_to_utf_8() {
     assert!(output.contains("Codierungen sind verrückt auf älteren Versionen von Ruby"));
 }
 
+// Not applicable: forces stdin/stdout to a non-UTF-8 encoding via `-E` and a
+// Ruby require. Rust's I/O is UTF-8 native and `adoc` has neither `-E` nor
+// `-r`, so there is no encoding to coerce.
 non_normative!(
     r#"
   test 'should force stdio encoding to UTF-8' do
@@ -1681,6 +1767,9 @@ non_normative!(
 "#
 );
 
+// Not applicable: a Ruby regression test that stubs `Dir.home` to raise via
+// `-r`. It concerns the Ruby runtime, not a rendering rule, and `adoc` has no
+// `-r`.
 non_normative!(
     r#"
   test 'should not fail to load if call to Dir.home fails', unless: RUBY_ENGINE == 'truffleruby' do
@@ -1692,6 +1781,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: `-t`/`--timings` prints conversion timings to stderr.
+// `adoc` has no such flag. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/151>.
 non_normative!(
     r#"
   test 'should print timings when -t flag is specified' do
@@ -1710,6 +1802,10 @@ non_normative!(
 "#
 );
 
+// Not implemented: reads the `doctime`/`localtime` attributes (rendered via
+// `-d inline`) to check UTC timezone formatting. `adoc` has neither `-d inline`
+// nor these date/time attributes. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should show timezone as UTC if system TZ is set to UTC' do
@@ -1723,6 +1819,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: the offset-timezone counterpart of the previous test. Same
+// date/time attribute gap. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should show timezone as offset if system TZ is not set to UTC' do
@@ -1736,6 +1835,10 @@ non_normative!(
 "#
 );
 
+// Not implemented: `SOURCE_DATE_EPOCH` seeds `docdate`/`docyear`/`docdatetime`
+// (and the `local*` variants) for reproducible builds. `adoc` does not read the
+// variable, and does not expose these attributes. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should use SOURCE_DATE_EPOCH as modified time of input file and local time' do
@@ -1763,6 +1866,9 @@ non_normative!(
 "#
 );
 
+// Not implemented: an empty `SOURCE_DATE_EPOCH` is ignored (dates fall back to
+// the current time). Same reproducible-builds gap. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
 non_normative!(
     r#"
   test 'should ignore SOURCE_DATE_EPOCH is value is empty' do
@@ -1786,6 +1892,10 @@ non_normative!(
 "#
 );
 
+// Not implemented: a malformed `SOURCE_DATE_EPOCH` should fail the run. `adoc`
+// does not read the variable, so it cannot fail on it. Tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>. (The trailing
+// line closes the Ruby `context` block.)
 non_normative!(
     r#"
   test 'should fail if SOURCE_DATE_EPOCH is malformed' do
