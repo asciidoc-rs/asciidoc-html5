@@ -719,6 +719,7 @@ mod preprocessor_reader {
           end
         end
       end
+
 "#
             );
 
@@ -728,12 +729,6 @@ mod preprocessor_reader {
             assert!(html.contains("source\nwith\nCRLF\nline endings"), "{html}");
             assert!(!html.contains('\r'), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_skip_front_matter_by_default() {
@@ -759,6 +754,7 @@ mod preprocessor_reader {
         assert_equal '---', reader.peek_line
         assert_equal 1, reader.lineno
       end
+
 "#
             );
 
@@ -767,12 +763,6 @@ mod preprocessor_reader {
             let html = convert("---\nlayout: post\ntitle: Document Title\nauthor: username\ntags: [ first, second ]\n---\n= Document Title\nAuthor Name\n\npreamble\n");
             assert!(html.contains("layout: post"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_skip_front_matter_if_ending_delimiter_is_not_found() {
@@ -795,6 +785,7 @@ mod preprocessor_reader {
         refute doc.attributes.key? 'front-matter'
         assert_equal 1, reader.lineno
       end
+
 "#
             );
 
@@ -806,12 +797,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("title: Document Title"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_skip_front_matter_if_specified_by_skip_front_matter_attribute() {
@@ -973,6 +958,7 @@ mod preprocessor_reader {
         reader = doc.reader
         assert_equal 'link:include-file.adoc[role=include]', reader.read_line
       end
+
 "#
             );
 
@@ -985,7 +971,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should not add role to link macro used to replace include directive in compat mode' do
         input = 'include::include-file.adoc[]'
         doc = Asciidoctor::Document.new input, attributes: { 'compat-mode' => '' }
@@ -1006,6 +991,7 @@ mod preprocessor_reader {
         reader = doc.reader
         assert_equal 'link:pass:c[foo bar baz.adoc][role=include]', reader.read_line
       end
+
 "#
             );
 
@@ -1017,7 +1003,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should replace include directive with link macro if safe mode allows it, but allow-uri-read is not set' do
         using_memory_logger do |logger|
           input = 'include::https://example.org/dist/info.adoc[]'
@@ -1056,18 +1041,13 @@ mod preprocessor_reader {
         assert_match(/included content/, output)
         assert doc.catalog[:includes]['fixtures/include-file']
       end
+
 "#
             );
 
             let html = convert_safe_with_fixtures("include::fixtures/include-file.adoc[]");
             assert!(html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_strip_bom_from_include_file() {
@@ -1080,6 +1060,7 @@ mod preprocessor_reader {
         assert_css 'h1', output, 1
         assert_match(/<h1>人<\/h1>/, output)
       end
+
 "#
             );
 
@@ -1095,7 +1076,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should include content from a file on the classloader', if: jruby? do
         require fixture_path 'assets.jar'
         input = 'include::uri:classloader:/includes-in-jar/include-file.adoc[]'
@@ -1122,6 +1102,7 @@ mod preprocessor_reader {
         doc = document_from_string input, safe: :safe, standalone: false, base_dir: DIRNAME
         assert doc.catalog[:includes].empty?
       end
+
 "#
             );
 
@@ -1137,12 +1118,6 @@ mod preprocessor_reader {
             let svg = load_with("----\ninclude::fixtures/circle.svg[]\n----", &opts);
             assert!(!svg.catalog().was_included("fixtures/circle"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_should_resolve_file_with_spaces_in_name() {
@@ -1161,6 +1136,7 @@ mod preprocessor_reader {
           FileUtils.rm include_file_with_sp
         end
       end
+
 "#
             );
 
@@ -1169,12 +1145,6 @@ mod preprocessor_reader {
             let html = convert_safe_in(&dir, "include::include file.adoc[]");
             assert!(html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_should_resolve_file_with_sp_in_name() {
@@ -1193,6 +1163,7 @@ mod preprocessor_reader {
           FileUtils.rm include_file_with_sp
         end
       end
+
 "#
             );
 
@@ -1204,7 +1175,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'include directive should not match if target is empty or starts or ends with space' do
         ['include::[]', 'include:: []', 'include:: not-include[]', 'include::not-include []'].each do |input|
           doc = Asciidoctor::Document.new input
@@ -1301,6 +1271,7 @@ mod preprocessor_reader {
         assert_equal ['Asciidoctor!'], doc.blocks[1].lines
         assert_equal ['last line'], doc.blocks[2].lines
       end
+
 "#
             );
 
@@ -1310,12 +1281,6 @@ mod preprocessor_reader {
             assert!(html.contains("Asciidoctor!"), "{html}");
             assert!(html.contains("last line"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_only_strip_trailing_newlines_not_trailing_whitespace_if_include_file_is_not_asciidoc(
@@ -1333,6 +1298,7 @@ mod preprocessor_reader {
         assert_equal 1, doc.blocks.size
         assert doc.blocks[0].lines[2].end_with? ?\t
       end
+
 "#
             );
 
@@ -1344,7 +1310,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should fail to read include file if not UTF-8 encoded and encoding is not specified' do
         input = <<~'EOS'
         ....
@@ -1379,6 +1344,7 @@ mod preprocessor_reader {
         assert_equal doc.blocks[0].lines[0].encoding, Encoding::UTF_8
         assert_equal ['Gregory Romé has written an AsciiDoc plugin for the Redmine project management application.'], doc.blocks[0].lines
       end
+
 "#
             );
 
@@ -1395,7 +1361,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should use encoding specified by encoding attribute when reading include file' do
         input = <<~'EOS'
         ....
@@ -1435,6 +1400,7 @@ mod preprocessor_reader {
           flunk 'include directive should not raise exception on unresolved target'
         end
       end
+
 "#
             );
 
@@ -1446,12 +1412,6 @@ mod preprocessor_reader {
             assert!(html.contains("trailing content"), "{html}");
             assert!(!html.contains("Unresolved directive"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_skip_include_directive_that_references_missing_file_if_optional_option_is_set() {
@@ -1475,6 +1435,7 @@ mod preprocessor_reader {
           flunk 'include directive should not raise exception on missing file'
         end
       end
+
 "#
             );
 
@@ -1484,12 +1445,6 @@ mod preprocessor_reader {
             assert!(html.contains("trailing content"), "{html}");
             assert!(!html.contains("Unresolved directive"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_replace_include_directive_that_references_missing_file_with_message() {
@@ -1514,6 +1469,7 @@ mod preprocessor_reader {
           flunk 'include directive should not raise exception on missing file'
         end
       end
+
 "#
             );
 
@@ -1539,7 +1495,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should replace include directive that references unreadable file with message', unless: (windows? || Process.euid == 0) do
         include_file = File.join DIRNAME, 'fixtures', 'chapter-a.adoc'
         old_mode = (File.stat include_file).mode
@@ -1727,6 +1682,7 @@ mod preprocessor_reader {
         assert_match(/eighth line/, output)
         assert_match(/last line of included content/, output)
       end
+
 "#
             );
 
@@ -1743,12 +1699,6 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_supports_line_ranges_separated_by_commas_in_quoted_attribute_value() {
@@ -1767,6 +1717,7 @@ mod preprocessor_reader {
         assert_match(/eighth line/, output)
         assert_match(/last line of included content/, output)
       end
+
 "#
             );
 
@@ -1783,12 +1734,6 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_ignores_spaces_between_line_ranges_in_quoted_attribute_value() {
@@ -1807,6 +1752,7 @@ mod preprocessor_reader {
         assert_match(/eighth line/, output)
         assert_match(/last line of included content/, output)
       end
+
 "#
             );
 
@@ -1823,12 +1769,6 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_supports_implicit_endless_range() {
@@ -1847,6 +1787,7 @@ mod preprocessor_reader {
         assert_match(/eighth line/, output)
         assert_match(/last line of included content/, output)
       end
+
 "#
             );
 
@@ -1858,12 +1799,6 @@ mod preprocessor_reader {
             assert!(html.contains("eighth line"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_ignores_lines_attribute_if_empty() {
@@ -1880,6 +1815,7 @@ mod preprocessor_reader {
         assert_includes output, 'first line of included content'
         assert_includes output, 'last line of included content'
       end
+
 "#
             );
 
@@ -1888,12 +1824,6 @@ mod preprocessor_reader {
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_ignores_lines_attribute_with_invalid_range() {
@@ -1910,6 +1840,7 @@ mod preprocessor_reader {
         assert_includes output, 'first line of included content'
         assert_includes output, 'last line of included content'
       end
+
 "#
             );
 
@@ -1919,12 +1850,6 @@ mod preprocessor_reader {
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_supports_selecting_lines_by_tag() {
@@ -1938,6 +1863,7 @@ mod preprocessor_reader {
         refute_match(/non-tagged content/, output)
         refute_match(/included content/, output)
       end
+
 "#
             );
 
@@ -1948,12 +1874,6 @@ mod preprocessor_reader {
             assert!(!html.contains("non-tagged content"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_supports_selecting_lines_by_tags() {
@@ -1967,6 +1887,7 @@ mod preprocessor_reader {
         refute_match(/non-tagged content/, output)
         refute_match(/included content/, output)
       end
+
 "#
             );
 
@@ -1978,12 +1899,6 @@ mod preprocessor_reader {
             assert!(!html.contains("non-tagged content"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_supports_selecting_lines_by_tag_in_language_that_uses_circumfix_comments(
@@ -2007,6 +1922,7 @@ mod preprocessor_reader {
           assert_equal expect, doc.blocks[0].source
         end
       end
+
 "#
             );
 
@@ -2026,12 +1942,6 @@ mod preprocessor_reader {
             }
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn include_directive_supports_selecting_lines_by_tag_in_file_that_has_crlf_line_endings() {
             verifies!(
@@ -2050,6 +1960,7 @@ mod preprocessor_reader {
           tmp_include.close!
         end
       end
+
 "#
             );
 
@@ -2063,12 +1974,6 @@ mod preprocessor_reader {
             assert!(html.contains("included line"), "{html}");
             assert!(!html.contains("do not include"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_finds_closing_tag_on_last_line_of_file_without_a_trailing_newline() {
@@ -2091,6 +1996,7 @@ mod preprocessor_reader {
           tmp_include.close!
         end
       end
+
 "#
             );
 
@@ -2105,12 +2011,6 @@ mod preprocessor_reader {
             assert!(html.contains("line included"), "{html}");
             assert!(!html.contains("line not included"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_does_not_select_lines_containing_tag_directives_within_selected_tag_region(
@@ -2134,6 +2034,7 @@ mod preprocessor_reader {
         EOS
         assert_equal expected, output
       end
+
 "#
             );
 
@@ -2151,12 +2052,6 @@ mod preprocessor_reader {
                 "nested tag directives should be excluded: {html}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_skips_lines_inside_tag_which_is_negated() {
@@ -2180,6 +2075,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2191,12 +2087,6 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_without_a_tag_directive_when_value_is_double_asterisk(
@@ -2229,6 +2119,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2237,12 +2128,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_except_lines_inside_tag_which_is_negated_when_value_starts_with_double_asterisk(
@@ -2267,6 +2152,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2278,12 +2164,6 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_including_lines_inside_nested_tags_except_lines_inside_tag_which_is_negated_when_value_starts_with_double_asterisk(
@@ -2313,6 +2193,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2321,12 +2202,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_outside_of_tags_when_value_is_double_asterisk_followed_by_negated_wildcard(
@@ -2347,6 +2222,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2355,12 +2231,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_skips_all_tagged_regions_when_value_of_tags_attribute_is_negated_wildcard(
@@ -2378,6 +2248,7 @@ mod preprocessor_reader {
         expected = %(class Dog\nend)
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2389,7 +2260,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       # FIXME this is a weird one since we'd expect it to only select the specified tags; but it's always been this way
 "#
         );
@@ -2425,6 +2295,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2436,7 +2307,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       # FIXME this is a weird one since we'd expect it to only select the specified tags; but it's always been this way
 "#
         );
@@ -2472,6 +2342,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2480,12 +2351,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_inside_unspecified_tags_when_value_is_negated_double_asterisk_followed_by_negated_tags(
@@ -2511,6 +2376,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2519,12 +2385,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_except_tag_which_is_negated_when_value_only_contains_negated_tag(
@@ -2549,6 +2409,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2560,12 +2421,6 @@ mod preprocessor_reader {
                 "class Dog\n  def initialize breed\n    @breed = breed\n  end\nend",
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_all_lines_except_tags_which_are_negated_when_value_only_contains_negated_tags(
@@ -2586,6 +2441,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2594,12 +2450,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_recognize_tag_wildcard_if_not_at_start_of_tags_list() {
@@ -2629,6 +2479,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2637,12 +2488,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_lines_between_tags_when_value_of_tags_attribute_is_wildcard() {
@@ -2671,6 +2516,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2678,12 +2524,6 @@ mod preprocessor_reader {
                 convert_safe_with_fixtures("----\ninclude::fixtures/tagged-class.rb[tags=*]\n----");
             assert_listing_selection(&html, "  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_lines_inside_tags_when_value_of_tags_attribute_is_wildcard_and_tag_surrounds_content(
@@ -2716,6 +2556,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2724,12 +2565,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n  def initialize breed\n    @breed = breed\n  end\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_lines_inside_all_tags_except_tag_which_is_negated_when_value_of_tags_attribute_is_wildcard_followed_by_negated_tag(
@@ -2759,6 +2594,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2767,12 +2603,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n    if @breed == 'beagle'\n      'woof woof woof woof woof'\n    else\n      'woof woof'\n    end\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_skips_all_tagged_regions_except_ones_re_enabled_when_value_of_tags_attribute_is_negated_wildcard_followed_by_tag_name(
@@ -2799,6 +2629,7 @@ mod preprocessor_reader {
           assert_includes output, %(<pre>#{expected}</pre>)
         end
       end
+
 "#
             );
 
@@ -2811,12 +2642,6 @@ mod preprocessor_reader {
                 );
             }
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_includes_regions_outside_tags_and_inside_specified_tags_when_value_begins_with_negated_wildcard(
@@ -2841,6 +2666,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2849,12 +2675,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\n\n  def bark\n  end\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_includes_lines_inside_tag_except_for_lines_inside_nested_tags_when_tag_is_followed_by_negated_wildcard(
@@ -2877,6 +2697,7 @@ mod preprocessor_reader {
           assert_includes output, %(<pre>#{expected}</pre>)
         end
       end
+
 "#
             );
 
@@ -2886,12 +2707,6 @@ mod preprocessor_reader {
                 assert_listing_selection(&html, "  def bark\n  end");
             }
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_selects_lines_inside_tag_except_for_lines_inside_nested_tags_when_tag_is_preceded_by_negated_double_asterisk_and_negated_wildcard(
@@ -2912,6 +2727,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2920,12 +2736,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "  def bark\n  end");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_does_not_select_lines_inside_tag_that_has_been_included_then_excluded()
@@ -2946,6 +2756,7 @@ mod preprocessor_reader {
         EOS
         assert_includes output, %(<pre>#{expected}</pre>)
       end
+
 "#
             );
 
@@ -2954,12 +2765,6 @@ mod preprocessor_reader {
             );
             assert_listing_selection(&html, "class Dog\nend");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_only_selects_lines_inside_specified_tag_even_if_proceeded_by_negated_double_asterisk(
@@ -2987,6 +2792,7 @@ mod preprocessor_reader {
           assert_includes output, %(<pre>#{expected}</pre>)
         end
       end
+
 "#
             );
 
@@ -2999,7 +2805,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'include directive selects lines inside specified tag and ignores lines inside a negated tag' do
         input = <<~'EOS'
         [indent=0]
@@ -3034,6 +2839,7 @@ mod preprocessor_reader {
           assert_message logger, :WARN, %(~<stdin>: line 1: tag 'no-such-tag' not found in include file), Hash
         end
       end
+
 "#
             );
 
@@ -3045,12 +2851,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_warn_if_specified_negated_tag_is_not_found_in_include_file() {
@@ -3083,6 +2883,7 @@ mod preprocessor_reader {
           assert_empty logger.messages
         end
       end
+
 "#
             );
 
@@ -3095,12 +2896,6 @@ mod preprocessor_reader {
                 fixture_warnings(src)
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_specified_tags_are_not_found_in_include_file() {
@@ -3119,6 +2914,7 @@ mod preprocessor_reader {
           assert_message logger, :WARN, %(~<stdin>: line 2: tags '#{expected_tags}' not found in include file), Hash
         end
       end
+
 "#
             );
 
@@ -3132,12 +2928,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_warn_if_specified_negated_tags_are_not_found_in_include_file() {
@@ -3170,6 +2960,7 @@ mod preprocessor_reader {
           assert_empty logger.messages
         end
       end
+
 "#
             );
 
@@ -3182,12 +2973,6 @@ mod preprocessor_reader {
                 fixture_warnings(src)
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_specified_tag_in_include_file_is_not_closed() {
@@ -3207,6 +2992,7 @@ mod preprocessor_reader {
           refute_nil logger.messages[0][:message][:include_location]
         end
       end
+
 "#
             );
 
@@ -3221,12 +3007,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_end_tag_in_included_file_is_mismatched() {
@@ -3247,6 +3027,7 @@ mod preprocessor_reader {
           refute_nil logger.messages[0][:message][:include_location]
         end
       end
+
 "#
             );
 
@@ -3259,12 +3040,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_unexpected_end_tag_is_found_in_included_file() {
@@ -3285,6 +3060,7 @@ mod preprocessor_reader {
           refute_nil logger.messages[0][:message][:include_location]
         end
       end
+
 "#
             );
 
@@ -3297,12 +3073,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_ignores_tags_attribute_when_empty() {
@@ -3320,6 +3090,7 @@ mod preprocessor_reader {
           assert_match(/(?:tag|end)::/, output, 2)
         end
       end
+
 "#
             );
 
@@ -3333,12 +3104,6 @@ mod preprocessor_reader {
             }
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn lines_attribute_takes_precedence_over_tags_attribute_in_include_directive() {
             verifies!(
@@ -3350,6 +3115,7 @@ mod preprocessor_reader {
         refute_match(/snippetA content/, output)
         refute_match(/snippetB content/, output)
       end
+
 "#
             );
 
@@ -3360,12 +3126,6 @@ mod preprocessor_reader {
             assert!(!html.contains("snippetA content"), "{html}");
             assert!(!html.contains("snippetB content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indent_of_included_file_can_be_reset_to_size_of_indent_attribute() {
@@ -3383,18 +3143,13 @@ mod preprocessor_reader {
         result = xmlnodes_at_xpath('//pre', output, 1).text
         assert_equal "<year>2013</year>\n<holder>Acme™, Inc.</holder>", result
       end
+
 "#
             );
 
             let html = convert_safe_with_fixtures("[source, xml]\n----\ninclude::fixtures/basic-docinfo.xml[lines=2..3, indent=0]\n----");
             assert!(html.contains("&lt;year&gt;2013&lt;/year&gt;\n&lt;holder&gt;Acme\u{2122}, Inc.&lt;/holder&gt;"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_substitute_attribute_references_in_attrlist() {
@@ -3412,6 +3167,7 @@ mod preprocessor_reader {
         refute_match(/non-tagged content/, output)
         refute_match(/included content/, output)
       end
+
 "#
             );
 
@@ -3426,7 +3182,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should fall back to built-in include directive behavior when not handled by include processor' do
         input = 'include::fixtures/include-file.adoc[]'
         include_processor = Class.new do
@@ -3476,6 +3231,7 @@ mod preprocessor_reader {
         document = Asciidoctor.load input, safe: :safe, base_dir: DIRNAME, parse: false
         assert_equal expected, document.reader.read_lines
       end
+
 "#
             );
 
@@ -3486,12 +3242,6 @@ mod preprocessor_reader {
             assert!(html.contains("preamble"), "{html}");
             assert!(html.contains("content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn attributes_are_substituted_in_target_of_include_directive() {
@@ -3509,6 +3259,7 @@ mod preprocessor_reader {
         output = doc.convert
         assert_match(/included content/, output)
       end
+
 "#
             );
 
@@ -3517,12 +3268,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn line_is_skipped_by_default_if_target_of_include_directive_resolves_to_empty() {
@@ -3538,6 +3283,7 @@ mod preprocessor_reader {
           assert_message logger, :WARN, '<stdin>: line 1: include dropped because resolved target is blank: include::{blank}[]', Hash
         end
       end
+
 "#
             );
 
@@ -3546,12 +3292,6 @@ mod preprocessor_reader {
             let html = convert_safe_with_fixtures("include::{blank}[]");
             assert!(html.contains("Unresolved directive"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_is_dropped_if_target_contains_missing_attribute_and_attribute_missing_is_drop_line(
@@ -3571,6 +3311,7 @@ mod preprocessor_reader {
           ]
         end
       end
+
 "#
             );
 
@@ -3585,12 +3326,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn line_following_dropped_include_is_not_dropped() {
@@ -3615,6 +3350,7 @@ mod preprocessor_reader {
           ]
         end
       end
+
 "#
             );
 
@@ -3631,12 +3367,6 @@ mod preprocessor_reader {
             assert!(html.contains("Unresolved directive"), "{html}");
             assert!(html.contains("yo"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn escaped_include_directive_is_left_unprocessed() {
@@ -3656,6 +3386,7 @@ mod preprocessor_reader {
         assert_equal 'include::fixtures/include-file.adoc[]', reader.read_line
         assert_equal '\\escape preserved here', reader.read_line
       end
+
 "#
             );
 
@@ -3671,12 +3402,6 @@ mod preprocessor_reader {
             assert!(!html.contains("included content"), "{html}");
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn include_directive_not_at_start_of_line_is_ignored() {
             verifies!(
@@ -3689,6 +3414,7 @@ mod preprocessor_reader {
         assert_equal :literal, para.context
         assert_equal 'include::include-file.adoc[]', para.source
       end
+
 "#
             );
 
@@ -3697,12 +3423,6 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_is_disabled_when_max_include_depth_attribute_is_0() {
@@ -3714,6 +3434,7 @@ mod preprocessor_reader {
         assert_equal 1, para.lines.size
         assert_equal 'include::include-file.adoc[]', para.source
       end
+
 "#
             );
 
@@ -3726,12 +3447,6 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn max_include_depth_cannot_be_set_by_document() {
@@ -3747,6 +3462,7 @@ mod preprocessor_reader {
         assert_equal 1, para.lines.size
         assert_equal 'include::include-file.adoc[]', para.source
       end
+
 "#
             );
 
@@ -3760,12 +3476,6 @@ mod preprocessor_reader {
             assert!(html.contains("include::include-file.adoc[]"), "{html}");
             assert!(!html.contains("included content"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_directive_should_be_disabled_if_max_include_depth_has_been_exceeded() {
@@ -3782,6 +3492,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, 'fixtures/child-include.adoc: line 3: maximum include depth of 1 exceeded', Hash
         end
       end
+
 "#
             );
 
@@ -3802,12 +3513,6 @@ mod preprocessor_reader {
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn include_directive_should_be_disabled_if_max_include_depth_set_in_nested_context_has_been_exceeded(
         ) {
@@ -3825,6 +3530,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, 'fixtures/child-include.adoc: line 3: maximum include depth of 0 exceeded', Hash
         end
       end
+
 "#
             );
 
@@ -3846,7 +3552,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'read_lines_until should not process lines if process option is false' do
         lines = <<~'EOS'.lines
         ////
@@ -4025,6 +3730,7 @@ mod preprocessor_reader {
         end
         assert_equal 'There is a holy grail!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4034,12 +3740,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("There is a holy grail!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_defined_attribute_includes_text_in_brackets() {
@@ -4060,6 +3760,7 @@ mod preprocessor_reader {
         end
         assert_equal "On our quest we go...\nThere is a holy grail!\nThere was much rejoicing.", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4077,7 +3778,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'ifdef with defined attribute processes include directive in brackets' do
         input = 'ifdef::asciidoctor-version[include::fixtures/include-file.adoc[tag=snippetA]]'
         doc = Asciidoctor::Document.new input, safe: :safe, base_dir: DIRNAME
@@ -4107,6 +3807,7 @@ mod preprocessor_reader {
         result = doc.reader.read
         assert_equal 'The script is shown!', result
       end
+
 "#
             );
 
@@ -4116,12 +3817,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("The script is shown!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_defined_attribute_does_not_include_text_in_brackets() {
@@ -4142,6 +3837,7 @@ mod preprocessor_reader {
         end
         assert_equal "On our quest we go...\nThere was no rejoicing.", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4153,12 +3849,6 @@ mod preprocessor_reader {
             assert!(!html.contains("There is a holy grail!"), "{html}");
             assert!(html.contains("There was no rejoicing."), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_with_non_matching_nested_exclude() {
@@ -4183,18 +3873,13 @@ mod preprocessor_reader {
         end
         assert_equal "holy\ngrail", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
             let html = convert_with_attrs("ifdef::grail[]\nholy\nifdef::swallow[]\nswallow\nendif::swallow[]\ngrail\nendif::grail[]", &[("grail", "")]);
             assert!(html.contains("holy\ngrail"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_excludes_with_same_condition() {
@@ -4217,6 +3902,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4226,12 +3912,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn include_with_nested_exclude_of_inverted_condition() {
@@ -4256,18 +3936,13 @@ mod preprocessor_reader {
         end
         assert_equal "holy\ngrail", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
             let html = convert_with_attrs("ifdef::grail[]\nholy\nifndef::grail[]\nnot here\nendif::grail[]\ngrail\nendif::grail[]", &[("grail", "")]);
             assert!(html.contains("holy\ngrail"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn exclude_with_matching_nested_exclude() {
@@ -4294,18 +3969,13 @@ mod preprocessor_reader {
         end
         assert_equal "poof\ngone", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
             let html = convert_with_attrs("poof\nifdef::swallow[]\nno\nifdef::swallow[]\nswallow\nendif::swallow[]\nhere\nendif::swallow[]\ngone", &[("grail", "")]);
             assert!(html.contains("poof\ngone"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn exclude_with_nested_include_using_shorthand_end() {
@@ -4332,18 +4002,13 @@ mod preprocessor_reader {
         end
         assert_equal "poof\ngone", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
             let html = convert_with_attrs("poof\nifndef::grail[]\nno grail\nifndef::swallow[]\nor swallow\nendif::[]\nin here\nendif::[]\ngone", &[("grail", "")]);
             assert!(html.contains("poof\ngone"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_one_alternative_attribute_set_includes_content() {
@@ -4364,6 +4029,7 @@ mod preprocessor_reader {
         end
         assert_equal 'Our quest is complete!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4373,12 +4039,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_no_alternative_attributes_set_does_not_include_content() {
@@ -4399,6 +4059,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4408,12 +4069,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_all_required_attributes_set_includes_content() {
@@ -4434,6 +4089,7 @@ mod preprocessor_reader {
         end
         assert_equal 'Our quest is complete!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4443,12 +4099,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_missing_required_attributes_does_not_include_content() {
@@ -4469,6 +4119,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4478,12 +4129,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_should_permit_leading_trailing_and_repeat_operators() {
@@ -4506,6 +4151,7 @@ mod preprocessor_reader {
           assert_equal expected, (document_from_string input, parse: false).reader.read
         end
       end
+
 "#
             );
 
@@ -4527,12 +4173,6 @@ mod preprocessor_reader {
             }
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn ifndef_with_undefined_attribute_includes_block() {
             verifies!(
@@ -4552,6 +4192,7 @@ mod preprocessor_reader {
         end
         assert_equal 'Our quest continues to find the holy grail!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4561,12 +4202,6 @@ mod preprocessor_reader {
                 "{html}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_one_alternative_attribute_set_does_not_include_content() {
@@ -4582,6 +4217,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input, attributes: { 'swallow' => '' }).reader.read
         assert_empty result
       end
+
 "#
             );
 
@@ -4591,12 +4227,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_both_alternative_attributes_set_does_not_include_content() {
@@ -4612,6 +4242,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input, attributes: { 'swallow' => '', 'holygrail' => '' }).reader.read
         assert_empty result
       end
+
 "#
             );
 
@@ -4621,12 +4252,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_no_alternative_attributes_set_includes_content() {
@@ -4642,6 +4267,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input).reader.read
         assert_equal 'Our quest is complete!', result
       end
+
 "#
             );
 
@@ -4651,12 +4277,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_no_required_attributes_set_includes_content() {
@@ -4672,6 +4292,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input).reader.read
         assert_equal 'Our quest is complete!', result
       end
+
 "#
             );
 
@@ -4681,12 +4302,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_all_required_attributes_set_does_not_include_content() {
@@ -4702,6 +4317,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input, attributes: { 'swallow' => '', 'holygrail' => '' }).reader.read
         assert_empty result
       end
+
 "#
             );
 
@@ -4711,12 +4327,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifndef_with_at_least_one_required_attributes_set_does_not_include_content() {
@@ -4732,6 +4342,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input, attributes: { 'swallow' => '' }).reader.read
         assert_equal 'Our quest is complete!', result
       end
+
 "#
             );
 
@@ -4741,12 +4352,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Our quest is complete!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_around_empty_line_does_not_introduce_extra_line() {
@@ -4764,6 +4369,7 @@ mod preprocessor_reader {
         result = (Asciidoctor::Document.new input).reader.read
         assert_equal %(before\nafter), result
       end
+
 "#
             );
 
@@ -4773,12 +4379,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("before\nafter"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_log_warning_if_endif_is_unmatched() {
@@ -4796,6 +4396,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 2: unmatched preprocessor directive: endif::on-quest[]', Hash
         end
       end
+
 "#
             );
 
@@ -4817,12 +4418,6 @@ mod preprocessor_reader {
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn should_log_warning_if_endif_is_mismatched() {
             verifies!(
@@ -4843,6 +4438,7 @@ mod preprocessor_reader {
           ]
         end
       end
+
 "#
             );
 
@@ -4868,12 +4464,6 @@ mod preprocessor_reader {
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn should_log_warning_if_endif_contains_text() {
             verifies!(
@@ -4895,6 +4485,7 @@ mod preprocessor_reader {
           ]
         end
       end
+
 "#
             );
 
@@ -4910,12 +4501,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn escaped_ifdef_is_unescaped_and_ignored() {
@@ -4936,6 +4521,7 @@ mod preprocessor_reader {
         end
         assert_equal "ifdef::holygrail[]\ncontent\nendif::holygrail[]", (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4946,12 +4532,6 @@ mod preprocessor_reader {
                 "{html}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_missing_attribute_to_nil_includes_content() {
@@ -4972,6 +4552,7 @@ mod preprocessor_reader {
         end
         assert_equal 'No foo for you!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -4979,12 +4560,6 @@ mod preprocessor_reader {
                 convert_with_attrs("ifeval::['{foo}' == '']\nNo foo for you!\nendif::[]", &[]);
             assert!(html.contains("No foo for you!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_missing_attribute_to_0_drops_content() {
@@ -5005,6 +4580,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5014,12 +4590,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_running_unsupported_operation_on_missing_attribute_drops_content() {
@@ -5040,6 +4610,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5049,12 +4620,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_running_invalid_operation_drops_content() {
@@ -5075,6 +4640,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5084,12 +4650,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_double_quoted_attribute_to_matching_string_includes_content() {
@@ -5110,6 +4670,7 @@ mod preprocessor_reader {
         end
         assert_equal 'Asciidoctor it is!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5119,12 +4680,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Asciidoctor it is!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_single_quoted_attribute_to_matching_string_includes_content() {
@@ -5145,6 +4700,7 @@ mod preprocessor_reader {
         end
         assert_equal 'Asciidoctor it is!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5154,12 +4710,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("Asciidoctor it is!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_quoted_attribute_to_non_matching_string_drops_content() {
@@ -5180,6 +4730,7 @@ mod preprocessor_reader {
         end
         assert_equal '', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5189,12 +4740,6 @@ mod preprocessor_reader {
             );
             assert!(html.trim().is_empty(), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_attribute_to_lower_version_number_includes_content() {
@@ -5215,6 +4760,7 @@ mod preprocessor_reader {
         end
         assert_equal 'That version will do!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5224,12 +4770,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("That version will do!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_comparing_attribute_to_self_includes_content() {
@@ -5250,18 +4790,13 @@ mod preprocessor_reader {
         end
         assert_equal 'Of course it\'s the same!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
             let html = convert("ifeval::['{asciidoctor-version}' == '{asciidoctor-version}']\nOf course it's the same!\nendif::[]");
             assert!(html.contains("the same!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_arguments_can_be_transposed() {
@@ -5282,6 +4817,7 @@ mod preprocessor_reader {
         end
         assert_equal 'That version will do!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5291,12 +4827,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("That version will do!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_matching_numeric_equality_includes_content() {
@@ -5317,6 +4847,7 @@ mod preprocessor_reader {
         end
         assert_equal 'One ring to rule them all!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5326,12 +4857,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("One ring to rule them all!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifeval_matching_numeric_inequality_includes_content() {
@@ -5352,6 +4877,7 @@ mod preprocessor_reader {
         end
         assert_equal 'One ring to rule them all!', (lines * ::Asciidoctor::LF)
       end
+
 "#
             );
 
@@ -5361,12 +4887,6 @@ mod preprocessor_reader {
             );
             assert!(html.contains("One ring to rule them all!"), "{html}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_ifeval_has_target() {
@@ -5387,6 +4907,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 1: malformed preprocessor directive - target not permitted: ifeval::target[1 == 1]', Hash
         end
       end
+
 "#
             );
 
@@ -5404,12 +4925,6 @@ mod preprocessor_reader {
                 )]
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_ifeval_has_invalid_expression() {
@@ -5430,6 +4945,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 1: malformed preprocessor directive - invalid expression: ifeval::[1 | 2]', Hash
         end
       end
+
 "#
             );
 
@@ -5447,12 +4963,6 @@ mod preprocessor_reader {
                 )]
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_ifeval_is_missing_expression() {
@@ -5473,6 +4983,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 1: malformed preprocessor directive - missing expression: ifeval::[]', Hash
         end
       end
+
 "#
             );
 
@@ -5490,12 +5001,6 @@ mod preprocessor_reader {
                 )]
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn ifdef_with_no_target_is_ignored() {
@@ -5516,6 +5021,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 1: malformed preprocessor directive - missing target: ifdef::[]', Hash
         end
       end
+
 "#
             );
 
@@ -5533,12 +5039,6 @@ mod preprocessor_reader {
                 )]
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_warn_about_invalid_ifdef_preprocessor_directive_if_already_skipping() {
@@ -5560,6 +5060,7 @@ mod preprocessor_reader {
           assert_empty logger
         end
       end
+
 "#
             );
 
@@ -5572,12 +5073,6 @@ mod preprocessor_reader {
                 conditional_warnings(src, &[])
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_warn_about_invalid_ifeval_preprocessor_directive_if_already_skipping() {
@@ -5599,6 +5094,7 @@ mod preprocessor_reader {
           assert_empty logger
         end
       end
+
 "#
             );
 
@@ -5611,12 +5107,6 @@ mod preprocessor_reader {
                 conditional_warnings(src, &[])
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_log_error_with_end_position_if_preprocessor_conditional_directive_is_unterminated(
@@ -5642,6 +5132,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 6: detected unterminated preprocessor conditional directive: ifdef::not-set[]', Hash
         end
       end
+
 "#
             );
 
@@ -5656,12 +5147,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_log_error_with_start_location_if_preprocessor_conditional_directive_is_unterminated_and_sourcemap_is_set(
@@ -5687,6 +5172,7 @@ mod preprocessor_reader {
           assert_message logger, :ERROR, '~<stdin>: line 2: detected unterminated preprocessor conditional directive: ifdef::not-set[]', Hash
         end
       end
+
 "#
             );
 
@@ -5703,12 +5189,6 @@ mod preprocessor_reader {
                 "{warnings:?}"
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_log_error_if_multiple_preprocessor_conditional_directives_are_unterminated() {
@@ -5738,6 +5218,7 @@ mod preprocessor_reader {
           ]
         end
       end
+
 "#
             );
 
@@ -5751,12 +5232,6 @@ mod preprocessor_reader {
                 .count();
             assert_eq!(count, 2, "{warnings:?}");
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_fail_to_process_preprocessor_directive_that_evaluates_to_false_and_has_a_large_number_of_lines(
@@ -5780,6 +5255,7 @@ mod preprocessor_reader {
         assert_equal 'before', doc.blocks[0].source
         assert_equal 'after', doc.blocks[1].source
       end
+
 "#
             );
 
@@ -5797,7 +5273,6 @@ mod preprocessor_reader {
 
         non_normative!(
             r#"
-
       test 'should not fail to process lines if reader contains a nil entry' do
         input = ['before', '', '', '', 'after']
         doc = Asciidoctor.load input, extensions: proc {
