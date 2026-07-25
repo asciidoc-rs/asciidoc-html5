@@ -3,10 +3,10 @@
 //! invocation, so a conversion never truncates a source file. The
 //! `invoker_test.rb` port covers the plain self-collision (`-o file` on `file`,
 //! and an `outfilesuffix` landing on the input's own extension); these cover
-//! the two ways that guard could otherwise be bypassed — an output that aliases
-//! an input through a symlink, and an output that lands on a *sibling* input in
-//! a multi-file run — plus a non-colliding batch, to guard against false
-//! positives.
+//! the ways that guard could otherwise be bypassed — an output that aliases an
+//! input through a symlink or a hard link, and an output that lands on a
+//! *sibling* input in a multi-file run — plus a non-colliding batch, to guard
+//! against false positives.
 
 use std::path::PathBuf;
 
@@ -53,6 +53,35 @@ fn an_output_symlinked_to_the_input_is_rejected_without_truncating_it() {
     assert!(
         after.contains("Original source."),
         "the input was clobbered through the symlink: {after:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// An output path that is a *hard link* to the input shares the input's inode
+// under a distinct pathname, so canonicalization alone would not equate them.
+// The guard compares file identity (device + inode), so it is caught, and
+// writing does not replace the shared inode's contents.
+#[cfg(unix)]
+#[test]
+fn an_output_hard_linked_to_the_input_is_rejected_without_truncating_it() {
+    let dir = tempdir("hardlink-alias");
+    let input = dir.join("doc.adoc");
+    std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
+
+    // `out.html` is a second directory entry for the input's inode.
+    let out = dir.join("out.html");
+    std::fs::hard_link(&input, &out).expect("create hard link");
+
+    let cli = Cli::parse_from(["adoc", "-o", out.to_str().unwrap(), input.to_str().unwrap()]);
+    let mut stdout = Vec::new();
+    let err = run(&cli, &mut stdout).expect_err("an output hard-linked to the input is rejected");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+
+    let after = std::fs::read_to_string(&input).expect("read input back");
+    assert!(
+        after.contains("Original source."),
+        "the input was clobbered through the hard link: {after:?}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);

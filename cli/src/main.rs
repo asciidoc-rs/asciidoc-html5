@@ -221,18 +221,17 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
 
     let sources = resolve_inputs(&cli.inputs)?;
 
-    // The canonical identity of every on-disk input in this invocation, resolved
-    // once. A source's resolved output must not land on any of them — not only on
-    // its own input — or converting one source would truncate another (or itself)
-    // before that source is read.
-    let input_ids: Vec<PathBuf> = sources
+    // Every on-disk input in this invocation. A source's resolved output must not
+    // name any of them — not only its own input — or converting one source would
+    // truncate another (or itself) before that source is read.
+    let input_paths: Vec<PathBuf> = sources
         .iter()
         .filter_map(InputSource::file)
-        .filter_map(resolve_for_compare)
+        .map(Path::to_path_buf)
         .collect();
 
     for source in &sources {
-        convert_source(cli, &base_options, source, &input_ids, stdin, stdout)?;
+        convert_source(cli, &base_options, source, &input_paths, stdin, stdout)?;
     }
 
     Ok(())
@@ -248,7 +247,7 @@ fn convert_source(
     cli: &Cli,
     base_options: &Options,
     source: &InputSource,
-    input_ids: &[PathBuf],
+    input_paths: &[PathBuf],
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
 ) -> io::Result<()> {
@@ -261,11 +260,11 @@ fn convert_source(
     // across a multi-file run, where one source's resolved output (named with
     // `-o` or derived, e.g. via an `outfilesuffix` landing on an input's
     // extension) could otherwise truncate a sibling input before it is read. The
-    // comparison resolves symlinks (see [`resolve_for_compare`]), so an output
-    // that aliases an input through one is caught too. Fail before reading or
-    // converting.
+    // comparison (see [`same_file`]) tests file identity, so an output that
+    // aliases an input through a symlink or a hard link is caught too. Fail
+    // before reading or converting.
     if let OutputTarget::File(path) = &target {
-        if resolve_for_compare(path).is_some_and(|out| input_ids.contains(&out)) {
+        if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "input file and output file cannot be the same",
@@ -447,14 +446,25 @@ impl AssetWriter for OutputGuard {
 
 /// Whether `a` and `b` name the same file on disk.
 ///
-/// Compares each path in its most resolved form (see [`resolve_for_compare`]),
-/// so symlinks, `..` segments, and parent-directory aliases are accounted for:
-/// an output that aliases the target through a symlink — writing through which
-/// would follow the link and truncate that target — is caught, which a plain
-/// string comparison of the absolute paths would miss. Falls back to the
-/// absolute (non-resolved) comparison when neither path can be resolved on
-/// disk, so the check still works before either file exists.
+/// When both paths exist, compares their file identity — device and inode — so
+/// two entries pointing at the same underlying file are recognized even under
+/// different path spellings, including a hard link (which shares an inode but
+/// has no common path) and a symlink (whose target is stat'd). Writing through
+/// either would replace that shared file's contents, so an output aliasing an
+/// input this way must be refused.
+///
+/// For a path that does not exist yet — a derived output not written, or one
+/// reached through a parent-directory symlink — there is no inode to compare,
+/// so it falls back to comparing resolved paths (see [`resolve_for_compare`]),
+/// and finally to the plain absolute comparison, so the check still works
+/// before either file exists.
 fn same_file(a: &Path, b: &Path) -> bool {
+    if let (Ok(ma), Ok(mb)) = (fs::metadata(a), fs::metadata(b)) {
+        if same_inode(&ma, &mb) {
+            return true;
+        }
+    }
+
     if let (Some(a), Some(b)) = (resolve_for_compare(a), resolve_for_compare(b)) {
         return a == b;
     }
@@ -463,6 +473,22 @@ fn same_file(a: &Path, b: &Path) -> bool {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
+}
+
+/// Whether two metadata handles refer to the same underlying file (same device
+/// and inode). On Unix this catches hard links and resolved symlinks; on other
+/// platforms std exposes no inode, so [`same_file`] relies on its path
+/// comparison instead.
+#[cfg(unix)]
+fn same_inode(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn same_inode(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
+    false
 }
 
 /// Resolves `path` to a canonical identity suitable for comparing whether two
