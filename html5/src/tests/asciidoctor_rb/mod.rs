@@ -13,7 +13,6 @@
 mod attribute_list_test;
 mod extensions_test;
 mod fixtures;
-mod helpers_test;
 mod logger_test;
 mod manpage_test;
 mod paragraphs_test;
