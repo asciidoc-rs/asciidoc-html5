@@ -354,21 +354,27 @@ fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
     result
 }
 
-/// The largest `indent`/`source-indent`/`tabsize` this crate will act on. These
-/// values come from document-supplied attributes, so an absurd one (e.g.
-/// `:tabsize: 999999999999`) would otherwise saturate to `i64::MAX` and drive
-/// an unbounded space allocation, aborting the process on untrusted input.
+/// The largest reindent margin (`indent`/`source-indent`) this crate will act
+/// on. These values come from document-supplied attributes, so an absurd one
+/// (e.g. `:source-indent: 999999999999`) would otherwise saturate to `i64::MAX`
+/// and drive an unbounded space allocation, aborting the process on untrusted
+/// input.
 ///
-/// The cap also bounds the amplification of tab expansion: a run of leading
-/// tabs expands each tab to `tabsize` spaces, so a hostile all-tabs line could
-/// otherwise inflate its input by the `tabsize` factor. Capping that factor at
-/// `100` keeps the expansion within a small, fixed multiple of the input.
-///
-/// No real verbatim block needs anywhere near this much indentation (100 spaces
+/// No real verbatim block needs anywhere near this much of a margin (100 spaces
 /// is already well past plausible), so this is a deliberate divergence from
 /// Asciidoctor (which bounds neither), guarding availability while leaving
 /// every realistic document byte-identical.
 const MAX_VERBATIM_INDENT: i64 = 100;
+
+/// The largest `tabsize` this crate will act on — the number of spaces a single
+/// tab expands to. Unlike a block margin, this is the width of *one* tab, and
+/// no real document uses more than a handful (2/4/8, occasionally 16); a value
+/// like `:tabsize: 100` — let alone `i64::MAX` — is nonsensical. Capping it
+/// here both avoids the unbounded allocation and keeps tab expansion's
+/// amplification (one tab → `tabsize` spaces) to a small, sane factor. As with
+/// the margin cap this is a deliberate divergence from Asciidoctor, invisible
+/// to any real document.
+const MAX_TAB_SIZE: i64 = 16;
 
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
 /// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
@@ -381,10 +387,11 @@ fn adjust_indentation(lines: &mut [String], indent_size: i64, tab_size: i64) {
     }
 
     // Clamp the document-supplied sizes so they cannot drive an unbounded
-    // allocation (see [`MAX_VERBATIM_INDENT`]). `min` preserves a negative
-    // `indent_size`, which is the "leave indentation as-is" sentinel.
+    // allocation. The margin and a single tab's width are bounded separately
+    // (see [`MAX_VERBATIM_INDENT`] and [`MAX_TAB_SIZE`]). `min` preserves a
+    // negative `indent_size`, which is the "leave indentation as-is" sentinel.
     let indent_size = indent_size.min(MAX_VERBATIM_INDENT);
-    let tab_size = tab_size.min(MAX_VERBATIM_INDENT);
+    let tab_size = tab_size.min(MAX_TAB_SIZE);
 
     if tab_size > 0 && lines.iter().any(|line| line.contains('\t')) {
         let full_tab_space = " ".repeat(tab_size as usize);
@@ -1809,12 +1816,9 @@ mod tests {
     #[test]
     fn verbatim_clamps_a_pathological_tabsize() {
         // Likewise for a huge `tabsize`: a single leading tab expands to at most
-        // the clamp, not gigabytes of spaces.
+        // the tab-size clamp, not gigabytes of spaces.
         let html = convert(":tabsize: 999999999999\n\n----\n\tx\n----");
-        assert_eq!(
-            pre_leading_spaces(&html),
-            super::MAX_VERBATIM_INDENT as usize
-        );
+        assert_eq!(pre_leading_spaces(&html), super::MAX_TAB_SIZE as usize);
     }
 
     #[test]
