@@ -1,6 +1,9 @@
 use std::fs;
 
-use asciidoc_parser::{blocks::IsBlock, document::InterpretedValue};
+use asciidoc_parser::{
+    blocks::{FindBlocks, IsBlock},
+    document::InterpretedValue,
+};
 
 use crate::{convert_file, load, load_file, tests::sdd::*};
 
@@ -15,7 +18,7 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/convert-files.adoc");
 // string counterpart), and `convert_file` parses and converts one. The
 // document-inspection calls the page shows — `doctitle`, the attributes, and
 // finding paragraph blocks — map to `Document::doctitle`,
-// `has_attribute`/`attribute_value`, and filtering `nested_blocks` by context.
+// `has_attribute`/`attribute_value`, and filtering `child_blocks` by context.
 //
 // Three of the page's claims describe behavior this crate does not share, so
 // they are non-normative: the CAUTION that inline content is parsed lazily
@@ -69,7 +72,7 @@ This object contains the full block structure of the AsciiDoc document.
     let doc = load(SAMPLE);
 
     // The parsed document exposes its block structure.
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 // This crate parses inline content eagerly, so the CAUTION does not hold here.
@@ -171,7 +174,7 @@ pp doc.attributes
 }
 
 // Finding the paragraph blocks. Asciidoctor's `find_by context: :paragraph`
-// selects blocks by context; this crate filters the document's `nested_blocks`
+// selects blocks by context; this crate filters the document's `child_blocks`
 // on `resolved_context`, which is `"paragraph"` for the sample's one paragraph.
 #[test]
 fn paragraph_blocks_can_be_found_by_context() {
@@ -191,7 +194,7 @@ puts doc.find_by context: :paragraph
     let doc = load(SAMPLE);
 
     let paragraphs = doc
-        .nested_blocks()
+        .child_blocks()
         .filter(|block| block.resolved_context().as_ref() == "paragraph")
         .count();
     assert_eq!(paragraphs, 1);

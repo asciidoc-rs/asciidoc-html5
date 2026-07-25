@@ -581,26 +581,26 @@ sees descendant blocks), so there is no document object to special-case: return
 == Walk the tree yourself
 
 Another way to find blocks is to traverse the tree explicitly. Starting from the
-document, `nested_blocks` (from the
-https://docs.rs/asciidoc-parser/latest/asciidoc_parser/blocks/trait.IsBlock.html[`IsBlock`]
+document, `child_blocks` (from the
+https://docs.rs/asciidoc-parser/latest/asciidoc_parser/blocks/trait.FindBlocks.html[`FindBlocks`]
 trait) gives you an iterator over a block's direct children, which you can then
 recurse into:
 
 "#
 );
 
-// Walking the tree by hand with `nested_blocks`, which yields a block's direct
+// Walking the tree by hand with `child_blocks`, which yields a block's direct
 // children.
 #[test]
-fn nested_blocks_yields_direct_children() {
+fn child_blocks_yields_direct_children() {
     verifies!(
         r#"
 [,rust]
 ----
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::FindBlocks;
 
-for block in doc.nested_blocks() {
-    // inspect each top-level block, and recurse with `block.nested_blocks()`
+for block in doc.child_blocks() {
+    // inspect each top-level block, and recurse with `block.child_blocks()`
 }
 ----
 
@@ -609,7 +609,7 @@ for block in doc.nested_blocks() {
 
     let doc = load(SAMPLE);
     let direct: Vec<_> = doc
-        .nested_blocks()
+        .child_blocks()
         .map(|block| block.resolved_context().to_string())
         .collect();
     assert_eq!(direct, ["preamble", "section", "section"]);
@@ -621,8 +621,8 @@ non_normative!(
 ====
 Not all blocks share the same model. Each item in a description list carries two
 nodes, and tables have a very different model from other blocks. These
-differences matter when you walk the tree by hand, and `descendant_blocks` also
-reaches children of a Markdown-style blockquote that `nested_blocks` cannot.
+differences matter when you walk the tree by hand: `child_blocks` reaches the
+children of a Markdown-style blockquote but does not enter table cells.
 ====
 
 If the block you are after is close at hand or in a known location, a custom

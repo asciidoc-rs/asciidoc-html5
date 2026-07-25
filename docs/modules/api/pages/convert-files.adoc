@@ -70,10 +70,10 @@ paragraph blocks, by filtering the document's blocks on their context:
 
 [,rust]
 ----
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::{FindBlocks, IsBlock};
 
 let paragraphs = doc
-    .nested_blocks()
+    .child_blocks()
     .filter(|block| block.resolved_context().as_ref() == "paragraph")
     .count();
 assert_eq!(paragraphs, 1);

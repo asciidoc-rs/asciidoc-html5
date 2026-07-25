@@ -33,9 +33,9 @@ its top-level blocks:
 
 [,rust]
 ----
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::FindBlocks;
 
-assert!(doc.nested_blocks().next().is_some());
+assert!(doc.child_blocks().next().is_some());
 ----
 
 If you hold the source in a file rather than in memory, read the file and pass

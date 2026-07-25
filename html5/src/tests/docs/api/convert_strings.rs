@@ -1,6 +1,6 @@
 use std::fs;
 
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::FindBlocks;
 
 use crate::{convert, convert_document, convert_file, convert_with, load, tests::sdd::*, Options};
 
@@ -67,11 +67,11 @@ let doc = asciidoc_html5::load("*This* is Asciidoctor.");
     );
 
     let doc = load(SAMPLE);
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 // The loaded document is inspectable — here by counting its top-level blocks
-// through `nested_blocks`.
+// through `child_blocks`.
 #[test]
 fn the_loaded_document_can_be_inspected() {
     verifies!(
@@ -81,16 +81,16 @@ its top-level blocks:
 
 [,rust]
 ----
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::FindBlocks;
 
-assert!(doc.nested_blocks().next().is_some());
+assert!(doc.child_blocks().next().is_some());
 ----
 
 "#
     );
 
     let doc = load(SAMPLE);
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 non_normative!(

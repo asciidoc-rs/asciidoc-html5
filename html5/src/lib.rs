@@ -588,7 +588,7 @@ mod writer_tests {
 
 #[cfg(test)]
 mod load_tests {
-    use asciidoc_parser::{blocks::IsBlock as _, document::InterpretedValue};
+    use asciidoc_parser::{blocks::FindBlocks as _, document::InterpretedValue};
 
     use crate::{
         convert, convert_document, convert_with, load, load_file, load_file_with, load_with,
@@ -604,7 +604,7 @@ mod load_tests {
 
         let doc = load(source);
         assert_eq!(doc.doctitle(), Some("Hello"));
-        assert!(doc.nested_blocks().next().is_some());
+        assert!(doc.child_blocks().next().is_some());
 
         assert_eq!(convert_document(&doc), convert(source));
     }

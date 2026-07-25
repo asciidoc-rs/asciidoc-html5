@@ -1,6 +1,6 @@
 use std::fs;
 
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::{FindBlocks, IsBlock};
 
 use crate::{convert_file, load, load_file, tests::sdd::*};
 
@@ -66,7 +66,7 @@ That object contains the full block structure of the AsciiDoc document.
     );
 
     let doc = load(SAMPLE);
-    assert!(doc.nested_blocks().next().is_some());
+    assert!(doc.child_blocks().next().is_some());
 }
 
 non_normative!(
@@ -170,7 +170,7 @@ assert!(doc.has_attribute("doctitle"));
     assert!(doc.has_attribute("doctitle"));
 }
 
-// Paragraph blocks are found by filtering the document's `nested_blocks` on
+// Paragraph blocks are found by filtering the document's `child_blocks` on
 // their `resolved_context`, which is `"paragraph"` for the sample's one
 // paragraph.
 #[test]
@@ -182,10 +182,10 @@ paragraph blocks, by filtering the document's blocks on their context:
 
 [,rust]
 ----
-use asciidoc_parser::blocks::IsBlock;
+use asciidoc_parser::blocks::{FindBlocks, IsBlock};
 
 let paragraphs = doc
-    .nested_blocks()
+    .child_blocks()
     .filter(|block| block.resolved_context().as_ref() == "paragraph")
     .count();
 assert_eq!(paragraphs, 1);
@@ -196,7 +196,7 @@ assert_eq!(paragraphs, 1);
 
     let doc = load(SAMPLE);
     let paragraphs = doc
-        .nested_blocks()
+        .child_blocks()
         .filter(|block| block.resolved_context().as_ref() == "paragraph")
         .count();
     assert_eq!(paragraphs, 1);
