@@ -9,13 +9,29 @@
 //! what `adoc` exposes: the rendered HTML and the files it writes, rather than
 //! the `Asciidoctor::Document` model the Ruby suite can inspect.
 //!
-//! Kept `non_normative!` are the tests for behavior `adoc` does not have: the
-//! Ruby `Invoker`/`Options` constructor internals, flags with no `adoc`
-//! counterpart (`-b`/`-d`/`-q`/`-w`/`-t`/`-r`/`-R`/`-T`/`-E`,
-//! `--failure-level`, `--eruby`), other backends (DocBook, manpage) and
-//! doctypes, the coderay source highlighter, image-based admonition icons, the
-//! warning/logger stream, `SOURCE_DATE_EPOCH`/timezone date handling, and
-//! Ruby-specific encoding and environment fixtures.
+//! Kept `non_normative!` are the tests for behavior `adoc` does not have,
+//! grouped by why:
+//!
+//! - Ruby CLI internals with no `adoc` analog: the `Invoker`/`Options`
+//!   constructor signatures, and the Ruby-only `--eruby`, `-E` stdio encoding,
+//!   `-r` require, and `Dir.home` fixtures.
+//! - Out of scope for this html5-only renderer: other backends (DocBook via
+//!   `-b`, manpage) and custom template engines (`-T`/`-E` haml/slim).
+//! - Tracked for later work: surfacing parser warnings with `-q`/`-w`/
+//!   `--failure-level` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/147>),
+//!   `-R`/`--source-dir` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/148>),
+//!   the `-d`/`--doctype` flag and the book/inline doctypes
+//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/149>), the coderay
+//!   source-highlighter stylesheet
+//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>), `-t` timings
+//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/151>), the document
+//!   date/time attributes and `SOURCE_DATE_EPOCH`
+//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/152>), image-based
+//!   admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
+//!   and the table of contents that `toc-title` renders into
+//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
+//! - Deliberate divergence: given no input file, `adoc` reads standard input
+//!   (its piping design) rather than printing a usage message.
 
 use std::path::PathBuf;
 
