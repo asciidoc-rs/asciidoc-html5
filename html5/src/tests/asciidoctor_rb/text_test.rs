@@ -24,19 +24,21 @@
 //!   tests are out of scope, and the `arbitrary block` test reaches for the
 //!   `PreprocessorReader` / `Parser.next_block` Ruby APIs (its verse-`<pre>`
 //!   behavior is already covered by the paragraphs suite).
-//! * *Compat mode* is not implemented by `asciidoc-parser`, so tests that carry
-//!   both a compat-mode and a modern assertion are ported as `verifies!` with
-//!   only the modern assertion driven in Rust; the compat-mode assertion
-//!   remains in the reproduced Ruby text.
+//! * *Compat mode* is not implemented by `asciidoc-parser`. A test that carries
+//!   both a compat-mode and a modern assertion is split *within* its `#[test]`:
+//!   the modern lines sit in `verifies!` blocks (driven in Rust) and the
+//!   compat-mode lines in interleaved `non_normative!` blocks, so the coverage
+//!   tool never counts an unverified compat-mode assertion as verified.
 //!
 //! The `markdown horizontal rules` (positive) test spans six variants at four
 //! leading offsets. This crate recognizes all six variants (`---`, `- - -`,
-//! `***`, `* * *`, `___`, `_ _ _`) at column 1, so the test is *verified* for
-//! the zero-offset dimension. It intentionally diverges on the leading offset —
-//! Asciidoctor tolerates 0–3 leading spaces, while an indented marker here
+//! `***`, `* * *`, `___`, `_ _ _`) at column 1, so the zero-offset entry is
+//! *verified* for each variant. It intentionally diverges on the leading offset
+//! — Asciidoctor tolerates 0–3 leading spaces, while an indented marker here
 //! becomes a literal paragraph — a deliberate, settled decision, so the three
-//! leading-space offsets are exercised by the negative-case test (which pins
-//! that they produce no thematic break) rather than the positive one.
+//! leading-space offset entries are carved into a `non_normative!` block (and
+//! covered as producing *no* break by the negative-case test) rather than
+//! counted as verified.
 
 use std::path::Path;
 
@@ -211,10 +213,22 @@ fn single_and_double_quoted_text() {
     verifies!(
         r#"
   test 'single- and double-quoted text' do
+"#
+    );
+
+    // Compat mode is unimplemented, so the first form's two assertions are
+    // tracked non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     output = convert_string_to_embedded(%q(``Where?,'' she said, flipping through her copy of `The New Yorker.'), attributes: { 'compat-mode' => '' })
     assert_match(/&#8220;Where\?,&#8221;/, output)
     assert_match(/&#8216;The New Yorker.&#8217;/, output)
 
+"#
+    );
+
+    verifies!(
+        r#"
     output = convert_string_to_embedded(%q("`Where?,`" she said, flipping through her copy of '`The New Yorker.`'))
     assert_match(/&#8220;Where\?,&#8221;/, output)
     assert_match(/&#8216;The New Yorker.&#8217;/, output)
@@ -223,7 +237,7 @@ fn single_and_double_quoted_text() {
 "#
     );
 
-    // Compat mode is unsupported; only the modern (second) form is driven here.
+    // Only the modern (second) form is driven here.
     let html = convert(r#""`Where?,`" she said, flipping through her copy of '`The New Yorker.`'"#);
     assert!(html.contains("&#8220;Where?,&#8221;"));
     assert!(html.contains("&#8216;The New Yorker.&#8217;"));
@@ -234,8 +248,20 @@ fn multiple_double_quoted_text_on_a_single_line() {
     verifies!(
         r#"
   test 'multiple double-quoted text on a single line' do
+"#
+    );
+
+    // Compat mode is unimplemented, so the first `assert_equal` is tracked
+    // non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     assert_equal '&#8220;Our business is constantly changing&#8221; or &#8220;We need faster time to market.&#8221;',
         convert_inline_string(%q(``Our business is constantly changing'' or ``We need faster time to market.''), attributes: { 'compat-mode' => '' })
+"#
+    );
+
+    verifies!(
+        r#"
     assert_equal '&#8220;Our business is constantly changing&#8221; or &#8220;We need faster time to market.&#8221;',
         convert_inline_string(%q("`Our business is constantly changing`" or "`We need faster time to market.`"))
   end
@@ -243,9 +269,9 @@ fn multiple_double_quoted_text_on_a_single_line() {
 "#
     );
 
-    // Compat mode is unsupported; only the modern (second) form is driven here.
-    // The inline doctype emits the fragment with the single trailing newline
-    // this crate — matching the `asciidoctor` CLI — always appends.
+    // Only the modern (second) form is driven here. The inline doctype emits the
+    // fragment with the single trailing newline this crate — matching the
+    // `asciidoctor` CLI — always appends.
     let output = convert_with(
         r#""`Our business is constantly changing`" or "`We need faster time to market.`""#,
         &Options::new().doctype("inline"),
@@ -309,9 +335,25 @@ fn markdown_horizontal_rules() {
 
     offsets = [
       '',
+"#
+    );
+
+    // This crate intentionally diverges on the leading offset: Asciidoctor
+    // tolerates 0–3 leading spaces, while an indented marker here becomes a
+    // literal paragraph. So the three leading-space offsets are *not* verified
+    // as thematic breaks — they are tracked non-normatively here (and covered as
+    // producing *no* break by `markdown_horizontal_rules_negative_case`), and
+    // only the zero-offset entry above is driven.
+    non_normative!(
+        r#"
       ' ',
       '  ',
       '   '
+"#
+    );
+
+    verifies!(
+        r#"
     ]
 
     variants.each do |variant|
@@ -337,14 +379,8 @@ fn markdown_horizontal_rules() {
 
     // This crate recognizes all six variants (`---`, `- - -`, `***`, `* * *`,
     // `___`, `_ _ _`) — the `-`/`*` forms are spec-recognized, the `_` forms an
-    // Asciidoctor-compatibility extension — but only at column 1. It
-    // intentionally diverges on the leading offset: Asciidoctor tolerates 0–3
-    // leading spaces, while an indented marker here becomes a literal paragraph.
-    // That divergence is a deliberate, settled decision, so only the zero-offset
-    // (column-1) dimension of the offsets loop is driven; the three
-    // leading-space offsets are covered by
-    // `markdown_horizontal_rules_negative_case` instead, which pins that they
-    // produce *no* thematic break.
+    // Asciidoctor-compatibility extension — at column 1, so the zero offset is
+    // driven for each.
     for variant in ["---", "- - -", "***", "* * *", "___", "_ _ _"] {
         let input = format!(
             "This line is separated by a horizontal rule...\n\n{variant}\n\n...from this line.\n"
@@ -470,15 +506,27 @@ fn emphasized_text_with_single_quote_using_apostrophe_characters() {
         r#"
   test 'emphasized text with single quote using apostrophe characters' do
     rsquo = decode_char 8217
+"#
+    );
+
+    // Compat mode is unimplemented, so the first assertion is tracked
+    // non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     assert_xpath %(//em[text()="Johnny#{rsquo}s"]), convert_string(%q(It's 'Johnny's' phone), attributes: { 'compat-mode' => '' })
+"#
+    );
+
+    verifies!(
+        r#"
     assert_xpath %(//p[text()="It#{rsquo}s 'Johnny#{rsquo}s' phone"]), convert_string(%q(It's 'Johnny's' phone))
   end
 
 "#
     );
 
-    // Compat mode is unsupported; only the modern (second) assertion is driven.
-    // `#{rsquo}` decodes to U+2019 (right single quotation mark).
+    // Only the modern (second) assertion is driven. `#{rsquo}` decodes to U+2019
+    // (right single quotation mark).
     let html = convert_with("It's 'Johnny's' phone", &Options::new().standalone(true));
     assert_xpath(
         &html,
@@ -492,15 +540,27 @@ fn emphasized_text_with_escaped_single_quote_using_apostrophe_characters() {
     verifies!(
         r#"
   test 'emphasized text with escaped single quote using apostrophe characters' do
+"#
+    );
+
+    // Compat mode is unimplemented, so the first assertion is tracked
+    // non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     assert_xpath %(//em[text()="Johnny's"]), convert_string(%q(It's 'Johnny\\'s' phone), attributes: { 'compat-mode' => '' })
+"#
+    );
+
+    verifies!(
+        r#"
     assert_xpath %(//p[text()="It's 'Johnny's' phone"]), convert_string(%q(It\\'s 'Johnny\\'s' phone))
   end
 
 "#
     );
 
-    // Compat mode is unsupported; only the modern (second) assertion is driven.
-    // In the `%q(..)` Ruby literal, `\\'` is a single escaped apostrophe.
+    // Only the modern (second) assertion is driven. In the `%q(..)` Ruby
+    // literal, `\\'` is a single escaped apostrophe.
     let html = convert_with(
         "It\\'s 'Johnny\\'s' phone",
         &Options::new().standalone(true),
@@ -530,9 +590,21 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
     verifies!(
         r#"
   test 'unescape escaped single quote emphasis in compat mode only' do
+"#
+    );
+
+    // Compat mode is unimplemented, so the two compat-mode assertions are tracked
+    // non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     assert_xpath %(//p[text()="A 'single quoted string' example"]), convert_string_to_embedded(%(A \\'single quoted string' example), attributes: { 'compat-mode' => '' })
     assert_xpath %(//p[text()="'single quoted string'"]), convert_string_to_embedded(%(\\'single quoted string'), attributes: { 'compat-mode' => '' })
 
+"#
+    );
+
+    verifies!(
+        r#"
     assert_xpath %(//p[text()="A \\'single quoted string' example"]), convert_string_to_embedded(%(A \\'single quoted string' example))
     assert_xpath %(//p[text()="\\'single quoted string'"]), convert_string_to_embedded(%(\\'single quoted string'))
   end
@@ -540,8 +612,8 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
 "#
     );
 
-    // Compat mode is unsupported; only the two modern assertions are driven.
-    // Outside compat mode the leading escaped apostrophe keeps its backslash.
+    // Only the two modern assertions are driven. Outside compat mode the leading
+    // escaped apostrophe keeps its backslash.
     let html = convert("A \\'single quoted string' example");
     assert_xpath(
         &html,
@@ -622,7 +694,19 @@ fn backticks_and_straight_quotes_in_text() {
         r#"
   test 'backticks and straight quotes in text' do
     backslash = '\\'
+"#
+    );
+
+    // Compat mode is unimplemented, so the first assertion is tracked
+    // non-normatively rather than counted as verified.
+    non_normative!(
+        r#"
     assert_equal %q(run <code>foo</code> <em>dog</em>), convert_inline_string(%q(run `foo` 'dog'), attributes: { 'compat-mode' => '' })
+"#
+    );
+
+    verifies!(
+        r#"
     assert_equal %q(run <code>foo</code> 'dog'), convert_inline_string(%q(run `foo` 'dog'))
     assert_equal %q(run `foo` 'dog'), convert_inline_string(%(run #{backslash}`foo` 'dog'))
     assert_equal %q(run &#8216;foo` 'dog&#8217;), convert_inline_string(%q(run '`foo` 'dog`'))
@@ -632,7 +716,7 @@ fn backticks_and_straight_quotes_in_text() {
 "#
     );
 
-    // Compat mode is unsupported; the four modern assertions are driven here.
+    // The four modern assertions are driven here.
     // The inline doctype appends the single trailing newline this crate always
     // emits.
     let inline = |src: &str| convert_with(src, &Options::new().doctype("inline"));
@@ -772,14 +856,25 @@ mod basic_styling {
             r#"
     test "passthrough" do
       assert_xpath "//code", convert_string("This is +passed through+."), 0
+"#
+        );
+
+        // The second assertion is compat-mode (unimplemented), so it is tracked
+        // non-normatively rather than counted as verified.
+        non_normative!(
+            r#"
       assert_xpath "//code", convert_string("This is +passed through and monospaced+.", attributes: { 'compat-mode' => '' }), 1
+"#
+        );
+
+        verifies!(
+            r#"
     end
 
 "#
         );
 
-        // Modern: single-plus is a passthrough, not a monospaced phrase. The
-        // second assertion is compat-mode (unsupported) and is not driven.
+        // Modern: single-plus is a passthrough, not a monospaced phrase.
         let html = convert_with(
             "This is +passed through+.",
             &Options::new().standalone(true),
@@ -792,11 +887,23 @@ mod basic_styling {
         verifies!(
             r#"
     test "nested styles" do
+"#
+        );
+
+        // Compat mode is unimplemented, so its output and two assertions are
+        // tracked non-normatively rather than counted as verified.
+        non_normative!(
+            r#"
       output = convert_string("Winning *big _time_* in the +city *boyeeee*+.", attributes: { 'compat-mode' => '' })
 
       assert_xpath "//strong/em", output
       assert_xpath "//code/strong", output
 
+"#
+        );
+
+        verifies!(
+            r#"
       output = convert_string("Winning *big _time_* in the `city *boyeeee*`.")
 
       assert_xpath "//strong/em", output
@@ -806,7 +913,7 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unsupported; only the modern form is driven here.
+        // Only the modern form is driven here.
         let html = convert_with(
             "Winning *big _time_* in the `city *boyeeee*`.",
             &Options::new().standalone(true),
@@ -820,12 +927,24 @@ mod basic_styling {
         verifies!(
             r#"
     test 'unconstrained quotes' do
+"#
+        );
+
+        // Compat mode is unimplemented, so its output and four assertions are
+        // tracked non-normatively rather than counted as verified.
+        non_normative!(
+            r#"
       output = convert_string('**B**__I__++M++[role]++M++', attributes: { 'compat-mode' => '' })
       assert_xpath '//strong', output, 1
       assert_xpath '//em', output, 1
       assert_xpath '//code[not(@class)]', output, 1
       assert_xpath '//code[@class="role"]', output, 1
 
+"#
+        );
+
+        verifies!(
+            r#"
       output = convert_string('**B**__I__``M``[role]``M``')
       assert_xpath '//strong', output, 1
       assert_xpath '//em', output, 1
@@ -835,7 +954,7 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unsupported; only the modern form is driven here.
+        // Only the modern form is driven here.
         let html = convert_with(
             "**B**__I__``M``[role]``M``",
             &Options::new().standalone(true),
