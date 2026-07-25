@@ -46,6 +46,8 @@
 //!   tag-selection assertions trim the compared `<pre>` text — [#118]
 //! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
 //!   [#138]
+//! - an unreadable include file is not distinguished from a missing one, so it
+//!   reports the generic not-found diagnostic — [#146]
 //!
 //! [#129]: https://github.com/asciidoc-rs/asciidoc-html5/issues/129
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
@@ -56,6 +58,7 @@
 //! [#136]: https://github.com/asciidoc-rs/asciidoc-html5/issues/136
 //! [#118]: https://github.com/asciidoc-rs/asciidoc-html5/issues/118
 //! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
+//! [#146]: https://github.com/asciidoc-rs/asciidoc-html5/issues/146
 
 use std::path::PathBuf;
 
