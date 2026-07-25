@@ -24,11 +24,13 @@
 //!   tests are out of scope, and the `arbitrary block` test reaches for the
 //!   `PreprocessorReader` / `Parser.next_block` Ruby APIs (its verse-`<pre>`
 //!   behavior is already covered by the paragraphs suite).
-//! * *Compat mode* is not implemented by `asciidoc-parser`. A test that carries
-//!   both a compat-mode and a modern assertion is split *within* its `#[test]`:
-//!   the modern lines sit in `verifies!` blocks (driven in Rust) and the
-//!   compat-mode lines in interleaved `non_normative!` blocks, so the coverage
-//!   tool never counts an unverified compat-mode assertion as verified.
+//! * *Compat mode* is permanently out of scope – this crate will not implement
+//!   it, and the decision is recorded in issue #166 (closed as won't-do). A
+//!   test that carries both a compat-mode and a modern assertion is split
+//!   *within* its `#[test]`: the modern lines sit in `verifies!` blocks (driven
+//!   in Rust) and the compat-mode lines in interleaved `non_normative!` blocks,
+//!   so the coverage tool never counts an out-of-scope compat-mode assertion as
+//!   verified.
 //!
 //! The `markdown horizontal rules` (positive) test spans six variants at four
 //! leading offsets. This crate recognizes all six variants (`---`, `- - -`,
@@ -216,8 +218,9 @@ fn single_and_double_quoted_text() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first form's two assertions are
-    // tracked non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the first form's two assertions stay
+    // non-normative rather than counted as verified.
     non_normative!(
         r#"
     output = convert_string_to_embedded(%q(``Where?,'' she said, flipping through her copy of `The New Yorker.'), attributes: { 'compat-mode' => '' })
@@ -251,8 +254,9 @@ fn multiple_double_quoted_text_on_a_single_line() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first `assert_equal` is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the first `assert_equal` stays non-normative
+    // rather than counted as verified.
     non_normative!(
         r#"
     assert_equal '&#8220;Our business is constantly changing&#8221; or &#8220;We need faster time to market.&#8221;',
@@ -509,8 +513,9 @@ fn emphasized_text_with_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the first assertion stays non-normative
+    // rather than counted as verified.
     non_normative!(
         r#"
     assert_xpath %(//em[text()="Johnny#{rsquo}s"]), convert_string(%q(It's 'Johnny's' phone), attributes: { 'compat-mode' => '' })
@@ -543,8 +548,9 @@ fn emphasized_text_with_escaped_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the first assertion stays non-normative
+    // rather than counted as verified.
     non_normative!(
         r#"
     assert_xpath %(//em[text()="Johnny's"]), convert_string(%q(It's 'Johnny\\'s' phone), attributes: { 'compat-mode' => '' })
@@ -593,8 +599,9 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
 "#
     );
 
-    // Compat mode is unimplemented, so the two compat-mode assertions are tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the two compat-mode assertions stay
+    // non-normative rather than counted as verified.
     non_normative!(
         r#"
     assert_xpath %(//p[text()="A 'single quoted string' example"]), convert_string_to_embedded(%(A \\'single quoted string' example), attributes: { 'compat-mode' => '' })
@@ -697,8 +704,9 @@ fn backticks_and_straight_quotes_in_text() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope (this crate will not implement it
+    // – #166, closed won't-do), so the first assertion stays non-normative
+    // rather than counted as verified.
     non_normative!(
         r#"
     assert_equal %q(run <code>foo</code> <em>dog</em>), convert_inline_string(%q(run `foo` 'dog'), attributes: { 'compat-mode' => '' })
@@ -859,8 +867,9 @@ mod basic_styling {
 "#
         );
 
-        // The second assertion is compat-mode (unimplemented), so it is tracked
-        // non-normatively rather than counted as verified.
+        // The second assertion is compat-mode, which is permanently out of scope
+        // (this crate will not implement it – #166, closed won't-do), so it stays
+        // non-normative rather than counted as verified.
         non_normative!(
             r#"
       assert_xpath "//code", convert_string("This is +passed through and monospaced+.", attributes: { 'compat-mode' => '' }), 1
@@ -890,8 +899,9 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unimplemented, so its output and two assertions are
-        // tracked non-normatively rather than counted as verified.
+        // Compat mode is permanently out of scope (this crate will not implement
+        // it – #166, closed won't-do), so its output and two assertions stay
+        // non-normative rather than counted as verified.
         non_normative!(
             r#"
       output = convert_string("Winning *big _time_* in the +city *boyeeee*+.", attributes: { 'compat-mode' => '' })
@@ -930,8 +940,9 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unimplemented, so its output and four assertions are
-        // tracked non-normatively rather than counted as verified.
+        // Compat mode is permanently out of scope (this crate will not implement
+        // it – #166, closed won't-do), so its output and four assertions stay
+        // non-normative rather than counted as verified.
         non_normative!(
             r#"
       output = convert_string('**B**__I__++M++[role]++M++', attributes: { 'compat-mode' => '' })

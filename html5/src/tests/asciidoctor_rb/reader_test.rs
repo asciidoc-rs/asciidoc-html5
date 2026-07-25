@@ -28,11 +28,11 @@
 //! test that asserts only on `Reader` internals.
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
-//! this crate currently diverges from the Asciidoctor oracle; rather than
-//! assert the divergent output, each is tracked by a follow-up issue:
+//! this crate diverges from the Asciidoctor oracle. One divergence is
+//! permanent: compat-mode role handling on a replacement link is out of scope –
+//! this crate will not implement compat mode (#129, closed won't-do). The rest
+//! are tracked by a follow-up issue rather than asserting the divergent output:
 //!
-//! - compat-mode does not drop the `include` role on the replacement link —
-//!   [#129]
 //! - a three-level nested include from a subdirectory leaves the inner include
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
@@ -44,7 +44,6 @@
 //! - an unreadable include file is not distinguished from a missing one, so it
 //!   reports the generic not-found diagnostic — [#146]
 //!
-//! [#129]: https://github.com/asciidoc-rs/asciidoc-html5/issues/129
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
@@ -958,8 +957,9 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="include-file.adoc"]"#, 1);
         }
 
-        // Non-normative: compat-mode does not drop the include role on the replacement
-        // link (#129).
+        // Non-normative: compat-mode role handling is permanently out of scope –
+        // this crate will not implement compat mode (#129, closed won't-do), so it
+        // does not drop the include role on the replacement link.
         non_normative!(
             r#"
       test 'should not add role to link macro used to replace include directive in compat mode' do
@@ -1009,8 +1009,9 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: compat-mode role suppression (#129) plus the remote link
-        // fallback (#136).
+        // Non-normative on two counts: compat-mode role suppression is
+        // permanently out of scope (#129, closed won't-do), and the remote link
+        // fallback (#136) is still unimplemented.
         non_normative!(
             r#"
       test 'should not add role to link macro that replaces include directive with remote target in compat mode' do
