@@ -157,6 +157,21 @@ fn merge_coverage(a: &[(String, bool)], b: &[(String, bool)]) -> Vec<(String, bo
     merged
 }
 
+/// Whether `line` (ignoring surrounding whitespace) is a bare raw-string
+/// opener: `r`, one or more `#`, then `"` — for example `r#"`, `r##"`, or
+/// `r###"`. The reproduction blocks put this opener alone on its own line.
+fn is_raw_string_opener(line: &str) -> bool {
+    let Some(after_r) = line.trim().strip_prefix('r') else {
+        return false;
+    };
+
+    let Some(hashes) = after_r.strip_suffix('"') else {
+        return false;
+    };
+
+    !hashes.is_empty() && hashes.bytes().all(|b| b == b'#')
+}
+
 fn parse_rs_file(path: &Path) -> Option<(String, Vec<(String, bool)>)> {
     // if !path.ends_with("revision_line.rs") {
     //     return None;
@@ -229,7 +244,12 @@ fn parse_rs_file(path: &Path) -> Option<(String, Vec<(String, bool)>)> {
             continue;
         }
 
-        if line.ends_with("r#\"") || line.ends_with("r##\"") {
+        // Opening delimiter of a raw-string block — `r#"`, `r##"`, `r###"`, …
+        // (any number of hashes) — alone on its own line. A file whose
+        // reproduced lines contain `"##` (e.g. an xpath like `[@href="##{p}"]`)
+        // needs `r###"`, so accept an arbitrary hash count rather than only one
+        // or two. Skip the opener line itself.
+        if is_raw_string_opener(&line) {
             // println!("<<<");
             continue;
         }

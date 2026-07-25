@@ -7,12 +7,15 @@
 //! - `//tag`, `/tag`, `//*`, `/*` — descendant / child steps and the wildcard
 //! - `a/b`, `a//b` — child and descendant combinators, chained
 //! - `foo/following-sibling::*`, `foo/preceding-sibling::tag` — the sibling
-//!   axes
+//!   axes; the `text()` node test addresses a character-data run on those axes
+//!   (`foo/following-sibling::text()`) and on the explicit `child::` axis
+//!   (`foo/child::text()`, equivalent to the default child step)
 //! - `foo/preceding::tag`, `foo/following::tag` — the general document-order
 //!   axes (excluding ancestors / descendants respectively)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
 //!   `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) =
-//!   "x"]`, and the positional `[N]` (1-indexed, per context node)
+//!   "x"]`, `[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per
+//!   context node)
 //! - a leading grouped path `(subpath)[N]…/rest` — the parenthesized subpath is
 //!   evaluated first, then a positional predicate on the *group* selects the
 //!   Nth match in document order across the whole set (not per context, the way
@@ -20,7 +23,7 @@
 //!   trailing relative path
 //!
 //! Anything outside this subset (the `ancestor::`/`descendant::` named axes,
-//! boolean `count(...)` expressions, `normalize-space()`, `contains()`, …) is
+//! boolean `count(...)` expressions, `last()`, `position()`, …) is
 //! simply not built yet. An unsupported predicate or axis **panics** rather
 //! than being silently ignored — a silently dropped predicate would make a step
 //! match more broadly than intended (a false pass). The next test that needs
@@ -333,10 +336,12 @@ enum Axis {
     Preceding,
 }
 
-/// A node test: a specific tag name, or `*` (any element).
+/// A node test: a specific tag name, `*` (any element), or `text()` (any
+/// character-data node).
 enum NameTest {
     Any,
     Named(String),
+    Text,
 }
 
 /// A single predicate inside `[...]`.
@@ -348,6 +353,7 @@ enum Pred {
     Text(String),
     ContainsText(String),
     NormalizeSpaceText(String),
+    StartsWithText(String),
 }
 
 impl Pred {
@@ -377,6 +383,9 @@ impl Pred {
                 .text
                 .as_deref()
                 .is_some_and(|t| normalize_space(t) == *v),
+            // `starts-with(., "v")`: the context node's string value (for a
+            // `#text` node, its character data) begins with `v`.
+            Pred::StartsWithText(v) => node.text.as_deref().is_some_and(|t| t.starts_with(v)),
         }
     }
 }
@@ -398,12 +407,17 @@ struct Step {
 
 impl Step {
     fn matches(&self, node: &VirtualNode) -> bool {
-        if let NameTest::Named(tag) = &self.name {
-            if &node.tag != tag {
-                return false;
-            }
-        }
-        self.preds.iter().all(|p| p.matches(node))
+        // A `#text` node is character data, not an element: only an explicit
+        // `text()` node test addresses it, and `text()` addresses nothing else.
+        // (`#root` is the synthetic top and, like `#text`, never satisfies an
+        // element node test.)
+        let name_ok = match &self.name {
+            NameTest::Any => !node.tag.starts_with('#'),
+            NameTest::Named(tag) => &node.tag == tag,
+            NameTest::Text => node.tag == "#text",
+        };
+
+        name_ok && self.preds.iter().all(|p| p.matches(node))
     }
 }
 
@@ -466,7 +480,12 @@ fn split_steps(s: &str) -> Vec<(Combinator, &str)> {
 /// Parses one step token, honoring an explicit sibling axis prefix; otherwise
 /// the axis comes from the preceding combinator.
 fn parse_step(comb: Combinator, token: &str) -> Step {
-    let (axis, node_test) = if let Some(rest) = token.strip_prefix("following-sibling::") {
+    let (axis, node_test) = if let Some(rest) = token.strip_prefix("child::") {
+        // The explicit `child::` axis is the same as the default child step; the
+        // suite writes it only to reach the `text()` node test
+        // (`a/child::text()`).
+        (Axis::Child, rest)
+    } else if let Some(rest) = token.strip_prefix("following-sibling::") {
         (Axis::FollowingSibling, rest)
     } else if let Some(rest) = token.strip_prefix("preceding-sibling::") {
         (Axis::PrecedingSibling, rest)
@@ -527,6 +546,8 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
 
     let name = if base.is_empty() || base == "*" {
         NameTest::Any
+    } else if base == "text()" {
+        NameTest::Text
     } else {
         NameTest::Named(base.to_string())
     };
@@ -615,6 +636,24 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
             preds.push(Pred::NormalizeSpaceText(unquote(value.trim())));
             return;
         }
+    }
+
+    if let Some(args) = inner.strip_prefix("starts-with(") {
+        let args = args
+            .strip_suffix(')')
+            .unwrap_or_else(|| panic!("malformed `starts-with(…)` predicate `[{inner}]`"));
+        let (target, value) = args
+            .split_once(',')
+            .unwrap_or_else(|| panic!("`starts-with(…)` needs two arguments in `[{inner}]`"));
+        // The suite tests the string value of the context node itself, written
+        // either as `.` or `text()`; both mean "this node's character data".
+        assert!(
+            matches!(target.trim(), "." | "text()"),
+            "assert_html `starts-with()` supports only `.` or `text()` as its first \
+             argument (got `[{inner}]`)"
+        );
+        preds.push(Pred::StartsWithText(unquote(value.trim())));
+        return;
     }
 
     panic!(
