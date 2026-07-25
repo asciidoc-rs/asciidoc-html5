@@ -121,7 +121,6 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Preamble` | `preamble` | `<div id="preamble"><div class="sectionbody">…</div></div>` | ✅ |
 | `Block::Break` (Thematic) | `thematic_break` | `<hr>` | ✅ |
 | `Block::RawDelimited` | `listing`/`literal` | as listing/literal above | ✅ |
-| `Block::RawDelimited` | `comment` | *(no output; a `////` comment block is skipped)* | ✅ |
 | `Block::RawDelimited` | `pass` | raw passthrough (no wrapper) | ⬜ |
 | `Block::RawDelimited`/`Simple` (`[comment]`, `////`) | `comment` | *(no output; dropped)* | ✅ |
 | `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ⬜ |

@@ -22,8 +22,7 @@
 //! - deferred features, each tracked by an issue: verbatim `indent` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>),
 //!   `tabsize` (#111), `nowrap`/`prewrap` (#112), example captions/counters
 //!   (#113), collapsible examples (#114), `listing-caption` (#115),
-//!   leading-period block titles (#116), lone line comment (#117), verbatim
-//!   blank-line strip (#118).
+//!   leading-period block titles (#116), verbatim blank-line strip (#118).
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -246,11 +245,10 @@ mod comments {
 "#
     );
 
-    // A lone `// line comment` currently yields an empty paragraph block instead
-    // of no block (an upstream `asciidoc-parser` behavior); tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/117>.
-    non_normative!(
-        r#"
+    #[test]
+    fn line_comment_between_paragraphs_offset_by_blank_lines() {
+        verifies!(
+            r#"
     test 'line comment between paragraphs offset by blank lines' do
       input = <<~'EOS'
       first paragraph
@@ -265,7 +263,15 @@ mod comments {
     end
 
 "#
-    );
+        );
+
+        // A lone `// line comment` survives parsing as an empty paragraph, which
+        // the renderer drops (see `renderer::renders_nothing`), so only the two
+        // real paragraphs remain.
+        let output = convert("first paragraph\n\n// line comment\n\nsecond paragraph\n");
+        assert!(!output.contains("line comment"));
+        assert_xpath(&output, "//p", 2);
+    }
 
     #[test]
     fn adjacent_line_comment_between_paragraphs() {
