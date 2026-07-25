@@ -28,13 +28,15 @@
 //!   both a compat-mode and a modern assertion are ported as `verifies!` with
 //!   only the modern assertion driven in Rust; the compat-mode assertion
 //!   remains in the reproduced Ruby text.
-//! * The `markdown horizontal rules` (positive) test asserts a thematic break
-//!   for every variant at 0–3 leading spaces. This crate recognizes the `---` /
-//!   `***` / `___` variants only at column 1 — a deliberate, settled divergence
-//!   from Asciidoctor's leading-space tolerance — so the offset dimension of
-//!   the test is left unsatisfied by design and the whole test is
-//!   non-normative. The negative case *is* verified, since it asserts no
-//!   thematic break either way.
+//!
+//! The `markdown horizontal rules` (positive) test spans six variants at four
+//! leading offsets. This crate recognizes all six variants (`---`, `- - -`,
+//! `***`, `* * *`, `___`, `_ _ _`) at column 1, so the test is *verified* for
+//! the zero-offset dimension. It intentionally diverges on the leading offset —
+//! Asciidoctor tolerates 0–3 leading spaces, while an indented marker here
+//! becomes a literal paragraph — a deliberate, settled decision, so the three
+//! leading-space offsets are exercised by the negative-case test (which pins
+//! that they produce no thematic break) rather than the positive one.
 
 use std::path::Path;
 
@@ -291,17 +293,10 @@ fn horizontal_rule() {
     assert_xpath(&html, "/hr/following-sibling::*[@class=\"paragraph\"]", 1);
 }
 
-// The `markdown horizontal rules` (positive) test asserts a thematic break for
-// six variants at four leading offsets. This crate recognizes all six variants
-// (`---`, `- - -`, `***`, `* * *`, `___`, `_ _ _`) at column 1 — the `-`/`*`
-// forms are spec-recognized, the `_` forms an Asciidoctor-compatibility
-// extension — but intentionally diverges on the leading offset: Asciidoctor
-// tolerates 0–3 leading spaces, while this crate requires the marker at column
-// 1 (an indented line becomes a literal paragraph). That divergence is a
-// deliberate, settled decision, so the offset dimension of this test is left
-// unsatisfied by design and the whole test is reproduced non-normatively.
-non_normative!(
-    r#"
+#[test]
+fn markdown_horizontal_rules() {
+    verifies!(
+        r#"
   test 'markdown horizontal rules' do
     variants = [
       '---',
@@ -338,7 +333,35 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // This crate recognizes all six variants (`---`, `- - -`, `***`, `* * *`,
+    // `___`, `_ _ _`) — the `-`/`*` forms are spec-recognized, the `_` forms an
+    // Asciidoctor-compatibility extension — but only at column 1. It
+    // intentionally diverges on the leading offset: Asciidoctor tolerates 0–3
+    // leading spaces, while an indented marker here becomes a literal paragraph.
+    // That divergence is a deliberate, settled decision, so only the zero-offset
+    // (column-1) dimension of the offsets loop is driven; the three
+    // leading-space offsets are covered by
+    // `markdown_horizontal_rules_negative_case` instead, which pins that they
+    // produce *no* thematic break.
+    for variant in ["---", "- - -", "***", "* * *", "___", "_ _ _"] {
+        let input = format!(
+            "This line is separated by a horizontal rule...\n\n{variant}\n\n...from this line.\n"
+        );
+        let html = convert(&input);
+
+        // The test xpath engine handles double-quoted attribute values only.
+        assert_xpath(&html, "//hr", 1);
+        assert_xpath(&html, "/*[@class=\"paragraph\"]", 2);
+        assert_xpath(
+            &html,
+            "(/*[@class=\"paragraph\"])[1]/following-sibling::hr",
+            1,
+        );
+        assert_xpath(&html, "/hr/following-sibling::*[@class=\"paragraph\"]", 1);
+    }
+}
 
 #[test]
 fn markdown_horizontal_rules_negative_case() {
