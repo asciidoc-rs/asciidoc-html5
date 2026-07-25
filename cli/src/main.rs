@@ -469,7 +469,8 @@ impl AssetWriter for OutputGuard {
 /// resolve symlinks and junctions, so a symlinked output is caught — but a
 /// *hard-linked* output (distinct path, no symlink to resolve) is not detected,
 /// so writing it could truncate the source. Closing that would take a Win32
-/// `GetFileInformationByHandle` call via a fresh, maintained binding.
+/// `GetFileInformationByHandle` call via a fresh, maintained binding; tracked
+/// in <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
 fn same_file(a: &Path, b: &Path) -> bool {
     if let (Ok(ma), Ok(mb)) = (fs::metadata(a), fs::metadata(b)) {
         if same_inode(&ma, &mb) {
