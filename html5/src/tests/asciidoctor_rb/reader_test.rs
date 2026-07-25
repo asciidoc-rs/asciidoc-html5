@@ -37,13 +37,8 @@
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
 //! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
-//! - a `++++` passthrough block renders an "unsupported" comment (so the tests
-//!   that wrap an include in one convert the include directly) — [#134]
-//! - a block-level `[indent=0]` does not reindent verbatim content — [#110]
 //! - a remote `include::` target under a non-secure safe mode is reported
 //!   unresolved (and warns) instead of falling back to a link macro — [#136]
-//! - leading/trailing blank lines are not trimmed from verbatim content, so the
-//!   tag-selection assertions trim the compared `<pre>` text — [#118]
 //! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
 //!   [#138]
 //! - an unreadable include file is not distinguished from a missing one, so it
@@ -53,10 +48,7 @@
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
-//! [#134]: https://github.com/asciidoc-rs/asciidoc-html5/issues/134
-//! [#110]: https://github.com/asciidoc-rs/asciidoc-html5/issues/110
 //! [#136]: https://github.com/asciidoc-rs/asciidoc-html5/issues/136
-//! [#118]: https://github.com/asciidoc-rs/asciidoc-html5/issues/118
 //! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
 //! [#146]: https://github.com/asciidoc-rs/asciidoc-html5/issues/146
 
@@ -166,19 +158,13 @@ fn pre_content(html: &str) -> &str {
     &html[start..end]
 }
 
-/// Asserts the sole listing block's `<pre>` content equals `expected` after
-/// trimming surrounding newlines. Asciidoctor strips leading and trailing blank
-/// lines from verbatim block content; this crate currently preserves a leading
-/// blank line when a tag region opens on a blank source line (as
-/// `tagged-class.rb`'s `bark` region does), so the comparison trims both ends
-/// to focus on the tag-selected lines rather than that separate rendering
-/// detail (tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/118>).
+/// Asserts the sole listing block's `<pre>` content equals `expected`. Like
+/// Asciidoctor, this crate strips leading and trailing blank lines from
+/// verbatim block content (so a tag region that opens on a blank source line,
+/// as `tagged-class.rb`'s `bark` region does, renders without that blank), so
+/// the tag-selected lines are compared directly.
 fn assert_listing_selection(html: &str, expected: &str) {
-    assert_eq!(
-        pre_content(html).trim_matches('\n'),
-        expected,
-        "in:\n{html}"
-    );
+    assert_eq!(pre_content(html), expected, "in:\n{html}");
 }
 
 non_normative!(
@@ -1914,8 +1900,11 @@ mod preprocessor_reader {
 "#
             );
 
-            // An empty `lines` value is ignored, so the whole file is included.
-            let html = convert_safe_with_fixtures("include::fixtures/include-file.adoc[lines=]");
+            // An empty `lines` value is ignored, so the whole file is included;
+            // the `++++` passthrough block emits it raw.
+            let html = convert_safe_with_fixtures(
+                "++++\ninclude::fixtures/include-file.adoc[lines=]\n++++",
+            );
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
@@ -1939,9 +1928,11 @@ mod preprocessor_reader {
 "#
             );
 
-            // An invalid range (start after end) is ignored, so the whole file is included.
-            let html =
-                convert_safe_with_fixtures("include::fixtures/include-file.adoc[lines=10..5]");
+            // An invalid range (start after end) is ignored, so the whole file is
+            // included; the `++++` passthrough block emits it raw.
+            let html = convert_safe_with_fixtures(
+                "++++\ninclude::fixtures/include-file.adoc[lines=10..5]\n++++",
+            );
             assert!(html.contains("first line of included content"), "{html}");
             assert!(html.contains("last line of included content"), "{html}");
         }
@@ -2133,18 +2124,17 @@ mod preprocessor_reader {
 "#
             );
 
-            // Selecting the outer `snippet` tag yields the inner content without the
-            // nested tag directive lines. (This crate does not render the `++++`
-            // passthrough block the Ruby test wraps the include in (issue #134), so the
-            // include is converted directly and the selected text checked instead.)
-            let html =
-                convert_safe_with_fixtures("include::fixtures/include-file.adoc[tags=snippet]");
-            assert!(html.contains("snippetA content"), "{html}");
-            assert!(html.contains("non-tagged content"), "{html}");
-            assert!(html.contains("snippetB content"), "{html}");
-            assert!(
-                !html.contains("tag::"),
-                "nested tag directives should be excluded: {html}"
+            // The `++++` passthrough block emits the tag-selected include content
+            // raw, so selecting the outer `snippet` tag yields the inner content
+            // without the nested tag directive lines. (This crate appends a
+            // trailing newline to embedded output that Asciidoctor omits, so it
+            // is trimmed for the comparison.)
+            let output = convert_safe_with_fixtures(
+                "++++\ninclude::fixtures/include-file.adoc[tags=snippet]\n++++",
+            );
+            assert_eq!(
+                output.trim_end_matches('\n'),
+                "snippetA content\n\nnon-tagged content\n\nsnippetB content",
             );
         }
 
@@ -2898,10 +2888,11 @@ mod preprocessor_reader {
             }
         }
 
-        // Non-normative: a block-level [indent=0] does not reindent verbatim content
-        // (#110).
-        non_normative!(
-            r#"
+        #[test]
+        fn include_directive_selects_lines_inside_specified_tag_and_ignores_lines_inside_a_negated_tag(
+        ) {
+            verifies!(
+                r#"
       test 'include directive selects lines inside specified tag and ignores lines inside a negated tag' do
         input = <<~'EOS'
         [indent=0]
@@ -2923,7 +2914,18 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            // The `[indent=0]` attribute removes the two-space block indent from
+            // the tag-selected `bark` region.
+            let html = convert_safe_with_fixtures(
+                "[indent=0]\n----\ninclude::fixtures/tagged-class.rb[tags=bark;!bark-other]\n----",
+            );
+            assert_listing_selection(
+                &html,
+                "def bark\n  if @breed == 'beagle'\n    'woof woof woof woof woof'\n  end\nend",
+            );
+        }
 
         #[test]
         fn should_warn_if_specified_tag_is_not_found_in_include_file() {
@@ -3093,9 +3095,11 @@ mod preprocessor_reader {
 "#
             );
 
-            // The include preprocesses (and warns) even though this crate does not
-            // render the surrounding `++++` passthrough block (issue #134).
+            // The `++++` passthrough block renders the included line raw, and the
+            // include still preprocesses and warns. (Embedded output carries a
+            // trailing newline this crate adds and Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/unclosed-tag.adoc[tag=a]\n++++";
+            assert_eq!(convert_safe_with_fixtures(src).trim_end_matches('\n'), "a");
             let warnings = fixture_warnings(src);
             assert!(
                 warnings
@@ -3128,7 +3132,14 @@ mod preprocessor_reader {
 "#
             );
 
+            // The `++++` passthrough block renders both included lines raw.
+            // (Embedded output carries a trailing newline this crate adds and
+            // Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/mismatched-end-tag.adoc[tags=a;b]\n++++";
+            assert_eq!(
+                convert_safe_with_fixtures(src).trim_end_matches('\n'),
+                "a\nb"
+            );
             let warnings = fixture_warnings(src);
             assert!(
                 warnings
@@ -3161,7 +3172,11 @@ mod preprocessor_reader {
 "#
             );
 
+            // The `++++` passthrough block renders the included line raw.
+            // (Embedded output carries a trailing newline this crate adds and
+            // Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/unexpected-end-tag.adoc[tags=a]\n++++";
+            assert_eq!(convert_safe_with_fixtures(src).trim_end_matches('\n'), "a");
             let warnings = fixture_warnings(src);
             assert!(
                 warnings
@@ -3191,10 +3206,11 @@ mod preprocessor_reader {
 "#
             );
 
-            // An empty `tag`/`tags` value is ignored, so every line — including the tag
-            // directive lines themselves — is included.
+            // An empty `tag`/`tags` value is ignored, so every line — including the
+            // tag directive lines themselves — is included; the `++++` passthrough
+            // block emits them raw.
             for attr_name in ["tag", "tags"] {
-                let src = format!("include::fixtures/include-file.xml[{attr_name}=]");
+                let src = format!("++++\ninclude::fixtures/include-file.xml[{attr_name}=]\n++++");
                 let html = convert_safe_with_fixtures(&src);
                 assert!(html.contains("tag::"), "{html}");
                 assert!(html.contains("end::"), "{html}");
