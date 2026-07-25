@@ -11,4 +11,5 @@
 //! yet rendered — are tracked as `non_normative!`.
 
 mod paragraphs_test;
+mod paths_test;
 mod preamble_test;
