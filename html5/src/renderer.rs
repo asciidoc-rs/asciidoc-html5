@@ -11,11 +11,12 @@
 //! backend emits, in document order.
 //!
 //! [`Renderer`] holds the output buffer and exposes one method per structural
-//! concern. [`Renderer::block`] is the dispatch point: it matches on the
-//! [`Block`] variant (and, for delimited blocks, on
-//! [`IsBlock::resolved_context`]) and delegates. Compound blocks recurse back
-//! into [`Renderer::blocks`] over their [`FindBlocks::child_blocks`], so the
-//! same machinery handles arbitrary nesting.
+//! concern. [`Renderer::block`] is the dispatch point: it drops comment blocks
+//! (see [`renders_nothing`]), then matches on the [`Block`] variant (and, for
+//! delimited blocks, on [`IsBlock::resolved_context`]) and delegates. Compound
+//! blocks recurse back into [`Renderer::blocks`] over their
+//! [`FindBlocks::child_blocks`], so the same machinery handles arbitrary
+//! nesting.
 //!
 //! This is a *baseline*: the constructs wired up below (the document skeleton,
 //! header, paragraphs, sections, the preamble, verbatim blocks, and thematic
@@ -53,6 +54,35 @@ pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
 /// when the `webfonts` attribute carries no explicit value: Open Sans for
 /// headings, Noto Serif for body text, Droid Sans Mono for monospaced text.
 const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
+
+/// Whether `block` is one Asciidoctor renders to nothing, so the renderer emits
+/// no output for it at all.
+///
+/// This is how comments are dropped. `asciidoc-parser` keeps them in the parse
+/// tree (so other tools can inspect them) and leaves it to the backend to
+/// discard them, matching Asciidoctor. Three shapes reach the renderer:
+///
+/// - the `////` delimited comment block and the `[comment]` open block, which
+///   the parser resolves to the `comment` context;
+/// - a `[comment]`-styled paragraph, whose declared block style is `comment`
+///   (its resolved context is still `paragraph`, so it is matched by style);
+/// - a paragraph the parser reduced to empty content by stripping an isolated
+///   `//` line comment — Asciidoctor emits no block for it, so the empty
+///   paragraph is dropped rather than rendered as an empty `<p></p>`.
+fn renders_nothing(block: &Block<'_>) -> bool {
+    if block.resolved_context().as_ref() == "comment" || block.declared_style() == Some("comment") {
+        return true;
+    }
+
+    // An isolated `//` line comment survives parsing as a paragraph with no
+    // content; an empty paragraph is never valid Asciidoctor output either way.
+    matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
+        && block
+            .rendered_content()
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+}
 
 /// Reads a document attribute as an explicit string value, if it has one.
 /// `Set`/`Unset`/absent all yield `None` (use `is_attribute_set` for booleans).
@@ -655,6 +685,13 @@ impl Renderer<'_> {
 
     /// The dispatch point: routes one block to the matching renderer.
     fn block<'src>(&mut self, block: &'src Block<'src>) {
+        // Comment blocks render to nothing in Asciidoctor. This crate drops them
+        // here, in the renderer, rather than in the parser (which preserves them
+        // so other tools can inspect them). See [`renders_nothing`].
+        if renders_nothing(block) {
+            return;
+        }
+
         match block {
             Block::Simple(simple) => match simple.style() {
                 // A styled paragraph can convert to a different block: `[open]`
@@ -1119,6 +1156,70 @@ mod tests {
     fn unsupported_block_leaves_a_marker() {
         let html = convert("* one\n* two");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    }
+
+    // Comments render to nothing, matching Asciidoctor. The parser preserves
+    // them; the renderer drops them (see `renders_nothing`). These use the real
+    // embedded `crate::convert` (the module's `convert` is shadowed to
+    // standalone) so the assertions see only the body.
+
+    #[test]
+    fn block_comment_is_dropped() {
+        let html =
+            crate::convert("first paragraph\n\n////\nblock comment\n////\n\nsecond paragraph");
+        assert!(!html.contains("block comment"));
+        assert!(!html.contains("unsupported"));
+        assert_eq!(html.matches("class=\"paragraph\"").count(), 2);
+    }
+
+    #[test]
+    fn isolated_line_comment_creates_no_empty_paragraph() {
+        // An isolated `//` line survives parsing as an empty paragraph; it must
+        // not render as `<p></p>`, so only the two real paragraphs remain.
+        let html = crate::convert("first paragraph\n\n// line comment\n\nsecond paragraph");
+        assert!(!html.contains("line comment"));
+        assert!(!html.contains("<p></p>"));
+        assert_eq!(html.matches("<p>").count(), 2);
+    }
+
+    #[test]
+    fn adjacent_line_comment_is_stripped_within_a_paragraph() {
+        // A `//` line between two content lines is stripped, joining them into a
+        // single paragraph rather than dropping the whole block.
+        let html = crate::convert("first line\n// line comment\nsecond line");
+        assert!(!html.contains("line comment"));
+        assert!(html.contains("<p>first line\nsecond line</p>"));
+    }
+
+    #[test]
+    fn comment_styled_paragraph_is_dropped() {
+        let html = crate::convert("Before.\n\n[comment]\nhidden text\nmore\n\nAfter.");
+        assert!(!html.contains("hidden text"));
+        assert_eq!(html.matches("class=\"paragraph\"").count(), 2);
+    }
+
+    #[test]
+    fn comment_styled_open_block_is_dropped() {
+        let html = crate::convert("Before.\n\n[comment]\n--\nhidden\n--\n\nAfter.");
+        assert!(!html.contains("hidden"));
+        assert!(!html.contains("unsupported"));
+        assert_eq!(html.matches("class=\"paragraph\"").count(), 2);
+    }
+
+    #[test]
+    fn triple_slash_is_not_a_line_comment() {
+        // Only a `//` prefix begins a line comment; `///` is ordinary text.
+        let html = crate::convert("/// not a line comment");
+        assert!(html.contains("/// not a line comment"));
+    }
+
+    #[test]
+    fn block_comment_at_end_of_document_creates_no_paragraph() {
+        // Trailing newlines after a closing comment block must not produce a
+        // spurious empty paragraph.
+        let html = crate::convert("paragraph\n\n////\nblock comment\n////\n\n\n");
+        assert!(!html.contains("block comment"));
+        assert_eq!(html.matches("class=\"paragraph\"").count(), 1);
     }
 
     #[test]
