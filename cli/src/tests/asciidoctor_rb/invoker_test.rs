@@ -14,9 +14,8 @@
 //! counterpart (`-b`/`-d`/`-q`/`-w`/`-t`/`-r`/`-R`/`-T`/`-E`,
 //! `--failure-level`, `--eruby`), other backends (DocBook, manpage) and
 //! doctypes, the coderay source highlighter, image-based admonition icons, the
-//! warning/logger stream, the input-equals-output guard,
-//! `SOURCE_DATE_EPOCH`/timezone date handling, and Ruby-specific encoding and
-//! environment fixtures.
+//! warning/logger stream, `SOURCE_DATE_EPOCH`/timezone date handling, and
+//! Ruby-specific encoding and environment fixtures.
 
 use std::path::PathBuf;
 
@@ -360,18 +359,34 @@ fn should_accept_document_from_stdin_and_write_to_output_file() {
     assert!(html.contains("<p>content</p>"));
 }
 
-non_normative!(
-    r#"
+#[test]
+fn should_fail_if_input_file_matches_resolved_output_file() {
+    verifies!(
+        r#"
   test 'should fail if input file matches resolved output file' do
     invoker = invoke_cli_to_buffer %w(-a outfilesuffix=.adoc), 'sample.adoc'
     assert_match(/input file and output file cannot be the same/, invoker.read_error)
   end
 
 "#
-);
+    );
 
-non_normative!(
-    r#"
+    // `-a outfilesuffix=.adoc` derives the output name `sample.adoc` — the input
+    // itself — so `adoc` refuses to convert the file onto itself.
+    let project = Project::new("input-eq-resolved-output");
+    let input = project.write("sample.adoc", "= Doc\n\nBody.\n");
+    let err = project
+        .run(&["-a", "outfilesuffix=.adoc", input.to_str().unwrap()])
+        .expect_err("input == resolved output fails");
+    assert!(err
+        .to_string()
+        .contains("input file and output file cannot be the same"));
+}
+
+#[test]
+fn should_fail_if_input_file_matches_specified_output_file() {
+    verifies!(
+        r#"
   test 'should fail if input file matches specified output file' do
     sample_outpath = fixture_path 'sample.adoc'
     invoker = invoke_cli_to_buffer %W(-o #{sample_outpath}), 'sample.adoc'
@@ -379,7 +394,19 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // Naming the output the same file as the input (`-o sample.adoc` on
+    // `sample.adoc`) is refused the same way.
+    let project = Project::new("input-eq-specified-output");
+    let input = project.write("sample.adoc", "= Doc\n\nBody.\n");
+    let err = project
+        .run(&["-o", input.to_str().unwrap(), input.to_str().unwrap()])
+        .expect_err("input == specified output fails");
+    assert!(err
+        .to_string()
+        .contains("input file and output file cannot be the same"));
+}
 
 non_normative!(
     r#"
@@ -1033,8 +1060,10 @@ fn should_convert_all_passed_files() {
     assert!(project.exists("sample.html"));
 }
 
-non_normative!(
-    r#"
+#[test]
+fn options_should_not_be_modified_when_processing_multiple_files() {
+    verifies!(
+        r#"
   test 'options should not be modified when processing multiple files' do
     destination_path = File.join testdir, 'test_output'
     basic_outpath = File.join destination_path, 'basic.htm'
@@ -1051,7 +1080,28 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // Converting several files does not mutate the shared options: each is
+    // written into the `-D` destination under its own derived name, here with the
+    // `outfilesuffix=.htm` override applied to both.
+    let project = Project::new("multi-file-options");
+    let basic = project.write("basic.adoc", "= Basic\n\nBody.\n");
+    let sample = project.write("sample.adoc", "= Sample\n\nBody.\n");
+    let dest = project.path("test_output");
+    project
+        .run(&[
+            "-D",
+            dest.to_str().unwrap(),
+            "-a",
+            "outfilesuffix=.htm",
+            basic.to_str().unwrap(),
+            sample.to_str().unwrap(),
+        ])
+        .expect("adoc converts");
+    assert!(dest.join("basic.htm").exists());
+    assert!(dest.join("sample.htm").exists());
+}
 
 #[test]
 fn should_convert_all_files_that_matches_a_glob_expression() {

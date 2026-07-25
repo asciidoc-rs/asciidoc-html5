@@ -235,9 +235,24 @@ fn convert_source(
 ) -> io::Result<()> {
     let input = source.file();
     let options = apply_base_dir(cli, base_options.clone(), input)?;
+    let target = output_target_for(cli, input);
+
+    // Refuse to convert a file onto itself, matching Asciidoctor: when the
+    // resolved output file (whether named with `-o` or derived, including via an
+    // `outfilesuffix` that lands on the input's own extension) is the input
+    // file, fail before reading or converting rather than truncating the source.
+    if let (OutputTarget::File(path), Some(input)) = (&target, input) {
+        if same_file(path, input) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "input file and output file cannot be the same",
+            ));
+        }
+    }
+
     let source_text = read_input(input, stdin)?;
 
-    match output_target_for(cli, input) {
+    match target {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
@@ -661,10 +676,36 @@ fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
         Some(path) if path.as_os_str() == "-" => OutputTarget::Stdout,
         Some(path) => OutputTarget::File(resolve_in_dir(dir, path)),
         None => match input {
-            Some(input) => OutputTarget::File(derive_output_path(input, dir)),
+            Some(input) => OutputTarget::File(derive_output_path(input, dir, &output_suffix(cli))),
             None => OutputTarget::Stdout,
         },
     }
+}
+
+/// The file-name suffix `adoc` derives a default output name with, honoring an
+/// `-a outfilesuffix=…` override the way Asciidoctor does (its derived output
+/// name uses the `outfilesuffix` attribute). Defaults to `.html`; when the same
+/// attribute is assigned more than once, the last value wins.
+///
+/// Only a value assignment (`outfilesuffix=.htm`) changes the suffix; a bare
+/// set or an unset leaves the default, since neither yields a usable extension.
+/// The parsing mirrors [`has_explicit_docdir`]: a trailing `@` soft-default
+/// marker is stripped, the key is everything before the first `=`, a leading or
+/// trailing `!` marks an unset, and the name is matched case-insensitively.
+fn output_suffix(cli: &Cli) -> String {
+    let mut suffix = String::from(".html");
+    for spec in &cli.attribute {
+        let body = spec.strip_suffix('@').unwrap_or(spec);
+        if let Some((key, value)) = body.split_once('=') {
+            if !key.starts_with('!')
+                && !key.ends_with('!')
+                && key.eq_ignore_ascii_case("outfilesuffix")
+            {
+                suffix = value.to_string();
+            }
+        }
+    }
+    suffix
 }
 
 /// Resolves an explicit `-o` output `file` against the `-D` destination `dir`:
@@ -679,11 +720,15 @@ fn resolve_in_dir(dir: Option<&Path>, file: &Path) -> PathBuf {
 }
 
 /// Derives the default output path for `input` by swapping its extension for
-/// `.html`, matching how `asciidoctor` names its output file. With a `-D`
-/// destination `dir`, the derived name is placed in that directory; otherwise
-/// it is written alongside the input.
-fn derive_output_path(input: &Path, dir: Option<&Path>) -> PathBuf {
-    let derived = input.with_extension("html");
+/// `suffix` (`.html` by default, or an `-a outfilesuffix=…` override — see
+/// [`output_suffix`]), matching how `asciidoctor` names its output file. With a
+/// `-D` destination `dir`, the derived name is placed in that directory;
+/// otherwise it is written alongside the input.
+fn derive_output_path(input: &Path, dir: Option<&Path>, suffix: &str) -> PathBuf {
+    // `outfilesuffix` carries the leading dot (`.htm`), while `with_extension`
+    // wants the extension without it.
+    let extension = suffix.strip_prefix('.').unwrap_or(suffix);
+    let derived = input.with_extension(extension);
     match (dir, derived.file_name()) {
         (Some(dir), Some(name)) => dir.join(name),
         _ => derived,
