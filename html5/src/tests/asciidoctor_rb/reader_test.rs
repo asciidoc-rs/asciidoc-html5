@@ -26,6 +26,35 @@
 //! `remote-fetch-not-planned`) and stay `non_normative!`, as do the
 //! jruby/classloader, non-UTF-8-encoding, and chmod-unreadable cases and every
 //! test that asserts only on `Reader` internals.
+//!
+//! A handful of *document-visible* tests are also kept `non_normative!` because
+//! this crate currently diverges from the Asciidoctor oracle; rather than
+//! assert the divergent output, each is tracked by a follow-up issue:
+//!
+//! - compat-mode does not drop the `include` role on the replacement link —
+//!   [#129]
+//! - a UTF-8 BOM is not stripped from an included file — [#130]
+//! - a three-level nested include from a subdirectory leaves the inner include
+//!   unresolved — [#131]
+//! - an absolute include path is not resolved — [#132]
+//! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
+//! - a `++++` passthrough block renders an "unsupported" comment (so the tests
+//!   that wrap an include in one convert the include directly) — [#134]
+//! - a block-level `[indent=0]` does not reindent verbatim content — [#110]
+//! - a remote `include::` target under a non-secure safe mode is reported
+//!   unresolved (and warns) instead of falling back to a link macro — [#136]
+//! - leading/trailing blank lines are not trimmed from verbatim content, so the
+//!   tag-selection assertions trim the compared `<pre>` text — [#118]
+//!
+//! [#129]: https://github.com/asciidoc-rs/asciidoc-html5/issues/129
+//! [#130]: https://github.com/asciidoc-rs/asciidoc-html5/issues/130
+//! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
+//! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
+//! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
+//! [#134]: https://github.com/asciidoc-rs/asciidoc-html5/issues/134
+//! [#110]: https://github.com/asciidoc-rs/asciidoc-html5/issues/110
+//! [#136]: https://github.com/asciidoc-rs/asciidoc-html5/issues/136
+//! [#118]: https://github.com/asciidoc-rs/asciidoc-html5/issues/118
 
 use std::path::PathBuf;
 
