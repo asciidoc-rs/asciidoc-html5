@@ -10,4 +10,5 @@ mod asciidoctor;
 mod asciidoctor_rb;
 mod docs;
 mod input_resolution;
+mod output_naming;
 mod path_helpers;
