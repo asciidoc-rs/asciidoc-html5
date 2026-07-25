@@ -12,15 +12,16 @@
 //! becomes a `mod`. The two top-level list contexts are kept as
 //! `bulleted_lists` / `ordered_lists` (rather than flattened away) only because
 //! both hold a `Simple lists` sub-context, which would otherwise collide at the
-//! module root.
+//! module root. The Checklists context is verified too (checklist rendering —
+//! the default ballot-box, `%interactive`, and `icons=font` markers — is
+//! implemented).
 //!
 //! What stays `non_normative!` here:
-//! - description lists (`:dlist`), callout lists (`:colist`), checklists, the
-//!   list model, and the description-list redux contexts (source lines 2107+):
-//!   these exercise list types this renderer does not build yet and are tracked
-//!   for follow-up (dlist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/154>,
-//!   colist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/155>,
-//!   checklist interactive/`icons=font` variants: <https://github.com/asciidoc-rs/asciidoc-html5/issues/156>);
+//! - description lists (`:dlist`), callout lists (`:colist`), the list model,
+//!   and the description-list redux contexts (source lines 2107+): these
+//!   exercise list types this renderer does not build yet and are tracked for
+//!   follow-up (dlist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/154>,
+//!   colist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/155>);
 //! - a handful of ulist tests that assert on a rendered `dl` (mixed
 //!   bulleted/description input) — blocked on dlist rendering (#154);
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -8135,13 +8136,19 @@ non_normative!(
 "#
 );
 
-// The entire Checklists context is reproduced but not yet ported: checklist
-// rendering (the default ballot-box, `%interactive`, and `icons=font`
-// markers) is implemented and covered by renderer unit tests, so porting
-// this Ruby context to `verifies!` is follow-up work (#156).
-non_normative!(
-    r##"
+mod checklists {
+    use super::*;
+
+    non_normative!(
+        r#"
 context 'Checklists' do
+"#
+    );
+
+    #[test]
+    fn should_create_checklist_if_at_least_one_item_has_checkbox_syntax() {
+        verifies!(
+            r##"
   test 'should create checklist if at least one item has checkbox syntax' do
     input = <<~'EOS'
     - [ ] todo
@@ -8168,7 +8175,49 @@ context 'Checklists' do
     assert_xpath %((/*[@class="ulist checklist"]/ul/li)[4]/p[text()="#{decode_char 10003} another done"]), output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[5]/p[text()="plain"]', output, 1
   end
+"##
+        );
+        let output =
+            convert("- [ ] todo\n- [x] done\n- [ ] another todo\n- [*] another done\n- plain\n");
+        assert_css(&output, r#".ulist.checklist"#, 1);
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[1]/p[text()="❏ todo"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[2]/p[text()="✓ done"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[3]/p[text()="❏ another todo"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[4]/p[text()="✓ another done"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[5]/p[text()="plain"]"#,
+            1,
+        );
+    }
 
+    non_normative!(
+        r#"
+
+"#
+    );
+
+    #[test]
+    fn entry_is_not_a_checklist_item_if_the_closing_bracket_is_not_immediately_followed_by_the_space_character(
+    ) {
+        verifies!(
+            r#"
   test 'entry is not a checklist item if the closing bracket is not immediately followed by the space character' do
     input = <<~EOS
     - [ ]    todo
@@ -8186,7 +8235,28 @@ context 'Checklists' do
     refute checklist.items[2].attr?('checkbox')
     refute checklist.items[3].attr?('checkbox')
   end
+"#
+        );
+        let output =
+            convert("- [ ]    todo\n- [x] \t done\n- [ ]\t  another todo\n- [x]\t  another done\n");
+        assert_css(&output, r#".ulist.checklist"#, 1);
+        assert_xpath(&output, r#"(//ul/li)[1]/p[contains(text(), "[ ]")]"#, 0);
+        assert_xpath(&output, r#"(//ul/li)[2]/p[contains(text(), "[x]")]"#, 0);
+        assert_xpath(&output, r#"(//ul/li)[3]/p[contains(text(), "[ ]")]"#, 1);
+        assert_xpath(&output, r#"(//ul/li)[4]/p[contains(text(), "[x]")]"#, 1);
+    }
 
+    non_normative!(
+        r#"
+
+"#
+    );
+
+    #[test]
+    fn should_create_checklist_with_font_icons_if_at_least_one_item_has_checkbox_syntax_and_icons_attribute_is_font(
+    ) {
+        verifies!(
+            r#"
   test 'should create checklist with font icons if at least one item has checkbox syntax and icons attribute is font' do
     input = <<~'EOS'
     - [ ] todo
@@ -8200,7 +8270,33 @@ context 'Checklists' do
     assert_css '.ulist.checklist li i.fa-square-o', output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[3]/p[text()="plain"]', output, 1
   end
+"#
+        );
+        let output = convert_with(
+            "- [ ] todo\n- [x] done\n- plain\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert_css(&output, r#".ulist.checklist"#, 1);
+        assert_css(&output, r#".ulist.checklist li i.fa-check-square-o"#, 1);
+        assert_css(&output, r#".ulist.checklist li i.fa-square-o"#, 1);
+        assert_xpath(
+            &output,
+            r#"(/*[@class="ulist checklist"]/ul/li)[3]/p[text()="plain"]"#,
+            1,
+        );
+    }
 
+    non_normative!(
+        r#"
+
+"#
+    );
+
+    #[test]
+    fn should_create_interactive_checklist_if_interactive_option_is_set_even_with_icons_attribute_is_font(
+    ) {
+        verifies!(
+            r#"
   test 'should create interactive checklist if interactive option is set even with icons attribute is font' do
     input = <<~'EOS'
     :icons: font
@@ -8221,7 +8317,33 @@ context 'Checklists' do
     assert_css '.ulist.checklist li input[type="checkbox"][disabled]', output, 0
     assert_css '.ulist.checklist li input[type="checkbox"][checked]', output, 1
   end
+"#
+        );
+        let output = convert(":icons: font\n\n[%interactive]\n- [ ] todo\n- [x] done\n");
+        assert_css(&output, r#".ulist.checklist"#, 1);
+        assert_css(&output, r#".ulist.checklist li input[type="checkbox"]"#, 2);
+        assert_css(
+            &output,
+            r#".ulist.checklist li input[type="checkbox"][disabled]"#,
+            0,
+        );
+        assert_css(
+            &output,
+            r#".ulist.checklist li input[type="checkbox"][checked]"#,
+            1,
+        );
+    }
 
+    non_normative!(
+        r#"
+
+"#
+    );
+
+    #[test]
+    fn should_not_create_checklist_if_checkbox_on_item_is_followed_by_a_tab() {
+        verifies!(
+            r#"
   test 'should not create checklist if checkbox on item is followed by a tab' do
     ['[ ]', '[x]', '[*]'].each do |checkbox|
       input = <<~EOS
@@ -8234,9 +8356,26 @@ context 'Checklists' do
       refute list.option?('checklist')
     end
   end
+"#
+        );
+        for checkbox in ["[ ]", "[x]", "[*]"] {
+            let output = convert(&format!("- {checkbox}\ttodo\n"));
+            assert_css(&output, ".ulist", 1);
+            assert_css(&output, ".ulist.checklist", 0);
+            assert_xpath(
+                &output,
+                &format!(r#"//ul/li/p[contains(text(), "{checkbox}")]"#),
+                1,
+            );
+        }
+    }
+
+    non_normative!(
+        r#"
 end
-"##
-);
+"#
+    );
+}
 
 non_normative!(
     r#"
