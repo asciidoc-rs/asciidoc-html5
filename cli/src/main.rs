@@ -263,6 +263,15 @@ fn convert_source(
     // comparison (see [`same_file`]) tests file identity, so an output that
     // aliases an input through a symlink or a hard link is caught too. Fail
     // before reading or converting.
+    //
+    // This check is best-effort against *accidental* clobbering, not a race-free
+    // atomic write: it runs here, but the actual write happens after the input is
+    // read and converted, so a concurrent process could swap the output path for
+    // an alias to an input in between (the identity checked is not bound to the
+    // file finally written). Matching Asciidoctor, which checks the same way, the
+    // TOCTOU race is left open; closing it would mean verifying the opened output
+    // handle's identity before truncating. Tracked in
+    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/170>.
     if let OutputTarget::File(path) = &target {
         if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
