@@ -950,9 +950,15 @@ impl Renderer<'_> {
     /// reindented and blank-line-trimmed by
     /// [`verbatim_content`](Self::verbatim_content), and the `<pre>` gains a
     /// `nowrap` class when the block opts out of wrapping.
+    ///
+    /// The title is captioned: a titled listing block gains its `Listing N. `
+    /// caption prefix when `listing-caption` is set (or an explicit
+    /// `[caption=]` override is given). A literal block is never
+    /// captionable, so [`captioned_title`](Self::captioned_title) falls
+    /// back to its bare title.
     fn verbatim<'src>(&mut self, block: &'src Block<'src>, wrapper_class: &str) {
         self.open_block_wrapper(block, wrapper_class);
-        self.block_title(block);
+        self.captioned_title(block);
         self.line("<div class=\"content\">");
         let is_source = block.declared_style() == Some("source");
         let content = self.verbatim_content(block, is_source);
@@ -966,9 +972,13 @@ impl Renderer<'_> {
     /// the language (`class="language-…" data-lang="…"`) when one is
     /// declared. This matches Asciidoctor's default output even when no
     /// syntax highlighter is active.
+    ///
+    /// A source block resolves to the `listing` context, so its title is
+    /// captioned the same way a listing block's is (see
+    /// [`verbatim`](Self::verbatim)).
     fn source<'src>(&mut self, block: &'src Block<'src>) {
         self.open_block_wrapper(block, "listingblock");
-        self.block_title(block);
+        self.captioned_title(block);
         self.line("<div class=\"content\">");
 
         let content = self.verbatim_content(block, true);
