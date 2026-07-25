@@ -18,7 +18,7 @@
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
 //! - the verse escaped-brace subs test (`\{` is not unescaped by
-//!   `asciidoc-parser` yet — see the paragraphs port);
+//!   `asciidoc-parser` yet — asciidoc-parser#962);
 //! - deferred features, each tracked by an issue: verbatim `indent` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>),
 //!   `tabsize` (#111), `nowrap`/`prewrap` (#112), example captions/counters
 //!   (#113), collapsible examples (#114), `listing-caption` (#115),
@@ -1628,7 +1628,8 @@ mod quote_and_verse_blocks {
     }
 
     // The `\{` escape is not yet unescaped by `asciidoc-parser` (same pending
-    // parser work tracked for the paragraphs port's verse-subs test).
+    // parser work as the paragraphs port's verse-subs test); tracked upstream in
+    // <https://github.com/asciidoc-rs/asciidoc-parser/issues/962>.
     non_normative!(
         r##"
     test 'should perform normal subs on a verse block' do
