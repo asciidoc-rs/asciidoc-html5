@@ -16,8 +16,9 @@
 //!   `Parser.next_block` Ruby APIs, and `include::` tag filtering. The HTML
 //!   document/embedded pair additionally depends on list rendering (the sample
 //!   ends in a bulleted list, so its fourth `<p>` comes from a list item),
-//!   which this crate does not yet emit. Encoding itself is not a concern here
-//!   — this crate converts `&str` that is already valid UTF-8.
+//!   which this crate does not yet emit — revisit those two once lists land
+//!   (#120). Encoding itself is not a concern here — this crate converts `&str`
+//!   that is already valid UTF-8.
 //! * *Compat mode* is not implemented by `asciidoc-parser`, so tests that carry
 //!   both a compat-mode and a modern assertion are ported as `verifies!` with
 //!   only the modern assertion driven in Rust; the compat-mode assertion
@@ -50,7 +51,8 @@ context "Text" do
 // UTF-8 encoding test: loads the `:encoding` sample document (fixture not
 // vendored) and converts it standalone. The sample ends in a bulleted list, so
 // the fourth `<p>` the test counts comes from a list item, which this crate
-// does not yet render; encoding itself is not a parser concern here.
+// does not yet render (light this up once lists land — #120); encoding itself
+// is not a parser concern here.
 non_normative!(
     r#"
   test "proper encoding to handle utf8 characters in document using html backend" do
