@@ -1676,6 +1676,70 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn ordered_list_honors_an_explicit_numbering_style() {
+        // An explicit `[loweralpha]` overrides the marker-derived style (the
+        // marker here is a plain `.`, which alone would be arabic), driving both
+        // the wrapper/`<ol>` class and the HTML `type`.
+        let html = convert("[loweralpha]\n. one\n. two");
+        assert!(
+            html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
+        );
+    }
+
+    #[test]
+    fn checklist_renders_default_ballot_markers() {
+        // An unordered list with any checkbox item becomes a checklist: the
+        // wrapper and `<ul>` gain the `checklist` class, and each checkbox item's
+        // text is prefixed with the ballot-box entity — `&#10063;` unchecked,
+        // `&#10003;` checked. A plain item in the same list keeps a bare `<p>`.
+        let html = convert("* [ ] todo\n* [x] done\n* plain");
+        assert!(html.contains("<div class=\"ulist checklist\">"));
+        assert!(html.contains("<ul class=\"checklist\">"));
+        assert!(html.contains("<p>&#10063; todo</p>"));
+        assert!(html.contains("<p>&#10003; done</p>"));
+        assert!(html.contains("<p>plain</p>"));
+    }
+
+    #[test]
+    fn checklist_interactive_renders_input_checkboxes() {
+        // The `%interactive` option swaps the entity markers for real
+        // `<input type="checkbox">` controls, `checked` for a checked item.
+        let html = convert("[%interactive]\n* [ ] todo\n* [x] done");
+        assert!(html.contains("<p><input type=\"checkbox\" data-item-complete=\"0\"> todo</p>"));
+        assert!(
+            html.contains("<p><input type=\"checkbox\" data-item-complete=\"1\" checked> done</p>")
+        );
+    }
+
+    #[test]
+    fn checklist_with_icons_font_renders_font_awesome_markers() {
+        // Under `:icons: font`, a non-interactive checklist uses Font Awesome
+        // glyphs instead of the ballot-box entities.
+        let html = crate::convert_with(
+            "* [ ] todo\n* [x] done",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains("<p><i class=\"fa fa-square-o\"></i> todo</p>"));
+        assert!(html.contains("<p><i class=\"fa fa-check-square-o\"></i> done</p>"));
+    }
+
+    #[test]
+    fn list_item_id_and_role_decorate_the_li() {
+        // When the parser attaches an id and/or roles to a list item (here via a
+        // block anchor / shorthand before the item), the renderer places them on
+        // the `<li>`, matching Asciidoctor's `convert_ulist` item loop: id first,
+        // then the item's roles as its class.
+        let id_only = convert("* one\n[[second]]\n* two");
+        assert!(id_only.contains("<li id=\"second\">\n<p>two</p>"));
+
+        let role_only = convert("* one\n[.special]\n* two");
+        assert!(role_only.contains("<li class=\"special\">\n<p>two</p>"));
+
+        let id_and_role = convert("* one\n[#second.special]\n* two");
+        assert!(id_and_role.contains("<li id=\"second\" class=\"special\">\n<p>two</p>"));
+    }
+
     // Comments render to nothing, matching Asciidoctor. The parser preserves
     // them; the renderer drops them (see `renders_nothing`). These use the real
     // embedded `crate::convert` (the module's `convert` is shadowed to
