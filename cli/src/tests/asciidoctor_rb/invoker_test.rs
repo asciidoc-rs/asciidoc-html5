@@ -30,8 +30,9 @@
 //!   admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
 //!   and the table of contents that `toc-title` renders into
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
-//! - Deliberate divergence: given no input file, `adoc` reads standard input
-//!   (its piping design) rather than printing a usage message.
+//! - Deliberate divergence (under re-evaluation): given no input file, `adoc`
+//!   reads standard input (its piping design) rather than printing a usage
+//!   message (<https://github.com/asciidoc-rs/asciidoc-html5/issues/160>).
 
 use std::path::PathBuf;
 
@@ -656,9 +657,11 @@ non_normative!(
 "#
 );
 
-// Deliberate divergence: with no input file Asciidoctor prints a usage
-// message, whereas `adoc` reads the document from standard input (its piping
-// design), so there is no usage error to assert.
+// Deliberate divergence (under re-evaluation): with no input file Asciidoctor
+// prints a usage message, whereas `adoc` reads the document from standard
+// input (its piping design), so there is no usage error to assert. Whether to
+// print usage when stdin is a terminal is tracked in
+// <https://github.com/asciidoc-rs/asciidoc-html5/issues/160>.
 non_normative!(
     r#"
   test 'should report usage if no input file given' do
