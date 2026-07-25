@@ -153,12 +153,18 @@ equivalent to --safe-mode=safe. Cannot be combined with --safe-mode."
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
+        visible_short_alias = 's',
         long = "embedded",
+        visible_alias = "no-header-footer",
         long_help = "Produce embedded output, the way Asciidoctor's -e option does.\n\n\
 By default adoc writes a standalone HTML5 document — the full \
 <!DOCTYPE>/<head>/<body> shell around the header, content, and footer. With -e \
 it writes just the converted body, with no document shell, stylesheet, or \
 header/footer frame, suitable for dropping into a surrounding template.\n\n\
+Asciidoctor's original spelling, -s/--no-header-footer (which -e/--embedded \
+superseded), is accepted as an alias, so `asciidoctor -s` and \
+`asciidoctor --no-header-footer` invocations run unchanged. Note that -s is \
+distinct from -S/--safe-mode.\n\n\
 Embedded output omits the doctitle by default; add `-a showtitle` to include it \
 as a leading <h1>."
     )]
@@ -213,8 +219,19 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
 
-    for source in resolve_inputs(&cli.inputs)? {
-        convert_source(cli, &base_options, &source, stdin, stdout)?;
+    let sources = resolve_inputs(&cli.inputs)?;
+
+    // Every on-disk input in this invocation. A source's resolved output must not
+    // name any of them — not only its own input — or converting one source would
+    // truncate another (or itself) before that source is read.
+    let input_paths: Vec<PathBuf> = sources
+        .iter()
+        .filter_map(InputSource::file)
+        .map(Path::to_path_buf)
+        .collect();
+
+    for source in &sources {
+        convert_source(cli, &base_options, source, &input_paths, stdin, stdout)?;
     }
 
     Ok(())
@@ -230,14 +247,43 @@ fn convert_source(
     cli: &Cli,
     base_options: &Options,
     source: &InputSource,
+    input_paths: &[PathBuf],
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
 ) -> io::Result<()> {
     let input = source.file();
     let options = apply_base_dir(cli, base_options.clone(), input)?;
+    let target = output_target_for(cli, input);
+
+    // Refuse to write the output onto any input file in this invocation, matching
+    // Asciidoctor's refusal to convert a file onto itself — and extending it
+    // across a multi-file run, where one source's resolved output (named with
+    // `-o` or derived, e.g. via an `outfilesuffix` landing on an input's
+    // extension) could otherwise truncate a sibling input before it is read. The
+    // comparison (see [`same_file`]) tests file identity, so an output that
+    // aliases an input through a symlink or a hard link is caught too. Fail
+    // before reading or converting.
+    //
+    // This check is best-effort against *accidental* clobbering, not a race-free
+    // atomic write: it runs here, but the actual write happens after the input is
+    // read and converted, so a concurrent process could swap the output path for
+    // an alias to an input in between (the identity checked is not bound to the
+    // file finally written). Matching Asciidoctor, which checks the same way, the
+    // TOCTOU race is left open; closing it would mean verifying the opened output
+    // handle's identity before truncating. Tracked in
+    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/170>.
+    if let OutputTarget::File(path) = &target {
+        if input_paths.iter().any(|input| same_file(path, input)) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "input file and output file cannot be the same",
+            ));
+        }
+    }
+
     let source_text = read_input(input, stdin)?;
 
-    match output_target_for(cli, input) {
+    match target {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
@@ -407,13 +453,89 @@ impl AssetWriter for OutputGuard {
     }
 }
 
-/// Whether `a` and `b` name the same file, comparing their absolute (but not
-/// symlink-resolved) forms so the check works before either file exists.
+/// Whether `a` and `b` name the same file on disk.
+///
+/// When both paths exist, compares their file identity — device and inode — so
+/// two entries pointing at the same underlying file are recognized even under
+/// different path spellings, including a hard link (which shares an inode but
+/// has no common path) and a symlink (whose target is stat'd). Writing through
+/// either would replace that shared file's contents, so an output aliasing an
+/// input this way must be refused.
+///
+/// For a path that does not exist yet — a derived output not written, or one
+/// reached through a parent-directory symlink — there is no inode to compare,
+/// so it falls back to comparing resolved paths (see [`resolve_for_compare`]),
+/// and finally to the plain absolute comparison, so the check still works
+/// before either file exists.
+///
+/// # Platform limitation
+///
+/// The identity comparison is Unix-only: the equivalent Windows file id
+/// (`file_index`/`volume_serial_number`) is exposed by std only behind an
+/// unstable feature, and the actively-maintained crates that fill the gap are
+/// avoided here (see the project's dependency policy). On Windows the check
+/// therefore relies on path resolution — which `canonicalize` still uses to
+/// resolve symlinks and junctions, so a symlinked output is caught — but a
+/// *hard-linked* output (distinct path, no symlink to resolve) is not detected,
+/// so writing it could truncate the source. Closing that would take a Win32
+/// `GetFileInformationByHandle` call via a fresh, maintained binding; tracked
+/// in <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
 fn same_file(a: &Path, b: &Path) -> bool {
+    if let (Ok(ma), Ok(mb)) = (fs::metadata(a), fs::metadata(b)) {
+        if same_inode(&ma, &mb) {
+            return true;
+        }
+    }
+
+    if let (Some(a), Some(b)) = (resolve_for_compare(a), resolve_for_compare(b)) {
+        return a == b;
+    }
+
     match (std::path::absolute(a), std::path::absolute(b)) {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
+}
+
+/// Whether two metadata handles refer to the same underlying file (same device
+/// and inode). On Unix this catches hard links and resolved symlinks; on other
+/// platforms std exposes no inode, so [`same_file`] relies on its path
+/// comparison instead.
+#[cfg(unix)]
+fn same_inode(a: &fs::Metadata, b: &fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+
+    a.dev() == b.dev() && a.ino() == b.ino()
+}
+
+#[cfg(not(unix))]
+fn same_inode(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
+    false
+}
+
+/// Resolves `path` to a canonical identity suitable for comparing whether two
+/// paths name the same file, even when the file does not exist yet.
+///
+/// An existing path is canonicalized outright, following a symlink to its
+/// target. A path that does not exist is resolved by canonicalizing its parent
+/// directory (so parent-directory symlinks are still accounted for) and
+/// re-attaching the file name; a bare file name resolves against the current
+/// directory. Returns `None` when neither the path nor its parent can be
+/// resolved — an unresolvable output cannot alias an existing input, so callers
+/// treat that as "not the same file".
+fn resolve_for_compare(path: &Path) -> Option<PathBuf> {
+    if let Ok(canonical) = path.canonicalize() {
+        return Some(canonical);
+    }
+
+    let name = path.file_name()?;
+    let parent = path.parent().unwrap_or(Path::new(""));
+    let base = if parent.as_os_str().is_empty() {
+        std::env::current_dir().ok()?
+    } else {
+        parent.canonicalize().ok()?
+    };
+    Some(base.join(name))
 }
 
 /// The directory to root companion-file writes at for an output file `path`:
@@ -661,10 +783,36 @@ fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
         Some(path) if path.as_os_str() == "-" => OutputTarget::Stdout,
         Some(path) => OutputTarget::File(resolve_in_dir(dir, path)),
         None => match input {
-            Some(input) => OutputTarget::File(derive_output_path(input, dir)),
+            Some(input) => OutputTarget::File(derive_output_path(input, dir, &output_suffix(cli))),
             None => OutputTarget::Stdout,
         },
     }
+}
+
+/// The file-name suffix `adoc` derives a default output name with, honoring an
+/// `-a outfilesuffix=…` override the way Asciidoctor does (its derived output
+/// name uses the `outfilesuffix` attribute). Defaults to `.html`; when the same
+/// attribute is assigned more than once, the last value wins.
+///
+/// Only a value assignment (`outfilesuffix=.htm`) changes the suffix; a bare
+/// set or an unset leaves the default, since neither yields a usable extension.
+/// The parsing mirrors [`has_explicit_docdir`]: a trailing `@` soft-default
+/// marker is stripped, the key is everything before the first `=`, a leading or
+/// trailing `!` marks an unset, and the name is matched case-insensitively.
+fn output_suffix(cli: &Cli) -> String {
+    let mut suffix = String::from(".html");
+    for spec in &cli.attribute {
+        let body = spec.strip_suffix('@').unwrap_or(spec);
+        if let Some((key, value)) = body.split_once('=') {
+            if !key.starts_with('!')
+                && !key.ends_with('!')
+                && key.eq_ignore_ascii_case("outfilesuffix")
+            {
+                suffix = value.to_string();
+            }
+        }
+    }
+    suffix
 }
 
 /// Resolves an explicit `-o` output `file` against the `-D` destination `dir`:
@@ -679,11 +827,15 @@ fn resolve_in_dir(dir: Option<&Path>, file: &Path) -> PathBuf {
 }
 
 /// Derives the default output path for `input` by swapping its extension for
-/// `.html`, matching how `asciidoctor` names its output file. With a `-D`
-/// destination `dir`, the derived name is placed in that directory; otherwise
-/// it is written alongside the input.
-fn derive_output_path(input: &Path, dir: Option<&Path>) -> PathBuf {
-    let derived = input.with_extension("html");
+/// `suffix` (`.html` by default, or an `-a outfilesuffix=…` override — see
+/// [`output_suffix`]), matching how `asciidoctor` names its output file. With a
+/// `-D` destination `dir`, the derived name is placed in that directory;
+/// otherwise it is written alongside the input.
+fn derive_output_path(input: &Path, dir: Option<&Path>, suffix: &str) -> PathBuf {
+    // `outfilesuffix` carries the leading dot (`.htm`), while `with_extension`
+    // wants the extension without it.
+    let extension = suffix.strip_prefix('.').unwrap_or(suffix);
+    let derived = input.with_extension(extension);
     match (dir, derived.file_name()) {
         (Some(dir), Some(name)) => dir.join(name),
         _ => derived,
