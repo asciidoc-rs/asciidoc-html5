@@ -14,3 +14,7 @@ version.workspace = true
 asciidoc-html5 = { path = "../html5", version = "=0.1.2" }
 clap = { version = "4", features = ["derive"] }
 glob = "0.3"
+# Cross-platform "are these two paths the same file" — OS file identity
+# ((device, inode) on Unix, (volume serial, file index) on Windows), used by the
+# input/output collision guard to catch hard-linked aliases on every platform.
+same-file = "1"

@@ -446,23 +446,25 @@ impl AssetWriter for OutputGuard {
 
 /// Whether `a` and `b` name the same file on disk.
 ///
-/// When both paths exist, compares their file identity — device and inode — so
-/// two entries pointing at the same underlying file are recognized even under
-/// different path spellings, including a hard link (which shares an inode but
-/// has no common path) and a symlink (whose target is stat'd). Writing through
-/// either would replace that shared file's contents, so an output aliasing an
-/// input this way must be refused.
+/// When both paths exist, compares their OS file identity — `(device, inode)`
+/// on Unix, `(volume serial number, file index)` on Windows, via the
+/// `same-file` crate — so two entries pointing at the same underlying file are
+/// recognized even under different path spellings, including a hard link (which
+/// shares that identity but has no common path) and a symlink (whose target is
+/// opened). Writing through either would replace that shared file's contents,
+/// so an output aliasing an input this way must be refused.
 ///
 /// For a path that does not exist yet — a derived output not written, or one
-/// reached through a parent-directory symlink — there is no inode to compare,
-/// so it falls back to comparing resolved paths (see [`resolve_for_compare`]),
-/// and finally to the plain absolute comparison, so the check still works
-/// before either file exists.
+/// reached through a parent-directory symlink — there is no file to open, so it
+/// falls back to comparing resolved paths (see [`resolve_for_compare`]), and
+/// finally to the plain absolute comparison, so the check still works before
+/// either file exists.
 fn same_file(a: &Path, b: &Path) -> bool {
-    if let (Ok(ma), Ok(mb)) = (fs::metadata(a), fs::metadata(b)) {
-        if same_inode(&ma, &mb) {
-            return true;
-        }
+    // `is_same_file` errors when either path cannot be opened (e.g. it does not
+    // exist yet), so only a definite `Ok(true)` short-circuits; `Ok(false)` and
+    // any error fall through to the path-based comparison.
+    if let Ok(true) = same_file::is_same_file(a, b) {
+        return true;
     }
 
     if let (Some(a), Some(b)) = (resolve_for_compare(a), resolve_for_compare(b)) {
@@ -473,22 +475,6 @@ fn same_file(a: &Path, b: &Path) -> bool {
         (Ok(a), Ok(b)) => a == b,
         _ => false,
     }
-}
-
-/// Whether two metadata handles refer to the same underlying file (same device
-/// and inode). On Unix this catches hard links and resolved symlinks; on other
-/// platforms std exposes no inode, so [`same_file`] relies on its path
-/// comparison instead.
-#[cfg(unix)]
-fn same_inode(a: &fs::Metadata, b: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt as _;
-
-    a.dev() == b.dev() && a.ino() == b.ino()
-}
-
-#[cfg(not(unix))]
-fn same_inode(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
-    false
 }
 
 /// Resolves `path` to a canonical identity suitable for comparing whether two

@@ -9,6 +9,7 @@ dependencies = [
  "asciidoc-html5",
  "clap",
  "glob",
+ "same-file",
 ]
 
 [[package]]
