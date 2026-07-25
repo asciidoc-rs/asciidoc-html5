@@ -146,8 +146,14 @@ fn run_steps<'a>(
     for step in steps {
         let mut next: Vec<&VirtualNode> = Vec::new();
         for &node in &context {
-            let mut matched: Vec<&VirtualNode> = match step.axis {
-                Axis::Child => node.children.iter().filter(|c| step.matches(c)).collect(),
+            // Collect the nodes on the axis that satisfy only the *node test*
+            // (the name/`text()` test) — not the value predicates yet.
+            let candidates: Vec<&VirtualNode> = match step.axis {
+                Axis::Child => node
+                    .children
+                    .iter()
+                    .filter(|c| step.name_matches(c))
+                    .collect(),
                 Axis::Descendant => {
                     let mut acc = Vec::new();
                     collect_descendants(node, step, &mut acc);
@@ -155,34 +161,40 @@ fn run_steps<'a>(
                 }
                 Axis::FollowingSibling => following_siblings(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::PrecedingSibling => preceding_siblings(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::Following => following(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::Preceding => preceding(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
             };
 
-            // A positional predicate selects the Nth match within this context
-            // node (1-indexed), matching XPath's per-context semantics.
-            if let Some(n) = step.index {
-                matched = matched
+            // XPath applies the predicates left to right. The suite only ever
+            // writes the positional predicate first (`th[2][text()="…"]`), so
+            // select the Nth node-test match within this context (1-indexed)
+            // and then apply the value predicates to what survives.
+            let indexed: Vec<&VirtualNode> = if let Some(n) = step.index {
+                candidates
                     .into_iter()
                     .nth(n.wrapping_sub(1))
                     .into_iter()
-                    .collect();
-            }
+                    .collect()
+            } else {
+                candidates
+            };
 
-            for m in matched {
-                push_unique(&mut next, m);
+            for m in indexed {
+                if step.preds.iter().all(|p| p.matches(m)) {
+                    push_unique(&mut next, m);
+                }
             }
         }
         context = next;
@@ -191,11 +203,12 @@ fn run_steps<'a>(
     context
 }
 
-/// Collects every descendant of `node` (excluding `node` itself) that matches
-/// `step`, in document order.
+/// Collects every descendant of `node` (excluding `node` itself) that satisfies
+/// `step`'s node test, in document order. Value predicates and the positional
+/// index are applied by the caller, after this name-only gather.
 fn collect_descendants<'a>(node: &'a VirtualNode, step: &Step, acc: &mut Vec<&'a VirtualNode>) {
     for child in &node.children {
-        if step.matches(child) {
+        if step.name_matches(child) {
             acc.push(child);
         }
         collect_descendants(child, step, acc);
@@ -406,18 +419,20 @@ struct Step {
 }
 
 impl Step {
-    fn matches(&self, node: &VirtualNode) -> bool {
+    /// Whether `node` satisfies this step's *node test* (name / `text()`)
+    /// alone, ignoring its value predicates and positional index.
+    /// Positional selection applies to the node-test matches, so the two
+    /// are kept separate.
+    fn name_matches(&self, node: &VirtualNode) -> bool {
         // A `#text` node is character data, not an element: only an explicit
         // `text()` node test addresses it, and `text()` addresses nothing else.
         // (`#root` is the synthetic top and, like `#text`, never satisfies an
         // element node test.)
-        let name_ok = match &self.name {
+        match &self.name {
             NameTest::Any => !node.tag.starts_with('#'),
             NameTest::Named(tag) => &node.tag == tag,
             NameTest::Text => node.tag == "#text",
-        };
-
-        name_ok && self.preds.iter().all(|p| p.matches(node))
+        }
     }
 }
 

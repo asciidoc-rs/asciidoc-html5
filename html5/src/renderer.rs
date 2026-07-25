@@ -28,11 +28,13 @@
 
 use asciidoc_parser::{
     blocks::{
-        AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel,
-        FindBlocks, IsBlock, QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
+        AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
+        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, QuoteBlock, QuoteType,
+        SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell,
+        TableCellContent, TableColumn, TableRow, VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
-    Document, SafeMode,
+    Document, HasSpan, SafeMode,
 };
 
 use crate::html::{class_attribute, escape_attribute, id_attribute};
@@ -71,6 +73,13 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 ///   paragraph is dropped rather than rendered as an empty `<p></p>`.
 fn renders_nothing(block: &Block<'_>) -> bool {
     if block.resolved_context().as_ref() == "comment" || block.declared_style() == Some("comment") {
+        return true;
+    }
+
+    // A document-attribute entry (`:name: value`) that survives into the block
+    // stream — as happens inside an AsciiDoc table cell's nested document — sets
+    // an attribute and renders nothing, matching Asciidoctor.
+    if block.resolved_context().as_ref() == "attribute" {
         return true;
     }
 
@@ -722,6 +731,7 @@ impl Renderer<'_> {
             },
             Block::Quote(quote) => self.quote(block, quote),
             Block::Admonition(admonition) => self.admonition(block, admonition),
+            Block::Table(table) => self.table(block, table),
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -912,6 +922,207 @@ impl Renderer<'_> {
         self.line("</div>");
     }
 
+    /// A table: `<table class="tableblock …">` wrapping an optional
+    /// `<caption>`, a `<colgroup>`, and `<thead>`/`<tbody>`/`<tfoot>` sections,
+    /// mirroring Asciidoctor's `html5` `convert_table`.
+    fn table<'src>(&mut self, block: &'src Block<'src>, table: &'src TableBlock<'src>) {
+        // The class list follows Asciidoctor's order exactly: `tableblock`, the
+        // frame and grid classes, an optional stripes class, then the
+        // width-driven class (`fit-content`/`stretch`) or an inline width style,
+        // then an optional float class, then the block's roles.
+        let frame = match table.frame() {
+            Frame::All => "all",
+            Frame::Ends => "ends",
+            Frame::Sides => "sides",
+            Frame::None => "none",
+        };
+        let grid = match table.grid() {
+            Grid::All => "all",
+            Grid::Rows => "rows",
+            Grid::Cols => "cols",
+            Grid::None => "none",
+        };
+        let mut classes = format!("tableblock frame-{frame} grid-{grid}");
+
+        if let Some(stripes) = table_stripes_class(table) {
+            classes.push(' ');
+            classes.push_str(&stripes);
+        }
+
+        // `autowidth` sizes the table (and columns) to content; `fit-content`
+        // marks that in HTML. Otherwise a table at the full content width gets
+        // `stretch`, and any other width becomes an inline `style`.
+        let autowidth = table.is_autowidth();
+        let has_width = table.width().is_some();
+        let mut style_attr = String::new();
+        if autowidth && !has_width {
+            classes.push_str(" fit-content");
+        } else {
+            let tablewidth = table.width().unwrap_or(100);
+            if tablewidth == 100 {
+                classes.push_str(" stretch");
+            } else {
+                style_attr = format!(" style=\"width: {tablewidth}%;\"");
+            }
+        }
+
+        if let Some(float) = table
+            .attrlist()
+            .and_then(|a| a.named_attribute("float"))
+            .map(|attr| attr.value())
+        {
+            classes.push(' ');
+            classes.push_str(float);
+        }
+
+        for role in block.roles() {
+            classes.push(' ');
+            classes.push_str(role);
+        }
+
+        self.line(&format!(
+            "<table{}{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&classes, &[]),
+            style_attr
+        ));
+
+        // A titled table is captioned: the ready-made caption prefix
+        // (e.g. `"Table 1. "`) sits ahead of the title text.
+        if let Some(title) = block.title() {
+            let caption = block.caption().unwrap_or_default();
+            self.line(&format!(
+                "<caption class=\"title\">{caption}{title}</caption>"
+            ));
+        }
+
+        // Asciidoctor emits the colgroup and rows only when the table has at
+        // least one row; a table whose rows were all dropped (e.g. an overrun)
+        // is just an empty `<table></table>`.
+        let rowcount = table.header_row().is_some() as usize
+            + table.body_rows().len()
+            + table.footer_row().is_some() as usize;
+        if rowcount > 0 {
+            self.colgroup(table, autowidth);
+
+            if let Some(header) = table.header_row() {
+                self.line("<thead>");
+                self.table_row(header, TableSection::Head);
+                self.line("</thead>");
+            }
+            if !table.body_rows().is_empty() {
+                self.line("<tbody>");
+                for row in table.body_rows() {
+                    self.table_row(row, TableSection::Body);
+                }
+                self.line("</tbody>");
+            }
+            if let Some(footer) = table.footer_row() {
+                self.line("<tfoot>");
+                self.table_row(footer, TableSection::Foot);
+                self.line("</tfoot>");
+            }
+        }
+
+        self.line("</table>");
+    }
+
+    /// Emits the `<colgroup>` of `<col>` elements. An autowidth table (or an
+    /// autowidth column) emits a bare `<col>`; every other column carries its
+    /// computed percentage width as an inline style.
+    fn colgroup(&mut self, table: &TableBlock<'_>, autowidth: bool) {
+        self.line("<colgroup>");
+        if autowidth {
+            for _ in table.columns() {
+                self.line("<col>");
+            }
+        } else {
+            let pcwidths = column_pcwidths(table.columns());
+            for (col, pcwidth) in table.columns().iter().zip(pcwidths) {
+                if col.is_autowidth() {
+                    self.line("<col>");
+                } else {
+                    self.line(&format!("<col style=\"width: {pcwidth}%;\">"));
+                }
+            }
+        }
+        self.line("</colgroup>");
+    }
+
+    /// Emits one `<tr>` and its cells, tagging the section so header cells (and
+    /// the first row of a header section) render as `<th>`.
+    fn table_row<'src>(&mut self, row: &'src TableRow<'src>, section: TableSection) {
+        self.line("<tr>");
+        for cell in row.cells() {
+            self.table_cell(cell, section);
+        }
+        self.line("</tr>");
+    }
+
+    /// Emits one table cell. The tag is `<th>` for a header-section cell or a
+    /// cell in a `h`-styled column, `<td>` otherwise; the content is rendered
+    /// per the cell's [style](ColumnStyle).
+    fn table_cell<'src>(&mut self, cell: &'src TableCell<'src>, section: TableSection) {
+        let is_head = section == TableSection::Head;
+
+        let content = if is_head {
+            // A header cell is always plain inline text (`cell.text`), never
+            // paragraph-split or style-wrapped.
+            match cell.content() {
+                TableCellContent::Simple(content) => content.rendered().to_string(),
+                TableCellContent::AsciiDoc(_) => String::new(),
+            }
+        } else {
+            match cell.style() {
+                ColumnStyle::AsciiDoc => match cell.content() {
+                    TableCellContent::AsciiDoc(ad) => format!(
+                        "<div class=\"content\">{}</div>",
+                        render_cell_document(ad.blocks(), ad.title(), ad.is_inline())
+                    ),
+                    TableCellContent::Simple(content) => content.rendered().to_string(),
+                },
+                ColumnStyle::Literal => {
+                    let text = match cell.content() {
+                        TableCellContent::Simple(content) => content.rendered(),
+                        TableCellContent::AsciiDoc(_) => "",
+                    };
+                    format!("<div class=\"literal\"><pre>{text}</pre></div>")
+                }
+                _ => cell_paragraphs(cell),
+            }
+        };
+
+        let tag = if is_head || cell.style() == ColumnStyle::Header {
+            "th"
+        } else {
+            "td"
+        };
+        let h_align = match cell.h_align() {
+            HorizontalAlignment::Left => "left",
+            HorizontalAlignment::Center => "center",
+            HorizontalAlignment::Right => "right",
+        };
+        let v_align = match cell.v_align() {
+            VerticalAlignment::Top => "top",
+            VerticalAlignment::Middle => "middle",
+            VerticalAlignment::Bottom => "bottom",
+        };
+        let colspan = if cell.colspan() > 1 {
+            format!(" colspan=\"{}\"", cell.colspan())
+        } else {
+            String::new()
+        };
+        let rowspan = if cell.rowspan() > 1 {
+            format!(" rowspan=\"{}\"", cell.rowspan())
+        } else {
+            String::new()
+        };
+
+        self.line(&format!(
+            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}>{content}</{tag}>"
+        ));
+    }
+
     /// Emits the inner content shared by wrapper blocks (open, quote,
     /// admonition): a compound block recurses over its nested blocks, while a
     /// simple block emits its rendered content on its own line, unwrapped (no
@@ -1026,6 +1237,260 @@ impl Renderer<'_> {
         self.line(&format!(
             "<!-- asciidoc-html5: unsupported block context '{context}' -->"
         ));
+    }
+}
+
+/// Which horizontal band of a table a row belongs to. The head band renders its
+/// cells as `<th>` and never paragraph-wraps or style-wraps them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TableSection {
+    Head,
+    Body,
+    Foot,
+}
+
+/// The `stripes-<value>` class for a table, or `None` when no striping applies.
+///
+/// Asciidoctor emits the class whenever the resolved `stripes` value is truthy
+/// — an explicit `stripes` attribute on the table (even `stripes=none`) or a
+/// `table-stripes` document default. The parser folds the document default into
+/// [`TableBlock::stripes`], so a non-`None` value means striping is on; an
+/// explicit attribute is honored on top of that so `[stripes=none]` still emits
+/// `stripes-none`.
+fn table_stripes_class(table: &TableBlock<'_>) -> Option<String> {
+    let has_attr = table
+        .attrlist()
+        .and_then(|a| a.named_attribute("stripes"))
+        .is_some();
+    let stripes = table.stripes();
+    if !has_attr && stripes == Stripes::None {
+        return None;
+    }
+    let value = match stripes {
+        Stripes::None => "none",
+        Stripes::Even => "even",
+        Stripes::Odd => "odd",
+        Stripes::All => "all",
+        Stripes::Hover => "hover",
+    };
+    Some(format!("stripes-{value}"))
+}
+
+/// The formatted percentage-width string for every column, mirroring
+/// Asciidoctor's `Table#assign_column_widths` (round to 4 decimal places,
+/// donating any balance to the final column).
+///
+/// A `~` autowidth column contributes no proportional width; the remaining
+/// 100% is split evenly across the autowidth columns. The strings are used only
+/// for non-autowidth columns' `<col style>`, but every column is computed so
+/// the balance donation lands on the correct final column.
+fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
+    let n = columns.len();
+    if n == 0 {
+        return vec![];
+    }
+
+    // Autowidth (`~`) columns carry no proportional width; `width_base` is the
+    // sum of the remaining columns' widths (matching Asciidoctor, which excludes
+    // the `-1` autowidth widths from the base).
+    let autowidth_count = columns.iter().filter(|c| c.is_autowidth()).count();
+    let width_base: f64 = columns
+        .iter()
+        .filter(|c| !c.is_autowidth())
+        .map(|c| c.width() as f64)
+        .sum();
+
+    // Asciidoctor treats a base of 0 with no autowidth columns as "no base" and
+    // divides the width equally; every other case resolves a positive base.
+    let has_base = width_base > 0.0 || autowidth_count > 0;
+
+    let mut pcwidths = vec![0.0_f64; n];
+    let mut total = 0.0_f64;
+    let mut last = 0.0_f64;
+
+    if has_base {
+        // The autowidth columns absorb whatever the fixed columns leave of the
+        // 100%, split evenly; the base then becomes the full 100.
+        let mut base = width_base;
+        let mut autowidth_value = 0.0;
+        if autowidth_count > 0 && width_base <= 100.0 {
+            autowidth_value = truncate4((100.0 - width_base) / autowidth_count as f64);
+            base = 100.0;
+        }
+
+        for (i, col) in columns.iter().enumerate() {
+            let width = if col.is_autowidth() {
+                autowidth_value
+            } else {
+                col.width() as f64
+            };
+            let pc = truncate4(width * 100.0 / base);
+            pcwidths[i] = pc;
+            total += pc;
+            last = pc;
+        }
+    } else {
+        let pc = truncate4(100.0 / n as f64);
+        for slot in pcwidths.iter_mut() {
+            *slot = pc;
+            total += pc;
+        }
+        last = pc;
+    }
+
+    // Any rounding balance is donated to the final column (half-up rounding).
+    if (total - 100.0).abs() > f64::EPSILON {
+        pcwidths[n - 1] = round4(100.0 - total + last);
+    }
+
+    pcwidths.iter().map(|pc| format_pcwidth(*pc)).collect()
+}
+
+/// Truncates `value` toward zero to four decimal places (Ruby's
+/// `Float#truncate 4`).
+fn truncate4(value: f64) -> f64 {
+    (value * 10000.0).trunc() / 10000.0
+}
+
+/// Rounds `value` half away from zero to four decimal places (Ruby's
+/// `Float#round 4`).
+fn round4(value: f64) -> f64 {
+    (value * 10000.0).round() / 10000.0
+}
+
+/// Formats a percentage width the way Ruby prints it: a whole number drops its
+/// decimals (`50`), otherwise up to four decimals with trailing zeros trimmed
+/// (`33.3333`, `17.647`).
+fn format_pcwidth(value: f64) -> String {
+    let scaled = (value * 10000.0).round() as i64;
+    let whole = scaled / 10000;
+    let frac = (scaled % 10000).abs();
+    if frac == 0 {
+        return whole.to_string();
+    }
+    let frac = format!("{frac:04}");
+    let frac = frac.trim_end_matches('0');
+    format!("{whole}.{frac}")
+}
+
+/// Renders the paragraph content of a non-header, non-literal, non-AsciiDoc
+/// cell, mirroring Asciidoctor's `Table::Cell#content`.
+///
+/// The cell text is split into paragraphs on blank lines — but only when the
+/// *raw* cell text contains a blank line, so a line reduced to blank by a
+/// substitution (e.g. `{blank}`) does not split the paragraph. Each paragraph
+/// is wrapped in `<p class="tableblock">`, and a styled column additionally
+/// wraps the text in the style's inline element (`<em>`/`<strong>`/`<code>`).
+/// An empty cell renders no `<p>` at all.
+fn cell_paragraphs(cell: &TableCell<'_>) -> String {
+    let content = match cell.content() {
+        TableCellContent::Simple(content) => content.rendered(),
+        TableCellContent::AsciiDoc(_) => return String::new(),
+    };
+
+    // The style's inline wrapper (`e`/`s`/`m`); the default and header styles
+    // add none.
+    let (open, close) = match cell.style() {
+        ColumnStyle::Emphasis => ("<em>", "</em>"),
+        ColumnStyle::Strong => ("<strong>", "</strong>"),
+        ColumnStyle::Monospace => ("<code>", "</code>"),
+        _ => ("", ""),
+    };
+    let wrap = |para: &str| {
+        if open.is_empty() {
+            para.to_string()
+        } else {
+            format!("{open}{para}{close}")
+        }
+    };
+
+    // The split decision keys off the raw (untrimmed, but stripped) cell source,
+    // matching Asciidoctor's `@text.include? DOUBLE_LF`.
+    let raw = cell.span().data().trim();
+    let paragraphs: Vec<String> = if raw.contains("\n\n") {
+        split_blank_lines(content).map(wrap).collect()
+    } else if content.is_empty() {
+        vec![]
+    } else {
+        vec![wrap(content)]
+    };
+
+    if paragraphs.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p class=\"tableblock\">{}</p>",
+            paragraphs.join("</p>\n<p class=\"tableblock\">")
+        )
+    }
+}
+
+/// Splits `text` on runs of two or more newlines (Asciidoctor's
+/// `BlankLineRx = /\n{2,}/`), dropping any trailing empty segment the way
+/// Ruby's `String#split` does.
+fn split_blank_lines(text: &str) -> impl Iterator<Item = &str> {
+    let mut parts: Vec<&str> = vec![];
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j] == b'\n' {
+                j += 1;
+            }
+            if j - i >= 2 {
+                parts.push(&text[start..i]);
+                start = j;
+                i = j;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    parts.push(&text[start..]);
+
+    // Ruby's default split trims trailing empty strings.
+    while parts.last() == Some(&"") {
+        parts.pop();
+    }
+    parts.into_iter()
+}
+
+/// Renders the nested document of an AsciiDoc (`a`) table cell to a body-only
+/// HTML fragment (no trailing newline), the way Asciidoctor's
+/// `cell.content` calls `@inner_document.convert`.
+///
+/// An `inline`-doctype cell renders just the inline content of its first block.
+/// Otherwise the cell's blocks are rendered as embedded output, preceded by the
+/// nested-document `<h1>` when the cell's title is shown.
+fn render_cell_document<'s>(blocks: &'s [Block<'s>], title: Option<&str>, inline: bool) -> String {
+    if inline {
+        // The inline doctype renders the first block's inline content; skip any
+        // leading attribute-entry blocks (which carry no rendered content) so the
+        // real first paragraph is what shows.
+        return blocks
+            .iter()
+            .find_map(|block| block.rendered_content())
+            .unwrap_or_default()
+            .to_string();
+    }
+
+    let mut renderer = Renderer {
+        out: String::new(),
+        custom_stylesheet: None,
+        standalone: false,
+    };
+    if let Some(title) = title {
+        renderer.line(&format!("<h1>{title}</h1>"));
+    }
+    renderer.blocks(blocks.iter());
+
+    // `convert` joins its lines with no trailing newline; drop the one the
+    // line-oriented renderer left behind.
+    match renderer.out.strip_suffix('\n') {
+        Some(trimmed) => trimmed.to_string(),
+        None => renderer.out,
     }
 }
 
