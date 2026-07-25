@@ -9,16 +9,21 @@
 //! counterpart to `convert_string`), or `convert_with(..doctype("inline")..)`
 //! (the counterpart to `convert_inline_string`).
 //!
+//! The UTF-8 encoding-from-included-file test *is* verified: `include::`
+//! resolution is this crate's own filesystem layer
+//! ([`FsIncludeFileHandler`](crate::include_handler)), so it is driven for real
+//! against the vendored `fixtures/encoding.adoc`.
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy:
 //!
-//! * The UTF-8 *encoding* tests load the `:encoding` sample document (fixture
-//!   not vendored) and exercise the DocBook backend, the `PreprocessorReader` /
-//!   `Parser.next_block` Ruby APIs, and `include::` tag filtering. The HTML
-//!   document/embedded pair additionally depends on list rendering (the sample
-//!   ends in a bulleted list, so its fourth `<p>` comes from a list item),
-//!   which this crate does not yet emit — revisit those two once lists land
-//!   (#120). Encoding itself is not a concern here — this crate converts `&str`
-//!   that is already valid UTF-8.
+//! * The UTF-8 *encoding* document/embedded pair converts the whole `:encoding`
+//!   sample. The sample ends in a bulleted list, so its fourth `<p>` comes from
+//!   a list item, which this crate does not yet emit — revisit those two once
+//!   lists land (#120). Encoding itself is not a concern here — this crate
+//!   converts `&str` that is already valid UTF-8. The matching DocBook-backend
+//!   tests are out of scope, and the `arbitrary block` test reaches for the
+//!   `PreprocessorReader` / `Parser.next_block` Ruby APIs (its verse-`<pre>`
+//!   behavior is already covered by the paragraphs suite).
 //! * *Compat mode* is not implemented by `asciidoc-parser`, so tests that carry
 //!   both a compat-mode and a modern assertion are ported as `verifies!` with
 //!   only the modern assertion driven in Rust; the compat-mode assertion
@@ -31,10 +36,15 @@
 //!   non-normative. The negative case *is* verified, since it asserts no
 //!   thematic break either way.
 
+use std::path::Path;
+
 use crate::{
     convert, convert_with,
-    tests::{assert_html::assert_xpath, sdd::*},
-    Options,
+    tests::{
+        assert_html::{assert_css, assert_xpath},
+        sdd::*,
+    },
+    Options, SafeMode,
 };
 
 track_file!("ref/asciidoctor/test/text_test.rb");
@@ -48,11 +58,10 @@ context "Text" do
 "#
 );
 
-// UTF-8 encoding test: loads the `:encoding` sample document (fixture not
-// vendored) and converts it standalone. The sample ends in a bulleted list, so
-// the fourth `<p>` the test counts comes from a list item, which this crate
-// does not yet render (light this up once lists land — #120); encoding itself
-// is not a parser concern here.
+// UTF-8 encoding test: converts the whole `:encoding` sample standalone. The
+// sample ends in a bulleted list, so the fourth `<p>` the test counts comes
+// from a list item, which this crate does not yet render (light this up once
+// lists land — #120); encoding itself is not a parser concern here.
 non_normative!(
     r#"
   test "proper encoding to handle utf8 characters in document using html backend" do
@@ -100,10 +109,10 @@ non_normative!(
 "#
 );
 
-// Reads the `:encoding` sample document (fixture not vendored) through the
-// `PreprocessorReader` and `Parser.next_block` Ruby APIs, which this crate does
-// not expose. A verse block rendering a `<pre>` from UTF-8 content is already
-// covered by the paragraphs suite.
+// Reads the `:encoding` sample through the `PreprocessorReader` and
+// `Parser.next_block` Ruby APIs, which this crate does not expose. A verse
+// block rendering a `<pre>` from UTF-8 content is already covered by the
+// paragraphs suite.
 non_normative!(
     r#"
   # NOTE this test ensures we have the encoding line on block templates too
@@ -120,10 +129,20 @@ non_normative!(
 "#
 );
 
-// Exercises `include::` tag filtering of a fixture file (not vendored) via the
-// `PreprocessorReader` Ruby API. Encoding is not a parser concern here.
-non_normative!(
-    r#"
+// Unlike the parser crate — which delegates `include::` resolution and marks
+// this non-normative — filesystem access lives in *this* crate, in
+// [`FsIncludeFileHandler`](crate::include_handler). So this test is driven for
+// real: `convert_with` with a `base_dir` installs the include handler even for
+// string input, and the `tags=romé` selector (a UTF-8 tag name) filters the
+// vendored `fixtures/encoding.adoc` down to its single tagged paragraph. The
+// Ruby `empty_safe_document base_dir: testdir` maps to `SafeMode::Safe`
+// anchored at `ref/asciidoctor/test`; the `PreprocessorReader` / `next_block`
+// scaffolding is Ruby plumbing for converting one block, which the whole-string
+// `convert` subsumes here (the include expands to exactly one paragraph).
+#[test]
+fn proper_encoding_to_handle_utf8_characters_from_included_file() {
+    verifies!(
+        r#"
   test 'proper encoding to handle utf8 characters from included file' do
     input = 'include::fixtures/encoding.adoc[tags=romé]'
     doc = empty_safe_document base_dir: testdir
@@ -134,7 +153,17 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `testdir` is Asciidoctor's `ref/asciidoctor/test`; this crate resolves the
+    // include relative to it under the `safe` jail.
+    let base_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ref/asciidoctor/test");
+    let html = convert_with(
+        "include::fixtures/encoding.adoc[tags=romé]",
+        &Options::new().safe_mode(SafeMode::Safe).base_dir(base_dir),
+    );
+    assert_css(&html, ".paragraph", 1);
+}
 
 #[test]
 fn escaped_text_markup() {
