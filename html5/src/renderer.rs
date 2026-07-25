@@ -354,6 +354,15 @@ fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
     result
 }
 
+/// The largest `indent`/`source-indent`/`tabsize` this crate will act on. The
+/// values come from document-supplied attributes, so an absurd one (e.g.
+/// `:tabsize: 999999999999`) would otherwise drive an unbounded space
+/// allocation and abort the process on untrusted input. No real verbatim block
+/// needs anywhere near this much indentation, so clamping here is a deliberate
+/// divergence from Asciidoctor (which bounds neither), guarding availability
+/// while leaving every realistic document byte-identical.
+const MAX_VERBATIM_INDENT: i64 = 1000;
+
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
 /// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
 /// and a tab is present), then — unless `indent_size` is negative — removes the
@@ -363,6 +372,12 @@ fn adjust_indentation(lines: &mut [String], indent_size: i64, tab_size: i64) {
     if lines.is_empty() {
         return;
     }
+
+    // Clamp the document-supplied sizes so they cannot drive an unbounded
+    // allocation (see [`MAX_VERBATIM_INDENT`]). `min` preserves a negative
+    // `indent_size`, which is the "leave indentation as-is" sentinel.
+    let indent_size = indent_size.min(MAX_VERBATIM_INDENT);
+    let tab_size = tab_size.min(MAX_VERBATIM_INDENT);
 
     if tab_size > 0 && lines.iter().any(|line| line.contains('\t')) {
         let full_tab_space = " ".repeat(tab_size as usize);
@@ -1763,6 +1778,36 @@ mod tests {
         let mut lines: Vec<String> = Vec::new();
         super::adjust_indentation(&mut lines, 0, 4);
         assert!(lines.is_empty());
+    }
+
+    /// Counts the leading spaces of the sole `<pre>`'s content.
+    fn pre_leading_spaces(html: &str) -> usize {
+        let start = html.find("<pre>").expect("a <pre>") + "<pre>".len();
+        let end = html[start..].find("</pre>").expect("a closing </pre>") + start;
+        html[start..end].chars().take_while(|c| *c == ' ').count()
+    }
+
+    #[test]
+    fn verbatim_clamps_a_pathological_indent() {
+        // A document-supplied `indent` far beyond any real use is clamped so it
+        // cannot drive an unbounded space allocation; rendering still completes
+        // rather than aborting the process. (Would OOM before the clamp.)
+        let html = convert("[indent=\"999999999999\"]\n----\n  x\n----");
+        assert_eq!(
+            pre_leading_spaces(&html),
+            super::MAX_VERBATIM_INDENT as usize
+        );
+    }
+
+    #[test]
+    fn verbatim_clamps_a_pathological_tabsize() {
+        // Likewise for a huge `tabsize`: a single leading tab expands to at most
+        // the clamp, not gigabytes of spaces.
+        let html = convert(":tabsize: 999999999999\n\n----\n\tx\n----");
+        assert_eq!(
+            pre_leading_spaces(&html),
+            super::MAX_VERBATIM_INDENT as usize
+        );
     }
 
     #[test]
