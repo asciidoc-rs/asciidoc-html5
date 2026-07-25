@@ -169,13 +169,14 @@ fn should_parse_options_from_array_passed_as_first_argument_of_constructor() {
     );
 
     // Asciidoctor's `-s` suppresses the header/footer (`standalone == false`).
-    // `adoc`'s primary spelling is `-e`/`--embedded`, and it accepts `-s` as a
-    // compatibility alias, so the Ruby `['-s', file]` array parses directly. Both
-    // short forms select embedded output and record the lone input file.
+    // `adoc`'s primary spelling is `-e`/`--embedded`, and it accepts the legacy
+    // `-s`/`--no-header-footer` as compatibility aliases, so the Ruby
+    // `['-s', file]` array parses directly. Every spelling selects embedded
+    // output and records the lone input file.
     let input_file = "test/fixtures/basic.adoc";
-    for short in ["-s", "-e"] {
-        let cli = Cli::parse_from(["adoc", short, input_file]);
-        assert!(cli.embedded, "{short} should select embedded output");
+    for flag in ["-s", "-e", "--no-header-footer"] {
+        let cli = Cli::parse_from(["adoc", flag, input_file]);
+        assert!(cli.embedded, "{flag} should select embedded output");
         assert_eq!(cli.inputs, vec![PathBuf::from(input_file)]);
     }
 }
@@ -1255,18 +1256,18 @@ fn should_suppress_header_footer_if_specified() {
     );
 
     // The Ruby test iterates `-e` and its legacy alias `-s`; `adoc` accepts both
-    // (`-e`/`--embedded` primary, `-s` as a compatibility alias). Each drops the
-    // `<html>` shell yet, for a titled document with a section, still emits the
-    // preamble wrapper.
-    for short in ["-e", "-s"] {
+    // (`-e`/`--embedded` primary, `-s`/`--no-header-footer` as compatibility
+    // aliases). Each drops the `<html>` shell yet, for a titled document with a
+    // section, still emits the preamble wrapper.
+    for flag in ["-e", "-s", "--no-header-footer"] {
         let output = String::from_utf8(
-            run_stdin(&[short, "-"], "= T\n\nPreamble.\n\n== Section\n\nbody\n")
+            run_stdin(&[flag, "-"], "= T\n\nPreamble.\n\n== Section\n\nbody\n")
                 .expect("adoc converts"),
         )
         .expect("output is UTF-8");
         assert!(
             !output.contains("<html"),
-            "{short} should drop the html shell"
+            "{flag} should drop the html shell"
         );
         assert!(output.contains(r#"id="preamble""#));
     }
