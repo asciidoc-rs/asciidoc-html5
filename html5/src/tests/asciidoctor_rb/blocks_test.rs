@@ -17,8 +17,6 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - the verse escaped-brace subs test (`\{` is not unescaped by
-//!   `asciidoc-parser` yet — asciidoc-parser#962);
 //! - deferred features, each tracked by an issue: verbatim `indent` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>),
 //!   `tabsize` (#111), `nowrap`/`prewrap` (#112), example captions/counters
 //!   (#113), collapsible examples (#114), `listing-caption` (#115), verbatim
@@ -1627,11 +1625,10 @@ mod quote_and_verse_blocks {
         assert_warning(input, 5, |w| matches!(w, WarningType::NoCalloutFound(1)));
     }
 
-    // The `\{` escape is not yet unescaped by `asciidoc-parser` (same pending
-    // parser work as the paragraphs port's verse-subs test); tracked upstream in
-    // <https://github.com/asciidoc-rs/asciidoc-parser/issues/962>.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_perform_normal_subs_on_a_verse_block() {
+        verifies!(
+            r##"
     test 'should perform normal subs on a verse block' do
       input = <<~'EOS'
       [verse]
@@ -1646,7 +1643,13 @@ mod quote_and_verse_blocks {
   end
 
 "##
-    );
+        );
+
+        let output = convert("[verse]\n____\n_GET /groups/link:#group-id[\\{group-id\\}]_\n____\n");
+        assert!(output.contains(
+            r##"<pre class="content"><em>GET /groups/<a href="#group-id">{group-id}</a></em></pre>"##
+        ));
+    }
 }
 
 mod example_blocks {
