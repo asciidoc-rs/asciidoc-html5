@@ -25,7 +25,8 @@
 //! resolve `catalog[:includes]` state, which need an include processed against
 //! a real fixture file (or hand-set catalog state this crate cannot inject).
 //! Where a test also carries a logger assertion this crate has no logger for,
-//! that part is noted.
+//! that part is noted. Every such divergence (DocBook aside) cites the issue
+//! tracking the work to make it compatible (#124–#128).
 
 use crate::{
     convert, convert_document, convert_with, load, load_with,
@@ -2313,7 +2314,7 @@ fn xref_using_angled_bracket_syntax_with_quoted_label() {
 // Compat-mode xref-target handling is an `asciidoc-parser` inline concern
 // this crate does not drive; the parser renders the inter-document form
 // instead (a divergence), and the test also asserts a verbose-logger message
-// this crate has no logger for.
+// this crate has no logger for. Tracked by #124.
 non_normative!(
     r###"
   test 'should not interpret path sans extension in xref with angled bracket syntax in compat mode' do
@@ -2683,7 +2684,7 @@ fn xref_using_angled_bracket_syntax_with_path_and_extension_with_fragment() {
 // Compat-mode xref-target handling is an `asciidoc-parser` inline concern
 // this crate does not drive; the parser renders the inter-document form
 // instead (a divergence), and the test also asserts a verbose-logger message
-// this crate has no logger for.
+// this crate has no logger for. Tracked by #124.
 non_normative!(
     r###"
   test 'xref using macro syntax with path and extension in compat mode' do
@@ -2808,7 +2809,8 @@ fn xref_using_angled_bracket_syntax_with_path_and_custom_relfilesuffix() {
 
 // Manipulates `doc.catalog[:includes]` on the parsed document by hand to
 // simulate an include; this crate cannot inject that catalog state, and the
-// include-aware xref resolution belongs to `asciidoc-parser`.
+// include-aware xref resolution belongs to `asciidoc-parser`. Tracked by
+// #127.
 non_normative!(
     r###"
   test 'xref using angled bracket syntax with path which has been included in this document' do
@@ -2828,7 +2830,8 @@ non_normative!(
 
 // Manipulates `doc.catalog[:includes]` on the parsed document by hand to
 // simulate an include; this crate cannot inject that catalog state, and the
-// include-aware xref resolution belongs to `asciidoc-parser`.
+// include-aware xref resolution belongs to `asciidoc-parser`. Tracked by
+// #127.
 non_normative!(
     r###"
   test 'xref using angled bracket syntax with nested path which has been included in this document' do
@@ -3320,6 +3323,7 @@ fn should_warn_and_create_link_if_verbose_flag_is_set_and_reference_using_notati
 
 // Depends on include processing against test fixtures (`fixturedir`) and
 // `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
+// Tracked by #127.
 non_normative!(
     r###"
   test 'should produce an internal anchor from an inter-document xref to file included into current file' do
@@ -3349,6 +3353,7 @@ non_normative!(
 
 // Depends on include processing against test fixtures (`fixturedir`) and
 // `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
+// Tracked by #127.
 non_normative!(
     r###"
   test 'should produce an internal anchor from an inter-document xref to file included entirely into current file using tags' do
@@ -3375,6 +3380,7 @@ non_normative!(
 
 // Depends on include processing against test fixtures (`fixturedir`) and
 // `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
+// Tracked by #127.
 non_normative!(
     r###"
   test 'should not produce an internal anchor for inter-document xref to file partially included into current file' do
@@ -3404,6 +3410,7 @@ non_normative!(
 
 // Depends on include processing against test fixtures (`fixturedir`) and
 // `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
+// Tracked by #127.
 non_normative!(
     r###"
   test 'should produce an internal anchor for inter-document xref to file included fully and partially' do
@@ -3438,7 +3445,7 @@ non_normative!(
 // parser` matches no such path and renders the inter-document link instead,
 // so the `#`-fragment fallback text is not produced — a divergence. (The
 // `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.)
+// matching, are verified above.) Tracked by #125.
 non_normative!(
     r###"
   test 'should warn and create link if debug mode is enabled, inter-document xref points to current doc, and reference not found' do
@@ -3467,7 +3474,7 @@ non_normative!(
 // parser` matches no such path and renders the inter-document link instead,
 // so the `#`-fragment fallback text is not produced — a divergence. (The
 // `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.)
+// matching, are verified above.) Tracked by #125.
 non_normative!(
     r###"
   test 'should use doctitle as fallback link text if inter-document xref points to current doc and no link text is provided' do
@@ -3483,9 +3490,9 @@ non_normative!(
 "###
 );
 
-// Combines the `docname` self-reference divergence above with an AsciiDoc
-// table cell; this crate does not yet render tables, so the anchor under
-// test is not emitted at all.
+// Combines the `docname` self-reference divergence (#125) with an AsciiDoc
+// table cell; this crate does not yet render tables (#126), so the anchor
+// under test is not emitted at all.
 non_normative!(
     r###"
   test 'should use doctitle of root document as fallback link text for inter-document xref in AsciiDoc table cell that resolves to current doc' do
@@ -3508,7 +3515,7 @@ non_normative!(
 // parser` matches no such path and renders the inter-document link instead,
 // so the `#`-fragment fallback text is not produced — a divergence. (The
 // `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.)
+// matching, are verified above.) Tracked by #125.
 non_normative!(
     r###"
   test 'should use reftext on document as fallback link text if inter-document xref points to current doc and no link text is provided' do
@@ -3554,7 +3561,7 @@ fn should_use_reftext_on_document_as_fallback_link_text_if_xref_points_to_empty_
 // parser` matches no such path and renders the inter-document link instead,
 // so the `#`-fragment fallback text is not produced — a divergence. (The
 // `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.)
+// matching, are verified above.) Tracked by #125.
 non_normative!(
     r###"
   test 'should use fallback link text if inter-document xref points to current doc without header and no link text is provided' do
@@ -3630,6 +3637,7 @@ non_normative!(
 
 // Depends on include processing against test fixtures (`fixturedir`) and
 // `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
+// Tracked by #127.
 non_normative!(
     r###"
   test 'should produce an internal anchor for inter-document xref to file outside of base directory' do
@@ -3843,7 +3851,8 @@ fn should_drop_nested_anchor_in_xreftext() {
 
 // Asciidoctor leaves an xref evaluated during parsing (a forward reference
 // in a section title) unresolved; `asciidoc-parser` resolves it, so this
-// crate emits the link the test asserts is absent — a divergence.
+// crate emits the link the test asserts is absent — a divergence. Tracked by
+// #128.
 non_normative!(
     r###"
   test 'should not resolve forward xref evaluated during parsing' do
@@ -3866,7 +3875,8 @@ non_normative!(
 
 // Asciidoctor leaves an xref evaluated during parsing (a forward reference
 // in a section title) unresolved; `asciidoc-parser` resolves it, so this
-// crate emits the link the test asserts is absent — a divergence.
+// crate emits the link the test asserts is absent — a divergence. Tracked by
+// #128.
 non_normative!(
     r###"
   test 'should not resolve forward natural xref evaluated during parsing' do
