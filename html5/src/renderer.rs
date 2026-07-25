@@ -1065,30 +1065,31 @@ impl Renderer<'_> {
     fn table_cell<'src>(&mut self, cell: &'src TableCell<'src>, section: TableSection) {
         let is_head = section == TableSection::Head;
 
-        let content = if is_head {
-            // A header cell is always plain inline text (`cell.text`), never
-            // paragraph-split or style-wrapped.
-            match cell.content() {
-                TableCellContent::Simple(content) => content.rendered().to_string(),
-                TableCellContent::AsciiDoc(_) => String::new(),
-            }
-        } else {
-            match cell.style() {
-                ColumnStyle::AsciiDoc => match cell.content() {
-                    TableCellContent::AsciiDoc(ad) => format!(
-                        "<div class=\"content\">{}</div>",
-                        render_cell_document(ad.blocks(), ad.title(), ad.is_inline())
-                    ),
-                    TableCellContent::Simple(content) => content.rendered().to_string(),
-                },
-                ColumnStyle::Literal => {
-                    let text = match cell.content() {
-                        TableCellContent::Simple(content) => content.rendered(),
-                        TableCellContent::AsciiDoc(_) => "",
-                    };
-                    format!("<div class=\"literal\"><pre>{text}</pre></div>")
+        // The content variant follows the cell's style: an AsciiDoc (`a`) cell
+        // carries block content, every other style carries inline `Simple`
+        // content. Matching the variant (rather than the style) keeps the two
+        // impossible pairings — an AsciiDoc-content header cell, a Simple-content
+        // AsciiDoc cell — off the map entirely.
+        let content = match cell.content() {
+            // An AsciiDoc cell never appears in the header row (the header is
+            // forced to the default style), so this is always a body cell.
+            TableCellContent::AsciiDoc(ad) => format!(
+                "<div class=\"content\">{}</div>",
+                render_cell_document(ad.blocks(), ad.title(), ad.is_inline())
+            ),
+            TableCellContent::Simple(simple) => {
+                if is_head {
+                    // A header cell is plain inline text, never paragraph-split
+                    // or style-wrapped.
+                    simple.rendered().to_string()
+                } else if cell.style() == ColumnStyle::Literal {
+                    format!(
+                        "<div class=\"literal\"><pre>{}</pre></div>",
+                        simple.rendered()
+                    )
+                } else {
+                    cell_paragraphs(cell, simple.rendered())
                 }
-                _ => cell_paragraphs(cell),
             }
         };
 
@@ -1284,11 +1285,13 @@ fn table_stripes_class(table: &TableBlock<'_>) -> Option<String> {
 /// 100% is split evenly across the autowidth columns. The strings are used only
 /// for non-autowidth columns' `<col style>`, but every column is computed so
 /// the balance donation lands on the correct final column.
+///
+/// Asciidoctor also has a "no base" path that divides the width equally when
+/// the column-width total is zero; `asciidoc-parser` clamps every column width
+/// to at least 1 (a `0` specifier keeps the default width of 1), so that total
+/// is never zero and the path is unreachable here.
 fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
     let n = columns.len();
-    if n == 0 {
-        return vec![];
-    }
 
     // Autowidth (`~`) columns carry no proportional width; `width_base` is the
     // sum of the remaining columns' widths (matching Asciidoctor, which excludes
@@ -1300,46 +1303,34 @@ fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
         .map(|c| c.width() as f64)
         .sum();
 
-    // Asciidoctor treats a base of 0 with no autowidth columns as "no base" and
-    // divides the width equally; every other case resolves a positive base.
-    let has_base = width_base > 0.0 || autowidth_count > 0;
+    // The autowidth columns absorb whatever the fixed columns leave of the 100%,
+    // split evenly; the base then becomes the full 100. With any fixed column
+    // `width_base` is already positive, and an all-autowidth table lands here,
+    // so `base` is never zero.
+    let mut base = width_base;
+    let mut autowidth_value = 0.0;
+    if autowidth_count > 0 && width_base <= 100.0 {
+        autowidth_value = truncate4((100.0 - width_base) / autowidth_count as f64);
+        base = 100.0;
+    }
 
     let mut pcwidths = vec![0.0_f64; n];
     let mut total = 0.0_f64;
     let mut last = 0.0_f64;
-
-    if has_base {
-        // The autowidth columns absorb whatever the fixed columns leave of the
-        // 100%, split evenly; the base then becomes the full 100.
-        let mut base = width_base;
-        let mut autowidth_value = 0.0;
-        if autowidth_count > 0 && width_base <= 100.0 {
-            autowidth_value = truncate4((100.0 - width_base) / autowidth_count as f64);
-            base = 100.0;
-        }
-
-        for (i, col) in columns.iter().enumerate() {
-            let width = if col.is_autowidth() {
-                autowidth_value
-            } else {
-                col.width() as f64
-            };
-            let pc = truncate4(width * 100.0 / base);
-            pcwidths[i] = pc;
-            total += pc;
-            last = pc;
-        }
-    } else {
-        let pc = truncate4(100.0 / n as f64);
-        for slot in pcwidths.iter_mut() {
-            *slot = pc;
-            total += pc;
-        }
+    for (i, col) in columns.iter().enumerate() {
+        let width = if col.is_autowidth() {
+            autowidth_value
+        } else {
+            col.width() as f64
+        };
+        let pc = truncate4(width * 100.0 / base);
+        pcwidths[i] = pc;
+        total += pc;
         last = pc;
     }
 
     // Any rounding balance is donated to the final column (half-up rounding).
-    if (total - 100.0).abs() > f64::EPSILON {
+    if n > 0 && (total - 100.0).abs() > f64::EPSILON {
         pcwidths[n - 1] = round4(100.0 - total + last);
     }
 
@@ -1374,7 +1365,8 @@ fn format_pcwidth(value: f64) -> String {
 }
 
 /// Renders the paragraph content of a non-header, non-literal, non-AsciiDoc
-/// cell, mirroring Asciidoctor's `Table::Cell#content`.
+/// cell, mirroring Asciidoctor's `Table::Cell#content`. `content` is the cell's
+/// already-substituted inline text (its `Simple` rendered value).
 ///
 /// The cell text is split into paragraphs on blank lines — but only when the
 /// *raw* cell text contains a blank line, so a line reduced to blank by a
@@ -1382,12 +1374,7 @@ fn format_pcwidth(value: f64) -> String {
 /// is wrapped in `<p class="tableblock">`, and a styled column additionally
 /// wraps the text in the style's inline element (`<em>`/`<strong>`/`<code>`).
 /// An empty cell renders no `<p>` at all.
-fn cell_paragraphs(cell: &TableCell<'_>) -> String {
-    let content = match cell.content() {
-        TableCellContent::Simple(content) => content.rendered(),
-        TableCellContent::AsciiDoc(_) => return String::new(),
-    };
-
+fn cell_paragraphs(cell: &TableCell<'_>, content: &str) -> String {
     // The style's inline wrapper (`e`/`s`/`m`); the default and header styles
     // add none.
     let (open, close) = match cell.style() {
@@ -2575,5 +2562,85 @@ mod tests {
 
         // Nothing spliced: head still flows stylesheet → `</head>`.
         assert!(!html.contains("<meta name=\"x\""));
+    }
+
+    // Table rendering is verified end-to-end by the `tables_test.rb` port
+    // (`tests::asciidoctor_rb::tables_test`); these unit tests cover the handful
+    // of attribute-value branches that suite does not exercise, each checked
+    // against Asciidoctor 2.0.26's `html5` output.
+
+    #[test]
+    fn table_frame_and_grid_values_map_to_classes() {
+        // Every non-default `frame`/`grid` value produces its own class.
+        for (spec, class) in [
+            ("frame=sides", "frame-sides grid-all"),
+            ("frame=none", "frame-none grid-all"),
+            ("grid=rows", "frame-all grid-rows"),
+            ("grid=cols", "frame-all grid-cols"),
+            ("grid=none", "frame-all grid-none"),
+        ] {
+            let html = crate::convert(&format!("[{spec}]\n|===\n|a |b\n|===\n"));
+            assert!(
+                html.contains(&format!("<table class=\"tableblock {class} stretch\">")),
+                "{spec}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn table_stripes_value_adds_a_class() {
+        // A `stripes` value — including an explicit `none` — adds `stripes-<v>`.
+        for value in ["even", "all", "hover", "none"] {
+            let html = crate::convert(&format!("[stripes={value}]\n|===\n|a |b\n|===\n"));
+            assert!(
+                html.contains(&format!(
+                    "<table class=\"tableblock frame-all grid-all stripes-{value} stretch\">"
+                )),
+                "{value}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn table_role_becomes_a_trailing_class() {
+        let html = crate::convert("[.myrole]\n|===\n|a |b\n|===\n");
+        assert!(
+            html.contains("<table class=\"tableblock frame-all grid-all stretch myrole\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn zero_width_column_specifier_keeps_the_default_width() {
+        // `asciidoc-parser` clamps a `0` width specifier to the default width of
+        // 1, so `cols="0,0"` behaves like `cols="1,1"` — an even 50/50 split.
+        let html = crate::convert("[cols=\"0,0\"]\n|===\n|a |b\n|===\n");
+        assert_eq!(html.matches("<col style=\"width: 50%;\">").count(), 2);
+    }
+
+    #[test]
+    fn split_blank_lines_matches_ruby_split_semantics() {
+        // Interior blank lines split into paragraphs; a trailing blank line is
+        // dropped, mirroring Ruby's `String#split(/\n{2,}/)`.
+        use super::split_blank_lines;
+        assert_eq!(split_blank_lines("a\n\nb").collect::<Vec<_>>(), ["a", "b"]);
+        assert_eq!(
+            split_blank_lines("a\n\n\nb\n\n").collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(split_blank_lines("solo").collect::<Vec<_>>(), ["solo"]);
+    }
+
+    #[test]
+    fn empty_asciidoc_cell_renders_an_empty_content_div() {
+        // An AsciiDoc (`a`) cell with no content still gets its `content`
+        // wrapper — and the nested render returns the empty string.
+        let html = crate::convert("|===\na|\n|===\n");
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\"><div class=\"content\"></div></td>"
+            ),
+            "{html}"
+        );
     }
 }
