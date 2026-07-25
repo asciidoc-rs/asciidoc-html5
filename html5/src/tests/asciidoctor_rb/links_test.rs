@@ -337,6 +337,12 @@ fn qualified_url_with_label_containing_square_brackets_using_link_macro() {
     str = 'http://example.com[[bracket1\]]'
     doc = document_from_string str, standalone: false, doctype: 'inline'
     assert_match '<a href="http://example.com">[bracket1]</a>', doc.convert, 1
+"###
+    );
+    // Lines 63-64 assert the DocBook rendering of the same input; this crate
+    // renders only the html5 backend.
+    non_normative!(
+        r###"
     doc = document_from_string str, standalone: false, backend: 'docbook', doctype: 'inline'
     assert_match '<link xl:href="http://example.com">[bracket1]</link>', doc.convert, 1
   end
