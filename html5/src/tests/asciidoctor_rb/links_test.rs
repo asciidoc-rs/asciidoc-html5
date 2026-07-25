@@ -18,13 +18,14 @@
 //!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); tests
-//! for inline behavior `asciidoc-parser` diverges on (`hide-uri-scheme`
-//! stripping, compat-mode and custom-suffix xref targets, `docname`
-//! self-references, and not resolving a forward xref during parsing); and the
-//! tests that inject or resolve `catalog[:includes]` state, which need an
-//! include processed against a real fixture file (or hand-set catalog state
-//! this crate cannot inject). Where a test also carries a logger assertion this
-//! crate has no logger for, that part is noted.
+//! for inline behavior `asciidoc-parser` diverges on (compat-mode xref
+//! targets, an inter-document `xref:` whose path names the current document via
+//! `docname`, and not resolving a forward xref during parsing); the AsciiDoc
+//! table cell (tables are not rendered yet); and the tests that inject or
+//! resolve `catalog[:includes]` state, which need an include processed against
+//! a real fixture file (or hand-set catalog state this crate cannot inject).
+//! Where a test also carries a logger assertion this crate has no logger for,
+//! that part is noted.
 
 use crate::{
     convert, convert_document, convert_with, load, load_with,
@@ -98,17 +99,29 @@ fn qualified_url_with_role_inline_with_text() {
     );
 }
 
-// `hide-uri-scheme` is applied by `asciidoc-parser`'s inline renderer, which
-// this crate does not override; the URI scheme is not stripped from the link
-// text, so the output diverges.
-non_normative!(
-    r###"
+#[test]
+fn qualified_http_url_inline_with_hide_uri_scheme_set() {
+    verifies!(
+        r###"
   test 'qualified http url inline with hide-uri-scheme set' do
     assert_xpath "//a[@href='http://asciidoc.org'][@class='bare'][text() = 'asciidoc.org']", convert_string("The AsciiDoc project is located at http://asciidoc.org.", attributes: { 'hide-uri-scheme' => '' })
   end
 
 "###
-);
+    );
+
+    let html = convert_with(
+        "The AsciiDoc project is located at http://asciidoc.org.",
+        &Options::new()
+            .standalone(true)
+            .attribute("hide-uri-scheme", ""),
+    );
+    assert_xpath(
+        &html,
+        r####"//a[@href='http://asciidoc.org'][@class='bare'][text() = 'asciidoc.org']"####,
+        1,
+    );
+}
 
 #[test]
 fn qualified_file_url_inline_with_label() {
@@ -129,17 +142,29 @@ fn qualified_file_url_inline_with_label() {
     );
 }
 
-// `hide-uri-scheme` is applied by `asciidoc-parser`'s inline renderer, which
-// this crate does not override; the URI scheme is not stripped from the link
-// text, so the output diverges.
-non_normative!(
-    r###"
+#[test]
+fn qualified_file_url_inline_with_hide_uri_scheme_set() {
+    verifies!(
+        r###"
   test 'qualified file url inline with hide-uri-scheme set' do
     assert_xpath "//a[@href='file:///etc/app.conf'][text() = '/etc/app.conf']", convert_string('Edit the configuration file link:file:///etc/app.conf[]', attributes: { 'hide-uri-scheme' => '' })
   end
 
 "###
-);
+    );
+
+    let html = convert_with(
+        "Edit the configuration file link:file:///etc/app.conf[]",
+        &Options::new()
+            .standalone(true)
+            .attribute("hide-uri-scheme", ""),
+    );
+    assert_xpath(
+        &html,
+        r####"//a[@href='file:///etc/app.conf'][text() = '/etc/app.conf']"####,
+        1,
+    );
+}
 
 #[test]
 fn should_not_hide_bare_uri_scheme_in_implicit_text_of_link_macro_when_hide_uri_scheme_is_set() {
@@ -2731,11 +2756,10 @@ fn xref_using_angled_bracket_syntax_with_path_fragment_and_text() {
     );
 }
 
-// Custom `relfileprefix`/`relfilesuffix`/`outfilesuffix` attributes are not
-// honored by the xref rendering in `asciidoc-parser`; the default `.html`
-// suffix is emitted instead — a divergence.
-non_normative!(
-    r###"
+#[test]
+fn xref_using_angled_bracket_syntax_with_path_and_custom_relfilesuffix_and_outfilesuffix() {
+    verifies!(
+        r###"
   test 'xref using angled bracket syntax with path and custom relfilesuffix and outfilesuffix' do
     attributes = { 'relfileprefix' => '../', 'outfilesuffix' => '/' }
     doc = document_from_string '<<tigers#about,About Tigers>>', standalone: false, attributes: attributes
@@ -2743,13 +2767,25 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Custom `relfileprefix`/`relfilesuffix`/`outfilesuffix` attributes are not
-// honored by the xref rendering in `asciidoc-parser`; the default `.html`
-// suffix is emitted instead — a divergence.
-non_normative!(
-    r###"
+    let output = convert_with(
+        "<<tigers#about,About Tigers>>",
+        &Options::new()
+            .attribute("relfileprefix", "../")
+            .attribute("outfilesuffix", "/"),
+    );
+    assert_xpath(
+        &output,
+        r####"//a[@href="../tigers/#about"][text() = "About Tigers"]"####,
+        1,
+    );
+}
+
+#[test]
+fn xref_using_angled_bracket_syntax_with_path_and_custom_relfilesuffix() {
+    verifies!(
+        r###"
   test 'xref using angled bracket syntax with path and custom relfilesuffix' do
     attributes = { 'relfilesuffix' => '/' }
     doc = document_from_string '<<tigers#about,About Tigers>>', standalone: false, attributes: attributes
@@ -2757,7 +2793,18 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let output = convert_with(
+        "<<tigers#about,About Tigers>>",
+        &Options::new().attribute("relfilesuffix", "/"),
+    );
+    assert_xpath(
+        &output,
+        r####"//a[@href="tigers/#about"][text() = "About Tigers"]"####,
+        1,
+    );
+}
 
 // Manipulates `doc.catalog[:includes]` on the parsed document by hand to
 // simulate an include; this crate cannot inject that catalog state, and the
@@ -3386,10 +3433,12 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
+// An inter-document `xref:` whose path names the current document (via
+// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
+// parser` matches no such path and renders the inter-document link instead,
+// so the `#`-fragment fallback text is not produced — a divergence. (The
+// `xref:#[]` empty-fragment forms, which do not depend on this path
+// matching, are verified above.)
 non_normative!(
     r###"
   test 'should warn and create link if debug mode is enabled, inter-document xref points to current doc, and reference not found' do
@@ -3413,10 +3462,12 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
+// An inter-document `xref:` whose path names the current document (via
+// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
+// parser` matches no such path and renders the inter-document link instead,
+// so the `#`-fragment fallback text is not produced — a divergence. (The
+// `xref:#[]` empty-fragment forms, which do not depend on this path
+// matching, are verified above.)
 non_normative!(
     r###"
   test 'should use doctitle as fallback link text if inter-document xref points to current doc and no link text is provided' do
@@ -3432,10 +3483,9 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
+// Combines the `docname` self-reference divergence above with an AsciiDoc
+// table cell; this crate does not yet render tables, so the anchor under
+// test is not emitted at all.
 non_normative!(
     r###"
   test 'should use doctitle of root document as fallback link text for inter-document xref in AsciiDoc table cell that resolves to current doc' do
@@ -3453,10 +3503,12 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
+// An inter-document `xref:` whose path names the current document (via
+// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
+// parser` matches no such path and renders the inter-document link instead,
+// so the `#`-fragment fallback text is not produced — a divergence. (The
+// `xref:#[]` empty-fragment forms, which do not depend on this path
+// matching, are verified above.)
 non_normative!(
     r###"
   test 'should use reftext on document as fallback link text if inter-document xref points to current doc and no link text is provided' do
@@ -3473,12 +3525,11 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
-non_normative!(
-    r###"
+#[test]
+fn should_use_reftext_on_document_as_fallback_link_text_if_xref_points_to_empty_fragment_and_no_link_text_is_provided(
+) {
+    verifies!(
+        r###"
   test 'should use reftext on document as fallback link text if xref points to empty fragment and no link text is provided' do
     input = <<~'EOS'
     [reftext="Links and Stuff"]
@@ -3491,12 +3542,19 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
+    let input = "[reftext=\"Links and Stuff\"]\n= Links & Stuff\n\nSee xref:#[]\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(&output, r####"<a href="#">Links and Stuff</a>"####);
+}
+
+// An inter-document `xref:` whose path names the current document (via
+// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
+// parser` matches no such path and renders the inter-document link instead,
+// so the `#`-fragment fallback text is not produced — a divergence. (The
+// `xref:#[]` empty-fragment forms, which do not depend on this path
+// matching, are verified above.)
 non_normative!(
     r###"
   test 'should use fallback link text if inter-document xref points to current doc without header and no link text is provided' do
@@ -3510,12 +3568,11 @@ non_normative!(
 "###
 );
 
-// An inter-document xref that points back to the current document (via
-// `docname`) resolves to a self-reference in Asciidoctor; `asciidoc-parser`
-// renders the inter-document link and does not produce the fallback link
-// text — a divergence.
-non_normative!(
-    r###"
+#[test]
+fn should_use_fallback_link_text_if_fragment_of_internal_xref_is_empty_and_no_link_text_is_provided(
+) {
+    verifies!(
+        r###"
   test 'should use fallback link text if fragment of internal xref is empty and no link text is provided' do
     input = <<~'EOS'
     See xref:#[]
@@ -3525,7 +3582,12 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let input = "See xref:#[]\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(&output, r####"<a href="#">[^top]</a>"####);
+}
 
 // Targets the DocBook backend, which this crate does not implement (it
 // renders only the `html5` backend).
