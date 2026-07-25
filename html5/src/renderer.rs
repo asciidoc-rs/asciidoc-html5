@@ -664,6 +664,10 @@ impl Renderer<'_> {
                     Some("open") => self.open_block(block),
                     Some("sidebar") => self.sidebar(block),
                     Some("example") => self.example(block),
+
+                    // A `[comment]` paragraph is skipped entirely, producing no
+                    // output, matching Asciidoctor.
+                    Some("comment") => {}
                     _ => self.paragraph(block),
                 },
                 SimpleBlockStyle::Listing => self.verbatim(block, "listingblock"),
@@ -676,8 +680,15 @@ impl Renderer<'_> {
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
+
+                // A `////` comment block produces no output.
+                "comment" => {}
                 other => self.unsupported(other),
             },
+
+            // A `[comment]` delimited block (e.g. `[comment]` over `--`) is
+            // skipped entirely, producing no output, matching Asciidoctor.
+            Block::CompoundDelimited(_) if block.declared_style() == Some("comment") => {}
             Block::CompoundDelimited(compound) => match compound.context_kind() {
                 CompoundDelimitedContext::Open => self.open_block(block),
                 CompoundDelimitedContext::Sidebar => self.sidebar(block),
@@ -1119,6 +1130,27 @@ mod tests {
     fn unsupported_block_leaves_a_marker() {
         let html = convert("* one\n* two");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    }
+
+    #[test]
+    fn comment_block_is_skipped() {
+        let html = convert("before\n\n////\nhidden\n////\n\nafter");
+        assert!(!html.contains("hidden"));
+        assert!(!html.contains("unsupported block context 'comment'"));
+        assert_eq!(content(&html).matches("<p>").count(), 2);
+    }
+
+    #[test]
+    fn comment_styled_blocks_are_skipped() {
+        // A `[comment]` paragraph and a `[comment]` open block both produce no
+        // output, leaving only the following paragraph.
+        let paragraph = convert("[comment]\nskip me\n\nkeep me");
+        assert!(!paragraph.contains("skip me"));
+        assert!(paragraph.contains("keep me"));
+
+        let open = convert("[comment]\n--\nskip me\n--\n\nkeep me");
+        assert!(!open.contains("skip me"));
+        assert!(open.contains("keep me"));
     }
 
     #[test]
