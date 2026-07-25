@@ -30,8 +30,8 @@
 //! A handful of *document-visible* tests are also kept `non_normative!` because
 //! this crate diverges from the Asciidoctor oracle. One divergence is
 //! permanent: compat-mode role handling on a replacement link is out of scope –
-//! this crate will not implement compat mode (#129, closed won't-do). The rest
-//! are tracked by a follow-up issue rather than asserting the divergent output:
+//! this crate will not implement compat mode. The rest are tracked by a
+//! follow-up issue rather than asserting the divergent output:
 //!
 //! - a three-level nested include from a subdirectory leaves the inner include
 //!   unresolved — [#131]
@@ -958,8 +958,8 @@ mod preprocessor_reader {
         }
 
         // Non-normative: compat-mode role handling is permanently out of scope –
-        // this crate will not implement compat mode (#129, closed won't-do), so it
-        // does not drop the include role on the replacement link.
+        // this crate will not implement compat mode, so it does not drop the
+        // include role on the replacement link.
         non_normative!(
             r#"
       test 'should not add role to link macro used to replace include directive in compat mode' do
@@ -1010,8 +1010,8 @@ mod preprocessor_reader {
         );
 
         // Non-normative on two counts: compat-mode role suppression is
-        // permanently out of scope (#129, closed won't-do), and the remote link
-        // fallback (#136) is still unimplemented.
+        // permanently out of scope, and the remote link fallback (#136) is still
+        // unimplemented.
         non_normative!(
             r#"
       test 'should not add role to link macro that replaces include directive with remote target in compat mode' do
