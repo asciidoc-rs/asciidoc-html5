@@ -312,8 +312,7 @@ fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
         return line.to_string();
     }
 
-    // A run of leading tabs expands directly to whole tab widths; if that
-    // clears every tab, the line is done.
+    // A run of leading tabs expands directly to whole tab widths.
     let mut line = line.to_string();
     if line.starts_with('\t') {
         let leading_tabs = line.bytes().take_while(|&b| b == b'\t').count();
@@ -322,9 +321,12 @@ fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
             full_tab_space.repeat(leading_tabs),
             &line[leading_tabs..]
         );
-        if !line.contains('\t') {
-            return line;
-        }
+    }
+
+    // If that cleared every tab, the line is done; otherwise embedded tabs
+    // remain for the per-stop loop below.
+    if !line.contains('\t') {
+        return line;
     }
 
     // Remaining tabs advance to the next tab stop, tracking how many spaces
@@ -1694,6 +1696,73 @@ mod tests {
             "<pre class=\"highlight\"><code class=\"language-perl\" data-lang=\"perl\">\
              die 'zomg perl is tough';</code></pre>"
         ));
+    }
+
+    #[test]
+    fn source_block_honors_nowrap() {
+        // A source block adds `nowrap` after `highlight` when wrapping is off
+        // (here via `:prewrap!:`), matching Asciidoctor's `highlight nowrap`.
+        let html = convert(":prewrap!:\n\n[source,ruby]\n    def x");
+        assert!(
+            html.contains("<pre class=\"highlight nowrap\"><code class=\"language-ruby\""),
+            "{html}"
+        );
+    }
+
+    // Tab expansion (`tabsize`) beyond the leading-tab fast path: an embedded
+    // tab advances to the next tab stop measured against the output column.
+
+    #[test]
+    fn verbatim_expands_an_embedded_tab() {
+        // A tab after two characters advances to column 4 (two spaces).
+        let html = convert(":tabsize: 4\n\n----\nab\tcd\n----");
+        assert!(html.contains("<pre>ab  cd</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_tab_landing_on_a_stop_expands_a_full_width() {
+        // A tab exactly on a stop expands to a whole `tabsize` run.
+        let html = convert(":tabsize: 4\n\n----\nabcd\te\n----");
+        assert!(html.contains("<pre>abcd    e</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_tab_one_short_of_a_stop_expands_to_a_single_space() {
+        // A tab one column short of a stop expands to exactly one space.
+        let html = convert(":tabsize: 4\n\n----\nabc\td\n----");
+        assert!(html.contains("<pre>abc d</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_honors_a_block_level_tabsize() {
+        // A block-level `tabsize` attribute overrides the document one.
+        let html = convert("[tabsize=4]\n----\n\tx\n----");
+        assert!(html.contains("<pre>    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_expands_tabs_without_an_indent_attribute() {
+        // A positive `tabsize` expands tabs even with no `indent` set; the
+        // indentation is otherwise preserved (`indent_size` of -1).
+        let html = convert(":tabsize: 4\n\n----\n\tx\n----");
+        assert!(html.contains("<pre>    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn indent_with_a_flush_line_adds_only_the_margin() {
+        // When a non-empty line is already flush against the margin there is no
+        // common indent to strip, so `indent=N` just prepends the margin.
+        let html = convert("[indent=\"2\"]\n----\nflush\n  x\n----");
+        assert!(html.contains("<pre>  flush\n    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn adjust_indentation_tolerates_empty_input() {
+        // A defensive no-op guard matching Asciidoctor; the render path splits
+        // rendered content and so never passes an empty line set.
+        let mut lines: Vec<String> = Vec::new();
+        super::adjust_indentation(&mut lines, 0, 4);
+        assert!(lines.is_empty());
     }
 
     #[test]
