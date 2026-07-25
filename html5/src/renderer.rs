@@ -354,14 +354,21 @@ fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
     result
 }
 
-/// The largest `indent`/`source-indent`/`tabsize` this crate will act on. The
+/// The largest `indent`/`source-indent`/`tabsize` this crate will act on. These
 /// values come from document-supplied attributes, so an absurd one (e.g.
-/// `:tabsize: 999999999999`) would otherwise drive an unbounded space
-/// allocation and abort the process on untrusted input. No real verbatim block
-/// needs anywhere near this much indentation, so clamping here is a deliberate
-/// divergence from Asciidoctor (which bounds neither), guarding availability
-/// while leaving every realistic document byte-identical.
-const MAX_VERBATIM_INDENT: i64 = 1000;
+/// `:tabsize: 999999999999`) would otherwise saturate to `i64::MAX` and drive
+/// an unbounded space allocation, aborting the process on untrusted input.
+///
+/// The cap also bounds the amplification of tab expansion: a run of leading
+/// tabs expands each tab to `tabsize` spaces, so a hostile all-tabs line could
+/// otherwise inflate its input by the `tabsize` factor. Capping that factor at
+/// `100` keeps the expansion within a small, fixed multiple of the input.
+///
+/// No real verbatim block needs anywhere near this much indentation (100 spaces
+/// is already well past plausible), so this is a deliberate divergence from
+/// Asciidoctor (which bounds neither), guarding availability while leaving
+/// every realistic document byte-identical.
+const MAX_VERBATIM_INDENT: i64 = 100;
 
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
 /// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
