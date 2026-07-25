@@ -272,6 +272,160 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
+/// Parses the leading integer of `value`, matching Ruby's `String#to_i`: an
+/// optional sign followed by ASCII digits, with any trailing text ignored, and
+/// `0` when no digits lead the string. This is how Asciidoctor coerces the
+/// `tabsize`, `indent`, and `source-indent` attributes.
+fn ruby_to_i(value: &str) -> i64 {
+    let value = value.trim_start();
+    let (sign, digits) = match value.strip_prefix('-') {
+        Some(rest) => (-1, rest),
+        None => (1, value.strip_prefix('+').unwrap_or(value)),
+    };
+
+    let magnitude: i64 = digits
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0i64, |acc, b| {
+            acc.saturating_mul(10).saturating_add((b - b'0') as i64)
+        });
+
+    sign * magnitude
+}
+
+/// The number of leading whitespace characters on `line` — Asciidoctor's
+/// `line.length - line.lstrip.length`. Only the ASCII whitespace Ruby's
+/// `String#lstrip` strips is counted; every such byte is one column, so the
+/// count doubles as a byte offset into the line.
+fn leading_whitespace_len(line: &str) -> usize {
+    line.bytes()
+        .take_while(|b| matches!(b, b' ' | b'\t' | b'\r' | 0x0b | 0x0c | 0))
+        .count()
+}
+
+/// Expands the tabs in one verbatim line to spaces on `tab_size`-column tab
+/// stops, a direct port of the tab-expansion arm of Asciidoctor's
+/// `Parser.adjust_indentation!`. `full_tab_space` is `tab_size` spaces, reused
+/// across lines by the caller.
+fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
+    if line.is_empty() || !line.contains('\t') {
+        return line.to_string();
+    }
+
+    // A run of leading tabs expands directly to whole tab widths; if that
+    // clears every tab, the line is done.
+    let mut line = line.to_string();
+    if line.starts_with('\t') {
+        let leading_tabs = line.bytes().take_while(|&b| b == b'\t').count();
+        line = format!(
+            "{}{}",
+            full_tab_space.repeat(leading_tabs),
+            &line[leading_tabs..]
+        );
+        if !line.contains('\t') {
+            return line;
+        }
+    }
+
+    // Remaining tabs advance to the next tab stop, tracking how many spaces
+    // have been added so each stop is measured against the output column.
+    let mut spaces_added = 0usize;
+    let mut result = String::new();
+    for (idx, c) in line.chars().enumerate() {
+        if c == '\t' {
+            let offset = idx + spaces_added;
+            if offset.is_multiple_of(tab_size) {
+                spaces_added += tab_size - 1;
+                result.push_str(full_tab_space);
+            } else {
+                let spaces = tab_size - (offset % tab_size);
+                if spaces != 1 {
+                    spaces_added += spaces - 1;
+                }
+                result.push_str(&" ".repeat(spaces));
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
+/// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
+/// and a tab is present), then — unless `indent_size` is negative — removes the
+/// common block indent and re-adds `indent_size` spaces of margin. Empty lines
+/// are left untouched throughout.
+fn adjust_indentation(lines: &mut [String], indent_size: i64, tab_size: i64) {
+    if lines.is_empty() {
+        return;
+    }
+
+    if tab_size > 0 && lines.iter().any(|line| line.contains('\t')) {
+        let full_tab_space = " ".repeat(tab_size as usize);
+        for line in lines.iter_mut() {
+            *line = expand_tabs(line, tab_size as usize, &full_tab_space);
+        }
+    }
+
+    // A negative indent preserves the existing indentation.
+    if indent_size < 0 {
+        return;
+    }
+
+    // The block indent is the smallest indent over the non-empty lines; a line
+    // flush against the margin (indent 0) means there is nothing to remove.
+    let mut block_indent: Option<usize> = None;
+    for line in lines.iter() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let line_indent = leading_whitespace_len(line);
+        if line_indent == 0 {
+            block_indent = None;
+            break;
+        }
+
+        block_indent = Some(match block_indent {
+            Some(current) if current < line_indent => current,
+            _ => line_indent,
+        });
+    }
+
+    let margin = " ".repeat(indent_size.max(0) as usize);
+    for line in lines.iter_mut() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let body = match block_indent {
+            Some(indent) => &line[indent..],
+            None => line.as_str(),
+        };
+        *line = format!("{margin}{body}");
+    }
+}
+
+/// Strips leading and trailing blank lines from a verbatim (or raw) block's
+/// `lines`, matching the whitespace trimming in Asciidoctor's `Block#content`.
+/// A line counts as blank when it holds only whitespace, and — as in
+/// Asciidoctor — the trimming applies only once the block has more than one
+/// line, so a lone (even blank) line is preserved.
+fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
+    if lines.len() < 2 {
+        return;
+    }
+
+    while lines.first().is_some_and(|line| line.trim_end().is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|line| line.trim_end().is_empty()) {
+        lines.pop();
+    }
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -294,6 +448,9 @@ pub(crate) fn render_document(
         out: String::new(),
         custom_stylesheet,
         standalone,
+        doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
+        source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
+        prewrap: document.is_attribute_set("prewrap"),
     };
     renderer.document(document);
     renderer.out
@@ -310,6 +467,21 @@ struct Renderer<'a> {
     /// Whether to emit the standalone document shell (`true`) or embedded,
     /// body-only output (`false`).
     standalone: bool,
+
+    /// The document `tabsize` attribute as an integer (Asciidoctor's
+    /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
+    /// own `tabsize` attribute overrides this; a positive value expands tabs.
+    doc_tabsize: i64,
+
+    /// The document `source-indent` attribute as an integer, when present. It
+    /// supplies the `indent` for *source* verbatim blocks that carry no
+    /// explicit `indent` attribute, matching Asciidoctor.
+    source_indent: Option<i64>,
+
+    /// Whether the document `prewrap` attribute is set. Asciidoctor sets it by
+    /// default; when it is unset (`:prewrap!:`) every verbatim `<pre>` gains
+    /// the `nowrap` class.
+    prewrap: bool,
 }
 
 impl Renderer<'_> {
@@ -713,6 +885,7 @@ impl Renderer<'_> {
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
+                "pass" => self.pass_block(block),
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -742,13 +915,17 @@ impl Renderer<'_> {
     /// class="content"><pre>…</pre></div></div>`.
     ///
     /// Verbatim content keeps its literal line breaks, so it is emitted inside
-    /// the `<pre>` without added newlines around the text.
+    /// the `<pre>` without added newlines around the text. The content is first
+    /// reindented and blank-line-trimmed by
+    /// [`verbatim_content`](Self::verbatim_content), and the `<pre>` gains a
+    /// `nowrap` class when the block opts out of wrapping.
     fn verbatim<'src>(&mut self, block: &'src Block<'src>, wrapper_class: &str) {
         self.open_block_wrapper(block, wrapper_class);
         self.block_title(block);
         self.line("<div class=\"content\">");
-        let content = block.rendered_content().unwrap_or_default();
-        self.line(&format!("<pre>{content}</pre>"));
+        let is_source = block.declared_style() == Some("source");
+        let content = self.verbatim_content(block, is_source);
+        self.line(&format!("<pre{}>{content}</pre>", self.nowrap_class(block)));
         self.line("</div>");
         self.line("</div>");
     }
@@ -763,7 +940,16 @@ impl Renderer<'_> {
         self.block_title(block);
         self.line("<div class=\"content\">");
 
-        let content = block.rendered_content().unwrap_or_default();
+        let content = self.verbatim_content(block, true);
+
+        // A `nowrap` block (or a document with `prewrap` disabled) adds the
+        // class after `highlight`, matching Asciidoctor's `pre class="highlight
+        // nowrap"`.
+        let highlight = if self.is_nowrap(block) {
+            "highlight nowrap"
+        } else {
+            "highlight"
+        };
 
         // The language is the second positional attribute of `[source, lang]`
         // (the first is the `source` style itself), or an explicit `language=`.
@@ -776,17 +962,84 @@ impl Renderer<'_> {
             Some(language) => {
                 let language = escape_attribute(language);
                 self.line(&format!(
-                    "<pre class=\"highlight\"><code class=\"language-{language}\" \
+                    "<pre class=\"{highlight}\"><code class=\"language-{language}\" \
                      data-lang=\"{language}\">{content}</code></pre>"
                 ));
             }
             None => self.line(&format!(
-                "<pre class=\"highlight\"><code>{content}</code></pre>"
+                "<pre class=\"{highlight}\"><code>{content}</code></pre>"
             )),
         }
 
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// A passthrough block (`++++`): its content is emitted raw and unescaped,
+    /// with no wrapping element, matching Asciidoctor's `convert_pass`. Like
+    /// other verbatim/raw content, leading and trailing blank lines are
+    /// trimmed.
+    fn pass_block<'src>(&mut self, block: &'src Block<'src>) {
+        let content = block.rendered_content().unwrap_or_default();
+        let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+        strip_surrounding_blank_lines(&mut lines);
+        self.line(&lines.join("\n"));
+    }
+
+    /// The reindented, blank-line-trimmed inner text of a verbatim block's
+    /// `<pre>`, applying Asciidoctor's `tabsize`/`indent`/`source-indent`
+    /// handling and its leading/trailing blank-line trimming.
+    ///
+    /// The parser has already applied inline substitutions (so special
+    /// characters are escaped), but leaves indentation and surrounding blank
+    /// lines untouched; those are normalized here. `is_source` selects whether
+    /// the document `source-indent` attribute supplies a default indent, which
+    /// Asciidoctor applies only to source blocks.
+    fn verbatim_content<'src>(&self, block: &'src Block<'src>, is_source: bool) -> String {
+        let content = block.rendered_content().unwrap_or_default();
+        let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+
+        // A block-level `tabsize` overrides the document one; `indent` (falling
+        // back to `source-indent` for source blocks) drives reindentation.
+        let tab_size = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("tabsize"))
+            .map(|attr| ruby_to_i(attr.value()))
+            .unwrap_or(self.doc_tabsize);
+
+        let indent_size = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("indent"))
+            .map(|attr| ruby_to_i(attr.value()))
+            .or(if is_source { self.source_indent } else { None });
+
+        // Asciidoctor reindents when an indent is in force, or (to expand tabs
+        // only) when a positive tabsize is set with the indentation preserved.
+        match indent_size {
+            Some(indent) => adjust_indentation(&mut lines, indent, tab_size),
+            None if tab_size > 0 => adjust_indentation(&mut lines, -1, tab_size),
+            None => {}
+        }
+
+        strip_surrounding_blank_lines(&mut lines);
+        lines.join("\n")
+    }
+
+    /// Whether a verbatim block's `<pre>` should carry the `nowrap` class: the
+    /// block declares the `nowrap` option, or the document has disabled
+    /// `prewrap` (`:prewrap!:`).
+    fn is_nowrap(&self, block: &Block<'_>) -> bool {
+        block.has_option("nowrap") || !self.prewrap
+    }
+
+    /// The `class="nowrap"` attribute for a bare verbatim `<pre>`, or an empty
+    /// string when wrapping is left enabled.
+    fn nowrap_class(&self, block: &Block<'_>) -> &'static str {
+        if self.is_nowrap(block) {
+            " class=\"nowrap\""
+        } else {
+            ""
+        }
     }
 
     /// An open block: `<div class="openblock"><div
@@ -1412,9 +1665,13 @@ mod tests {
     }
 
     #[test]
-    fn delimited_passthrough_is_unsupported_for_now() {
-        let html = convert("++++\nraw\n++++");
-        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
+    fn delimited_passthrough_emits_raw_content() {
+        // A `++++` block emits its content unescaped, with no wrapping element,
+        // matching Asciidoctor's `convert_pass`.
+        let html = crate::convert("++++\n<b>raw</b>\n++++");
+        assert!(html.contains("<b>raw</b>"));
+        assert!(!html.contains("&lt;b&gt;"));
+        assert!(!html.contains("unsupported"));
     }
 
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
