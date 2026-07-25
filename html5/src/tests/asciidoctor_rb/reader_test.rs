@@ -972,6 +972,8 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="include-file.adoc"]"#, 1);
         }
 
+        // Non-normative: compat-mode does not drop the include role on the replacement
+        // link (#129).
         non_normative!(
             r#"
       test 'should not add role to link macro used to replace include directive in compat mode' do
@@ -1004,6 +1006,8 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="foo bar baz.adoc"]"#, 1);
         }
 
+        // Non-normative: a remote target under a non-secure safe mode is reported
+        // unresolved instead of falling back to a link (#136).
         non_normative!(
             r#"
       test 'should replace include directive with link macro if safe mode allows it, but allow-uri-read is not set' do
@@ -1016,6 +1020,13 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        // Non-normative: compat-mode role suppression (#129) plus the remote link
+        // fallback (#136).
+        non_normative!(
+            r#"
       test 'should not add role to link macro that replaces include directive with remote target in compat mode' do
         input = 'include::https://example.org/dist/info.adoc[]'
         doc = Asciidoctor::Document.new input, safe: :safe, attributes: { 'compat-mode' => '' }
@@ -1023,6 +1034,12 @@ mod preprocessor_reader {
         assert_equal 'link:https://example.org/dist/info.adoc[]', reader.read_line
       end
 
+"#
+        );
+
+        // Non-normative: the remote link fallback under a non-secure safe mode (#136).
+        non_normative!(
+            r#"
       test 'should escape spaces in target when generating link from remote include directive' do
         input = 'include::https://example.org/no such file.adoc[]'
         doc = Asciidoctor::Document.new input, safe: :safe
@@ -1077,6 +1094,7 @@ mod preprocessor_reader {
             assert!(html.contains("<h1>\u{4eba}</h1>"), "{html}");
         }
 
+        // Non-normative: reads from the JRuby classloader (jruby-only; out of scope).
         non_normative!(
             r#"
       test 'should include content from a file on the classloader', if: jruby? do
@@ -1176,6 +1194,8 @@ mod preprocessor_reader {
             assert!(html.contains("included content"), "{html}");
         }
 
+        // Non-normative: asserts the raw reader line for a non-include; there is no
+        // rendered form.
         non_normative!(
             r#"
       test 'include directive should not match if target is empty or starts or ends with space' do
@@ -1186,6 +1206,12 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        // Non-normative: remote include target handling (#136).
+        non_normative!(
+            r#"
       test 'include directive should not attempt to resolve target as remote if allow-uri-read is set and URL is not on first line' do
         using_memory_logger do |logger|
           input = <<~'EOS'
@@ -1201,6 +1227,13 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        // Non-normative: asserts PreprocessorReader internals (file/dir/path/cursor);
+        // no rendered form.
+        non_normative!(
+            r#"
       test 'include directive should resolve file relative to current include' do
         input = 'include::fixtures/parent-include.adoc[]'
         pseudo_docfile = File.join DIRNAME, 'main.adoc'
@@ -1311,6 +1344,8 @@ mod preprocessor_reader {
             assert!(html.contains("1\t2\t\n"), "{html:?}");
         }
 
+        // Non-normative: reads a non-UTF-8 include file; this crate is UTF-8 only
+        // (#138).
         non_normative!(
             r#"
       test 'should fail to read include file if not UTF-8 encoded and encoding is not specified' do
@@ -1362,6 +1397,8 @@ mod preprocessor_reader {
             );
         }
 
+        // Non-normative: reads a non-UTF-8 include file per the encoding attribute;
+        // this crate is UTF-8 only (#138).
         non_normative!(
             r#"
       test 'should use encoding specified by encoding attribute when reading include file' do
@@ -1496,6 +1533,8 @@ mod preprocessor_reader {
             );
         }
 
+        // Non-normative: an unreadable include file is not distinguished from a missing
+        // one (#146).
         non_normative!(
             r#"
       test 'should replace include directive that references unreadable file with message', unless: (windows? || Process.euid == 0) do
@@ -1523,7 +1562,18 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        non_normative!(
+            r#"
       # IMPORTANT this test needs to be run on Windows to verify proper behavior in Windows
+"#
+        );
+
+        // Non-normative: an absolute include path is not resolved (#132).
+        non_normative!(
+            r#"
       test 'can resolve include directive with absolute path' do
         include_path = ::File.join DIRNAME, 'fixtures', 'chapter-a.adoc'
         input = %(include::#{include_path}[])
@@ -1534,6 +1584,13 @@ mod preprocessor_reader {
         assert_equal 'Chapter A', result.doctitle
       end
 
+"#
+        );
+
+        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
+        // (remote-fetch-not-planned).
+        non_normative!(
+            r#"
       test 'include directive can retrieve data from uri' do
         url = %(http://#{resolve_localhost}:9876/name/asciidoctor)
         input = <<~EOS
@@ -1550,6 +1607,13 @@ mod preprocessor_reader {
         assert_match(expect, output)
       end
 
+"#
+        );
+
+        // Non-normative: a nested include from a subdirectory leaves the inner include
+        // unresolved (#131).
+        non_normative!(
+            r#"
       test 'nested include directives are resolved relative to current file' do
         input = <<~'EOS'
         ....
@@ -1574,6 +1638,13 @@ mod preprocessor_reader {
         assert_includes output, expected
       end
 
+"#
+        );
+
+        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
+        // (remote-fetch-not-planned).
+        non_normative!(
+            r#"
       test 'nested remote include directive is resolved relative to uri of current file' do
         url = %(http://#{resolve_localhost}:9876/fixtures/outer-include.adoc)
         input = <<~EOS
@@ -1601,6 +1672,13 @@ mod preprocessor_reader {
         assert_includes output, expected
       end
 
+"#
+        );
+
+        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
+        // (remote-fetch-not-planned).
+        non_normative!(
+            r#"
       test 'nested remote include directive that cannot be resolved does not crash processor' do
         include_url = %(http://#{resolve_localhost}:9876/fixtures/file-with-missing-include.adoc)
         nested_include_url = 'no-such-file.adoc'
@@ -1622,6 +1700,13 @@ mod preprocessor_reader {
         end
       end
 
+"#
+        );
+
+        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
+        // (remote-fetch-not-planned).
+        non_normative!(
+            r#"
       test 'should support tag filtering for remote includes' do
         url = %(http://#{resolve_localhost}:9876/fixtures/tagged-class.rb)
         input = <<~EOS
@@ -1643,6 +1728,13 @@ mod preprocessor_reader {
         assert_includes output, expected
       end
 
+"#
+        );
+
+        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
+        // (remote-fetch-not-planned).
+        non_normative!(
+            r#"
       test 'should not crash if include directive references inaccessible uri' do
         url = %(http://#{resolve_localhost}:9876/no_such_file)
         input = <<~EOS
@@ -2806,6 +2898,8 @@ mod preprocessor_reader {
             }
         }
 
+        // Non-normative: a block-level [indent=0] does not reindent verbatim content
+        // (#110).
         non_normative!(
             r#"
       test 'include directive selects lines inside specified tag and ignores lines inside a negated tag' do
@@ -3183,6 +3277,8 @@ mod preprocessor_reader {
             assert!(!html.contains("included content"), "{html}");
         }
 
+        // Non-normative: requires a custom include processor (the extension mechanism
+        // is out of scope).
         non_normative!(
             r#"
       test 'should fall back to built-in include directive behavior when not handled by include processor' do
@@ -3596,6 +3692,13 @@ mod preprocessor_reader {
         non_normative!(
             r#"
     context 'Conditional Inclusions' do
+"#
+        );
+
+        // Non-normative: these drive PreprocessorReader cursor mechanics (process_line
+        // / peek_line / peek_lines); no rendered form.
+        non_normative!(
+            r#"
       test 'process_line returns nil if cursor advanced' do
         input = <<~'EOS'
         ifdef::asciidoctor[]
@@ -3779,6 +3882,8 @@ mod preprocessor_reader {
             );
         }
 
+        // Non-normative: an include directive inside an ifdef[...] bracket is not
+        // processed (#133).
         non_normative!(
             r#"
       test 'ifdef with defined attribute processes include directive in brackets' do
@@ -5274,6 +5379,7 @@ mod preprocessor_reader {
             assert!(!html.contains("data"), "large block should be dropped");
         }
 
+        // Non-normative: requires the extension/preprocessor mechanism (out of scope).
         non_normative!(
             r#"
       test 'should not fail to process lines if reader contains a nil entry' do
@@ -5290,6 +5396,11 @@ mod preprocessor_reader {
         assert_equal 'before', doc.blocks[0].source
         assert_equal 'after', doc.blocks[1].source
       end
+"#
+        );
+
+        non_normative!(
+            r#"
     end
 "#
         );
