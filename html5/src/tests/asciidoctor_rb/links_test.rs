@@ -9,19 +9,25 @@
 //! counterpart to `convert_string`), or `convert_with(..doctype("inline")..)`
 //! (the counterpart to `convert_inline_string`).
 //!
+//! Tests that assert on the reference catalog (`doc.catalog[:refs]`) port too:
+//! this crate re-exports the parsed `Document` through [`load`]/[`load_with`],
+//! and [`Document::catalog`](crate::Document::catalog) exposes the same
+//! registered anchors, their reftext, and `contains_id` the Ruby reads — so a
+//! catalog claim is checked against the loaded document rather than deferred to
+//! the parser crate.
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); tests
-//! that assert solely on `asciidoc-parser`'s reference catalog
-//! (`doc.catalog[:refs]`/`[:includes]`), which has no rendered form; tests for
-//! inline behavior `asciidoc-parser` diverges on (`hide-uri-scheme` stripping,
-//! compat-mode and custom-suffix xref targets, `docname` self-references, and
-//! not resolving a forward xref during parsing); and the
-//! include-against-fixture tests. Where a test also carries a verifiable
-//! rendered claim, that claim is re-expressed and the parser-only or
-//! logger-only parts are noted.
+//! for inline behavior `asciidoc-parser` diverges on (`hide-uri-scheme`
+//! stripping, compat-mode and custom-suffix xref targets, `docname`
+//! self-references, and not resolving a forward xref during parsing); and the
+//! tests that inject or resolve `catalog[:includes]` state, which need an
+//! include processed against a real fixture file (or hand-set catalog state
+//! this crate cannot inject). Where a test also carries a logger assertion this
+//! crate has no logger for, that part is noted.
 
 use crate::{
-    convert, convert_with,
+    convert, convert_document, convert_with, load, load_with,
     tests::{assert_html::assert_xpath, sdd::*},
     Options,
 };
@@ -1761,13 +1767,17 @@ fn inline_ref() {
 "###
     );
 
-    // The Ruby catalog assertions probe `asciidoc-parser` internals; here we
-    // verify the rendered anchor (present, with no text).
+    // The catalog registers `tigers` as an anchor with no reftext (the Ruby
+    // test's `assert_kind_of Inline` + `assert_nil …text`), and the rendered
+    // anchor is present but empty.
     for anchor in ["[[tigers]]", "anchor:tigers[]"] {
-        let output = convert_with(
-            &format!("Here you can read about tigers.{anchor}"),
-            &Options::new().standalone(true),
-        );
+        let doc = load(&format!("Here you can read about tigers.{anchor}"));
+        let entry = doc
+            .catalog()
+            .get_ref("tigers")
+            .expect("tigers is registered");
+        assert_eq!(entry.reftext, None);
+        let output = convert_document(&doc);
         assert_xpath(&output, r####"//a[@id="tigers"]"####, 1);
         assert_xpath(&output, r####"//a[@id="tigers"]/child::text()"####, 0);
     }
@@ -1791,10 +1801,9 @@ fn escaped_inline_ref() {
     );
 
     for anchor in ["[[tigers]]", "anchor:tigers[]"] {
-        let output = convert_with(
-            &format!("Here you can read about tigers.\\{anchor}"),
-            &Options::new().standalone(true),
-        );
+        let doc = load(&format!("Here you can read about tigers.\\{anchor}"));
+        assert!(!doc.catalog().contains_id("tigers"));
+        let output = convert_document(&doc);
         assert_xpath(&output, r####"//a[@id="tigers"]"####, 0);
     }
 }
@@ -1850,8 +1859,11 @@ fn reftext_of_shorthand_inline_ref_cannot_resolve_to_empty() {
 "###
     );
 
-    let input = "[[no-such-id,{empty}]]text";
-    let output = convert(input);
+    // The reftext resolves to empty, so the shorthand is not a valid anchor:
+    // nothing registers, and the literal survives in the output.
+    let doc = load("[[no-such-id,{empty}]]text");
+    assert!(doc.catalog().is_empty());
+    let output = convert_document(&doc);
     assert_includes(&output, "[[no-such-id,]]text");
 }
 
@@ -1874,8 +1886,9 @@ fn reftext_of_macro_inline_ref_can_resolve_to_empty() {
 
     // The Ruby input is single-quoted, so `\n` is a literal backslash-n
     // (not a newline); this crate reproduces it verbatim in the output.
-    let input = "anchor:id-only[{empty}]text\\n\\nsee <<id-only>>";
-    let output = convert(input);
+    let doc = load("anchor:id-only[{empty}]text\\n\\nsee <<id-only>>");
+    assert!(doc.catalog().contains_id("id-only"));
+    let output = convert_document(&doc);
     assert_xpath(&output, r####"//a[@id="id-only"]"####, 1);
     assert_xpath(&output, r####"//a[@href="#id-only"]"####, 1);
     assert_xpath(
@@ -1903,11 +1916,16 @@ fn inline_ref_with_reftext() {
 "###
     );
 
+    // The catalog stores the explicit reftext (`Tigers`); the rendered
+    // anchor itself carries no text.
     for anchor in ["[[tigers,Tigers]]", "anchor:tigers[Tigers]"] {
-        let output = convert_with(
-            &format!("Here you can read about tigers.{anchor}"),
-            &Options::new().standalone(true),
-        );
+        let doc = load(&format!("Here you can read about tigers.{anchor}"));
+        let entry = doc
+            .catalog()
+            .get_ref("tigers")
+            .expect("tigers is registered");
+        assert_eq!(entry.reftext.as_deref(), Some("Tigers"));
+        let output = convert_document(&doc);
         assert_xpath(&output, r####"//a[@id="tigers"]"####, 1);
         assert_xpath(&output, r####"//a[@id="tigers"]/child::text()"####, 0);
     }
@@ -1926,11 +1944,10 @@ non_normative!(
 "###
 );
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+#[test]
+fn should_substitute_attribute_references_in_reftext_when_registering_inline_ref() {
+    verifies!(
+        r###"
   test 'should substitute attribute references in reftext when registering inline ref' do
     %w([[tigers,{label-tigers}]] anchor:tigers[{label-tigers}]).each do |anchor|
       doc = document_from_string %(Here you can read about tigers.#{anchor}), attributes: { 'label-tigers' => 'Tigers' }
@@ -1941,7 +1958,22 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    // `reftext` carries the attribute-substituted label — the catalog state
+    // the Ruby test reads as `doc.catalog[:refs]['tigers'].text`.
+    for anchor in ["[[tigers,{label-tigers}]]", "anchor:tigers[{label-tigers}]"] {
+        let doc = load_with(
+            &format!("Here you can read about tigers.{anchor}"),
+            &Options::new().attribute("label-tigers", "Tigers"),
+        );
+        let entry = doc
+            .catalog()
+            .get_ref("tigers")
+            .expect("tigers is registered");
+        assert_eq!(entry.reftext.as_deref(), Some("Tigers"));
+    }
+}
 
 // Targets the DocBook backend, which this crate does not implement (it
 // renders only the `html5` backend).
@@ -1960,18 +1992,24 @@ non_normative!(
 "###
 );
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+#[test]
+fn does_not_match_bibliography_anchor_in_prose_when_scanning_for_inline_anchor() {
+    verifies!(
+        r###"
   test 'does not match bibliography anchor in prose when scanning for inline anchor' do
     doc = document_from_string 'Use [[[label]]] to assign a label to a bibliography entry, but not in a paragraph.'
     refute doc.catalog[:refs].key? 'label'
   end
 
 "###
-);
+    );
+
+    // A bibliography anchor (`[[[label]]]`) in prose is not an inline anchor,
+    // so it registers no reference.
+    let doc =
+        load("Use [[[label]]] to assign a label to a bibliography entry, but not in a paragraph.");
+    assert!(!doc.catalog().contains_id("label"));
+}
 
 #[test]
 fn repeating_inline_anchor_macro_with_empty_reftext() {
@@ -3871,11 +3909,10 @@ fn should_not_match_numeric_character_references_in_path_of_interdocument_xref()
     assert_includes(&output, r####"<a href="#C&#43;&#43;">C&#43;&#43;</a>"####);
 }
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+#[test]
+fn anchor_creates_reference() {
+    verifies!(
+        r###"
   test 'anchor creates reference' do
     doc = document_from_string '[[tigers]]Tigers roam here.'
     ref = doc.catalog[:refs]['tigers']
@@ -3884,13 +3921,20 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+    let doc = load("[[tigers]]Tigers roam here.");
+    let entry = doc
+        .catalog()
+        .get_ref("tigers")
+        .expect("tigers is registered");
+    assert_eq!(entry.reftext, None);
+}
+
+#[test]
+fn anchor_with_label_creates_reference() {
+    verifies!(
+        r###"
   test 'anchor with label creates reference' do
     doc = document_from_string '[[tigers,Tigers]]Tigers roam here.'
     ref = doc.catalog[:refs]['tigers']
@@ -3899,13 +3943,20 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+    let doc = load("[[tigers,Tigers]]Tigers roam here.");
+    let entry = doc
+        .catalog()
+        .get_ref("tigers")
+        .expect("tigers is registered");
+    assert_eq!(entry.reftext.as_deref(), Some("Tigers"));
+}
+
+#[test]
+fn anchor_with_quoted_label_creates_reference_with_quoted_label_text() {
+    verifies!(
+        r###"
   test 'anchor with quoted label creates reference with quoted label text' do
     doc = document_from_string %([[tigers,"Tigers roam here"]]Tigers roam here.)
     ref = doc.catalog[:refs]['tigers']
@@ -3914,13 +3965,20 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Asserts only on `asciidoc-parser`'s reference catalog
-// (`doc.catalog[:refs]`), which has no rendered HTML form; this behavior
-// belongs to the parser crate.
-non_normative!(
-    r###"
+    let doc = load(r####"[[tigers,"Tigers roam here"]]Tigers roam here."####);
+    let entry = doc
+        .catalog()
+        .get_ref("tigers")
+        .expect("tigers is registered");
+    assert_eq!(entry.reftext.as_deref(), Some("\"Tigers roam here\""));
+}
+
+#[test]
+fn anchor_with_label_containing_a_comma_creates_reference() {
+    verifies!(
+        r###"
   test 'anchor with label containing a comma creates reference' do
     doc = document_from_string %([[tigers,Tigers, scary tigers, roam here]]Tigers roam here.)
     ref = doc.catalog[:refs]['tigers']
@@ -3928,7 +3986,18 @@ non_normative!(
     assert_equal 'Tigers, scary tigers, roam here', ref.reftext
   end
 "###
-);
+    );
+
+    let doc = load("[[tigers,Tigers, scary tigers, roam here]]Tigers roam here.");
+    let entry = doc
+        .catalog()
+        .get_ref("tigers")
+        .expect("tigers is registered");
+    assert_eq!(
+        entry.reftext.as_deref(),
+        Some("Tigers, scary tigers, roam here")
+    );
+}
 
 non_normative!(
     r###"
