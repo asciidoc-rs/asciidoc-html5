@@ -551,7 +551,7 @@ Therefore, if you're going to be using the block filter to control the traversal
 
 // Walking the tree by hand instead of searching it. Asciidoctor reaches a
 // block's direct children with `blocks`; the analog here is `child_blocks`
-// (from `IsBlock`), an iterator over the direct child blocks that you can
+// (from `FindBlocks`), an iterator over the direct child blocks that you can
 // recurse into yourself.
 #[test]
 fn custom_traversal_reaches_direct_children() {
