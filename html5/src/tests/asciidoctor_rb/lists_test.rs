@@ -513,6 +513,9 @@ wrapped content']"#,
 "#
         );
 
+        // Non-normative: this test also asserts `ul dl` for the nested `term:: def`
+        // list, which needs description-list rendering (#154); the `ul ol` half
+        // already renders correctly.
         non_normative!(
             r#"
     test 'a list item for a different list terminates non-indented paragraph for text of list item' do
@@ -584,6 +587,9 @@ wrapped content']"#,
 "#
         );
 
+        // Non-normative: asserts — via a node-text line comparison the harness
+        // cannot express (#157) — that the wrapped line keeps its leading indent,
+        // which the parser strips before the renderer sees it (#168).
         non_normative!(
             r#"
     test 'wrapped list item with hanging indent followed by non-indented line' do
@@ -679,6 +685,9 @@ wrapped content']"#,
 "#
         );
 
+        // Non-normative: like its non-indented sibling above, asserts `ul dl` for
+        // the nested `term:: def` list — description-list rendering is not built
+        // yet (#154).
         non_normative!(
             r#"
     test 'a list item for a different list terminates indented paragraph for text of list item' do
@@ -972,6 +981,9 @@ wrapped text"]"#,
 "#
         );
 
+        // Non-normative: asserts `ul > li > .colist`, which needs callout-list
+        // rendering (#155); it also drives parser-model APIs
+        // (`document_from_string`, `blocks[..].context`/`.style`).
         non_normative!(
             r#"
     test 'should not inherit block attributes from previous block when block is attached using a list continuation' do
@@ -1092,6 +1104,9 @@ wrapped text"]"#,
 "#
         );
 
+        // Non-normative: asserts the attached literal keeps its ` literal`
+        // first-line indent, which the parser strips before the renderer sees it
+        // (#168).
         non_normative!(
             r#"
     test "a literal paragraph with a line that appears as a list item that is followed by a continuation should create two blocks" do
@@ -1188,6 +1203,9 @@ literal']"#,
 "#
         );
 
+        // Non-normative: asserts the attached literal keeps its ` literal`
+        // first-line indent, which the parser strips before the renderer sees it
+        // (#168).
         non_normative!(
             r#"
     test "a literal paragraph without a trailing blank line consumes following list items" do
@@ -2335,6 +2353,9 @@ more text"]"#,
 "#
         );
 
+        // Non-normative: parser-model only — asserts `find_by(context:
+        // :ulist)[i].level`, which has no rendered-output counterpart (list level
+        // is covered by the parser crate's own tests).
         non_normative!(
             r#"
     test 'level of unordered list should match section level' do
@@ -2491,6 +2512,9 @@ more text"]"#,
 "#
         );
 
+        // Non-normative: parser-model only — asserts `find_by(context:
+        // :olist)[i].level`, which has no rendered-output counterpart (list level
+        // is covered by the parser crate's own tests).
         non_normative!(
             r#"
     test 'level of ordered list should match section level' do
@@ -2799,6 +2823,8 @@ hungry"]"#,
 "#
         );
 
+        // Non-normative: asserts `//dl`/`dl/dt`/`dl/dd` for the nested `term1::
+        // def1` list — description-list rendering is not built yet (#154).
         non_normative!(
             r#"
     test "lines with alternating markers of bulleted and description list types separated by blank lines should be nested" do
@@ -3997,6 +4023,8 @@ continued"]"#,
 "#
         );
 
+        // Non-normative: asserts a nested description list (`ul dl`, `dl/dt`,
+        // `dl/dd`) — description-list rendering is not built yet (#154).
         non_normative!(
             r#"
     test 'indented description list item inside outline list item offset by a blank line should be recognized as a nested list' do
@@ -4697,6 +4725,8 @@ more text"]"#,
 "#
         );
 
+        // Non-normative: exercises the DocBook backend (`backend: 'docbook5'`);
+        // this crate targets only the `html5` backend.
         non_normative!(
             r#"
     test 'should use start number in docbook5 backend' do
@@ -4848,6 +4878,8 @@ non_normative!(
 "#
 );
 
+// The entire Description lists (`:dlist`) context is reproduced but
+// non-normative: this crate does not render description lists yet (#154).
 non_normative!(
     r##"
 context "Description lists (:dlist)" do
@@ -6285,6 +6317,8 @@ non_normative!(
 "#
 );
 
+// The entire `Description lists redux` context is non-normative for the
+// same reason: description-list rendering is not built yet (#154).
 non_normative!(
     r#"
 context 'Description lists redux' do
@@ -7447,6 +7481,8 @@ non_normative!(
 "#
 );
 
+// The entire Callout lists (`:colist`) context is non-normative: this crate
+// does not render callout lists yet (#155).
 non_normative!(
     r##"
 context 'Callout lists' do
@@ -8099,6 +8135,10 @@ non_normative!(
 "#
 );
 
+// The entire Checklists context is reproduced but not yet ported: checklist
+// rendering (the default ballot-box, `%interactive`, and `icons=font`
+// markers) is implemented and covered by renderer unit tests, so porting
+// this Ruby context to `verifies!` is follow-up work (#156).
 non_normative!(
     r##"
 context 'Checklists' do
@@ -8204,6 +8244,9 @@ non_normative!(
 "#
 );
 
+// The entire Lists model context is non-normative: it asserts parser-model
+// state (block structure and attributes), which the parser crate's own
+// tests cover, not rendered HTML.
 non_normative!(
     r#"
 context 'Lists model' do
