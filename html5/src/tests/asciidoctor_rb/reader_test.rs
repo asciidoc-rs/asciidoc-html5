@@ -1901,7 +1901,7 @@ mod preprocessor_reader {
             );
 
             // An empty `lines` value is ignored, so the whole file is included;
-            // the `++++` passthrough block emits it raw (issue #134).
+            // the `++++` passthrough block emits it raw.
             let html = convert_safe_with_fixtures(
                 "++++\ninclude::fixtures/include-file.adoc[lines=]\n++++",
             );
@@ -1929,7 +1929,7 @@ mod preprocessor_reader {
             );
 
             // An invalid range (start after end) is ignored, so the whole file is
-            // included; the `++++` passthrough block emits it raw (issue #134).
+            // included; the `++++` passthrough block emits it raw.
             let html = convert_safe_with_fixtures(
                 "++++\ninclude::fixtures/include-file.adoc[lines=10..5]\n++++",
             );
@@ -2125,10 +2125,10 @@ mod preprocessor_reader {
             );
 
             // The `++++` passthrough block emits the tag-selected include content
-            // raw (issue #134), so selecting the outer `snippet` tag yields the
-            // inner content without the nested tag directive lines. (This crate
-            // appends a trailing newline to embedded output that Asciidoctor
-            // omits, so it is trimmed for the comparison.)
+            // raw, so selecting the outer `snippet` tag yields the inner content
+            // without the nested tag directive lines. (This crate appends a
+            // trailing newline to embedded output that Asciidoctor omits, so it
+            // is trimmed for the comparison.)
             let output = convert_safe_with_fixtures(
                 "++++\ninclude::fixtures/include-file.adoc[tags=snippet]\n++++",
             );
@@ -2917,7 +2917,7 @@ mod preprocessor_reader {
             );
 
             // The `[indent=0]` attribute removes the two-space block indent from
-            // the tag-selected `bark` region (issue #110).
+            // the tag-selected `bark` region.
             let html = convert_safe_with_fixtures(
                 "[indent=0]\n----\ninclude::fixtures/tagged-class.rb[tags=bark;!bark-other]\n----",
             );
@@ -3095,10 +3095,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `++++` passthrough block renders the included line raw (issue
-            // #134), and the include still preprocesses and warns. (Embedded
-            // output carries a trailing newline this crate adds and Asciidoctor
-            // omits.)
+            // The `++++` passthrough block renders the included line raw, and the
+            // include still preprocesses and warns. (Embedded output carries a
+            // trailing newline this crate adds and Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/unclosed-tag.adoc[tag=a]\n++++";
             assert_eq!(convert_safe_with_fixtures(src).trim_end_matches('\n'), "a");
             let warnings = fixture_warnings(src);
@@ -3133,9 +3132,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `++++` passthrough block renders both included lines raw (issue
-            // #134). (Embedded output carries a trailing newline this crate adds
-            // and Asciidoctor omits.)
+            // The `++++` passthrough block renders both included lines raw.
+            // (Embedded output carries a trailing newline this crate adds and
+            // Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/mismatched-end-tag.adoc[tags=a;b]\n++++";
             assert_eq!(
                 convert_safe_with_fixtures(src).trim_end_matches('\n'),
@@ -3173,9 +3172,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `++++` passthrough block renders the included line raw (issue
-            // #134). (Embedded output carries a trailing newline this crate adds
-            // and Asciidoctor omits.)
+            // The `++++` passthrough block renders the included line raw.
+            // (Embedded output carries a trailing newline this crate adds and
+            // Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/unexpected-end-tag.adoc[tags=a]\n++++";
             assert_eq!(convert_safe_with_fixtures(src).trim_end_matches('\n'), "a");
             let warnings = fixture_warnings(src);
@@ -3209,7 +3208,7 @@ mod preprocessor_reader {
 
             // An empty `tag`/`tags` value is ignored, so every line — including the
             // tag directive lines themselves — is included; the `++++` passthrough
-            // block emits them raw (issue #134).
+            // block emits them raw.
             for attr_name in ["tag", "tags"] {
                 let src = format!("++++\ninclude::fixtures/include-file.xml[{attr_name}=]\n++++");
                 let html = convert_safe_with_fixtures(&src);

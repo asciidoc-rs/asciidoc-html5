@@ -2547,7 +2547,7 @@ mod preformatted_blocks {
         );
     }
 
-    // Indent normalization (`indent="1"` / `source-indent`) — see #110.
+    // Indent normalization (`indent="1"` / `source-indent`).
     #[test]
     fn should_set_block_indent_to_value_specified_by_indent_attribute() {
         verifies!(
