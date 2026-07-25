@@ -233,6 +233,30 @@ mod tests {
         );
     }
 
+    // A row of header cells whose text repeats, so a value predicate and a
+    // positional predicate select different nodes depending on their order.
+    const HEADER_ROW: &str = r#"<table><tbody>
+<tr><th id="a">X</th><th id="b">B</th><th id="c">B</th></tr>
+</tbody></table>"#;
+
+    #[test]
+    fn xpath_predicates_apply_in_source_order() {
+        // `[text()="B"][2]` filters to the two B cells first, then takes the
+        // second of those — the third `th` (`id="c"`).
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][2][@id="c"]"#, 1);
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][2][@id="b"]"#, 0);
+
+        // `[2][text()="B"]` takes the second `th` first (`id="b"`), then checks
+        // its text — a different node from the case above, though both are "B".
+        assert_xpath(HEADER_ROW, r#"//th[2][text()="B"][@id="b"]"#, 1);
+        assert_xpath(HEADER_ROW, r#"//th[2][text()="B"][@id="c"]"#, 0);
+
+        // `[1]` is the first `th` (`id="a"`, text "X"), so filtering it by
+        // `text()="B"` afterward yields nothing.
+        assert_xpath(HEADER_ROW, r#"//th[1][text()="B"]"#, 0);
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][1][@id="b"]"#, 1);
+    }
+
     #[test]
     fn xpath_grouped_predicate_value_may_contain_brackets_and_parens() {
         // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding the

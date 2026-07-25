@@ -22,5 +22,6 @@ mod paragraphs_test;
 mod paths_test;
 mod preamble_test;
 mod reader_test;
+mod tables_test;
 mod test_helper;
 mod text_test;
