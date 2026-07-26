@@ -91,7 +91,7 @@ passthrough), it dispatches on [`IsBlock::resolved_context`] — the parser's
 resolved block "type" string (`"listing"`, `"sidebar"`, `"example"`, …).
 
 Compound blocks (sections, the preamble, the delimited example/sidebar/open
-blocks, and later lists and tables) recurse back into `blocks()` over their
+blocks, tables, and later lists) recurse back into `blocks()` over their
 [`IsBlock::nested_blocks`]. That is the whole recursion: one dispatch function,
 one `nested_blocks` iterator, and the tree walks itself. Adding a construct is
 adding one match arm and one `render_*` method.
@@ -121,7 +121,8 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Preamble` | `preamble` | `<div id="preamble"><div class="sectionbody">…</div></div>` | ✅ |
 | `Block::Break` (Thematic) | `thematic_break` | `<hr>` | ✅ |
 | `Block::RawDelimited` | `listing`/`literal` | as listing/literal above | ✅ |
-| `Block::RawDelimited` | `pass` | raw passthrough (no wrapper) | ⬜ |
+| `Block::RawDelimited` | `pass` | raw passthrough (no wrapper) | ✅ |
+| `Block::RawDelimited`/`Simple` (`[comment]`, `////`) | `comment` | *(no output; dropped)* | ✅ |
 | `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ⬜ |
 | `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ⬜ |
 | `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ⬜ |
@@ -134,7 +135,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
-| `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ⬜ |
+| `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
 | `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |
 | `Block::DocumentAttribute` | `attribute` | *(no output; updates attribute state)* | ⬜ |
 

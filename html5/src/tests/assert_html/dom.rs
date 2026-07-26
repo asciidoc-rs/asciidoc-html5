@@ -8,10 +8,13 @@
 //! — the same shape `asciidoc-parser`'s test harness queries — and run the
 //! XPath subset over that.
 //!
-//! The projection is deliberately lossy in one way that matches how the ported
-//! Asciidoctor tests read the DOM: an element's `text` is the concatenation of
-//! its *direct* text-node children (mirroring XPath's `text()`), while nested
-//! element content lives in `children`.
+//! The projection keeps direct text two ways, to serve both shapes the ported
+//! Asciidoctor tests read: an element's `text` is the concatenation of its
+//! *direct* text-node children (what an element's `[text()="…"]` predicate
+//! compares against), while each individual text node is *also* kept as a
+//! `#text` child interleaved in document order among the element children — so
+//! the `text()` node test on the sibling axes (`following-sibling::text()`) can
+//! address a specific run of character data.
 
 use std::collections::BTreeMap;
 
@@ -21,7 +24,8 @@ use scraper::{ElementRef, Html, Node};
 #[derive(Debug, Clone)]
 pub(super) struct VirtualNode {
     /// Lower-cased tag name (`div`, `p`, `h2`, …). The synthetic root carries
-    /// the sentinel tag `#root` so no real selector matches it.
+    /// the sentinel tag `#root`, and each projected character-data run the
+    /// sentinel tag `#text`, so no element node test matches either.
     pub(super) tag: String,
 
     /// The `id` attribute, lifted out of the generic attribute map.
@@ -97,7 +101,16 @@ fn convert(el: ElementRef<'_>) -> VirtualNode {
     let mut text = String::new();
     for child in el.children() {
         match child.value() {
-            Node::Text(t) => text.push_str(t),
+            Node::Text(t) => {
+                text.push_str(t);
+
+                // Keep the run of character data as its own `#text` child so the
+                // `text()` node test on the sibling axes can address it in
+                // document order alongside the element children.
+                let mut text_node = VirtualNode::new("#text");
+                text_node.text = Some(t.to_string());
+                node.children.push(text_node);
+            }
             Node::Element(_) => {
                 if let Some(child_el) = ElementRef::wrap(child) {
                     node.children.push(convert(child_el));

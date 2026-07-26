@@ -12,8 +12,7 @@
 //!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); the
-//! verse escaped-brace subs test (`\{` is not unescaped by `asciidoc-parser`
-//! yet); the inline-doctype nil/warn test and the custom-style logging tests
+//! inline-doctype nil/warn test and the custom-style logging tests
 //! (this crate has no logger). The `[source]` parser-model assertions
 //! (`block_from_string`) test `asciidoc-parser` internals; only the rendered
 //! HTML of those tests is re-expressed here.
@@ -905,10 +904,10 @@ mod quote {
         );
     }
 
-    // `\{group-id\}` should render as `{group-id}`, but `asciidoc-parser` does
-    // not yet unescape `\{`, so the expected substitution output differs.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_perform_normal_subs_on_a_verse_paragraph() {
+        verifies!(
+            r##"
     test 'should perform normal subs on a verse paragraph' do
       input = <<~'EOS'
       [verse]
@@ -920,7 +919,13 @@ mod quote {
     end
 
 "##
-    );
+        );
+
+        let html = convert("[verse]\n_GET /groups/link:#group-id[\\{group-id\\}]_\n");
+        assert!(html.contains(
+            r##"<pre class="content"><em>GET /groups/<a href="#group-id">{group-id}</a></em></pre>"##
+        ));
+    }
 
     #[test]
     fn quote_paragraph_should_honor_explicit_subs_list() {

@@ -210,8 +210,21 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         // returned via `IncludeContent::new` (the parser emits the non-UTF-8
         // include-encoding warning itself when a non-UTF-8 encoding was asked
         // for).
-        read_confined(&self.base_dir, self.safe, &path).map(IncludeContent::new)
+        read_confined(&self.base_dir, self.safe, &path)
+            .map(strip_utf8_bom)
+            .map(IncludeContent::new)
     }
+}
+
+/// Removes a leading UTF-8 byte-order mark (`U+FEFF`) from `content`, matching
+/// Asciidoctor, which strips a BOM from the first line of an included file so
+/// it does not leak into the first parsed line. Content without a BOM is
+/// returned unchanged.
+fn strip_utf8_bom(mut content: String) -> String {
+    if content.starts_with('\u{feff}') {
+        content.drain(..'\u{feff}'.len_utf8());
+    }
+    content
 }
 
 /// Returns the directory portion of `path`: everything before the final path
@@ -346,10 +359,26 @@ mod tests {
     use asciidoc_parser::SafeMode;
 
     use super::{
-        directory_of, fold_into, is_absolute, normalize, posixify, strip_root, FsIncludeFileHandler,
+        directory_of, fold_into, is_absolute, normalize, posixify, strip_root, strip_utf8_bom,
+        FsIncludeFileHandler,
     };
 
     const BASE: &str = "/home/user/project";
+
+    #[test]
+    fn strip_utf8_bom_removes_only_a_leading_bom() {
+        // A leading BOM is removed; the rest of the content is untouched.
+        assert_eq!(
+            strip_utf8_bom("\u{feff}= Title\nbody".to_owned()),
+            "= Title\nbody"
+        );
+        // Content without a BOM is returned unchanged.
+        assert_eq!(strip_utf8_bom("= Title".to_owned()), "= Title");
+        // A BOM only counts at the very start, not mid-content.
+        assert_eq!(strip_utf8_bom("a\u{feff}b".to_owned()), "a\u{feff}b");
+        // Empty content is fine.
+        assert_eq!(strip_utf8_bom(String::new()), "");
+    }
 
     fn handler(safe: SafeMode) -> FsIncludeFileHandler {
         FsIncludeFileHandler::new(PathBuf::from(BASE), safe)
