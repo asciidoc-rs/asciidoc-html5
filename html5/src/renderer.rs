@@ -1698,15 +1698,19 @@ impl Renderer<'_> {
         // `Block::id()` now surfaces a section's auto-generated id (it delegates
         // to the `SectionBlock` override), so the block-level accessor is enough.
         let id = block.id();
-        let title = section.section_title();
+        let title = self.section_heading_title(block, section);
 
         if section.section_type() == SectionType::Discrete {
-            // Asciidoctor renders a discrete heading as a bare `<hN>` carrying
-            // the `discrete` class plus any roles, e.g. `class="discrete role"`.
+            // Asciidoctor renders a discrete heading as a bare `<hN>` whose
+            // leading class is the style keyword that declared it — `float` or
+            // `discrete` — followed by any roles, e.g. `class="float role"`.
+            // The parser exposes the keyword through `declared_style`; it
+            // defaults to `discrete` for the rare case one is not recorded.
+            let style = block.declared_style().unwrap_or("discrete");
             self.line(&format!(
                 "<h{heading_level}{}{}>{title}</h{heading_level}>",
                 id_attribute(id),
-                class_attribute("discrete", &block.roles())
+                class_attribute(style, &block.roles())
             ));
             return;
         }
@@ -1729,6 +1733,30 @@ impl Renderer<'_> {
         }
 
         self.line("</div>");
+    }
+
+    /// Builds a section heading's displayed text, applying Asciidoctor's
+    /// `captioned_title` precedence: a captioned section (an appendix carries
+    /// an `"Appendix A: "` / `"A. "` caption prefix) shows its caption
+    /// ahead of the title; otherwise a numbered section (`sectnums`) shows
+    /// its section number as a `"1.1. "` prefix; otherwise the bare title.
+    /// The parser assigns the number and caption, so the renderer only lays
+    /// out the prefix. The title itself already has inline substitutions
+    /// applied.
+    fn section_heading_title<'src>(
+        &self,
+        block: &'src Block<'src>,
+        section: &'src SectionBlock<'src>,
+    ) -> String {
+        let title = section.section_title();
+
+        if let Some(caption) = block.caption() {
+            format!("{caption}{title}")
+        } else if let Some(number) = section.section_number() {
+            format!("{number}. {title}")
+        } else {
+            title.to_string()
+        }
     }
 
     /// The preamble: content between the doctitle and the first section,
@@ -2452,6 +2480,55 @@ mod tests {
         let html = convert("= Doc\n\n[.independent]\n[discrete]\n== Free Heading");
         assert!(content(&html)
             .contains("<h2 id=\"_free_heading\" class=\"discrete independent\">Free Heading</h2>"));
+    }
+
+    #[test]
+    fn floating_title_leading_class_is_the_style_keyword() {
+        // A `[float]` heading keeps `float` as its leading class (not
+        // `discrete`), matching Asciidoctor; roles still follow.
+        let html = convert("= Doc\n\n[.independent]\n[float]\n=== Free Heading");
+        assert!(
+            content(&html)
+                .contains("<h3 id=\"_free_heading\" class=\"float independent\">Free Heading</h3>"),
+            "{}",
+            content(&html)
+        );
+    }
+
+    #[test]
+    fn numbered_sections_prefix_the_heading_with_the_section_number() {
+        // With `:sectnums:` each heading carries its dotted section number and a
+        // trailing separator ahead of the title, matching Asciidoctor.
+        let html = convert("= Doc\n:sectnums:\n\n== One\n\ntext\n\n=== One One\n\n== Two");
+        let body = content(&html);
+        assert!(body.contains("<h2 id=\"_one\">1. One</h2>"), "{body}");
+        assert!(
+            body.contains("<h3 id=\"_one_one\">1.1. One One</h3>"),
+            "{body}"
+        );
+        assert!(body.contains("<h2 id=\"_two\">2. Two</h2>"), "{body}");
+    }
+
+    #[test]
+    fn unnumbered_sections_show_the_bare_title() {
+        // Without `:sectnums:` the parser assigns no section number, so the
+        // heading is just the title.
+        let html = convert("= Doc\n\n== One\n\n== Two");
+        let body = content(&html);
+        assert!(body.contains("<h2 id=\"_one\">One</h2>"), "{body}");
+        assert!(body.contains("<h2 id=\"_two\">Two</h2>"), "{body}");
+    }
+
+    #[test]
+    fn appendix_heading_carries_its_caption_prefix() {
+        // An appendix is always lettered and captioned, even without
+        // `:sectnums:`; the caption prefix precedes the title.
+        let html = convert("= Doc\n\n[appendix]\n== Grammar\n\ntext");
+        assert!(
+            content(&html).contains("<h2 id=\"_grammar\">Appendix A: Grammar</h2>"),
+            "{}",
+            content(&html)
+        );
     }
 
     #[test]
