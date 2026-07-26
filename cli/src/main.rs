@@ -14,6 +14,7 @@ use std::{
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
+    time::{Duration, Instant},
 };
 
 use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, SafeMode};
@@ -278,6 +279,20 @@ them with -q); this flag does not govern them."
     )]
     warnings: bool,
 
+    /// Print a timing report (read, parse, convert) to stderr after converting
+    #[arg(
+        short = 't',
+        long = "timings",
+        long_help = "Print a timing report to standard error, the way Asciidoctor's -t option \
+does.\n\n\
+After converting each input, adoc reports how long the work took — the time to read and \
+parse the source, the time to convert it to HTML5, and the total of the two — on standard \
+error, labeled with the input file (or `-` when the document was read from standard \
+input). The report is independent of -q/--quiet, which silences only parser warnings.\n\n\
+With several inputs, a separate report is printed for each."
+    )]
+    timings: bool,
+
     /// Minimum level that yields a non-zero exit: INFO, WARN, ERROR, or FATAL
     #[arg(
         long = "failure-level",
@@ -475,6 +490,11 @@ fn convert_source(
         }
     }
 
+    // Measure the read and the parse together, matching Asciidoctor's timings
+    // report, which combines them into one "read and parse" figure. The clocks
+    // are always read (the cost is negligible); the report is only printed under
+    // `-t`/`--timings`.
+    let read_parse_start = Instant::now();
     let source_text = read_input(input, stdin)?;
 
     // Load the document once so its warnings can be surfaced to `stderr`, then
@@ -482,9 +502,13 @@ fn convert_source(
     // the output file. The reporter both prints the warnings (subject to
     // `-q`/`-v`) and reports whether any reached the failure level.
     let document = asciidoc_html5::load_with(&source_text, &options);
+    let read_parse = read_parse_start.elapsed();
+
     let failure_reached = reporter.report(&document, warning_document_name(input), stderr)?;
 
-    match target {
+    // The convert time excludes writing the output, matching Asciidoctor, whose
+    // report times the conversion apart from the file write.
+    let convert = match target {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
@@ -502,18 +526,33 @@ fn convert_source(
                 inner: DirAssetWriter::new(dir),
                 output: path.clone(),
             };
+
+            let convert_start = Instant::now();
             let html =
                 asciidoc_html5::convert_document_with_writer(&document, &options, &mut writer)?;
+            let convert = convert_start.elapsed();
+
             fs::write(path, html)?;
+            convert
         }
 
         // Writing to standard output has no directory to copy alongside, so
         // `copycss` is inert here — again matching Asciidoctor, which skips the
         // copy unless there is an output file.
         OutputTarget::Stdout => {
+            let convert_start = Instant::now();
             let html = asciidoc_html5::convert_document_with(&document, &options);
+            let convert = convert_start.elapsed();
+
             stdout.write_all(html.as_bytes())?;
+            convert
         }
+    };
+
+    // Print the timing report after the write, matching Asciidoctor, which
+    // reports once each converted input has been written out.
+    if cli.timings {
+        print_timings_report(stderr, timings_subject(input), read_parse, convert)?;
     }
 
     Ok(failure_reached)
@@ -527,6 +566,43 @@ fn warning_document_name(input: Option<&Path>) -> String {
         Some(path) => path.display().to_string(),
         None => "<stdin>".to_string(),
     }
+}
+
+/// The subject label a timing report attributes its figures to: the input
+/// file's path, or the conventional `-` when the document was read from
+/// standard input — matching how Asciidoctor's `Timings#print_report` labels
+/// its `Input file:` line.
+fn timings_subject(input: Option<&Path>) -> String {
+    match input {
+        Some(path) => path.display().to_string(),
+        None => "-".to_string(),
+    }
+}
+
+/// Prints a `-t`/`--timings` report to `stderr`, mirroring
+/// `Asciidoctor::Timings#print_report`: the input `subject`, the combined time
+/// to read and parse the source, the time to convert it, and the total of the
+/// two. Each duration is rendered as fractional seconds with five decimal
+/// places, matching Asciidoctor's `%05.5f` formatting.
+fn print_timings_report(
+    stderr: &mut dyn Write,
+    subject: String,
+    read_parse: Duration,
+    convert: Duration,
+) -> io::Result<()> {
+    let read_parse = read_parse.as_secs_f64();
+    let convert = convert.as_secs_f64();
+    let total = read_parse + convert;
+
+    // Emit the whole report in one write, returning its result directly, so the
+    // four lines are not each a separate error-propagation branch.
+    write!(
+        stderr,
+        "Input file: {subject}\n  \
+         Time to read and parse source: {read_parse:05.5}\n  \
+         Time to convert document: {convert:05.5}\n  \
+         Total time (read, parse and convert): {total:05.5}\n"
+    )
 }
 
 /// A single resolved source for `adoc` to convert: an on-disk file, or standard
