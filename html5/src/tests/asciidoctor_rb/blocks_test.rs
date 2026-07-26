@@ -17,8 +17,7 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - deferred features, each tracked by an issue: example captions/counters (<https://github.com/asciidoc-rs/asciidoc-html5/issues/113>),
-//!   `listing-caption` (#115).
+//! - the deferred example captions/counters feature, tracked by <https://github.com/asciidoc-rs/asciidoc-html5/issues/113>.
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -2707,9 +2706,15 @@ mod preformatted_blocks {
         );
         assert_css(&output, "pre", 1);
         assert_css(&output, ".listingblock pre", 1);
+        // The Ruby assertion reads the `<pre>`'s full descendant text; a source
+        // block wraps its code in `<code>`, so the reindented content is that
+        // element's text (this crate renders a delimited `[source]` block as
+        // `<pre class="highlight"><code …>`, matching Asciidoctor — unlike a
+        // plain `[listing]`/`----` block, which keeps its text directly on the
+        // `<pre>`).
         assert_xpath(
             &output,
-            "//pre[text()=\" def names\n\n   @names.split\n\n end\"]",
+            "//pre/code[text()=\" def names\n\n   @names.split\n\n end\"]",
             1,
         );
     }
@@ -3058,11 +3063,11 @@ mod preformatted_blocks {
         );
     }
 
-    // `listing-caption` / caption-counter on listing titles is not implemented
-    // yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/115>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_prepend_caption_specified_by_listing_caption_attribute_and_number_to_title_of_listing_block_with_title(
+    ) {
+        verifies!(
+            r#"
     test 'should prepend caption specified by listing-caption attribute and number to title of listing block with title' do
       input = <<~'EOS'
       :listing-caption: Listing
@@ -3077,6 +3082,23 @@ mod preformatted_blocks {
       assert_xpath '/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. title"]', output, 1
     end
 
+"#
+        );
+
+        let output =
+            convert(":listing-caption: Listing\n\n.title\n----\nlisting block content\n----\n");
+        assert_xpath(
+            &output,
+            r#"/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. title"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_prepend_caption_specified_by_caption_attribute_on_listing_block_even_if_listing_caption_attribute_is_not_set(
+    ) {
+        verifies!(
+            r#"
     test 'should prepend caption specified by caption attribute on listing block even if listing-caption attribute is not set' do
       input = <<~'EOS'
       [caption="Listing {counter:listing-number}. "]
@@ -3091,7 +3113,16 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output =
+            convert("[caption=\"Listing {counter:listing-number}. \"]\n.Behold!\n----\nlisting block content\n----\n");
+        assert_xpath(
+            &output,
+            r#"/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. Behold!"]"#,
+            1,
+        );
+    }
 
     // The listing/source-promotion tests assert `asciidoc-parser` model state
     // (`find_by`, `style`, `attr 'language'`), and the last two target DocBook.
