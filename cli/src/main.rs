@@ -592,17 +592,17 @@ fn print_timings_report(
 ) -> io::Result<()> {
     let read_parse = read_parse.as_secs_f64();
     let convert = convert.as_secs_f64();
+    let total = read_parse + convert;
 
-    writeln!(stderr, "Input file: {subject}")?;
-    writeln!(stderr, "  Time to read and parse source: {read_parse:05.5}")?;
-    writeln!(stderr, "  Time to convert document: {convert:05.5}")?;
-    writeln!(
+    // Emit the whole report in one write, returning its result directly, so the
+    // four lines are not each a separate error-propagation branch.
+    write!(
         stderr,
-        "  Total time (read, parse and convert): {total:05.5}",
-        total = read_parse + convert,
-    )?;
-
-    Ok(())
+        "Input file: {subject}\n  \
+         Time to read and parse source: {read_parse:05.5}\n  \
+         Time to convert document: {convert:05.5}\n  \
+         Total time (read, parse and convert): {total:05.5}\n"
+    )
 }
 
 /// A single resolved source for `adoc` to convert: an on-disk file, or standard
