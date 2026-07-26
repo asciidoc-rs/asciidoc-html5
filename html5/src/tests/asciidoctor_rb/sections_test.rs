@@ -28,12 +28,8 @@
 //!   level-0 heading is swallowed as the doctitle, special sections that don't
 //!   support subsections emit no warning
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/189>), a `==` heading
-//!   inside a delimited block is treated as a section, a `leveloffset` that
-//!   would make a section level 0 is not coerced to the doctitle, an xref to
-//!   the doctitle is not resolved to its title text
-//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/965>), and a
-//!   discrete heading reports the context `section` rather than `floating_title`
-//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/966>).
+//!   inside a delimited block is treated as a section, and a `leveloffset` that
+//!   would make a section level 0 is not coerced to the doctitle.
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -1358,12 +1354,10 @@ mod levels {
 "#
         );
 
-        // Not verified: the bracketed block-anchor form `[[idname]]` above the
-        // document title is not recognized by asciidoc-parser (header title/id come
-        // back empty), so the id never reaches the `<body>` (asciidoc-parser#968).
-        // The equivalent `[#idname]` shorthand is verified just below.
-        non_normative!(
-            r#"
+        #[test]
+        fn should_assign_id_on_document_title_to_body() {
+            verifies!(
+                r#"
       test 'should assign id on document title to body' do
         input = <<~'EOS'
         [[idname]]
@@ -1376,7 +1370,15 @@ mod levels {
       end
 
 "#
-        );
+            );
+
+            // The bracketed block-anchor form `[[idname]]` above the document title
+            // is recognized by asciidoc-parser (fixed in 0.27.2, asciidoc-parser#968),
+            // so its id lands on the `<body>` just like the `[#idname]` shorthand
+            // verified just below.
+            let output = convert_standalone("[[idname]]\n= Document Title\n\ncontent\n");
+            assert_css(&output, "body#idname", 1);
+        }
 
         #[test]
         fn should_assign_id_defined_using_shorthand_syntax_on_document_title_to_body() {
@@ -1424,12 +1426,10 @@ mod levels {
             assert_css(&output, "body#idname-block", 1);
         }
 
-        // Not verified: the bracketed block-anchor form `[[reference]]` above the
-        // document title is not recognized by asciidoc-parser (header title/id come
-        // back empty), so the id reaches neither the document nor the `<body>`
-        // (asciidoc-parser#968).
-        non_normative!(
-            r#"
+        #[test]
+        fn block_id_above_document_title_sets_id_on_document() {
+            verifies!(
+                r#"
       test 'block id above document title sets id on document' do
         input = <<~'EOS'
         [[reference]]
@@ -1446,7 +1446,23 @@ mod levels {
       end
 
 "#
-        );
+            );
+
+            // The bracketed block-anchor form `[[reference]]` above the document
+            // title is recognized by asciidoc-parser (fixed in 0.27.2,
+            // asciidoc-parser#968): the id reaches the document header and the
+            // `<body>`, and the attribute entry below the title still applies.
+            let input = "[[reference]]\n= Reference Manual\n:css-signature: refguide\n\npreamble\n";
+            let doc = load(input);
+            assert_eq!(doc.header().id(), Some("reference"));
+            assert_eq!(
+                crate::renderer::attribute_str(&doc, "css-signature"),
+                Some("refguide".to_string())
+            );
+
+            let output = convert_standalone(input);
+            assert_css(&output, "body#reference", 1);
+        }
 
         #[test]
         fn should_register_document_in_catalog_if_id_is_set() {
@@ -1480,10 +1496,10 @@ mod levels {
             );
         }
 
-        // Not verified: an xref to the document title is not resolved to its title text
-        // (asciidoc-parser#965).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_compute_xreftext_to_document_title() {
+            verifies!(
+                r#"
       test 'should compute xreftext to document title' do
         input = <<~'EOS'
         [#manual]
@@ -1497,7 +1513,15 @@ mod levels {
       end
 
 "#
-        );
+            );
+
+            // An xref to the document title now resolves to its title text (fixed
+            // in asciidoc-parser 0.27.2, asciidoc-parser#965).
+            let output = convert_standalone(
+                "[#manual]\n= Reference Manual\n:xrefstyle: full\n\nThis is the <<manual>>.\n",
+            );
+            assert_xpath(&output, r#"//a[text()="Reference Manual"]"#, 1);
+        }
 
         #[test]
         fn should_discard_style_role_and_options_shorthand_attributes_defined_on_document_title() {
@@ -2697,8 +2721,11 @@ mod discrete_heading {
 "#
     );
 
-    // Not verified: asserts the parser block context is :floating_title, but the
-    // parser reports "section" for a discrete heading (asciidoc-parser#966).
+    // Not verified: asserts the parser's internal block context is
+    // :floating_title (fixed in asciidoc-parser 0.27.2, asciidoc-parser#966). The
+    // renderer keys discrete headings off `section_type()` rather than the block
+    // context, so this claim is a parser-model detail the parser crate verifies;
+    // discrete rendering and catalog registration are covered by the tests below.
     non_normative!(
         r#"
     test 'discrete heading should be a block with context floating_title' do
