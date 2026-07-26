@@ -185,6 +185,20 @@ mod tests {
 </div>"#;
 
     #[test]
+    fn xpath_not_attr_exists_predicate() {
+        // `not(@attr)` matches elements lacking the attribute. The fragment's
+        // `<h2>` carries an id; a bare `<h1>` here does not.
+        const H: &str = r#"<h1>Doctitle</h1>
+<div class="sect1">
+<h2 id="_first_section">First Section</h2>
+</div>"#;
+        assert_xpath(H, r#"//h1[not(@id)]"#, 1);
+        assert_xpath(H, r#"//h1[not(@id)][text()="Doctitle"]"#, 1);
+        assert_xpath(H, r#"//h2[not(@id)]"#, 0);
+        assert_xpath(H, r#"//h2[not(@class)]"#, 1);
+    }
+
+    #[test]
     fn xpath_leading_slash_matches_fragment_top_level() {
         // A leading `/` is a child step from the (wrapperless) fragment root, so
         // it matches the fragment's own top-level elements — not scraper's

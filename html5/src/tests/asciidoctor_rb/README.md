@@ -119,7 +119,7 @@ which queries the parse tree instead.
 steps; the `following-sibling::` / `preceding-sibling::` sibling axes and the
 general `following::` / `preceding::` document-order axes; the `text()` node
 test on those axes (`a/following-sibling::text()`), addressing a character-data
-run; predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
+run; predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`, `[not(@attr)]`,
 `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) = "x"]`,
 `[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per context node);
 and a leading grouped path `(subpath)[N]…/rest` (see below).
