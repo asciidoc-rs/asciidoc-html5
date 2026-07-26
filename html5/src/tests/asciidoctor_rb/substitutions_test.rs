@@ -2601,9 +2601,10 @@ mod macros {
         assert_eq!(subs_opts("image:tiger.svg[Tiger,fallback=tiger.png,opts=interactive]", &Options::new().safe_mode(SafeMode::Server).attribute("imagesdir", "images")), "<span class=\"image\"><object type=\"image/svg+xml\" data=\"images/tiger.svg\"><img src=\"images/tiger.png\" alt=\"Tiger\"></object></span>");
     }
 
-    // Inline SVG embeds a fixture file's own markup and Ruby asserts it with a
-    // regex (`assert_match`) — an asset-reading pipeline concern beyond these
-    // inline-substitution checks.
+    // Inline SVG (`opts=inline`) is not rendered: `asciidoc-parser` supports it
+    // but degrades to alt text unless a filesystem-backed `SvgFileHandler` is
+    // installed (via `Parser::with_svg_file_handler`), which this crate does
+    // not yet wire up. Tracked by asciidoc-html5#52.
     non_normative!(
         r#"
     test 'an image macro with an inline SVG image should be converted to an svg element' do
@@ -2618,9 +2619,8 @@ mod macros {
 "#
     );
 
-    // As above (inline SVG from a fixture, asserted by regex), plus the `data-
-    // uri` variant — an asset-reading pipeline concern beyond these inline-
-    // substitution checks.
+    // As 792 (inline SVG needs a `SvgFileHandler` this crate does not install),
+    // plus the `data-uri` variant. Tracked by asciidoc-html5#52.
     non_normative!(
         r#"
     test 'an image macro with an inline SVG image should be converted to an svg element even when data-uri is set' do
@@ -3001,9 +3001,12 @@ mod macros {
         assert!(s.contains("image::tiger.png[]"));
     }
 
-    // Catalogs image assets discovered in a section title (`catalog[:images]`)
-    // under a memory logger — parser-model catalog and logging plumbing this
-    // crate does not surface.
+    // Asserts the image cataloged from a section title (`catalog[:images]`).
+    // `asciidoc-parser` exposes both the image catalog
+    // (`Document::catalog().images()` / `ImageReference`) and the
+    // `catalog_assets` toggle (`Parser::with_catalog_assets`), but this crate's
+    // `Options` has no way to enable `catalog_assets`, so the catalog stays
+    // empty. Tracked by asciidoc-html5#95.
     non_normative!(
         r#"
     test 'should substitute attributes in target of inline image in section title' do
@@ -5140,7 +5143,9 @@ mod passthroughs {
 
     // Inspects the parser's internal passthrough collection
     // (`extract_passthroughs`, the `@passthroughs` array, its `:text` and
-    // `:subs` entries) — machinery this crate does not surface.
+    // `:subs` entries) — machinery this crate does not surface. (The rendered
+    // `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect inline triple plus passthroughs' do
@@ -5157,7 +5162,9 @@ mod passthroughs {
     );
 
     // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface.
+    // `extract_passthroughs` — machinery this crate does not surface. (The
+    // rendered `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect multi-line inline triple plus passthroughs' do
@@ -5175,6 +5182,8 @@ mod passthroughs {
 
     // Inspects the internal `@passthroughs` collection (and its
     // `:specialcharacters` subs entry) — machinery this crate does not surface.
+    // (The rendered `convert` output matches Asciidoctor exactly; only the
+    // internal collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect inline double dollar passthroughs' do
@@ -5192,6 +5201,8 @@ mod passthroughs {
 
     // Inspects the internal `@passthroughs` collection (and its
     // `:specialcharacters` subs entry) — machinery this crate does not surface.
+    // (The rendered `convert` output matches Asciidoctor exactly; only the
+    // internal collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect inline double plus passthroughs' do
@@ -5209,7 +5220,8 @@ mod passthroughs {
 
     // The role-enclosed-in-quotes robustness case renders differently here —
     // this crate does not emit the `<span class="'role'">` wrapper the test
-    // asserts.
+    // asserts. An inline-substitution divergence in `asciidoc-parser` (the
+    // renderer holds no passthrough logic); tracked by asciidoc-parser#973.
     non_normative!(
         r#"
     test 'should not crash if role on passthrough is enclosed in quotes' do
@@ -5261,7 +5273,9 @@ mod passthroughs {
     }
 
     // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface.
+    // `extract_passthroughs` — machinery this crate does not surface. (The
+    // rendered `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect multi-line inline double dollar passthroughs' do
@@ -5278,7 +5292,9 @@ mod passthroughs {
     );
 
     // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface.
+    // `extract_passthroughs` — machinery this crate does not surface. (The
+    // rendered `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect multi-line inline double plus passthroughs' do
@@ -5296,6 +5312,8 @@ mod passthroughs {
 
     // Inspects the internal `@passthroughs` collection (and resolved subs list)
     // from an inline `pass:` macro — machinery this crate does not surface.
+    // (The rendered `convert` output matches Asciidoctor exactly; only the
+    // internal collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect passthroughs from inline pass macro' do
@@ -5312,7 +5330,9 @@ mod passthroughs {
     );
 
     // Inspects the internal `@passthroughs` collection from a multi-line
-    // `pass:` macro — machinery this crate does not surface.
+    // `pass:` macro — machinery this crate does not surface. (The rendered
+    // `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'collect multi-line passthroughs from inline pass macro' do
@@ -5346,7 +5366,8 @@ mod passthroughs {
 
     // Inspects `@passthroughs` sub-shorthand resolution and drives
     // `restore_passthroughs` directly — a parser-model API this crate does not
-    // surface.
+    // surface. (The rendered `convert` output matches Asciidoctor exactly; only
+    // the internal collection is unverifiable here.)
     non_normative!(
         r#"
     test 'resolves sub shorthands on inline pass macro' do
@@ -5364,7 +5385,8 @@ mod passthroughs {
 
     // Inspects incremental-subs resolution on `@passthroughs` and drives
     // `restore_passthroughs` directly — a parser-model API this crate does not
-    // surface.
+    // surface. (The rendered `convert` output matches Asciidoctor exactly; only
+    // the internal collection is unverifiable here.)
     non_normative!(
         r#"
     test 'inline pass macro supports incremental subs' do
@@ -5425,8 +5447,10 @@ mod passthroughs {
             == WarningType::InvalidSubstitutionTypeForPassthroughMacro("bogus".to_string())));
     }
 
-    // Drives `extract_passthroughs`/`restore_passthroughs` on empty content
-    // directly — a parser-model API this crate does not surface.
+    // Drives `restore_passthroughs` on empty content directly (a parser-model
+    // API this crate does not surface), and the observable equivalent
+    // `convert("pass:[]")` also diverges — this crate drops the empty paragraph
+    // instead of emitting `<p></p>`. Tracked by asciidoc-html5#200.
     non_normative!(
         r#"
     test 'should allow content of inline pass macro to be empty' do
@@ -5529,7 +5553,9 @@ mod passthroughs {
     }
 
     // Inspects the collected `@passthroughs` entries (their unescaped `:text`)
-    // from `extract_passthroughs` — machinery this crate does not surface.
+    // from `extract_passthroughs` — machinery this crate does not surface. (The
+    // rendered `convert` output matches Asciidoctor exactly; only the internal
+    // collection is unverifiable here.)
     non_normative!(
         r#"
     test 'complex inline passthrough macro' do
