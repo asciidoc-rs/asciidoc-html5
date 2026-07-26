@@ -150,6 +150,22 @@ equivalent to --safe-mode=safe. Cannot be combined with --safe-mode."
     )]
     safe: bool,
 
+    /// Select the output backend; only `html5` is supported (default: html5)
+    #[arg(
+        short = 'b',
+        long = "backend",
+        value_name = "BACKEND",
+        long_help = "Select the output backend, the way Asciidoctor's -b option does.\n\n\
+adoc produces only the HTML5 backend, so the sole accepted value is `html5` \
+(case-insensitive), which — like omitting the option — is a no-op accepted for \
+command-line compatibility, so an existing `asciidoctor -b html5 …` invocation \
+runs unchanged.\n\n\
+Any other backend Asciidoctor documents (`xhtml5`, `docbook5`, `manpage`, and \
+the like) is rejected with a non-zero exit, rather than being silently ignored. \
+The `xhtml5` backend in particular is a permanent non-goal of this project."
+    )]
+    backend: Option<String>,
+
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
@@ -210,6 +226,10 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 /// once; the per-source base directory and input file are layered on top for
 /// each.
 fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
+    // Reject an unsupported backend before reading or converting anything, so an
+    // `-b docbook5` invocation fails cleanly without touching the input.
+    check_backend(cli)?;
+
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document — matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
@@ -614,6 +634,41 @@ fn input_file(cli: &Cli) -> Option<&Path> {
     match cli.inputs.first() {
         Some(path) if path.as_os_str() != "-" => Some(path),
         _ => None,
+    }
+}
+
+/// Validates the `-b`/`--backend` selection, accepting only the HTML5 backend.
+///
+/// `adoc` produces solely the HTML5 backend, so `-b html5` (case-insensitive)
+/// and the default (no `-b`) are accepted as a no-op, purely for command-line
+/// compatibility with `asciidoctor -b html5 …`. Any other backend Asciidoctor
+/// documents — `xhtml5`, `docbook5`, `manpage`, extended converters — is
+/// rejected rather than silently ignored, so a caller expecting different
+/// output finds out immediately.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error naming the unsupported
+/// backend. The `xhtml5` backend gets a message noting it is a permanent
+/// non-goal of this project, matching the documented decision.
+fn check_backend(cli: &Cli) -> io::Result<()> {
+    let Some(name) = &cli.backend else {
+        return Ok(());
+    };
+
+    match name.to_lowercase().as_str() {
+        "html5" => Ok(()),
+        "xhtml5" => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "unsupported backend '{name}': adoc only produces the html5 backend, \
+                 and the xhtml5 backend is a permanent non-goal of this project"
+            ),
+        )),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unsupported backend '{name}': adoc only produces the html5 backend"),
+        )),
     }
 }
 

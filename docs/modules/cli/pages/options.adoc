@@ -31,6 +31,12 @@ than one file in a single invocation.
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].
 
+For compatibility with existing `asciidoctor` command lines, `adoc` also accepts
+`-b` (`--backend`). Because it produces only the HTML5 backend, the sole accepted
+value is `html5` — like `asciidoctor -b html5`, it is a no-op — while any other
+backend, such as `xhtml5` or `docbook5`, exits with an error instead of being
+silently ignored.
+
 [NOTE]
 .Known limitations
 ====

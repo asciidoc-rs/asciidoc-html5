@@ -1,6 +1,6 @@
 use clap::Parser as _;
 
-use crate::{tests::sdd::*, Cli};
+use crate::{check_backend, tests::sdd::*, Cli};
 
 track_file!("docs/modules/cli/pages/options.adoc");
 
@@ -66,9 +66,8 @@ documented behavior is guaranteed.
     );
 }
 
-// The remainder of the page cross-references the task-specific option pages and
-// records the known limitations of `adoc`'s option coverage; neither carries a
-// rule to verify here.
+// The cross-references to the task-specific option pages and the `-a` pointer
+// carry no rule to verify here.
 non_normative!(
     r#"
 Each option is described in depth on the page for the task it serves:
@@ -85,6 +84,44 @@ than one file in a single invocation.
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].
 
+"#
+);
+
+// `-b` (`--backend`) is accepted for `asciidoctor` compatibility: `html5` (the
+// only backend `adoc` produces) is a no-op, and any other backend fails rather
+// than being silently ignored. Driven through `check_backend`, the gate `adoc`
+// applies to the parsed `--backend` value.
+#[test]
+fn the_backend_option_accepts_only_html5() {
+    verifies!(
+        r#"
+For compatibility with existing `asciidoctor` command lines, `adoc` also accepts
+`-b` (`--backend`). Because it produces only the HTML5 backend, the sole accepted
+value is `html5` — like `asciidoctor -b html5`, it is a no-op — while any other
+backend, such as `xhtml5` or `docbook5`, exits with an error instead of being
+silently ignored.
+
+"#
+    );
+
+    // `-b html5` is accepted as a no-op, as is omitting the option entirely.
+    check_backend(&Cli::parse_from(["adoc", "-b", "html5", "doc.adoc"]))
+        .expect("-b html5 is accepted");
+    check_backend(&Cli::parse_from(["adoc", "doc.adoc"])).expect("the default is accepted");
+
+    // Any other backend exits with an error rather than being ignored.
+    for backend in ["xhtml5", "docbook5"] {
+        assert!(
+            check_backend(&Cli::parse_from(["adoc", "-b", backend, "doc.adoc"])).is_err(),
+            "-b {backend} is rejected"
+        );
+    }
+}
+
+// The known-limitations note records the scope of `adoc`'s option coverage; it
+// carries no rule to verify here.
+non_normative!(
+    r#"
 [NOTE]
 .Known limitations
 ====
