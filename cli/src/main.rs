@@ -844,19 +844,57 @@ fn destination_dir_for(cli: &Cli, input: Option<&Path>) -> Option<PathBuf> {
 /// The directory of `input` relative to `source_dir`, or `None` when `input` is
 /// not located below `source_dir`.
 ///
-/// Both paths are made absolute (without resolving symlinks, matching
-/// Asciidoctor's lexical `File.expand_path`) before the input's parent
-/// directory is stripped of the source-root prefix. An input directly inside
-/// the source root yields an empty relative path (joining it onto `-D` leaves
-/// the directory unchanged); an input outside the root yields `None`.
+/// Both paths are normalized to a lexical absolute form (see
+/// [`normalize_lexically`]) — matching Asciidoctor's `File.expand_path`, which
+/// collapses `.` and `..` purely textually without touching the filesystem —
+/// before the input's parent directory is stripped of the source-root prefix.
+/// Collapsing `..` first is what keeps an input like `src/../outside/doc.adoc`
+/// (which resolves *out* of `src`) from being treated as living under the
+/// source root. An input directly inside the source root yields an empty
+/// relative path (joining it onto `-D` leaves the directory unchanged); an
+/// input outside the root yields `None`.
 fn relative_subdir(source_dir: &Path, input: &Path) -> Option<PathBuf> {
-    let abs_source = std::path::absolute(source_dir).ok()?;
-    let abs_input = std::path::absolute(input).ok()?;
+    let abs_source = normalize_lexically(source_dir)?;
+    let abs_input = normalize_lexically(input)?;
     let abs_input_dir = abs_input.parent()?;
     abs_input_dir
         .strip_prefix(&abs_source)
         .ok()
         .map(Path::to_path_buf)
+}
+
+/// Resolves `path` to an absolute form with `.` and `..` collapsed purely
+/// lexically, without consulting the filesystem — the same normalization
+/// Asciidoctor's `File.expand_path` performs.
+///
+/// The path is first made absolute (prepending the current directory when it is
+/// relative) via [`std::path::absolute`], which does not itself collapse `..`;
+/// each `..` is then resolved by popping the preceding normal component, and a
+/// `..` at the root is dropped (as `File.expand_path` treats `/..` as `/`).
+/// Unlike [`Path::canonicalize`], symlinks are not resolved and the path need
+/// not exist, so two spellings compare by their textual structure alone.
+///
+/// Returns `None` only when the path cannot be made absolute (for example, an
+/// empty path with no current directory available).
+fn normalize_lexically(path: &Path) -> Option<PathBuf> {
+    use std::path::Component;
+
+    let absolute = std::path::absolute(path).ok()?;
+    let mut normalized = Vec::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                // Climb out of the preceding directory, but never past the root
+                // (or a Windows prefix), where `..` is a no-op.
+                if matches!(normalized.last(), Some(Component::Normal(_))) {
+                    normalized.pop();
+                }
+            }
+            other => normalized.push(other),
+        }
+    }
+    Some(normalized.iter().collect())
 }
 
 /// The file-name suffix `adoc` derives a default output name with, honoring an
