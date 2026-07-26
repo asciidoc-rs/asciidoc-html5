@@ -13,16 +13,14 @@
 //! grouped by why:
 //!
 //! - Ruby CLI internals with no `adoc` analog: the `Invoker`/`Options`
-//!   constructor signatures, and the Ruby-only `--eruby`, `-E` stdio encoding,
-//!   `-r` require, and `Dir.home` fixtures.
+//!   constructor signatures, the Ruby-only `--eruby`, `-E` stdio encoding, `-r`
+//!   require, and `Dir.home` fixtures, and the `-w` flag's Ruby-VM effect of
+//!   toggling `$VERBOSE` script warnings (the flag itself is accepted).
 //! - Out of scope for this html5-only renderer: other backends (DocBook via
 //!   `-b`, manpage) and custom template engines (`-T`/`-E` haml/slim).
-//! - Tracked for later work: surfacing parser warnings with `-q`/`-w`/
-//!   `--failure-level` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/147>),
-//!   `-R`/`--source-dir` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/148>),
-//!   the `-d`/`--doctype` flag and the book/inline doctypes
-//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/149>), the coderay
-//!   source-highlighter stylesheet
+//! - Tracked for later work: the `-d`/`--doctype` flag and the book/inline
+//!   doctypes (<https://github.com/asciidoc-rs/asciidoc-html5/issues/149>), the
+//!   coderay source-highlighter stylesheet
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>), `-t` timings
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/151>), the document
 //!   date/time attributes and `SOURCE_DATE_EPOCH`
@@ -39,7 +37,7 @@ use std::path::PathBuf;
 use asciidoc_html5::SafeMode;
 use clap::Parser as _;
 
-use crate::{resolve_safe_mode, run, run_with_input, tests::sdd::*, Cli};
+use crate::{resolve_safe_mode, run, run_with_input, run_with_streams, tests::sdd::*, Cli};
 
 track_file!("ref/asciidoctor/test/invoker_test.rb");
 
@@ -94,6 +92,20 @@ impl Project {
         run(&cli, &mut stdout)?;
         Ok(stdout)
     }
+
+    /// Like [`Project::run`], but drives [`run_with_streams`] so it can capture
+    /// standard error (the warning stream) and whether the run reached its
+    /// `--failure-level`. Returns `(failure_reached, stderr)`; standard output
+    /// is discarded, as these warning tests only inspect stderr and the code.
+    fn run_streams(&self, args: &[&str]) -> (bool, String) {
+        let cli = Cli::parse_from(std::iter::once("adoc").chain(args.iter().copied()));
+        let mut stdin = std::io::empty();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let failed =
+            run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+        (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
+    }
 }
 
 impl Drop for Project {
@@ -111,6 +123,20 @@ fn run_stdin(args: &[&str], source: &str) -> std::io::Result<Vec<u8>> {
     let mut stdout = Vec::new();
     run_with_input(&cli, &mut stdin, &mut stdout)?;
     Ok(stdout)
+}
+
+/// Like [`run_stdin`], but drives [`run_with_streams`] so it can capture
+/// standard error (the warning stream) and whether the run reached its
+/// `--failure-level`. Returns `(failure_reached, stderr)`; standard output is
+/// discarded, as these warning tests only inspect stderr and the code.
+fn run_stdin_streams(args: &[&str], source: &str) -> (bool, String) {
+    let cli = Cli::parse_from(std::iter::once("adoc").chain(args.iter().copied()));
+    let mut stdin = source.as_bytes();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let failed =
+        run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
 }
 
 non_normative!(
@@ -529,11 +555,10 @@ fn should_display_version_and_exit() {
     }
 }
 
-// Not implemented: `adoc` has no channel that prints parser warnings to
-// stderr. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
-non_normative!(
-    r#"
+#[test]
+fn should_print_warnings_to_stderr_by_default() {
+    verifies!(
+        r#"
   test 'should print warnings to stderr by default' do
     input = <<~'EOS'
     1. first
@@ -548,13 +573,20 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: `-w`/`--warnings` (here, asserting a clean run emits none)
-// has no `adoc` counterpart. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
-non_normative!(
-    r#"
+    // `adoc` prints the parser's warnings to standard error by default. The
+    // out-of-sequence list item in the piped document raises one; its formatted
+    // line carries the `WARNING` label the Ruby test matches. (Output goes to
+    // `-o -`/stdout, which this helper discards — the assertion is on stderr.)
+    let (_failed, stderr) = run_stdin_streams(&["-o", "-"], "1. first\n3. third\n");
+    assert!(stderr.contains("WARNING"));
+}
+
+#[test]
+fn should_not_emit_any_unexpected_warnings() {
+    verifies!(
+        r#"
   test 'should not emit any unexpected warnings' do
     input_path = fixture_path 'basic.adoc'
     output = run_command(asciidoctor_cmd, '-o', '/dev/null', '-w', input_path) {|out| out.read }
@@ -562,11 +594,26 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not applicable / not implemented: toggles Ruby's `$VERBOSE` for `-w` script
-// warnings. `adoc` has neither `-w` nor a Ruby VM to make verbose. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
+    // `-w`/`--warnings` is accepted for compatibility (Asciidoctor's `-w` toggles
+    // the Ruby interpreter's script warnings, which have no analog here). A clean
+    // document emits nothing on stderr under it — the parser reports no warnings,
+    // and `-w` does not manufacture any.
+    let project = Project::new("no-unexpected-warnings");
+    let input = project.write("basic.adoc", "= Document Title\n\nBody paragraph.\n");
+    let out = project.path("basic.html");
+    let (failed, stderr) =
+        project.run_streams(&["-w", "-o", out.to_str().unwrap(), input.to_str().unwrap()]);
+    assert!(!failed);
+    assert!(stderr.is_empty(), "expected no warnings, got: {stderr}");
+}
+
+// Not applicable: `adoc` accepts `-w`/`--warnings` for compatibility (see
+// `should_not_emit_any_unexpected_warnings` above), but this test asserts the
+// Ruby-VM behavior the flag drives there — toggling `$VERBOSE` so redefining a
+// constant emits an interpreter script warning. A native binary has no such VM
+// state, so there is nothing to verify.
 non_normative!(
     r#"
   test 'should enable script warnings if -w flag is specified' do
@@ -590,11 +637,10 @@ non_normative!(
 "#
 );
 
-// Not implemented: `-q`/`--quiet` silences the warning stream `adoc` does not
-// have. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
-non_normative!(
-    r#"
+#[test]
+fn should_silence_warnings_if_q_flag_is_specified() {
+    verifies!(
+        r#"
   test 'should silence warnings if -q flag is specified' do
     input = <<~'EOS'
     2. second
@@ -609,12 +655,18 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: `-q` again (checking the log level is still consulted).
-// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
-non_normative!(
-    r#"
+    // `-q`/`--quiet` silences the warning stream: the out-of-sequence list item
+    // still raises a warning, but nothing is written to stderr.
+    let (_failed, stderr) = run_stdin_streams(&["-q", "-o", "-"], "2. second\n3. third\n");
+    assert_eq!(stderr, "");
+}
+
+#[test]
+fn should_not_fail_to_check_log_level_when_q_flag_is_specified() {
+    verifies!(
+        r#"
   test 'should not fail to check log level when -q flag is specified' do
     input = <<~'EOS'
     skip to <<install>>
@@ -635,13 +687,20 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: `--failure-level=WARN` turning a warning into a non-zero
-// exit code. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/147>.
-non_normative!(
-    r#"
+    // Under `-q`, computing the failure code (which consults each diagnostic's
+    // severity) must not itself fail the run: with the default failure level of
+    // `FATAL`, this document's diagnostics leave the exit code at success.
+    let input = "skip to <<install>>\n\n. download\n. install[[install]]\n. run\n";
+    let (failed, _stderr) = run_stdin_streams(&["-q", "-o", "-"], input);
+    assert!(!failed);
+}
+
+#[test]
+fn should_return_non_zero_exit_code_if_failure_level_is_reached() {
+    verifies!(
+        r#"
   test 'should return non-zero exit code if failure level is reached' do
     input = <<~'EOS'
     1. first
@@ -655,7 +714,20 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `--failure-level=WARN` makes a warning fail the run: the out-of-sequence
+    // list item raises one, so `adoc` exits non-zero (the `failure_reached` flag
+    // the binary maps to a `1` exit code). `-q` still silences the stream, so the
+    // failure is signaled without any message — matching the Ruby test's assertion
+    // that the exit code is 1 while stderr stays empty.
+    let (failed, stderr) = run_stdin_streams(
+        &["-q", "--failure-level=WARN", "-o", "-"],
+        "1. first\n3. third\n",
+    );
+    assert!(failed);
+    assert!(stderr.is_empty(), "expected no messages, got: {stderr}");
+}
 
 // Deliberate divergence (under re-evaluation): with no input file Asciidoctor
 // prints a usage message, whereas `adoc` reads the document from standard
@@ -807,11 +879,10 @@ fn should_output_to_file_in_destination_directory_if_set() {
     assert!(dest.join("sample.html").exists());
 }
 
-// Not implemented: `-R`/`--source-dir` recreates the input's subdirectory tree
-// under `-D`. `adoc` has no `-R` and flattens outputs by base name. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/148>.
-non_normative!(
-    r#"
+#[test]
+fn should_preserve_directory_structure_in_destination_directory_if_source_directory_is_set() {
+    verifies!(
+        r#"
   test 'should preserve directory structure in destination directory if source directory is set' do
     sample_inpath = 'subdir/index.adoc'
     destination_path = 'test_output'
@@ -830,7 +901,39 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `-R`/`--source-dir` names a source root so that `-D` recreates the input's
+    // subdirectory beneath it. Here the input `fixtures/subdir/index.adoc` sits
+    // one level under the source root `fixtures`, so its output lands in the
+    // mirrored `subdir` under the destination, not flat in it.
+    let project = Project::new("source-dir");
+    let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
+    let dest = project.path("test_output");
+    let source_dir = project.path("fixtures");
+    project
+        .run(&[
+            "-D",
+            dest.to_str().unwrap(),
+            "-R",
+            source_dir.to_str().unwrap(),
+            input.to_str().unwrap(),
+        ])
+        .expect("adoc converts");
+    assert!(project.path("test_output/subdir").is_dir());
+    assert!(project.exists("test_output/subdir/index.html"));
+
+    // Without `-R`, the same input flattens to the destination directory by base
+    // name — the behavior `-R` opts out of.
+    let project = Project::new("source-dir-flat");
+    let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
+    let dest = project.path("test_output");
+    project
+        .run(&["-D", dest.to_str().unwrap(), input.to_str().unwrap()])
+        .expect("adoc converts");
+    assert!(project.exists("test_output/index.html"));
+    assert!(!project.exists("test_output/subdir/index.html"));
+}
 
 #[test]
 fn should_output_to_file_specified() {
