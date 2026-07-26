@@ -5458,6 +5458,13 @@ mod passthroughs {
     // `convert("pass:[]")` rendering an empty `<p></p>` (asciidoc-html5#200), is
     // verified in `renderer`'s
     // `empty_inline_passthrough_paragraph_renders_an_empty_p`.
+    //
+    // NOTE: this is a deliberate split — the page's claim is now observably
+    // true, but verifying it *here* would mean marking the `extract_passthroughs`
+    // / `restore_passthroughs` lines `verifies!` while actually driving `convert`
+    // instead, which overstates what these lines exercise. If page-tracked
+    // coverage is preferred, replace this block with a `#[test]` whose
+    // `verifies!` reproduces these lines and asserts `convert("pass:[]")`.
     non_normative!(
         r#"
     test 'should allow content of inline pass macro to be empty' do
