@@ -81,6 +81,8 @@ and `-B` (`--base-dir`).
 writing the result to standard output.
 * xref:process-multiple-files.adoc[Process Multiple Files] covers converting more
 than one file in a single invocation.
+* xref:control-warnings.adoc[Control Warnings] covers `-q` (`--quiet`), `-v`
+(`--verbose`), `-w` (`--warnings`), and `--failure-level`.
 
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].

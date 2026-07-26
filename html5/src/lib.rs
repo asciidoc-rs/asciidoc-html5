@@ -116,7 +116,7 @@ pub fn convert(source: &str) -> String {
 /// ```
 pub fn convert_with(source: &str, options: &Options) -> String {
     let document = load_with(source, options);
-    render(&document, options)
+    convert_document_with(&document, options)
 }
 
 /// Parses and renders `source` like [`convert_with`], and additionally emits
@@ -150,16 +150,7 @@ pub fn convert_with_writer(
     writer: &mut impl AssetWriter,
 ) -> io::Result<String> {
     let document = load_with(source, options);
-    let html = render(&document, options);
-
-    // Embedded output emits no stylesheet, so there is nothing to copy alongside
-    // it — matching Asciidoctor, which skips the `copycss` copy for embeddable
-    // output. Only a standalone document can reference a copied stylesheet.
-    if options.is_standalone() {
-        emit_stylesheet_copy(&document, options, writer)?;
-    }
-
-    Ok(html)
+    convert_document_with_writer(&document, options, writer)
 }
 
 /// Renders `document` to HTML, resolving the embedded custom stylesheet the way
@@ -426,6 +417,58 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
     renderer::render_document(document, None, false)
+}
+
+/// Renders an already-parsed [`Document`] to HTML5 under `options` — the
+/// [`Options`]-aware counterpart to [`convert_document`].
+///
+/// This is the render step of [`convert_with`] split out from its parse step,
+/// for a caller that has already [`load`]ed the [`Document`] (for example, to
+/// inspect its [`warnings`](Document::warnings) first) and wants to render the
+/// *same* parse rather than parsing the source a second time:
+/// `convert_document_with(&load_with(source, options), options)` equals
+/// `convert_with(source, options)`.
+///
+/// Unlike [`convert_document`], this honors [`Options::standalone`] (emitting
+/// the full `<!DOCTYPE>`/`<head>`/`<body>` shell when set) and an *embedded*
+/// custom stylesheet exactly as [`convert_with`] does — see that function for
+/// how the stylesheet's CSS is resolved. It does not emit the `copycss`
+/// companion file; for that, render with [`convert_document_with_writer`].
+pub fn convert_document_with(document: &Document<'_>, options: &Options) -> String {
+    render(document, options)
+}
+
+/// Renders an already-parsed [`Document`] like [`convert_document_with`], and
+/// additionally emits the companion files the conversion calls for through
+/// `writer` — the render step of [`convert_with_writer`] split out from its
+/// parse step.
+///
+/// This lets a caller that has already [`load`]ed the [`Document`] render it
+/// without parsing the source again:
+/// `convert_document_with_writer(&load_with(source, options), options, writer)`
+/// equals [`convert_with_writer(source, options,
+/// writer)`](convert_with_writer). See [`convert_with_writer`] for what
+/// `copycss` writes through `writer`.
+///
+/// # Errors
+///
+/// Returns any [`io::Error`] raised while writing a companion file through
+/// `writer`.
+pub fn convert_document_with_writer(
+    document: &Document<'_>,
+    options: &Options,
+    writer: &mut impl AssetWriter,
+) -> io::Result<String> {
+    let html = render(document, options);
+
+    // Embedded output emits no stylesheet, so there is nothing to copy alongside
+    // it — matching Asciidoctor, which skips the `copycss` copy for embeddable
+    // output. Only a standalone document can reference a copied stylesheet.
+    if options.is_standalone() {
+        emit_stylesheet_copy(document, options, writer)?;
+    }
+
+    Ok(html)
 }
 
 /// Generates the HTML table of contents (the *outline*) for `document`.
