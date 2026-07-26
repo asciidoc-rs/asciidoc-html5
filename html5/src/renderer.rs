@@ -489,6 +489,70 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
     }
 }
 
+/// Wraps a section heading's `title` text in its `sectlinks`
+/// `<a class="link" href="#id">…</a>`, keeping any leading *supplemental*
+/// anchors (`<a id="…"></a>`, from a title like `[[fu]]Foo`) as siblings
+/// *before* the link rather than nested inside it. An `<a>` cannot legally
+/// nest, so Asciidoctor — and html5 tree construction — hoist those anchors
+/// out; this mirrors Asciidoctor's `LeadingAnchorsRx` handling.
+fn apply_sectlinks(id: &str, title: &str) -> String {
+    // Only a title that begins with an inline anchor can carry leading
+    // supplemental anchors to preserve; otherwise the whole title is wrapped.
+    let prefix_len = if title.starts_with("<a ") {
+        leading_anchors_len(title)
+    } else {
+        0
+    };
+
+    let (anchors, rest) = title.split_at(prefix_len);
+    format!(
+        "{anchors}<a class=\"link\" href=\"#{}\">{rest}</a>",
+        escape_attribute(id)
+    )
+}
+
+/// Injects a section heading's `sectanchors`
+/// `<a class="anchor" href="#id"></a>`, before `title` by default or after it
+/// when `after` is set (`:sectanchors: after`).
+fn apply_sectanchors(id: &str, title: &str, after: bool) -> String {
+    let anchor = format!(
+        "<a class=\"anchor\" href=\"#{}\"></a>",
+        escape_attribute(id)
+    );
+
+    if after {
+        format!("{title}{anchor}")
+    } else {
+        format!("{anchor}{title}")
+    }
+}
+
+/// The byte length of the run of leading supplemental anchors at the start of
+/// `s` — the `<a id="…"></a>` sequence Asciidoctor matches with
+/// `LeadingAnchorsRx` (`^(?:<a id="[^"]+"></a>)+`). Returns `0` when `s` does
+/// not begin with such an anchor.
+fn leading_anchors_len(s: &str) -> usize {
+    const OPEN: &str = "<a id=\"";
+    const CLOSE: &str = "\"></a>";
+
+    let mut len = 0;
+    while let Some(after_open) = s[len..].strip_prefix(OPEN) {
+        // The id is one or more non-quote characters, so an immediate closing
+        // quote (empty id) does not match.
+        let Some(id_len) = after_open.find('"').filter(|&i| i > 0) else {
+            break;
+        };
+
+        if !after_open[id_len..].starts_with(CLOSE) {
+            break;
+        }
+
+        len += OPEN.len() + id_len + CLOSE.len();
+    }
+
+    len
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -515,6 +579,10 @@ pub(crate) fn render_document(
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
+        sectlinks: document.is_attribute_set("sectlinks"),
+        sectanchors: document
+            .is_attribute_set("sectanchors")
+            .then(|| attribute_str(document, "sectanchors").as_deref() == Some("after")),
     };
     renderer.document(document);
     renderer.out
@@ -550,6 +618,17 @@ struct Renderer<'a> {
     /// default; when it is unset (`:prewrap!:`) every verbatim `<pre>` gains
     /// the `nowrap` class.
     prewrap: bool,
+
+    /// Whether the document `sectlinks` attribute is set, which wraps each
+    /// non-discrete section heading's title text in an `<a class="link">` to
+    /// the section's own id.
+    sectlinks: bool,
+
+    /// Whether the document `sectanchors` attribute is set, which injects an
+    /// `<a class="anchor">` into each non-discrete section heading. `None` when
+    /// unset; `Some(after)` when set, with `after` selecting whether the anchor
+    /// follows (`:sectanchors: after`) rather than precedes the title text.
+    sectanchors: Option<bool>,
 }
 
 impl Renderer<'_> {
@@ -1715,6 +1794,15 @@ impl Renderer<'_> {
             return;
         }
 
+        // With an id present (always, for a non-discrete section), `sectlinks`
+        // and `sectanchors` decorate the heading title: `sectlinks` wraps the
+        // text in a self-link and `sectanchors` injects a standalone anchor,
+        // matching Asciidoctor's ordering (link first, then anchor).
+        let title = match id {
+            Some(id) => self.decorate_section_heading(id, title),
+            None => title,
+        };
+
         self.line(&format!(
             "<div{}>",
             class_attribute(&format!("sect{level}"), &block.roles())
@@ -1756,6 +1844,25 @@ impl Renderer<'_> {
             format!("{number}. {title}")
         } else {
             title.to_string()
+        }
+    }
+
+    /// Applies the `sectlinks` self-link and the `sectanchors` anchor to a
+    /// section heading's `title`, keyed off the section's `id`. The order
+    /// mirrors Asciidoctor: `sectlinks` wraps the title text first, then
+    /// `sectanchors` prepends (or, for `:sectanchors: after`, appends) its
+    /// anchor around whatever `sectlinks` produced. When neither attribute is
+    /// set, `title` is returned unchanged.
+    fn decorate_section_heading(&self, id: &str, title: String) -> String {
+        let title = if self.sectlinks {
+            apply_sectlinks(id, &title)
+        } else {
+            title
+        };
+
+        match self.sectanchors {
+            Some(after) => apply_sectanchors(id, &title, after),
+            None => title,
         }
     }
 
@@ -2060,6 +2167,11 @@ fn render_cell_document<'s>(
         doc_tabsize,
         source_indent,
         prewrap,
+
+        // Section headings do not occur inside a table cell's nested document,
+        // so `sectlinks`/`sectanchors` have nothing to decorate here.
+        sectlinks: false,
+        sectanchors: None,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -3451,6 +3563,25 @@ mod tests {
             ["a", "b"]
         );
         assert_eq!(split_blank_lines("solo").collect::<Vec<_>>(), ["solo"]);
+    }
+
+    #[test]
+    fn leading_anchors_len_measures_the_supplemental_anchor_run() {
+        use super::leading_anchors_len;
+
+        // No leading anchor: nothing to hoist out of a `sectlinks` wrapper.
+        assert_eq!(leading_anchors_len("Foo"), 0);
+        assert_eq!(leading_anchors_len("<a class=\"x\"></a>Foo"), 0);
+
+        // A single supplemental anchor, then two run together.
+        assert_eq!(leading_anchors_len("<a id=\"fu\"></a>Foo"), 15);
+        assert_eq!(
+            leading_anchors_len("<a id=\"fu\"></a><a id=\"bar\"></a>Foo"),
+            31
+        );
+
+        // An empty id (`id=""`) does not match Asciidoctor's `[^"]+`.
+        assert_eq!(leading_anchors_len("<a id=\"\"></a>Foo"), 0);
     }
 
     #[test]

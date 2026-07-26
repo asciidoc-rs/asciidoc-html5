@@ -15,8 +15,7 @@
 //!   rendering is not wired up yet (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>);
 //! - the **book doctype** context and book-conditioned tests — non-article
 //!   doctypes are out of scope for 1.0 (like the DocBook-backend tests below);
-//! - `sectanchors` / `sectlinks` heading anchors (<https://github.com/asciidoc-rs/asciidoc-html5/issues/186>)
-//!   and the document-title id/role on `<body>` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/187>);
+//! - the document-title id/role on `<body>` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/187>);
 //! - **setext** (two-line/underlined) titles, which are intentionally out of
 //!   scope for this project;
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -4283,10 +4282,10 @@ mod links_and_anchors {
 "#
     );
 
-    // Not verified: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186).
-    non_normative!(
-        r##"
+    #[test]
+    fn should_include_anchor_if_sectanchors_document_attribute_is_set() {
+        verifies!(
+            r##"
     test 'should include anchor if sectanchors document attribute is set' do
       input = <<~'EOS'
       == Installation
@@ -4308,12 +4307,43 @@ mod links_and_anchors {
     end
 
 "##
-    );
+        );
 
-    // Not verified: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186).
-    non_normative!(
-        r##"
+        // `:sectanchors:` is passed as a document attribute; the port drives it
+        // through the source header rather than an API-level attribute map. The
+        // boolean sibling-text assertions become count-based `starts-with`
+        // predicates on the sibling text node, the supported harness idiom.
+        let out = convert(
+            ":sectanchors:\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
+        );
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="anchor"][@href="#_installation"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a/following-sibling::text()[starts-with(., "Installation")]"#,
+            1,
+        );
+        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="anchor"][@href="#_linux"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"//*[@class="sect2"]/h3[@id="_linux"]/a/following-sibling::text()[starts-with(., "Linux")]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_position_after_title_text_if_sectanchors_is_set_to_after() {
+        verifies!(
+            r##"
     test 'should position after title text if sectanchors is set to after' do
       input = <<~'EOS'
       == Installation
@@ -4335,12 +4365,41 @@ mod links_and_anchors {
     end
 
 "##
-    );
+        );
 
-    // Not verified: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186).
-    non_normative!(
-        r##"
+        // `:sectanchors: after` places the anchor after the title text, so the
+        // title is now on the anchor's *preceding*-sibling text axis.
+        let out = convert(
+            ":sectanchors: after\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
+        );
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="anchor"][@href="#_installation"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a/preceding-sibling::text()[starts-with(., "Installation")]"#,
+            1,
+        );
+        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="anchor"][@href="#_linux"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"//*[@class="sect2"]/h3[@id="_linux"]/a/preceding-sibling::text()[starts-with(., "Linux")]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_link_section_if_sectlinks_document_attribute_is_set() {
+        verifies!(
+            r##"
     test 'should link section if sectlinks document attribute is set' do
       input = <<~'EOS'
       == Installation
@@ -4362,12 +4421,40 @@ mod links_and_anchors {
     end
 
 "##
-    );
+        );
 
-    // Not verified: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186).
-    non_normative!(
-        r#"
+        // `:sectlinks:` wraps the whole title text in an `<a class="link">`.
+        let out = convert(
+            ":sectlinks:\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
+        );
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="link"][@href="#_installation"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a[text()="Installation"]"#,
+            1,
+        );
+        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+        assert_xpath(
+            &out,
+            r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="link"][@href="#_linux"]"##,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"//*[@class="sect2"]/h3[@id="_linux"]/a[text()="Linux"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_start_section_link_after_supplemental_anchors_when_sectlinks_is_set() {
+        verifies!(
+            r#"
     test 'should start section link after supplemental anchors when sectlinks is set' do
       input = <<~'EOS'
       :sectlinks:
@@ -4384,7 +4471,25 @@ mod links_and_anchors {
       assert_xpath '/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]/following-sibling::a[@class="link"]', output, 1
     end
 "#
-    );
+        );
+
+        // A leading supplemental anchor (`[[fu]]`) stays a sibling *before* the
+        // section link rather than nesting inside it — an `<a>` cannot nest.
+        let out = convert(":sectlinks:\n\n[#foo]\n== [[fu]]Foo");
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]"#, 1);
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]/a"#, 2);
+        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]"#, 1);
+        assert_xpath(
+            &out,
+            r#"/*[@class="sect1"]/h2[@id="foo"]/a[@class="link"]"#,
+            1,
+        );
+        assert_xpath(
+            &out,
+            r#"/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]/following-sibling::a[@class="link"]"#,
+            1,
+        );
+    }
 
     non_normative!(
         r#"
