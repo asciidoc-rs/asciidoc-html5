@@ -5452,10 +5452,12 @@ mod passthroughs {
             == WarningType::InvalidSubstitutionTypeForPassthroughMacro("bogus".to_string())));
     }
 
-    // Drives `restore_passthroughs` on empty content directly (a parser-model
-    // API this crate does not surface), and the observable equivalent
-    // `convert("pass:[]")` also diverges — this crate drops the empty paragraph
-    // instead of emitting `<p></p>`. Tracked by asciidoc-html5#200.
+    // Drives `extract_passthroughs`/`restore_passthroughs` on empty content
+    // directly — a parser-model API this crate does not surface — so the Ruby
+    // test body itself stays non-normative. The observable equivalent,
+    // `convert("pass:[]")` rendering an empty `<p></p>` (asciidoc-html5#200), is
+    // verified in `renderer`'s
+    // `empty_inline_passthrough_paragraph_renders_an_empty_p`.
     non_normative!(
         r#"
     test 'should allow content of inline pass macro to be empty' do
