@@ -1,14 +1,15 @@
-//! Port of Asciidoctor's `blocks_test.rb` — **front half only** (through the
-//! `Open Blocks` context, source lines 1–1748).
+//! Port of Asciidoctor's `blocks_test.rb` — the front half plus the
+//! `Passthrough Blocks` context (through source line 1841).
 //!
-//! This crate already renders the block types the front half exercises — layout
-//! breaks, comments, sidebar/quote/verse/example/admonition/open blocks, and
-//! verbatim (listing/literal/source) blocks — so those contexts port directly,
-//! driven through `convert` (embedded) / `convert_with(..standalone(true)..)`.
+//! This crate already renders the block types these contexts exercise — layout
+//! breaks, comments, sidebar/quote/verse/example/admonition/open blocks,
+//! verbatim (listing/literal/source) blocks, and passthrough blocks — so they
+//! port directly, driven through `convert` (embedded) /
+//! `convert_with(..standalone(true)..)`.
 //!
-//! The back half (Passthrough, Math, Images, Media, Admonition icons, Source
-//! code, Abstract/Part Intro, Substitutions, References — lines 1749+) hits
-//! block types this renderer does not implement yet and is deliberately not
+//! The remaining back half (Math, Images, Media, Admonition icons, Source code,
+//! Abstract/Part Intro, Substitutions, References — lines 1842+) hits block
+//! types this renderer does not implement yet and is deliberately not
 //! reproduced here; it is being sequenced as its own implement-then-port work.
 //!
 //! What stays `non_normative!` in the front half:
@@ -3308,4 +3309,179 @@ mod open_blocks {
 
 "#
     );
+}
+
+mod passthrough_blocks {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Passthrough Blocks' do
+"#
+    );
+
+    // `block_from_string` + `block.lines`/`block.source` inspect the parser's
+    // block model, which `asciidoc-parser` verifies; this crate has no rendered
+    // output to re-express for it.
+    non_normative!(
+        r#"
+    test 'can parse a passthrough block' do
+      input = <<~'EOS'
+      ++++
+      This is a passthrough block.
+      ++++
+      EOS
+
+      block = block_from_string input
+      refute_nil block
+      assert_equal 1, block.lines.size
+      assert_equal 'This is a passthrough block.', block.source
+    end
+
+"#
+    );
+
+    #[test]
+    fn does_not_perform_subs_on_a_passthrough_block_by_default() {
+        verifies!(
+            r#"
+    test 'does not perform subs on a passthrough block by default' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      ++++
+      This is a '{type}' block.
+      http://asciidoc.org
+      image:tiger.png[]
+      ++++
+      EOS
+
+      expected = %(This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[])
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n++++\nThis is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]\n++++\n";
+        let expected = "This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]";
+
+        // The crate's embedded output carries a single trailing newline, which
+        // Ruby's `output.strip` removes; `trim` mirrors that here.
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn does_not_perform_subs_on_a_passthrough_block_with_pass_style_by_default() {
+        verifies!(
+            r#"
+    test 'does not perform subs on a passthrough block with pass style by default' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      [pass]
+      ++++
+      This is a '{type}' block.
+      http://asciidoc.org
+      image:tiger.png[]
+      ++++
+      EOS
+
+      expected = %(This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[])
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n[pass]\n++++\nThis is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]\n++++\n";
+        let expected = "This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]";
+
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn passthrough_block_honors_explicit_subs_list() {
+        verifies!(
+            r#"
+    test 'passthrough block honors explicit subs list' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      [subs="attributes,quotes,macros"]
+      ++++
+      This is a _{type}_ block.
+      http://asciidoc.org
+      ++++
+      EOS
+
+      expected = %(This is a <em>passthrough</em> block.\n<a href="http://asciidoc.org" class="bare">http://asciidoc.org</a>)
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n[subs=\"attributes,quotes,macros\"]\n++++\nThis is a _{type}_ block.\nhttp://asciidoc.org\n++++\n";
+        let expected =
+            "This is a <em>passthrough</em> block.\n<a href=\"http://asciidoc.org\" class=\"bare\">http://asciidoc.org</a>";
+
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn should_strip_leading_and_trailing_blank_lines_when_converting_raw_block() {
+        verifies!(
+            r#"
+    test 'should strip leading and trailing blank lines when converting raw block' do
+      # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
+      input = <<~EOS
+      ++++
+      line above
+      ++++
+
+      ++++
+
+
+        first line
+
+      last line
+
+
+      ++++
+
+      ++++
+      line below
+      ++++
+      EOS
+
+      doc = document_from_string input, standalone: false
+      block = doc.blocks[1]
+      assert_equal ['', '', '  first line', '', 'last line', '', ''], block.lines
+      result = doc.convert
+      assert_equal "line above\n  first line\n\nlast line\nline below", result, 1
+    end
+  end
+
+"#
+        );
+
+        // The `block.lines` assertion inspects the parser's line buffer (verified
+        // in `asciidoc-parser`); here we drive the rendered output. Each raw
+        // block trims its own leading and trailing blank lines, so the three
+        // passthrough blocks emit only their non-blank content.
+        let input = "++++\nline above\n++++\n\n++++\n\n\n  first line\n\nlast line\n\n\n++++\n\n++++\nline below\n++++\n";
+
+        // Ruby's `result` has no trailing newline; the crate's embedded output —
+        // matching the `asciidoctor` CLI — carries the usual single trailing one.
+        let expected = "line above\n  first line\n\nlast line\nline below\n";
+
+        assert_eq!(convert(input), expected);
+    }
 }
