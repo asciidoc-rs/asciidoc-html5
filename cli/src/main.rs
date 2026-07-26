@@ -161,8 +161,8 @@ adoc produces only the HTML5 backend, so the sole accepted value is `html5` \
 command-line compatibility, so an existing `asciidoctor -b html5 …` invocation \
 runs unchanged.\n\n\
 Any other backend Asciidoctor documents (`xhtml5`, `docbook5`, `manpage`, and \
-the like) is rejected with a non-zero exit, rather than being silently ignored. \
-The `xhtml5` backend in particular is a permanent non-goal of this project."
+the like) is not implemented here, so it is rejected with a non-zero exit rather \
+than being silently ignored."
     )]
     backend: Option<String>,
 
@@ -641,16 +641,15 @@ fn input_file(cli: &Cli) -> Option<&Path> {
 ///
 /// `adoc` produces solely the HTML5 backend, so `-b html5` (case-insensitive)
 /// and the default (no `-b`) are accepted as a no-op, purely for command-line
-/// compatibility with `asciidoctor -b html5 …`. Any other backend Asciidoctor
-/// documents — `xhtml5`, `docbook5`, `manpage`, extended converters — is
-/// rejected rather than silently ignored, so a caller expecting different
-/// output finds out immediately.
+/// compatibility with `asciidoctor -b html5 …`. Every other backend Asciidoctor
+/// documents — `xhtml5`, `docbook5`, `manpage`, extended converters — is simply
+/// not implemented here, so it is rejected rather than silently ignored, and a
+/// caller expecting different output finds out immediately.
 ///
 /// # Errors
 ///
 /// Returns an [`io::ErrorKind::InvalidInput`] error naming the unsupported
-/// backend. The `xhtml5` backend gets a message noting it is a permanent
-/// non-goal of this project, matching the documented decision.
+/// backend.
 fn check_backend(cli: &Cli) -> io::Result<()> {
     let Some(name) = &cli.backend else {
         return Ok(());
@@ -658,13 +657,6 @@ fn check_backend(cli: &Cli) -> io::Result<()> {
 
     match name.to_lowercase().as_str() {
         "html5" => Ok(()),
-        "xhtml5" => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "unsupported backend '{name}': adoc only produces the html5 backend, \
-                 and the xhtml5 backend is a permanent non-goal of this project"
-            ),
-        )),
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("unsupported backend '{name}': adoc only produces the html5 backend"),

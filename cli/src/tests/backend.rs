@@ -31,23 +31,13 @@ fn the_html5_backend_is_accepted() {
     check(&["adoc", "-b", "HTML5", "doc.adoc"]).expect("-b HTML5 is accepted");
 }
 
-// The `xhtml5` backend is a permanent non-goal of this project, so it is
-// rejected with a message that says so — not silently ignored.
-#[test]
-fn the_xhtml5_backend_is_rejected_as_a_non_goal() {
-    let err = check(&["adoc", "-b", "xhtml5", "doc.adoc"]).expect_err("xhtml5 is rejected");
-    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
-
-    let message = err.to_string();
-    assert!(message.contains("xhtml5"), "names the offending backend");
-    assert!(message.contains("non-goal"), "explains it is a non-goal");
-}
-
-// Every other backend Asciidoctor documents is rejected with a message
-// explaining that `adoc` only produces the HTML5 backend.
+// Every other backend Asciidoctor documents — `xhtml5` included, with no
+// special treatment — is not implemented here, so it is rejected with a message
+// explaining that `adoc` only produces the HTML5 backend, rather than being
+// silently ignored.
 #[test]
 fn other_backends_are_rejected() {
-    for backend in ["docbook5", "manpage", "pdf", "revealjs"] {
+    for backend in ["xhtml5", "docbook5", "manpage", "pdf", "revealjs"] {
         let err = check(&["adoc", "-b", backend, "doc.adoc"])
             .expect_err("an unsupported backend is rejected");
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
