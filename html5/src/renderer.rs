@@ -29,9 +29,10 @@
 use asciidoc_parser::{
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
-        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListType,
-        QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock,
-        TableCell, TableCellContent, TableColumn, TableRow, VerticalAlignment,
+        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
+        ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
+        SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
+        VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
     Document, HasSpan, SafeMode,
@@ -302,6 +303,111 @@ fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &
     }
 
     list.marker_style().unwrap_or("arabic")
+}
+
+/// One description-list entry: the terms sharing a single description (their
+/// already-rendered `<dt>` text), paired with the list item that carries that
+/// description — or `None` for a trailing run of terms with no description.
+/// Mirrors Asciidoctor's `[terms, dd]` item pairs.
+type DlistEntry<'src> = (Vec<String>, Option<&'src ListItem<'src>>);
+
+/// Regroups a description list's per-term items into Asciidoctor's `[terms,
+/// dd]` entries.
+///
+/// The parser emits one list item per `term::` line, so several terms sharing
+/// one description arrive as term-only items (no child blocks) followed by the
+/// item holding the description. This accumulates the term-only items and
+/// flushes them, together with the next described item, into a single entry; a
+/// trailing run of undescribed terms forms a final entry with no description.
+fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
+    let mut entries: Vec<DlistEntry<'src>> = Vec::new();
+    let mut pending_terms: Vec<String> = Vec::new();
+
+    // Every child of a description list is a `ListItem` whose marker is a
+    // `DefinedTerm`, so the narrowing helpers never actually discard anything
+    // here; `filter_map`/`extend` let the loop stay branch-free (the narrowing
+    // itself lives in — and is covered through — the helpers).
+    for list_item in list.child_blocks().filter_map(as_list_item) {
+        pending_terms.extend(dlist_term_text(list_item));
+
+        // A described item (one with child blocks) closes the entry, taking the
+        // terms accumulated so far with it.
+        if list_item.child_blocks().next().is_some() {
+            entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
+        }
+    }
+
+    // Any terms left over had no description of their own.
+    if !pending_terms.is_empty() {
+        entries.push((pending_terms, None));
+    }
+
+    entries
+}
+
+/// Narrows a block to the list item it holds, or `None` for any other block.
+/// A [`ListBlock`] only ever holds list items, so list rendering never sees the
+/// `None` case; the narrowing lives here (rather than inline) so it can be
+/// exercised directly.
+fn as_list_item<'src>(block: &'src Block<'src>) -> Option<&'src ListItem<'src>> {
+    match block {
+        Block::ListItem(list_item) => Some(list_item),
+        _ => None,
+    }
+}
+
+/// The already-rendered term text of a description-list item (its `DefinedTerm`
+/// marker's content, with inline substitutions applied), or `None` for a list
+/// item carrying any other marker. A description list's items are always
+/// `DefinedTerm`, so the `None` case never arises during rendering.
+fn dlist_term_text(list_item: &ListItem<'_>) -> Option<String> {
+    match list_item.list_item_marker() {
+        ListItemMarker::DefinedTerm { term, .. } => Some(term.rendered().to_string()),
+        _ => None,
+    }
+}
+
+/// Whether a list-continuation (`+`) line separates a description item's term
+/// from its first child block. Such a block was explicitly attached, so
+/// Asciidoctor renders it as a block rather than folding it into the item's
+/// principal text. The check reads the item's own source between the term and
+/// the first child and looks for a line that is a bare `+`.
+fn continuation_before_first_child(item: &ListItem<'_>, first: &Block<'_>) -> bool {
+    let item_span = item.span();
+    let item_src = item_span.data();
+
+    // The first child lies within the item, so its offset is at or past the
+    // item's; `saturating_sub` and the `min` keep the slice in bounds even if a
+    // span were ever malformed.
+    let start = item_span.byte_offset();
+    let end = first.span().byte_offset();
+    let between = &item_src[..end.saturating_sub(start).min(item_src.len())];
+
+    // Skip the term line itself; a `+` alone on any later line is a
+    // continuation that attached the first block.
+    between.split('\n').skip(1).any(|line| line.trim() == "+")
+}
+
+/// The `labelwidth`/`itemwidth` value of a `horizontal` description list, with
+/// one trailing `%` stripped (Asciidoctor's `chomp '%'`), or `None` when the
+/// attribute is absent.
+fn dlist_width(list: &ListBlock<'_>, name: &str) -> Option<String> {
+    list.attrlist()
+        .and_then(|attrlist| attrlist.named_attribute(name))
+        .map(|attr| {
+            let value = attr.value();
+            value.strip_suffix('%').unwrap_or(value).to_string()
+        })
+}
+
+/// A `<col>` element for a `horizontal` description list's `<colgroup>`,
+/// carrying an inline percentage `width` style when one was given, or bare
+/// otherwise, matching Asciidoctor's `style="width: N%;"`.
+fn dlist_col(width: Option<&str>) -> String {
+    match width {
+        Some(width) => format!("<col style=\"width: {}%;\">", escape_attribute(width)),
+        None => "<col>".to_string(),
+    }
 }
 
 /// Parses the leading integer of `value`, matching Ruby's `String#to_i`: an
@@ -615,7 +721,30 @@ impl Renderer<'_> {
         self.docinfo(document, DocinfoLocation::Head);
 
         self.line("</head>");
-        self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
+
+        // An explicit id and/or role(s) on the document title (the `[#id.role]`
+        // shorthand above the doctitle) move onto the standalone `<body>`: the id
+        // becomes `id="…"` and each role is appended to the doctype class, matching
+        // Asciidoctor's `<body id="idname" class="article rolename">`. (The
+        // bracketed `[[id]]` anchor form is not yet recognized by asciidoc-parser
+        // above a doctitle – asciidoc-parser#968.)
+        let header = document.header();
+        let id_attr = header
+            .id()
+            .map(|id| format!(" id=\"{}\"", escape_attribute(id)))
+            .unwrap_or_default();
+
+        let mut classes = doctype;
+        for role in header.roles() {
+            classes.push(' ');
+            classes.push_str(role);
+        }
+
+        self.line(&format!(
+            "<body{} class=\"{}\">",
+            id_attr,
+            escape_attribute(&classes)
+        ));
 
         // Header docinfo is inserted immediately before the header `<div>`,
         // whether or not the header itself is suppressed by `noheader` — this
@@ -1011,12 +1140,11 @@ impl Renderer<'_> {
             Block::List(list) => match list.type_() {
                 ListType::Unordered => self.ulist(block, list),
                 ListType::Ordered => self.olist(block, list),
+                ListType::Description => self.dlist(block, list),
 
-                // Description and callout lists are not rendered yet; see
-                // ARCHITECTURE.md for the roadmap.
-                ListType::Description | ListType::Callout => {
-                    self.unsupported(&block.resolved_context())
-                }
+                // Callout lists are not rendered yet; see ARCHITECTURE.md for
+                // the roadmap.
+                ListType::Callout => self.unsupported(&block.resolved_context()),
             },
             Block::Table(table) => self.table(block, table),
 
@@ -1438,6 +1566,203 @@ impl Renderer<'_> {
         self.line("</div>");
     }
 
+    /// A description list (`term:: definition`), matching Asciidoctor's
+    /// `convert_dlist`. The block style selects the layout: `qanda` renders a
+    /// numbered question-and-answer `<ol>`, `horizontal` a two-column
+    /// `<table>`, and every other value (including none) the default
+    /// `<dl>`/`<dt>`/`<dd>` structure.
+    ///
+    /// The parser models each `term::` line as its own list item, so
+    /// consecutive terms that share one description surface as term-only items
+    /// (no child blocks) followed by the item that carries the description.
+    /// [`dlist_entries`] regroups them into Asciidoctor's `[terms, dd]` pairs
+    /// before rendering.
+    fn dlist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let style = block.declared_style();
+        let entries = dlist_entries(list);
+
+        match style {
+            Some("qanda") => self.dlist_qanda(block, &entries),
+            Some("horizontal") => self.dlist_horizontal(block, list, &entries),
+            _ => self.dlist_labeled(block, style, &entries),
+        }
+    }
+
+    /// The default `<div class="dlist …"><dl>…</dl></div>` layout: each term
+    /// becomes a `<dt>` and each description a following `<dd>`. A plain
+    /// description list (no style) tags every `<dt>` with `class="hdlist1"`; a
+    /// styled one names the style on the wrapper `<div>` and leaves the `<dt>`
+    /// bare, matching Asciidoctor.
+    fn dlist_labeled(
+        &mut self,
+        block: &Block<'_>,
+        style: Option<&str>,
+        entries: &[DlistEntry<'_>],
+    ) {
+        // `['dlist', style, *roles]` — the style (when present) sits right after
+        // `dlist`, ahead of the roles.
+        let mut base = String::from("dlist");
+        if let Some(style) = style {
+            base.push(' ');
+            base.push_str(style);
+        }
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&base, &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<dl>");
+
+        // A styled list leaves each `<dt>` bare; a plain one tags it `hdlist1`.
+        let dt_open = if style.is_some() {
+            "<dt>"
+        } else {
+            "<dt class=\"hdlist1\">"
+        };
+        for (terms, description) in entries {
+            for term in terms {
+                self.line(&format!("{dt_open}{term}</dt>"));
+            }
+
+            if let Some(item) = description {
+                self.line("<dd>");
+                self.dlist_body(item);
+                self.line("</dd>");
+            }
+        }
+
+        self.line("</dl>");
+        self.line("</div>");
+    }
+
+    /// The `qanda` layout: `<div class="qlist qanda"><ol>…</ol></div>`, each
+    /// entry an `<li>` whose terms render as emphasized `<p><em>…</em></p>`
+    /// questions ahead of the description, matching Asciidoctor.
+    fn dlist_qanda(&mut self, block: &Block<'_>, entries: &[DlistEntry<'_>]) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("qlist qanda", &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<ol>");
+
+        for (terms, description) in entries {
+            self.line("<li>");
+            for term in terms {
+                self.line(&format!("<p><em>{term}</em></p>"));
+            }
+            if let Some(item) = description {
+                self.dlist_body(item);
+            }
+            self.line("</li>");
+        }
+
+        self.line("</ol>");
+        self.line("</div>");
+    }
+
+    /// The `horizontal` layout: `<div class="hdlist"><table>…</table></div>`,
+    /// each entry a `<tr>` with the terms in an `hdlist1` label cell (separated
+    /// by `<br>`) and the description in an `hdlist2` cell, matching
+    /// Asciidoctor. The `labelwidth`/`itemwidth` attributes emit a
+    /// `<colgroup>`, and the `strong` option bolds the label cell.
+    fn dlist_horizontal(
+        &mut self,
+        block: &Block<'_>,
+        list: &ListBlock<'_>,
+        entries: &[DlistEntry<'_>],
+    ) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("hdlist", &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<table>");
+
+        // A `labelwidth`/`itemwidth` pair sizes the two columns; either alone
+        // still emits both `<col>`s (the other with no width), matching
+        // Asciidoctor.
+        let labelwidth = dlist_width(list, "labelwidth");
+        let itemwidth = dlist_width(list, "itemwidth");
+        if labelwidth.is_some() || itemwidth.is_some() {
+            self.line("<colgroup>");
+            self.line(&dlist_col(labelwidth.as_deref()));
+            self.line(&dlist_col(itemwidth.as_deref()));
+            self.line("</colgroup>");
+        }
+
+        let strong = if block.has_option("strong") {
+            " strong"
+        } else {
+            ""
+        };
+        for (terms, description) in entries {
+            self.line("<tr>");
+            self.line(&format!("<td class=\"hdlist1{strong}\">"));
+            for (index, term) in terms.iter().enumerate() {
+                // Terms after the first are separated by a line break.
+                if index > 0 {
+                    self.line("<br>");
+                }
+                self.line(term);
+            }
+            self.line("</td>");
+
+            self.line("<td class=\"hdlist2\">");
+            if let Some(item) = description {
+                self.dlist_body(item);
+            }
+            self.line("</td>");
+            self.line("</tr>");
+        }
+
+        self.line("</table>");
+        self.line("</div>");
+    }
+
+    /// Emits a description entry's body — its principal text as a bare `<p>`
+    /// (Asciidoctor's `dd.text`) followed by any attached blocks
+    /// (`dd.content`), matching Asciidoctor's `convert_dlist`.
+    ///
+    /// Asciidoctor *folds* the first block into the item's principal text when
+    /// it is a paragraph adjacent to the term — same-line text, or the first
+    /// paragraph that follows without a list-continuation (`+`) line between
+    /// (`Parser#fold_first` under `content_adjacent`). A first block that is
+    /// not a paragraph, or that was explicitly attached by a `+` continuation,
+    /// is not folded: the item then has no principal text and every child
+    /// renders as an attached block.
+    fn dlist_body(&mut self, description: &ListItem<'_>) {
+        let blocks: Vec<&Block<'_>> = description.child_blocks().collect();
+
+        // The first block folds into the principal text only when it is a
+        // paragraph the term did not attach with a `+` continuation. An entry
+        // reaching here always has at least one block (it is why the entry has a
+        // description at all), so `first` drives the decision without a separate
+        // empty case.
+        let foldable = blocks.first().is_some_and(|first| {
+            first.resolved_context().as_ref() == "paragraph"
+                && !continuation_before_first_child(description, first)
+        });
+
+        let attached = if foldable {
+            let text = blocks[0].rendered_content().unwrap_or_default();
+            if !text.is_empty() {
+                self.line(&format!("<p>{text}</p>"));
+            }
+            &blocks[1..]
+        } else {
+            &blocks[..]
+        };
+
+        for &block in attached {
+            self.block(block);
+        }
+    }
+
     /// Emits one `<li>…</li>` for a list item: the principal text as a bare
     /// `<p>`, followed by any attached blocks (continuation paragraphs, nested
     /// lists), matching Asciidoctor's `convert_ulist`/`convert_olist` item
@@ -1739,15 +2064,19 @@ impl Renderer<'_> {
         // `Block::id()` now surfaces a section's auto-generated id (it delegates
         // to the `SectionBlock` override), so the block-level accessor is enough.
         let id = block.id();
-        let title = section.section_title();
+        let title = self.section_heading_title(block, section);
 
         if section.section_type() == SectionType::Discrete {
-            // Asciidoctor renders a discrete heading as a bare `<hN>` carrying
-            // the `discrete` class plus any roles, e.g. `class="discrete role"`.
+            // Asciidoctor renders a discrete heading as a bare `<hN>` whose
+            // leading class is the style keyword that declared it — `float` or
+            // `discrete` — followed by any roles, e.g. `class="float role"`.
+            // The parser exposes the keyword through `declared_style`; it
+            // defaults to `discrete` for the rare case one is not recorded.
+            let style = block.declared_style().unwrap_or("discrete");
             self.line(&format!(
                 "<h{heading_level}{}{}>{title}</h{heading_level}>",
                 id_attribute(id),
-                class_attribute("discrete", &block.roles())
+                class_attribute(style, &block.roles())
             ));
             return;
         }
@@ -1770,6 +2099,30 @@ impl Renderer<'_> {
         }
 
         self.line("</div>");
+    }
+
+    /// Builds a section heading's displayed text, applying Asciidoctor's
+    /// `captioned_title` precedence: a captioned section (an appendix carries
+    /// an `"Appendix A: "` / `"A. "` caption prefix) shows its caption
+    /// ahead of the title; otherwise a numbered section (`sectnums`) shows
+    /// its section number as a `"1.1. "` prefix; otherwise the bare title.
+    /// The parser assigns the number and caption, so the renderer only lays
+    /// out the prefix. The title itself already has inline substitutions
+    /// applied.
+    fn section_heading_title<'src>(
+        &self,
+        block: &'src Block<'src>,
+        section: &'src SectionBlock<'src>,
+    ) -> String {
+        let title = section.section_title();
+
+        if let Some(caption) = block.caption() {
+            format!("{caption}{title}")
+        } else if let Some(number) = section.section_number() {
+            format!("{number}. {title}")
+        } else {
+            title.to_string()
+        }
     }
 
     /// The preamble: content between the doctitle and the first section,
@@ -2238,9 +2591,9 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        // Description lists are not rendered yet, so they still emit the
-        // placeholder marker (unordered/ordered lists now render).
-        let html = convert("term:: definition");
+        // Callout lists are not rendered yet, so they still emit the
+        // placeholder marker (unordered/ordered/description lists now render).
+        let html = convert("----\ncode <1>\n----\n\n<1> explanation");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
     }
 
@@ -2322,6 +2675,116 @@ mod tests {
 
         let id_and_role = convert("* one\n[#second.special]\n* two");
         assert!(id_and_role.contains("<li id=\"second\" class=\"special\">\n<p>two</p>"));
+    }
+
+    #[test]
+    fn description_list_renders_dlist() {
+        // A plain description list is `<div class="dlist"><dl>`, each term a
+        // `<dt class="hdlist1">` and each description a `<dd>` holding the
+        // principal text as a bare `<p>`, matching Asciidoctor's `convert_dlist`.
+        let html = convert("CPU:: The brain\nRAM:: The memory");
+        assert!(html.contains(
+            "<div class=\"dlist\">\n<dl>\n\
+             <dt class=\"hdlist1\">CPU</dt>\n<dd>\n<p>The brain</p>\n</dd>\n\
+             <dt class=\"hdlist1\">RAM</dt>\n<dd>\n<p>The memory</p>\n</dd>\n</dl>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn description_list_folds_subsequent_line_and_appends_continuation_block() {
+        // A term with no inline text folds the immediately-following paragraph
+        // into its principal text (a bare `<p>`), while a paragraph attached by
+        // a `+` continuation stays a block (`<div class="paragraph">`).
+        let html = convert("term::\ndef\n+\nattached");
+        assert!(html.contains(
+            "<dt class=\"hdlist1\">term</dt>\n<dd>\n<p>def</p>\n\
+             <div class=\"paragraph\">\n<p>attached</p>\n</div>\n</dd>"
+        ));
+    }
+
+    #[test]
+    fn description_list_groups_multiple_terms_with_one_description() {
+        // Consecutive terms with no description of their own share the next
+        // term's `<dd>`: each becomes its own `<dt>` ahead of the single `<dd>`.
+        let html = convert("term1::\nterm2:: shared");
+        assert!(html.contains(
+            "<dt class=\"hdlist1\">term1</dt>\n\
+             <dt class=\"hdlist1\">term2</dt>\n<dd>\n<p>shared</p>\n</dd>"
+        ));
+    }
+
+    #[test]
+    fn qanda_description_list_renders_ordered_questions() {
+        // The `qanda` style renders `<div class="qlist qanda"><ol>`, each entry
+        // an `<li>` with emphasized `<p><em>…</em></p>` questions.
+        let html = convert("[qanda]\nWhat?:: This.");
+        assert!(html.contains(
+            "<div class=\"qlist qanda\">\n<ol>\n<li>\n<p><em>What?</em></p>\n<p>This.</p>\n</li>\n</ol>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn horizontal_description_list_renders_table() {
+        // The `horizontal` style renders `<div class="hdlist"><table>`, the
+        // terms in an `hdlist1` label cell and the description in an `hdlist2`
+        // cell.
+        let html = convert("[horizontal]\nCPU:: brain");
+        assert!(html.contains(
+            "<div class=\"hdlist\">\n<table>\n<tr>\n\
+             <td class=\"hdlist1\">\nCPU\n</td>\n\
+             <td class=\"hdlist2\">\n<p>brain</p>\n</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn horizontal_description_list_sets_column_widths() {
+        // `labelwidth`/`itemwidth` emit a `<colgroup>` whose `<col>`s carry the
+        // widths as inline styles (Asciidoctor's `style="width: N%;"`), and the
+        // `strong` option bolds the label cell.
+        let html = convert("[horizontal%strong,labelwidth=20%,itemwidth=80%]\nCPU:: brain");
+        assert!(html.contains(
+            "<colgroup>\n<col style=\"width: 20%;\">\n<col style=\"width: 80%;\">\n</colgroup>"
+        ));
+        assert!(html.contains("<td class=\"hdlist1 strong\">"));
+    }
+
+    #[test]
+    fn horizontal_description_list_with_one_column_width_leaves_the_other_bare() {
+        // With only `labelwidth` set, Asciidoctor still emits both `<col>`s: the
+        // label column carries its width, the item column is a bare `<col>`.
+        let html = convert("[horizontal,labelwidth=30%]\nCPU:: brain");
+        assert!(html.contains("<colgroup>\n<col style=\"width: 30%;\">\n<col>\n</colgroup>"));
+    }
+
+    #[test]
+    fn dlist_narrowing_helpers_handle_both_arms() {
+        // `dlist_entries` narrows through these helpers on the assumption that a
+        // description list only holds `DefinedTerm` list items. That always
+        // holds during rendering, so exercise both arms directly here: a
+        // non-list block and a non-description marker take the `None` paths a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        use super::{as_list_item, dlist_term_text};
+
+        // A bullet list: the `<ul>` block is not a list item, its child is, and
+        // that child's marker is not a description term. `child_blocks()` on the
+        // `&Block` descends into the list's items without a narrowing branch.
+        let mut parser = Parser::default();
+        let ulist = parser.parse("* bullet\n");
+        let list_block = ulist.child_blocks().next().unwrap();
+        assert!(as_list_item(list_block).is_none());
+
+        let bullet_item = as_list_item(list_block.child_blocks().next().unwrap())
+            .expect("a list's child is always a list item");
+        assert!(dlist_term_text(bullet_item).is_none());
+
+        // A description list: the item's `DefinedTerm` marker yields its term.
+        let mut parser = Parser::default();
+        let dlist = parser.parse("term:: def\n");
+        let dlist_block = dlist.child_blocks().next().unwrap();
+        let term_item = as_list_item(dlist_block.child_blocks().next().unwrap()).unwrap();
+        assert_eq!(dlist_term_text(term_item).as_deref(), Some("term"));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
@@ -2519,6 +2982,55 @@ mod tests {
         let html = convert("= Doc\n\n[.independent]\n[discrete]\n== Free Heading");
         assert!(content(&html)
             .contains("<h2 id=\"_free_heading\" class=\"discrete independent\">Free Heading</h2>"));
+    }
+
+    #[test]
+    fn floating_title_leading_class_is_the_style_keyword() {
+        // A `[float]` heading keeps `float` as its leading class (not
+        // `discrete`), matching Asciidoctor; roles still follow.
+        let html = convert("= Doc\n\n[.independent]\n[float]\n=== Free Heading");
+        assert!(
+            content(&html)
+                .contains("<h3 id=\"_free_heading\" class=\"float independent\">Free Heading</h3>"),
+            "{}",
+            content(&html)
+        );
+    }
+
+    #[test]
+    fn numbered_sections_prefix_the_heading_with_the_section_number() {
+        // With `:sectnums:` each heading carries its dotted section number and a
+        // trailing separator ahead of the title, matching Asciidoctor.
+        let html = convert("= Doc\n:sectnums:\n\n== One\n\ntext\n\n=== One One\n\n== Two");
+        let body = content(&html);
+        assert!(body.contains("<h2 id=\"_one\">1. One</h2>"), "{body}");
+        assert!(
+            body.contains("<h3 id=\"_one_one\">1.1. One One</h3>"),
+            "{body}"
+        );
+        assert!(body.contains("<h2 id=\"_two\">2. Two</h2>"), "{body}");
+    }
+
+    #[test]
+    fn unnumbered_sections_show_the_bare_title() {
+        // Without `:sectnums:` the parser assigns no section number, so the
+        // heading is just the title.
+        let html = convert("= Doc\n\n== One\n\n== Two");
+        let body = content(&html);
+        assert!(body.contains("<h2 id=\"_one\">One</h2>"), "{body}");
+        assert!(body.contains("<h2 id=\"_two\">Two</h2>"), "{body}");
+    }
+
+    #[test]
+    fn appendix_heading_carries_its_caption_prefix() {
+        // An appendix is always lettered and captioned, even without
+        // `:sectnums:`; the caption prefix precedes the title.
+        let html = convert("= Doc\n\n[appendix]\n== Grammar\n\ntext");
+        assert!(
+            content(&html).contains("<h2 id=\"_grammar\">Appendix A: Grammar</h2>"),
+            "{}",
+            content(&html)
+        );
     }
 
     #[test]

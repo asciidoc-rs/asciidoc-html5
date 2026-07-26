@@ -1,8 +1,19 @@
 use clap::Parser as _;
 
-use crate::{check_backend, tests::sdd::*, Cli};
+use crate::{check_backend, check_doctype, run_with_input, tests::sdd::*, Cli};
 
 track_file!("docs/modules/cli/pages/options.adoc");
+
+/// Converts a two-section document (with no `sectnums` in its own header) under
+/// `args` and returns the rendered HTML, so the `-n` behavior can be driven end
+/// to end through the CLI pipeline.
+fn convert(args: &[&str]) -> String {
+    let cli = Cli::parse_from(args);
+    let mut stdin = &b"= Doc\n\n== One\n"[..];
+    let mut stdout = Vec::new();
+    run_with_input(&cli, &mut stdin, &mut stdout).expect("conversion succeeds");
+    String::from_utf8(stdout).expect("output is UTF-8")
+}
 
 // This crate's "CLI Options" page. It is a landing page for the CLI module:
 // descriptive prose, cross-references to the task-specific option pages, and
@@ -119,6 +130,73 @@ silently ignored.
             "-b {backend} is rejected"
         );
     }
+}
+
+// `-d` (`--doctype`) is accepted for `asciidoctor` compatibility: `article`
+// (the only doctype `adoc` models) is a no-op, and every other doctype fails
+// rather than being silently ignored. Driven through `check_doctype`, the gate
+// `adoc` applies to the parsed `--doctype` value.
+#[test]
+fn the_doctype_option_accepts_only_article() {
+    verifies!(
+        r#"
+Likewise, `adoc` accepts `-d` (`--doctype`). Because it models only the `article`
+doctype, the sole accepted value is `article` — like `asciidoctor -d article`, it
+is a no-op — while the other doctypes Asciidoctor defines, `book`, `manpage`, and
+`inline`, exit with an error instead of being silently ignored.
+
+"#
+    );
+
+    // `-d article` is accepted as a no-op, as is omitting the option entirely.
+    check_doctype(&Cli::parse_from(["adoc", "-d", "article", "doc.adoc"]))
+        .expect("-d article is accepted");
+    check_doctype(&Cli::parse_from(["adoc", "doc.adoc"])).expect("the default is accepted");
+
+    // Every other doctype exits with an error rather than being ignored.
+    for doctype in ["book", "manpage", "inline"] {
+        assert!(
+            check_doctype(&Cli::parse_from(["adoc", "-d", doctype, "doc.adoc"])).is_err(),
+            "-d {doctype} is rejected"
+        );
+    }
+}
+
+// `-n` (`--section-numbers`) sets the `sectnums` attribute, numbering section
+// headings; an explicit `-a sectnums!` on the same command line overrides it.
+// Both are driven end to end through the CLI's conversion pipeline.
+#[test]
+fn the_section_numbers_option_numbers_headings() {
+    verifies!(
+        r#"
+To auto-number section titles, pass `-n` (`--section-numbers`), the same shorthand
+`asciidoctor -n` provides for setting the `sectnums` document attribute. With it,
+each section heading is prefixed with its dotted section number (`1.`, `1.1.`, …);
+without it, headings are unnumbered. It is seeded before any `-a` option, so an
+explicit `-a sectnums!` on the same command line still leaves the headings
+unnumbered.
+
+"#
+    );
+
+    // With `-n`, the lone section heading is numbered `1.`.
+    assert!(
+        convert(&["adoc", "-n", "-o", "-"]).contains(r#"<h2 id="_one">1. One</h2>"#),
+        "-n numbers the heading"
+    );
+
+    // Without it, the heading is unnumbered.
+    assert!(
+        convert(&["adoc", "-o", "-"]).contains(r#"<h2 id="_one">One</h2>"#),
+        "the heading is unnumbered by default"
+    );
+
+    // An explicit `-a sectnums!` overrides `-n`, leaving the heading unnumbered.
+    assert!(
+        convert(&["adoc", "-n", "-a", "sectnums!", "-o", "-"])
+            .contains(r#"<h2 id="_one">One</h2>"#),
+        "-a sectnums! overrides -n"
+    );
 }
 
 // The known-limitations note records the scope of `adoc`'s option coverage; it

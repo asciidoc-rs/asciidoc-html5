@@ -188,6 +188,36 @@ than being silently ignored."
     )]
     backend: Option<String>,
 
+    /// Select the document type; only `article` is supported (default: article)
+    #[arg(
+        short = 'd',
+        long = "doctype",
+        value_name = "DOCTYPE",
+        long_help = "Select the document type, the way Asciidoctor's -d option does.\n\n\
+adoc models only the `article` doctype, so the sole accepted value is `article` \
+(case-insensitive), which — like omitting the option — is a no-op accepted for \
+command-line compatibility, so an existing `asciidoctor -d article …` invocation \
+runs unchanged.\n\n\
+The other doctypes Asciidoctor defines (`book`, `manpage`, and `inline`) are not \
+implemented here, so each is rejected with a non-zero exit rather than being \
+silently ignored."
+    )]
+    doctype: Option<String>,
+
+    /// Auto-number section titles (sets the `sectnums` attribute)
+    #[arg(
+        short = 'n',
+        long = "section-numbers",
+        long_help = "Auto-number section titles, the way Asciidoctor's -n option does.\n\n\
+Equivalent to setting the `sectnums` document attribute (`-a sectnums`): each \
+section heading is prefixed with its dotted section number (`1.`, `1.1.`, …), \
+nesting down to the `sectnumlevels` depth (3 by default). Numbering is off \
+unless this flag, or the attribute, turns it on.\n\n\
+This flag seeds `sectnums` before any -a option on the same command line, so an \
+explicit `-a sectnums!` still wins and leaves the headings unnumbered."
+    )]
+    section_numbers: bool,
+
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
@@ -346,16 +376,18 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
-    // Reject an unsupported backend before reading or converting anything, so an
-    // `-b docbook5` invocation fails cleanly without touching the input.
+    // Reject an unsupported backend or doctype before reading or converting
+    // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
+    // touching the input.
     check_backend(cli)?;
+    check_doctype(cli)?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document — matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
-    let base_options = build_options(&cli.attribute)?
+    let base_options = build_options(cli.section_numbers, &cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
 
@@ -826,6 +858,34 @@ fn check_backend(cli: &Cli) -> io::Result<()> {
     }
 }
 
+/// Validates the `-d`/`--doctype` selection, accepting only the article
+/// doctype.
+///
+/// `adoc` models solely the `article` doctype, so `-d article`
+/// (case-insensitive) and the default (no `-d`) are accepted as a no-op, purely
+/// for command-line compatibility with `asciidoctor -d article …`. The other
+/// doctypes Asciidoctor defines — `book`, `manpage`, and `inline` — are not
+/// implemented here, so each is rejected rather than silently ignored, and a
+/// caller expecting different output finds out immediately.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error naming the unsupported
+/// doctype.
+fn check_doctype(cli: &Cli) -> io::Result<()> {
+    let Some(name) = &cli.doctype else {
+        return Ok(());
+    };
+
+    match name.to_lowercase().as_str() {
+        "article" => Ok(()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unsupported doctype '{name}': adoc only produces the article doctype"),
+        )),
+    }
+}
+
 /// Resolves the [`SafeMode`] to convert under from the CLI's safe-mode options.
 ///
 /// `--safe-mode=MODE` names the mode explicitly; the compatibility flag
@@ -1044,10 +1104,21 @@ fn parse_failure_level(name: &str) -> io::Result<LogLevel> {
     }
 }
 
-/// Builds the conversion [`Options`] from the raw `-a`/`--attribute` specs,
-/// parsing each with [`apply_attribute_spec`].
-fn build_options(specs: &[String]) -> io::Result<Options> {
+/// Builds the conversion [`Options`] from the `-n`/`--section-numbers` flag and
+/// the raw `-a`/`--attribute` specs, parsing each spec with
+/// [`apply_attribute_spec`].
+///
+/// `-n` is Asciidoctor's shorthand for `-a sectnums`, so it is seeded as an
+/// override *before* the `-a` specs are applied. Because a later directive for
+/// the same name wins, an explicit `-a sectnums!` on the same command line
+/// still overrides `-n` and leaves headings unnumbered — matching
+/// `asciidoctor -n -a sectnums!`.
+fn build_options(section_numbers: bool, specs: &[String]) -> io::Result<Options> {
     let mut options = Options::new();
+    if section_numbers {
+        options = options.set("sectnums");
+    }
+
     for spec in specs {
         options = apply_attribute_spec(options, spec)?;
     }

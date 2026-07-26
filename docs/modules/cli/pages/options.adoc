@@ -40,6 +40,18 @@ value is `html5` — like `asciidoctor -b html5`, it is a no-op — while any ot
 backend, such as `xhtml5` or `docbook5`, exits with an error instead of being
 silently ignored.
 
+Likewise, `adoc` accepts `-d` (`--doctype`). Because it models only the `article`
+doctype, the sole accepted value is `article` — like `asciidoctor -d article`, it
+is a no-op — while the other doctypes Asciidoctor defines, `book`, `manpage`, and
+`inline`, exit with an error instead of being silently ignored.
+
+To auto-number section titles, pass `-n` (`--section-numbers`), the same shorthand
+`asciidoctor -n` provides for setting the `sectnums` document attribute. With it,
+each section heading is prefixed with its dotted section number (`1.`, `1.1.`, …);
+without it, headings are unnumbered. It is seeded before any `-a` option, so an
+explicit `-a sectnums!` on the same command line still leaves the headings
+unnumbered.
+
 [NOTE]
 .Known limitations
 ====

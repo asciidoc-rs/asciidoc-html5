@@ -16,11 +16,12 @@
 //!   it matches the node test (used to name the type of a positionally-selected
 //!   node, e.g. `((…)[N])/self::div[@class="…"]`)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
-//!   `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) =
-//!   "x"]`, `[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per
-//!   context node). Predicates are applied in source order, so a positional
-//!   `[N]` selects the Nth node that the predicates to its left left behind
-//!   (`tag[text()="x"][2]` ≠ `tag[2][text()="x"]`)
+//!   `[not(@attr)]`, `[text()="x"]`, `[contains(text(), "x")]`,
+//!   `[normalize-space(text()) = "x"]`, `[starts-with(., "x")]`, and the
+//!   positional `[N]` (1-indexed, per context node). Predicates are applied in
+//!   source order, so a positional `[N]` selects the Nth node that the
+//!   predicates to its left left behind (`tag[text()="x"][2]` ≠
+//!   `tag[2][text()="x"]`)
 //! - a leading grouped path `(subpath)[N]…/rest` — the parenthesized subpath is
 //!   evaluated first, then a positional predicate on the *group* selects the
 //!   Nth match in document order across the whole set (not per context, the way
@@ -386,6 +387,7 @@ enum Pred {
     Class(String),
     Attr(String, String),
     AttrExists(String),
+    NotAttrExists(String),
     Text(String),
     ContainsText(String),
     NormalizeSpaceText(String),
@@ -404,11 +406,10 @@ impl Pred {
             // for the renderer's single-space-separated class lists.
             Pred::Class(v) => node.classes.join(" ") == *v,
             Pred::Attr(k, v) => node.attributes.get(k).map(String::as_str) == Some(v.as_str()),
-            Pred::AttrExists(k) => match k.as_str() {
-                "id" => node.id.is_some(),
-                "class" => !node.classes.is_empty(),
-                _ => node.attributes.contains_key(k),
-            },
+            Pred::AttrExists(k) => attr_exists(node, k),
+            // `not(@attr)`: the element lacks the attribute entirely — e.g.
+            // `//h1[not(@id)]` for an idless heading.
+            Pred::NotAttrExists(k) => !attr_exists(node, k),
             Pred::Text(v) => node.text.as_deref() == Some(v.as_str()),
             // `contains(text(), "v")`: the element's direct text contains `v`.
             Pred::ContainsText(v) => node.text.as_deref().is_some_and(|t| t.contains(v.as_str())),
@@ -445,6 +446,16 @@ enum PredTerm {
 /// ends, mirroring XPath's `normalize-space()`.
 fn normalize_space(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Whether `node` carries the attribute `k` at all (the `id` and `class`
+/// attributes are projected onto their own fields, so they are checked there).
+fn attr_exists(node: &VirtualNode, k: &str) -> bool {
+    match k {
+        "id" => node.id.is_some(),
+        "class" => !node.classes.is_empty(),
+        _ => node.attributes.contains_key(k),
+    }
 }
 
 /// One location step: an axis, a node test, and its predicates in source order
@@ -645,6 +656,19 @@ fn parse_predicate(inner: &str, terms: &mut Vec<PredTerm>) {
     }
 
     let mut filter = |pred| terms.push(PredTerm::Filter(pred));
+
+    // `not(@attr)` — the element lacks the named attribute. Only the
+    // attribute-presence form is used by the suite.
+    if let Some(rest) = inner.strip_prefix("not(") {
+        let arg = rest
+            .strip_suffix(')')
+            .unwrap_or_else(|| panic!("malformed `not(…)` predicate `[{inner}]`"));
+        if let Some(attr) = arg.trim().strip_prefix('@') {
+            filter(Pred::NotAttrExists(attr.trim().to_string()));
+            return;
+        }
+        panic!("assert_html `not(…)` supports only `not(@attr)` (got `[{inner}]`)");
+    }
 
     if let Some(attr) = inner.strip_prefix('@') {
         if let Some((name, value)) = attr.split_once('=') {
