@@ -12,10 +12,11 @@ track_file!("docs/modules/cli/pages/output-file.adoc");
 // against the current directory, which also fixes the companion-file
 // directory); `-D` names the output directory while the file name defaults, and
 // a relative `-o` is then resolved inside it; `-D` applies per input, so it
-// also governs a multi-file conversion; and a piped document writes to standard
-// output unless `-o` names a file. Each invocation is verified through `adoc`'s
-// own routing (`Cli` plus the private `output_target`/`output_dir` helpers)
-// and, for the file-writing cases, end to end.
+// also governs a multi-file conversion; `-R` names a source root so `-D`
+// recreates each input's subdirectory beneath it; and a piped document writes
+// to standard output unless `-o` names a file. Each invocation is verified
+// through `adoc`'s own routing (`Cli` plus the private `output_target`/
+// `output_dir` helpers) and, for the file-writing cases, end to end.
 
 /// The output file `adoc` would write this invocation's HTML to, or `None` when
 /// it writes to standard output.
@@ -289,6 +290,84 @@ into [.path]_build_:
     assert!(std::fs::read_to_string(build.join("b.html"))
         .expect("read b output")
         .contains("Bravo."));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// `-R` names a source root so that `-D` recreates each input's subdirectory
+// beneath it; an input outside the root, or piped standard input, keeps the
+// flat `-D` behavior, and `-R` is inert without `-D`.
+#[test]
+fn the_source_dir_option_recreates_input_subdirectories() {
+    verifies!(
+        r#"
+== Preserve the input directory structure
+
+By itself, `-D` writes every output into one flat directory, so inputs that live
+in different subdirectories but share a base name would collide. The `-R`
+(longhand `--source-dir`) option names a source root, and `adoc` then recreates
+each input's subdirectory beneath that root inside the `-D` directory:
+
+ $ adoc -D out -R src src/guide/intro.adoc
+
+Because [.path]_src/guide/intro.adoc_ sits under the [.path]_src_ source root, its
+output is written to [.path]_out/guide/intro.html_ rather than flattened to
+[.path]_out/intro.html_. An input that is not located under the source root, and
+a document read from standard input, are unaffected and keep the plain `-D`
+behavior. `-R` has no effect unless `-D` is also given, since without a
+destination directory there is nowhere to build the tree.
+
+"#
+    );
+
+    // An input under the source root has its subdirectory recreated inside `-D`;
+    // the `--source-dir` longhand behaves the same.
+    assert_eq!(
+        output_file(&["adoc", "-D", "out", "-R", "src", "src/guide/intro.adoc"]),
+        Some(PathBuf::from("out/guide/intro.html"))
+    );
+    assert_eq!(
+        output_file(&[
+            "adoc",
+            "--destination-dir",
+            "out",
+            "--source-dir",
+            "src",
+            "src/guide/intro.adoc",
+        ]),
+        Some(PathBuf::from("out/guide/intro.html"))
+    );
+
+    // An input that is not under the source root keeps the flat `-D` output, and
+    // `-R` without `-D` is inert (the derived name is written beside the input).
+    assert_eq!(
+        output_file(&["adoc", "-D", "out", "-R", "other", "src/guide/intro.adoc"]),
+        Some(PathBuf::from("out/intro.html"))
+    );
+    assert_eq!(
+        output_file(&["adoc", "-R", "src", "src/guide/intro.adoc"]),
+        Some(PathBuf::from("src/guide/intro.html"))
+    );
+
+    // End to end: the mirrored subdirectory is created under the destination and
+    // the HTML is written inside it.
+    let dir = sandbox("source-dir");
+    let input = dir.join("src").join("guide").join("intro.adoc");
+    std::fs::create_dir_all(input.parent().unwrap()).expect("create src tree");
+    std::fs::write(&input, "= Intro\n\nBody.\n").expect("write input");
+    let out = dir.join("out");
+    let src = dir.join("src");
+    let stdout = run_argv(&[
+        "adoc",
+        "-D",
+        out.to_str().unwrap(),
+        "-R",
+        src.to_str().unwrap(),
+        input.to_str().unwrap(),
+    ]);
+    assert!(stdout.is_empty(), "adoc wrote to stdout instead of a file");
+    let html = std::fs::read_to_string(out.join("guide").join("intro.html"))
+        .expect("read mirrored output");
+    assert!(html.contains("<p>Body.</p>"));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

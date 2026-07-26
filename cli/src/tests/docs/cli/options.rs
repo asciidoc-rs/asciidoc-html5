@@ -73,7 +73,8 @@ non_normative!(
 Each option is described in depth on the page for the task it serves:
 
 * xref:output-file.adoc[Specify an Output File] covers `-o` (`--output`) to name
-the output file and `-D` (`--destination-dir`) to set the output directory.
+the output file, `-D` (`--destination-dir`) to set the output directory, and `-R`
+(`--source-dir`) to recreate the input's subdirectories under it.
 * xref:set-safe-mode.adoc[Set Safe Mode] covers `-S` (`--safe-mode`), `--safe`,
 and `-B` (`--base-dir`).
 * xref:io-piping.adoc[Pipe Content] covers reading from standard input and
