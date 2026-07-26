@@ -1373,9 +1373,8 @@ mod levels {
             );
 
             // The bracketed block-anchor form `[[idname]]` above the document title
-            // is recognized by asciidoc-parser (fixed in 0.27.2, asciidoc-parser#968),
-            // so its id lands on the `<body>` just like the `[#idname]` shorthand
-            // verified just below.
+            // is recognized, so its id lands on the `<body>` just like the
+            // `[#idname]` shorthand verified just below.
             let output = convert_standalone("[[idname]]\n= Document Title\n\ncontent\n");
             assert_css(&output, "body#idname", 1);
         }
@@ -1449,8 +1448,7 @@ mod levels {
             );
 
             // The bracketed block-anchor form `[[reference]]` above the document
-            // title is recognized by asciidoc-parser (fixed in 0.27.2,
-            // asciidoc-parser#968): the id reaches the document header and the
+            // title is recognized: the id reaches the document header and the
             // `<body>`, and the attribute entry below the title still applies.
             let input = "[[reference]]\n= Reference Manual\n:css-signature: refguide\n\npreamble\n";
             let doc = load(input);
@@ -1515,8 +1513,7 @@ mod levels {
 "#
             );
 
-            // An xref to the document title now resolves to its title text (fixed
-            // in asciidoc-parser 0.27.2, asciidoc-parser#965).
+            // An xref to the document title resolves to its title text.
             let output = convert_standalone(
                 "[#manual]\n= Reference Manual\n:xrefstyle: full\n\nThis is the <<manual>>.\n",
             );
@@ -2722,10 +2719,10 @@ mod discrete_heading {
     );
 
     // Not verified: asserts the parser's internal block context is
-    // :floating_title (fixed in asciidoc-parser 0.27.2, asciidoc-parser#966). The
-    // renderer keys discrete headings off `section_type()` rather than the block
-    // context, so this claim is a parser-model detail the parser crate verifies;
-    // discrete rendering and catalog registration are covered by the tests below.
+    // :floating_title. The renderer keys discrete headings off `section_type()`
+    // rather than the block context, so this claim is a parser-model detail the
+    // parser crate verifies; discrete rendering and catalog registration are
+    // covered by the tests below.
     non_normative!(
         r#"
     test 'discrete heading should be a block with context floating_title' do
