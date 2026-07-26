@@ -1182,19 +1182,25 @@ impl Renderer<'_> {
     }
 
     /// A collapsible example (`[%collapsible]`): a `<details>`/`<summary>`
-    /// disclosure widget in place of the standard `exampleblock`. The `open`
-    /// option (`[%collapsible%open]`) adds the boolean `open` attribute so the
-    /// widget starts expanded, and an untitled block falls back to a default
-    /// `Details` summary. A collapsible example is never captioned or numbered
-    /// — the parser suppresses its caption — so it does not consume an
-    /// example number.
+    /// disclosure widget in place of the standard `exampleblock`. The block's
+    /// id and roles carry onto the `<details>` element (`id="…"` and each role
+    /// as a class), matching Asciidoctor. The `open` option
+    /// (`[%collapsible%open]`) adds the boolean `open` attribute so the widget
+    /// starts expanded, and an untitled block falls back to a default `Details`
+    /// summary. A collapsible example is never captioned or numbered — the
+    /// parser suppresses its caption — so it does not consume an example
+    /// number.
     fn collapsible_example<'src>(&mut self, block: &'src Block<'src>) {
         let open = if block.has_option("open") {
             " open"
         } else {
             ""
         };
-        self.line(&format!("<details{}{open}>", id_attribute(block.id())));
+        self.line(&format!(
+            "<details{}{}{open}>",
+            id_attribute(block.id()),
+            class_attribute("", &block.roles())
+        ));
         let summary = block.title().unwrap_or("Details");
         self.line(&format!("<summary class=\"title\">{summary}</summary>"));
         self.line("<div class=\"content\">");

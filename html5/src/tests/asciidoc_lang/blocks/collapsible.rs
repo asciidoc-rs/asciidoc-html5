@@ -75,10 +75,24 @@ include::example$collapsible.adoc[tag=basic]
     assert_css(&output, "details > summary.title + .content", 1);
 }
 
-non_normative!(
-    r#"
+// Like any other block, a collapsible block honors the `id` and `role`
+// attributes: the id becomes `id="…"` on the `<details>` element and each role
+// becomes one of its classes.
+#[test]
+fn collapsible_block_recognizes_id_and_role_attributes() {
+    verifies!(
+        r#"
 Like other blocks, the collapsible block recognizes the `id` and `role` attributes.
 
+"#
+    );
+
+    let output = convert("[#ex-toggle.rolename%collapsible]\n====\ncontent\n====\n");
+    assert_css(&output, "details#ex-toggle.rolename", 1);
+}
+
+non_normative!(
+    r#"
 == Collapsible paragraph syntax
 
 "#
