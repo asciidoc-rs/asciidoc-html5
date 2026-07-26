@@ -6,9 +6,10 @@
 //! resolves cross-references and the document catalog — so the `Ids`, `Levels`,
 //! `Substitutions`, `Markdown-style headings`, `Discrete Heading`,
 //! `Level offset`, `Section Numbering`, the appendix slice of `Special
-//! sections`, `heading patterns in blocks`, and the warning/xref parts of
-//! `Nesting` and `Links and anchors` port directly, driven through `convert`
-//! (embedded) / `convert_with(.. standalone(true) ..)`.
+//! sections`, `heading patterns in blocks`, `Links and anchors` (including the
+//! `sectanchors` / `sectlinks` heading self-links), and the warning/xref parts
+//! of `Nesting` port directly, driven through `convert` (embedded) /
+//! `convert_with(.. standalone(true) ..)`.
 //!
 //! What stays `non_normative!` here:
 //! - the **Table of Contents** context and the toc assertions elsewhere — TOC
@@ -1357,8 +1358,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
+        // Not verified: the bracketed block-anchor form `[[idname]]` above the
+        // document title is not recognized by asciidoc-parser (header title/id come
+        // back empty), so the id never reaches the `<body>` (asciidoc-parser#968).
+        // The equivalent `[#idname]` shorthand is verified just below.
         non_normative!(
             r#"
       test 'should assign id on document title to body' do
@@ -1375,10 +1378,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_assign_id_defined_using_shorthand_syntax_on_document_title_to_body() {
+            verifies!(
+                r#"
       test 'should assign id defined using shorthand syntax on document title to body' do
         input = <<~'EOS'
         [#idname]
@@ -1391,12 +1394,16 @@ mod levels {
       end
 
 "#
-        );
+            );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+            let output = convert_standalone("[#idname]\n= Document Title\n\ncontent\n");
+            assert_css(&output, "body#idname", 1);
+        }
+
+        #[test]
+        fn should_use_id_defined_in_block_attributes_instead_of_id_defined_inline() {
+            verifies!(
+                r#"
       test 'should use ID defined in block attributes instead of ID defined inline' do
         input = <<~'EOS'
         [#idname-block]
@@ -1409,10 +1416,18 @@ mod levels {
       end
 
 "#
-        );
+            );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
+            let output = convert_standalone(
+                "[#idname-block]\n= Document Title [[idname-inline]]\n\ncontent\n",
+            );
+            assert_css(&output, "body#idname-block", 1);
+        }
+
+        // Not verified: the bracketed block-anchor form `[[reference]]` above the
+        // document title is not recognized by asciidoc-parser (header title/id come
+        // back empty), so the id reaches neither the document nor the `<body>`
+        // (asciidoc-parser#968).
         non_normative!(
             r#"
       test 'block id above document title sets id on document' do
@@ -1484,10 +1499,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_discard_style_role_and_options_shorthand_attributes_defined_on_document_title() {
+            verifies!(
+                r#"
       test 'should discard style, role and options shorthand attributes defined on document title' do
         input = <<~'EOS'
         [style#idname.rolename%optionname]
@@ -1504,7 +1519,18 @@ mod levels {
         assert_css 'body.rolename', output, 1
       end
 "#
-        );
+            );
+
+            // The style (`style`) and options (`%optionname`) shorthand are discarded;
+            // only the id and role survive, landing on the `<body>` element.
+            let output = convert_standalone(
+                "[style#idname.rolename%optionname]\n= Document Title\n\ncontent\n",
+            );
+            assert_css(&output, "#idname", 1);
+            assert_css(&output, "body#idname", 1);
+            assert_css(&output, ".rolename", 1);
+            assert_css(&output, "body.rolename", 1);
+        }
 
         non_normative!(
             r#"
@@ -4309,32 +4335,40 @@ mod links_and_anchors {
 "##
         );
 
-        // `:sectanchors:` is passed as a document attribute; the port drives it
-        // through the source header rather than an API-level attribute map. The
-        // boolean sibling-text assertions become count-based `starts-with`
-        // predicates on the sibling text node, the supported harness idiom.
-        let out = convert(
-            ":sectanchors:\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
-        );
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        let opts = Options::new().attribute("sectanchors", "");
+        let input = "== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.\n";
+        let output = convert_with(input, &opts);
+
+        // `:sectanchors:` prepends a bare `<a class="anchor">` self-link inside
+        // each heading, so the title text follows the anchor as a sibling.
         assert_xpath(
-            &out,
+            &output,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#,
+            1,
+        );
+
+        assert_xpath(
+            &output,
             r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="anchor"][@href="#_installation"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"/*[@class="sect1"]/h2[@id="_installation"]/a/following-sibling::text()[starts-with(., "Installation")]"#,
             1,
         );
-        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
+        assert_xpath(&output, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
         assert_xpath(
-            &out,
+            &output,
             r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="anchor"][@href="#_linux"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"//*[@class="sect2"]/h3[@id="_linux"]/a/following-sibling::text()[starts-with(., "Linux")]"#,
             1,
         );
@@ -4367,30 +4401,40 @@ mod links_and_anchors {
 "##
         );
 
-        // `:sectanchors: after` places the anchor after the title text, so the
-        // title is now on the anchor's *preceding*-sibling text axis.
-        let out = convert(
-            ":sectanchors: after\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
-        );
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        let opts = Options::new().attribute("sectanchors", "after");
+        let input = "== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.\n";
+        let output = convert_with(input, &opts);
+
+        // `:sectanchors: after` appends the anchor after the title text, so the
+        // title text precedes the anchor as a sibling.
         assert_xpath(
-            &out,
+            &output,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#,
+            1,
+        );
+
+        assert_xpath(
+            &output,
             r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="anchor"][@href="#_installation"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"/*[@class="sect1"]/h2[@id="_installation"]/a/preceding-sibling::text()[starts-with(., "Installation")]"#,
             1,
         );
-        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
+        assert_xpath(&output, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
         assert_xpath(
-            &out,
+            &output,
             r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="anchor"][@href="#_linux"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"//*[@class="sect2"]/h3[@id="_linux"]/a/preceding-sibling::text()[starts-with(., "Linux")]"#,
             1,
         );
@@ -4423,29 +4467,40 @@ mod links_and_anchors {
 "##
         );
 
-        // `:sectlinks:` wraps the whole title text in an `<a class="link">`.
-        let out = convert(
-            ":sectlinks:\n\n== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.",
-        );
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#, 1);
+        let opts = Options::new().attribute("sectlinks", "");
+        let input = "== Installation\n\nInstallation section.\n\n=== Linux\n\nLinux installation instructions.\n";
+        let output = convert_with(input, &opts);
+
+        // `:sectlinks:` wraps the title text itself in an `<a class="link">`
+        // self-link, so the `<a>` carries the visible title text.
         assert_xpath(
-            &out,
+            &output,
+            r#"/*[@class="sect1"]/h2[@id="_installation"]/a"#,
+            1,
+        );
+
+        assert_xpath(
+            &output,
             r##"/*[@class="sect1"]/h2[@id="_installation"]/a[@class="link"][@href="#_installation"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"/*[@class="sect1"]/h2[@id="_installation"]/a[text()="Installation"]"#,
             1,
         );
-        assert_xpath(&out, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
+        assert_xpath(&output, r#"//*[@class="sect2"]/h3[@id="_linux"]/a"#, 1);
+
         assert_xpath(
-            &out,
+            &output,
             r##"//*[@class="sect2"]/h3[@id="_linux"]/a[@class="link"][@href="#_linux"]"##,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"//*[@class="sect2"]/h3[@id="_linux"]/a[text()="Linux"]"#,
             1,
         );
@@ -4473,19 +4528,30 @@ mod links_and_anchors {
 "#
         );
 
-        // A leading supplemental anchor (`[[fu]]`) stays a sibling *before* the
-        // section link rather than nesting inside it — an `<a>` cannot nest.
-        let out = convert(":sectlinks:\n\n[#foo]\n== [[fu]]Foo");
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]"#, 1);
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]/a"#, 2);
-        assert_xpath(&out, r#"/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]"#, 1);
+        let input = ":sectlinks:\n\n[#foo]\n== [[fu]]Foo\n";
+        let output = convert(input);
+
+        assert_xpath(&output, r#"/*[@class="sect1"]/h2[@id="foo"]"#, 1);
+
+        // A leading supplemental anchor (`[[fu]]`) stays a *sibling before* the
+        // section link rather than nesting inside it — an `<a>` cannot contain
+        // another `<a>` — so the heading holds two `<a>` elements.
+        assert_xpath(&output, r#"/*[@class="sect1"]/h2[@id="foo"]/a"#, 2);
+
         assert_xpath(
-            &out,
+            &output,
+            r#"/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]"#,
+            1,
+        );
+
+        assert_xpath(
+            &output,
             r#"/*[@class="sect1"]/h2[@id="foo"]/a[@class="link"]"#,
             1,
         );
+
         assert_xpath(
-            &out,
+            &output,
             r#"/*[@class="sect1"]/h2[@id="foo"]/a[@id="fu"]/following-sibling::a[@class="link"]"#,
             1,
         );

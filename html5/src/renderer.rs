@@ -29,9 +29,10 @@
 use asciidoc_parser::{
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
-        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListType,
-        QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock,
-        TableCell, TableCellContent, TableColumn, TableRow, VerticalAlignment,
+        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
+        ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
+        SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
+        VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
     Document, HasSpan, SafeMode,
@@ -100,6 +101,36 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
     }
+}
+
+/// The byte length of the leading run of supplemental inline anchors
+/// (`<a id="…"></a>`) at the start of a rendered heading title, or `0` when it
+/// does not begin with one. Mirrors Asciidoctor's `LeadingAnchorsRx`
+/// (`^(?:<a id="[^"]+"></a>)+`): the id must be non-empty, and anchors are
+/// consumed greedily.
+fn leading_anchors_len(title: &str) -> usize {
+    let mut rest = title;
+    let mut consumed = 0;
+
+    while let Some(after_open) = rest.strip_prefix("<a id=\"") {
+        // The id runs up to the next `"`; `[^"]+` requires at least one char.
+        let Some(quote) = after_open.find('"') else {
+            break;
+        };
+
+        if quote == 0 {
+            break;
+        }
+
+        let Some(after_anchor) = after_open[quote + 1..].strip_prefix("></a>") else {
+            break;
+        };
+
+        consumed = title.len() - after_anchor.len();
+        rest = after_anchor;
+    }
+
+    consumed
 }
 
 /// Whether the default stylesheet should be *linked* (to `./asciidoctor.css`)
@@ -304,6 +335,111 @@ fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &
     list.marker_style().unwrap_or("arabic")
 }
 
+/// One description-list entry: the terms sharing a single description (their
+/// already-rendered `<dt>` text), paired with the list item that carries that
+/// description — or `None` for a trailing run of terms with no description.
+/// Mirrors Asciidoctor's `[terms, dd]` item pairs.
+type DlistEntry<'src> = (Vec<String>, Option<&'src ListItem<'src>>);
+
+/// Regroups a description list's per-term items into Asciidoctor's `[terms,
+/// dd]` entries.
+///
+/// The parser emits one list item per `term::` line, so several terms sharing
+/// one description arrive as term-only items (no child blocks) followed by the
+/// item holding the description. This accumulates the term-only items and
+/// flushes them, together with the next described item, into a single entry; a
+/// trailing run of undescribed terms forms a final entry with no description.
+fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
+    let mut entries: Vec<DlistEntry<'src>> = Vec::new();
+    let mut pending_terms: Vec<String> = Vec::new();
+
+    // Every child of a description list is a `ListItem` whose marker is a
+    // `DefinedTerm`, so the narrowing helpers never actually discard anything
+    // here; `filter_map`/`extend` let the loop stay branch-free (the narrowing
+    // itself lives in — and is covered through — the helpers).
+    for list_item in list.child_blocks().filter_map(as_list_item) {
+        pending_terms.extend(dlist_term_text(list_item));
+
+        // A described item (one with child blocks) closes the entry, taking the
+        // terms accumulated so far with it.
+        if list_item.child_blocks().next().is_some() {
+            entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
+        }
+    }
+
+    // Any terms left over had no description of their own.
+    if !pending_terms.is_empty() {
+        entries.push((pending_terms, None));
+    }
+
+    entries
+}
+
+/// Narrows a block to the list item it holds, or `None` for any other block.
+/// A [`ListBlock`] only ever holds list items, so list rendering never sees the
+/// `None` case; the narrowing lives here (rather than inline) so it can be
+/// exercised directly.
+fn as_list_item<'src>(block: &'src Block<'src>) -> Option<&'src ListItem<'src>> {
+    match block {
+        Block::ListItem(list_item) => Some(list_item),
+        _ => None,
+    }
+}
+
+/// The already-rendered term text of a description-list item (its `DefinedTerm`
+/// marker's content, with inline substitutions applied), or `None` for a list
+/// item carrying any other marker. A description list's items are always
+/// `DefinedTerm`, so the `None` case never arises during rendering.
+fn dlist_term_text(list_item: &ListItem<'_>) -> Option<String> {
+    match list_item.list_item_marker() {
+        ListItemMarker::DefinedTerm { term, .. } => Some(term.rendered().to_string()),
+        _ => None,
+    }
+}
+
+/// Whether a list-continuation (`+`) line separates a description item's term
+/// from its first child block. Such a block was explicitly attached, so
+/// Asciidoctor renders it as a block rather than folding it into the item's
+/// principal text. The check reads the item's own source between the term and
+/// the first child and looks for a line that is a bare `+`.
+fn continuation_before_first_child(item: &ListItem<'_>, first: &Block<'_>) -> bool {
+    let item_span = item.span();
+    let item_src = item_span.data();
+
+    // The first child lies within the item, so its offset is at or past the
+    // item's; `saturating_sub` and the `min` keep the slice in bounds even if a
+    // span were ever malformed.
+    let start = item_span.byte_offset();
+    let end = first.span().byte_offset();
+    let between = &item_src[..end.saturating_sub(start).min(item_src.len())];
+
+    // Skip the term line itself; a `+` alone on any later line is a
+    // continuation that attached the first block.
+    between.split('\n').skip(1).any(|line| line.trim() == "+")
+}
+
+/// The `labelwidth`/`itemwidth` value of a `horizontal` description list, with
+/// one trailing `%` stripped (Asciidoctor's `chomp '%'`), or `None` when the
+/// attribute is absent.
+fn dlist_width(list: &ListBlock<'_>, name: &str) -> Option<String> {
+    list.attrlist()
+        .and_then(|attrlist| attrlist.named_attribute(name))
+        .map(|attr| {
+            let value = attr.value();
+            value.strip_suffix('%').unwrap_or(value).to_string()
+        })
+}
+
+/// A `<col>` element for a `horizontal` description list's `<colgroup>`,
+/// carrying an inline percentage `width` style when one was given, or bare
+/// otherwise, matching Asciidoctor's `style="width: N%;"`.
+fn dlist_col(width: Option<&str>) -> String {
+    match width {
+        Some(width) => format!("<col style=\"width: {}%;\">", escape_attribute(width)),
+        None => "<col>".to_string(),
+    }
+}
+
 /// Parses the leading integer of `value`, matching Ruby's `String#to_i`: an
 /// optional sign followed by ASCII digits, with any trailing text ignored, and
 /// `0` when no digits lead the string. This is how Asciidoctor coerces the
@@ -489,70 +625,6 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
     }
 }
 
-/// Wraps a section heading's `title` text in its `sectlinks`
-/// `<a class="link" href="#id">…</a>`, keeping any leading *supplemental*
-/// anchors (`<a id="…"></a>`, from a title like `[[fu]]Foo`) as siblings
-/// *before* the link rather than nested inside it. An `<a>` cannot legally
-/// nest, so Asciidoctor — and html5 tree construction — hoist those anchors
-/// out; this mirrors Asciidoctor's `LeadingAnchorsRx` handling.
-fn apply_sectlinks(id: &str, title: &str) -> String {
-    // Only a title that begins with an inline anchor can carry leading
-    // supplemental anchors to preserve; otherwise the whole title is wrapped.
-    let prefix_len = if title.starts_with("<a ") {
-        leading_anchors_len(title)
-    } else {
-        0
-    };
-
-    let (anchors, rest) = title.split_at(prefix_len);
-    format!(
-        "{anchors}<a class=\"link\" href=\"#{}\">{rest}</a>",
-        escape_attribute(id)
-    )
-}
-
-/// Injects a section heading's `sectanchors`
-/// `<a class="anchor" href="#id"></a>`, before `title` by default or after it
-/// when `after` is set (`:sectanchors: after`).
-fn apply_sectanchors(id: &str, title: &str, after: bool) -> String {
-    let anchor = format!(
-        "<a class=\"anchor\" href=\"#{}\"></a>",
-        escape_attribute(id)
-    );
-
-    if after {
-        format!("{title}{anchor}")
-    } else {
-        format!("{anchor}{title}")
-    }
-}
-
-/// The byte length of the run of leading supplemental anchors at the start of
-/// `s` — the `<a id="…"></a>` sequence Asciidoctor matches with
-/// `LeadingAnchorsRx` (`^(?:<a id="[^"]+"></a>)+`). Returns `0` when `s` does
-/// not begin with such an anchor.
-fn leading_anchors_len(s: &str) -> usize {
-    const OPEN: &str = "<a id=\"";
-    const CLOSE: &str = "\"></a>";
-
-    let mut len = 0;
-    while let Some(after_open) = s[len..].strip_prefix(OPEN) {
-        // The id is one or more non-quote characters, so an immediate closing
-        // quote (empty id) does not match.
-        let Some(id_len) = after_open.find('"').filter(|&i| i > 0) else {
-            break;
-        };
-
-        if !after_open[id_len..].starts_with(CLOSE) {
-            break;
-        }
-
-        len += OPEN.len() + id_len + CLOSE.len();
-    }
-
-    len
-}
-
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -579,13 +651,43 @@ pub(crate) fn render_document(
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
+        section_anchors: if !document.is_attribute_set("sectanchors") {
+            SectionAnchors::None
+        } else if attribute_str(document, "sectanchors").as_deref() == Some("after") {
+            SectionAnchors::After
+        } else {
+            SectionAnchors::Before
+        },
         sectlinks: document.is_attribute_set("sectlinks"),
-        sectanchors: document
-            .is_attribute_set("sectanchors")
-            .then(|| attribute_str(document, "sectanchors").as_deref() == Some("after")),
     };
     renderer.document(document);
     renderer.out
+}
+
+/// How the `sectanchors` document attribute decorates a non-discrete section
+/// heading with its `<a class="anchor">` self-link.
+#[derive(Clone, Copy, PartialEq)]
+enum SectionAnchors {
+    /// `sectanchors` is unset: no anchor is injected.
+    None,
+
+    /// `:sectanchors:` — the anchor is prepended before the title text.
+    Before,
+
+    /// `:sectanchors: after` — the anchor is appended after the title text.
+    After,
+}
+
+/// The document-level render settings a nested AsciiDoc table cell inherits
+/// from its parent document, carried into the cell's sub-renderer.
+#[derive(Clone, Copy)]
+struct CellRenderConfig {
+    icons_font: bool,
+    doc_tabsize: i64,
+    source_indent: Option<i64>,
+    prewrap: bool,
+    section_anchors: SectionAnchors,
+    sectlinks: bool,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -619,16 +721,13 @@ struct Renderer<'a> {
     /// the `nowrap` class.
     prewrap: bool,
 
-    /// Whether the document `sectlinks` attribute is set, which wraps each
-    /// non-discrete section heading's title text in an `<a class="link">` to
-    /// the section's own id.
-    sectlinks: bool,
+    /// How the `sectanchors` document attribute decorates non-discrete section
+    /// headings with a self-anchor.
+    section_anchors: SectionAnchors,
 
-    /// Whether the document `sectanchors` attribute is set, which injects an
-    /// `<a class="anchor">` into each non-discrete section heading. `None` when
-    /// unset; `Some(after)` when set, with `after` selecting whether the anchor
-    /// follows (`:sectanchors: after`) rather than precedes the title text.
-    sectanchors: Option<bool>,
+    /// Whether the `sectlinks` document attribute is set, wrapping each
+    /// non-discrete section heading's title text in `<a class="link">`.
+    sectlinks: bool,
 }
 
 impl Renderer<'_> {
@@ -694,7 +793,30 @@ impl Renderer<'_> {
         self.docinfo(document, DocinfoLocation::Head);
 
         self.line("</head>");
-        self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
+
+        // An explicit id and/or role(s) on the document title (the `[#id.role]`
+        // shorthand above the doctitle) move onto the standalone `<body>`: the id
+        // becomes `id="…"` and each role is appended to the doctype class, matching
+        // Asciidoctor's `<body id="idname" class="article rolename">`. (The
+        // bracketed `[[id]]` anchor form is not yet recognized by asciidoc-parser
+        // above a doctitle – asciidoc-parser#968.)
+        let header = document.header();
+        let id_attr = header
+            .id()
+            .map(|id| format!(" id=\"{}\"", escape_attribute(id)))
+            .unwrap_or_default();
+
+        let mut classes = doctype;
+        for role in header.roles() {
+            classes.push(' ');
+            classes.push_str(role);
+        }
+
+        self.line(&format!(
+            "<body{} class=\"{}\">",
+            id_attr,
+            escape_attribute(&classes)
+        ));
 
         // Header docinfo is inserted immediately before the header `<div>`,
         // whether or not the header itself is suppressed by `noheader` — this
@@ -1049,12 +1171,11 @@ impl Renderer<'_> {
             Block::List(list) => match list.type_() {
                 ListType::Unordered => self.ulist(block, list),
                 ListType::Ordered => self.olist(block, list),
+                ListType::Description => self.dlist(block, list),
 
-                // Description and callout lists are not rendered yet; see
-                // ARCHITECTURE.md for the roadmap.
-                ListType::Description | ListType::Callout => {
-                    self.unsupported(&block.resolved_context())
-                }
+                // Callout lists are not rendered yet; see ARCHITECTURE.md for
+                // the roadmap.
+                ListType::Callout => self.unsupported(&block.resolved_context()),
             },
             Block::Table(table) => self.table(block, table),
 
@@ -1476,6 +1597,203 @@ impl Renderer<'_> {
         self.line("</div>");
     }
 
+    /// A description list (`term:: definition`), matching Asciidoctor's
+    /// `convert_dlist`. The block style selects the layout: `qanda` renders a
+    /// numbered question-and-answer `<ol>`, `horizontal` a two-column
+    /// `<table>`, and every other value (including none) the default
+    /// `<dl>`/`<dt>`/`<dd>` structure.
+    ///
+    /// The parser models each `term::` line as its own list item, so
+    /// consecutive terms that share one description surface as term-only items
+    /// (no child blocks) followed by the item that carries the description.
+    /// [`dlist_entries`] regroups them into Asciidoctor's `[terms, dd]` pairs
+    /// before rendering.
+    fn dlist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let style = block.declared_style();
+        let entries = dlist_entries(list);
+
+        match style {
+            Some("qanda") => self.dlist_qanda(block, &entries),
+            Some("horizontal") => self.dlist_horizontal(block, list, &entries),
+            _ => self.dlist_labeled(block, style, &entries),
+        }
+    }
+
+    /// The default `<div class="dlist …"><dl>…</dl></div>` layout: each term
+    /// becomes a `<dt>` and each description a following `<dd>`. A plain
+    /// description list (no style) tags every `<dt>` with `class="hdlist1"`; a
+    /// styled one names the style on the wrapper `<div>` and leaves the `<dt>`
+    /// bare, matching Asciidoctor.
+    fn dlist_labeled(
+        &mut self,
+        block: &Block<'_>,
+        style: Option<&str>,
+        entries: &[DlistEntry<'_>],
+    ) {
+        // `['dlist', style, *roles]` — the style (when present) sits right after
+        // `dlist`, ahead of the roles.
+        let mut base = String::from("dlist");
+        if let Some(style) = style {
+            base.push(' ');
+            base.push_str(style);
+        }
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&base, &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<dl>");
+
+        // A styled list leaves each `<dt>` bare; a plain one tags it `hdlist1`.
+        let dt_open = if style.is_some() {
+            "<dt>"
+        } else {
+            "<dt class=\"hdlist1\">"
+        };
+        for (terms, description) in entries {
+            for term in terms {
+                self.line(&format!("{dt_open}{term}</dt>"));
+            }
+
+            if let Some(item) = description {
+                self.line("<dd>");
+                self.dlist_body(item);
+                self.line("</dd>");
+            }
+        }
+
+        self.line("</dl>");
+        self.line("</div>");
+    }
+
+    /// The `qanda` layout: `<div class="qlist qanda"><ol>…</ol></div>`, each
+    /// entry an `<li>` whose terms render as emphasized `<p><em>…</em></p>`
+    /// questions ahead of the description, matching Asciidoctor.
+    fn dlist_qanda(&mut self, block: &Block<'_>, entries: &[DlistEntry<'_>]) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("qlist qanda", &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<ol>");
+
+        for (terms, description) in entries {
+            self.line("<li>");
+            for term in terms {
+                self.line(&format!("<p><em>{term}</em></p>"));
+            }
+            if let Some(item) = description {
+                self.dlist_body(item);
+            }
+            self.line("</li>");
+        }
+
+        self.line("</ol>");
+        self.line("</div>");
+    }
+
+    /// The `horizontal` layout: `<div class="hdlist"><table>…</table></div>`,
+    /// each entry a `<tr>` with the terms in an `hdlist1` label cell (separated
+    /// by `<br>`) and the description in an `hdlist2` cell, matching
+    /// Asciidoctor. The `labelwidth`/`itemwidth` attributes emit a
+    /// `<colgroup>`, and the `strong` option bolds the label cell.
+    fn dlist_horizontal(
+        &mut self,
+        block: &Block<'_>,
+        list: &ListBlock<'_>,
+        entries: &[DlistEntry<'_>],
+    ) {
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("hdlist", &block.roles())
+        ));
+        self.block_title(block);
+        self.line("<table>");
+
+        // A `labelwidth`/`itemwidth` pair sizes the two columns; either alone
+        // still emits both `<col>`s (the other with no width), matching
+        // Asciidoctor.
+        let labelwidth = dlist_width(list, "labelwidth");
+        let itemwidth = dlist_width(list, "itemwidth");
+        if labelwidth.is_some() || itemwidth.is_some() {
+            self.line("<colgroup>");
+            self.line(&dlist_col(labelwidth.as_deref()));
+            self.line(&dlist_col(itemwidth.as_deref()));
+            self.line("</colgroup>");
+        }
+
+        let strong = if block.has_option("strong") {
+            " strong"
+        } else {
+            ""
+        };
+        for (terms, description) in entries {
+            self.line("<tr>");
+            self.line(&format!("<td class=\"hdlist1{strong}\">"));
+            for (index, term) in terms.iter().enumerate() {
+                // Terms after the first are separated by a line break.
+                if index > 0 {
+                    self.line("<br>");
+                }
+                self.line(term);
+            }
+            self.line("</td>");
+
+            self.line("<td class=\"hdlist2\">");
+            if let Some(item) = description {
+                self.dlist_body(item);
+            }
+            self.line("</td>");
+            self.line("</tr>");
+        }
+
+        self.line("</table>");
+        self.line("</div>");
+    }
+
+    /// Emits a description entry's body — its principal text as a bare `<p>`
+    /// (Asciidoctor's `dd.text`) followed by any attached blocks
+    /// (`dd.content`), matching Asciidoctor's `convert_dlist`.
+    ///
+    /// Asciidoctor *folds* the first block into the item's principal text when
+    /// it is a paragraph adjacent to the term — same-line text, or the first
+    /// paragraph that follows without a list-continuation (`+`) line between
+    /// (`Parser#fold_first` under `content_adjacent`). A first block that is
+    /// not a paragraph, or that was explicitly attached by a `+` continuation,
+    /// is not folded: the item then has no principal text and every child
+    /// renders as an attached block.
+    fn dlist_body(&mut self, description: &ListItem<'_>) {
+        let blocks: Vec<&Block<'_>> = description.child_blocks().collect();
+
+        // The first block folds into the principal text only when it is a
+        // paragraph the term did not attach with a `+` continuation. An entry
+        // reaching here always has at least one block (it is why the entry has a
+        // description at all), so `first` drives the decision without a separate
+        // empty case.
+        let foldable = blocks.first().is_some_and(|first| {
+            first.resolved_context().as_ref() == "paragraph"
+                && !continuation_before_first_child(description, first)
+        });
+
+        let attached = if foldable {
+            let text = blocks[0].rendered_content().unwrap_or_default();
+            if !text.is_empty() {
+                self.line(&format!("<p>{text}</p>"));
+            }
+            &blocks[1..]
+        } else {
+            &blocks[..]
+        };
+
+        for &block in attached {
+            self.block(block);
+        }
+    }
+
     /// Emits one `<li>…</li>` for a list item: the principal text as a bare
     /// `<p>`, followed by any attached blocks (continuation paragraphs, nested
     /// lists), matching Asciidoctor's `convert_ulist`/`convert_olist` item
@@ -1700,10 +2018,14 @@ impl Renderer<'_> {
                     ad.blocks(),
                     ad.title(),
                     ad.is_inline(),
-                    self.icons_font,
-                    self.doc_tabsize,
-                    self.source_indent,
-                    self.prewrap,
+                    CellRenderConfig {
+                        icons_font: self.icons_font,
+                        doc_tabsize: self.doc_tabsize,
+                        source_indent: self.source_indent,
+                        prewrap: self.prewrap,
+                        section_anchors: self.section_anchors,
+                        sectlinks: self.sectlinks,
+                    },
                 )
             ),
             TableCellContent::Simple(simple) => {
@@ -1794,14 +2116,9 @@ impl Renderer<'_> {
             return;
         }
 
-        // With an id present (always, for a non-discrete section), `sectlinks`
-        // and `sectanchors` decorate the heading title: `sectlinks` wraps the
-        // text in a self-link and `sectanchors` injects a standalone anchor,
-        // matching Asciidoctor's ordering (link first, then anchor).
-        let title = match id {
-            Some(id) => self.decorate_section_heading(id, title),
-            None => title,
-        };
+        // `sectlinks` / `sectanchors` inject `<a>` elements into a non-discrete
+        // heading, keyed off the section's own id.
+        let title = self.decorate_section_heading(&title, id);
 
         self.line(&format!(
             "<div{}>",
@@ -1847,23 +2164,44 @@ impl Renderer<'_> {
         }
     }
 
-    /// Applies the `sectlinks` self-link and the `sectanchors` anchor to a
-    /// section heading's `title`, keyed off the section's `id`. The order
-    /// mirrors Asciidoctor: `sectlinks` wraps the title text first, then
-    /// `sectanchors` prepends (or, for `:sectanchors: after`, appends) its
-    /// anchor around whatever `sectlinks` produced. When neither attribute is
-    /// set, `title` is returned unchanged.
-    fn decorate_section_heading(&self, id: &str, title: String) -> String {
-        let title = if self.sectlinks {
-            apply_sectlinks(id, &title)
-        } else {
-            title
+    /// Applies the `sectlinks` and `sectanchors` decorations to a section
+    /// heading's title, matching Asciidoctor's `convert_section`. Both toggles
+    /// key off the section's own `id`; a section without an id is left
+    /// untouched. `sectlinks` wraps the title text in `<a class="link">`, and
+    /// `sectanchors` then adds an `<a class="anchor">` self-link before (or,
+    /// with `:sectanchors: after`, after) the whole thing.
+    fn decorate_section_heading(&self, title: &str, id: Option<&str>) -> String {
+        let Some(id) = id else {
+            return title.to_string();
         };
 
-        match self.sectanchors {
-            Some(after) => apply_sectanchors(id, &title, after),
-            None => title,
+        let href = escape_attribute(id);
+
+        // `sectlinks` wraps the title text in a self-link. A leading run of
+        // supplemental inline anchors (`[[fu]]` → `<a id="fu"></a>`) must stay
+        // a *sibling before* the link rather than nesting inside it — an `<a>`
+        // cannot contain another `<a>` under html5 tree construction — so the
+        // link opens only after those anchors.
+        let mut title = if self.sectlinks {
+            let split = leading_anchors_len(title);
+            let (leading, text) = title.split_at(split);
+
+            format!("{leading}<a class=\"link\" href=\"#{href}\">{text}</a>")
+        } else {
+            title.to_string()
+        };
+
+        match self.section_anchors {
+            SectionAnchors::Before => {
+                title = format!("<a class=\"anchor\" href=\"#{href}\"></a>{title}");
+            }
+            SectionAnchors::After => {
+                title.push_str(&format!("<a class=\"anchor\" href=\"#{href}\"></a>"));
+            }
+            SectionAnchors::None => {}
         }
+
+        title
     }
 
     /// The preamble: content between the doctitle and the first section,
@@ -2140,10 +2478,7 @@ fn render_cell_document<'s>(
     blocks: &'s [Block<'s>],
     title: Option<&str>,
     inline: bool,
-    icons_font: bool,
-    doc_tabsize: i64,
-    source_indent: Option<i64>,
-    prewrap: bool,
+    config: CellRenderConfig,
 ) -> String {
     if inline {
         // The inline doctype renders the first block's inline content; skip any
@@ -2157,21 +2492,19 @@ fn render_cell_document<'s>(
     }
 
     // The cell is a nested document that inherits the parent's verbatim-layout
-    // attributes (`tabsize`, `source-indent`, `prewrap`), so the sub-renderer
-    // carries them forward.
+    // attributes (`tabsize`, `source-indent`, `prewrap`) and section-heading
+    // toggles (`sectanchors`, `sectlinks`), so the sub-renderer carries them
+    // forward.
     let mut renderer = Renderer {
         out: String::new(),
         custom_stylesheet: None,
         standalone: false,
-        icons_font,
-        doc_tabsize,
-        source_indent,
-        prewrap,
-
-        // Section headings do not occur inside a table cell's nested document,
-        // so `sectlinks`/`sectanchors` have nothing to decorate here.
-        sectlinks: false,
-        sectanchors: None,
+        icons_font: config.icons_font,
+        doc_tabsize: config.doc_tabsize,
+        source_indent: config.source_indent,
+        prewrap: config.prewrap,
+        section_anchors: config.section_anchors,
+        sectlinks: config.sectlinks,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -2289,6 +2622,34 @@ mod tests {
     }
 
     #[test]
+    fn leading_anchors_len_matches_leading_anchors_rx() {
+        use super::leading_anchors_len;
+
+        // No leading anchor: bare text, or a title opening with some other
+        // element, consumes nothing.
+        assert_eq!(leading_anchors_len("Foo"), 0);
+        assert_eq!(leading_anchors_len("<em>Foo</em>"), 0);
+
+        // A single bare anchor is consumed up to and including its `</a>`; the
+        // trailing title text is left behind.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"></a>Foo"#), 15);
+
+        // Anchors are consumed greedily: a run of them all counts.
+        assert_eq!(
+            leading_anchors_len(r#"<a id="fu"></a><a id="bar"></a>Foo"#),
+            31
+        );
+
+        // The three non-match branches mirror the regex `<a id="[^"]+"></a>`:
+        // an unterminated id (no closing quote), an empty id (`[^"]+` needs one
+        // char), and an anchor not closed by `></a>` (e.g. a real link that
+        // carries an `id`) each stop the scan with nothing consumed.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"#), 0);
+        assert_eq!(leading_anchors_len(r#"<a id=""></a>Foo"#), 0);
+        assert_eq!(leading_anchors_len(r##"<a id="fu" href="#x">Foo</a>"##), 0);
+    }
+
+    #[test]
     fn preamble_is_wrapped() {
         let html = convert("= Doc\n\nIntro.\n\n== Section\n\nBody.");
         let body = content(&html);
@@ -2311,9 +2672,9 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        // Description lists are not rendered yet, so they still emit the
-        // placeholder marker (unordered/ordered lists now render).
-        let html = convert("term:: definition");
+        // Callout lists are not rendered yet, so they still emit the
+        // placeholder marker (unordered/ordered/description lists now render).
+        let html = convert("----\ncode <1>\n----\n\n<1> explanation");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
     }
 
@@ -2395,6 +2756,116 @@ mod tests {
 
         let id_and_role = convert("* one\n[#second.special]\n* two");
         assert!(id_and_role.contains("<li id=\"second\" class=\"special\">\n<p>two</p>"));
+    }
+
+    #[test]
+    fn description_list_renders_dlist() {
+        // A plain description list is `<div class="dlist"><dl>`, each term a
+        // `<dt class="hdlist1">` and each description a `<dd>` holding the
+        // principal text as a bare `<p>`, matching Asciidoctor's `convert_dlist`.
+        let html = convert("CPU:: The brain\nRAM:: The memory");
+        assert!(html.contains(
+            "<div class=\"dlist\">\n<dl>\n\
+             <dt class=\"hdlist1\">CPU</dt>\n<dd>\n<p>The brain</p>\n</dd>\n\
+             <dt class=\"hdlist1\">RAM</dt>\n<dd>\n<p>The memory</p>\n</dd>\n</dl>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn description_list_folds_subsequent_line_and_appends_continuation_block() {
+        // A term with no inline text folds the immediately-following paragraph
+        // into its principal text (a bare `<p>`), while a paragraph attached by
+        // a `+` continuation stays a block (`<div class="paragraph">`).
+        let html = convert("term::\ndef\n+\nattached");
+        assert!(html.contains(
+            "<dt class=\"hdlist1\">term</dt>\n<dd>\n<p>def</p>\n\
+             <div class=\"paragraph\">\n<p>attached</p>\n</div>\n</dd>"
+        ));
+    }
+
+    #[test]
+    fn description_list_groups_multiple_terms_with_one_description() {
+        // Consecutive terms with no description of their own share the next
+        // term's `<dd>`: each becomes its own `<dt>` ahead of the single `<dd>`.
+        let html = convert("term1::\nterm2:: shared");
+        assert!(html.contains(
+            "<dt class=\"hdlist1\">term1</dt>\n\
+             <dt class=\"hdlist1\">term2</dt>\n<dd>\n<p>shared</p>\n</dd>"
+        ));
+    }
+
+    #[test]
+    fn qanda_description_list_renders_ordered_questions() {
+        // The `qanda` style renders `<div class="qlist qanda"><ol>`, each entry
+        // an `<li>` with emphasized `<p><em>…</em></p>` questions.
+        let html = convert("[qanda]\nWhat?:: This.");
+        assert!(html.contains(
+            "<div class=\"qlist qanda\">\n<ol>\n<li>\n<p><em>What?</em></p>\n<p>This.</p>\n</li>\n</ol>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn horizontal_description_list_renders_table() {
+        // The `horizontal` style renders `<div class="hdlist"><table>`, the
+        // terms in an `hdlist1` label cell and the description in an `hdlist2`
+        // cell.
+        let html = convert("[horizontal]\nCPU:: brain");
+        assert!(html.contains(
+            "<div class=\"hdlist\">\n<table>\n<tr>\n\
+             <td class=\"hdlist1\">\nCPU\n</td>\n\
+             <td class=\"hdlist2\">\n<p>brain</p>\n</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn horizontal_description_list_sets_column_widths() {
+        // `labelwidth`/`itemwidth` emit a `<colgroup>` whose `<col>`s carry the
+        // widths as inline styles (Asciidoctor's `style="width: N%;"`), and the
+        // `strong` option bolds the label cell.
+        let html = convert("[horizontal%strong,labelwidth=20%,itemwidth=80%]\nCPU:: brain");
+        assert!(html.contains(
+            "<colgroup>\n<col style=\"width: 20%;\">\n<col style=\"width: 80%;\">\n</colgroup>"
+        ));
+        assert!(html.contains("<td class=\"hdlist1 strong\">"));
+    }
+
+    #[test]
+    fn horizontal_description_list_with_one_column_width_leaves_the_other_bare() {
+        // With only `labelwidth` set, Asciidoctor still emits both `<col>`s: the
+        // label column carries its width, the item column is a bare `<col>`.
+        let html = convert("[horizontal,labelwidth=30%]\nCPU:: brain");
+        assert!(html.contains("<colgroup>\n<col style=\"width: 30%;\">\n<col>\n</colgroup>"));
+    }
+
+    #[test]
+    fn dlist_narrowing_helpers_handle_both_arms() {
+        // `dlist_entries` narrows through these helpers on the assumption that a
+        // description list only holds `DefinedTerm` list items. That always
+        // holds during rendering, so exercise both arms directly here: a
+        // non-list block and a non-description marker take the `None` paths a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        use super::{as_list_item, dlist_term_text};
+
+        // A bullet list: the `<ul>` block is not a list item, its child is, and
+        // that child's marker is not a description term. `child_blocks()` on the
+        // `&Block` descends into the list's items without a narrowing branch.
+        let mut parser = Parser::default();
+        let ulist = parser.parse("* bullet\n");
+        let list_block = ulist.child_blocks().next().unwrap();
+        assert!(as_list_item(list_block).is_none());
+
+        let bullet_item = as_list_item(list_block.child_blocks().next().unwrap())
+            .expect("a list's child is always a list item");
+        assert!(dlist_term_text(bullet_item).is_none());
+
+        // A description list: the item's `DefinedTerm` marker yields its term.
+        let mut parser = Parser::default();
+        let dlist = parser.parse("term:: def\n");
+        let dlist_block = dlist.child_blocks().next().unwrap();
+        let term_item = as_list_item(dlist_block.child_blocks().next().unwrap()).unwrap();
+        assert_eq!(dlist_term_text(term_item).as_deref(), Some("term"));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
@@ -3563,25 +4034,6 @@ mod tests {
             ["a", "b"]
         );
         assert_eq!(split_blank_lines("solo").collect::<Vec<_>>(), ["solo"]);
-    }
-
-    #[test]
-    fn leading_anchors_len_measures_the_supplemental_anchor_run() {
-        use super::leading_anchors_len;
-
-        // No leading anchor: nothing to hoist out of a `sectlinks` wrapper.
-        assert_eq!(leading_anchors_len("Foo"), 0);
-        assert_eq!(leading_anchors_len("<a class=\"x\"></a>Foo"), 0);
-
-        // A single supplemental anchor, then two run together.
-        assert_eq!(leading_anchors_len("<a id=\"fu\"></a>Foo"), 15);
-        assert_eq!(
-            leading_anchors_len("<a id=\"fu\"></a><a id=\"bar\"></a>Foo"),
-            31
-        );
-
-        // An empty id (`id=""`) does not match Asciidoctor's `[^"]+`.
-        assert_eq!(leading_anchors_len("<a id=\"\"></a>Foo"), 0);
     }
 
     #[test]
