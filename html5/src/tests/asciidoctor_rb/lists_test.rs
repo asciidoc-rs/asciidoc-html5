@@ -14,10 +14,10 @@
 //! `bulleted_lists` / `ordered_lists` (rather than flattened away) only because
 //! both hold a `Simple lists` sub-context, which would otherwise collide at the
 //! module root. The two description-list contexts are flattened into
-//! `description_lists` / `description_lists_redux`, whose tests carry a `tNNN_`
-//! ordinal prefix to keep names unique across their sub-contexts. The
-//! Checklists context is verified too (checklist rendering — the default
-//! ballot-box, `%interactive`, and `icons=font` markers — is implemented).
+//! `description_lists` / `description_lists_redux`; their sub-contexts' test
+//! names happen not to collide, so no extra nesting is needed. The Checklists
+//! context is verified too (checklist rendering — the default ballot-box,
+//! `%interactive`, and `icons=font` markers — is implemented).
 //!
 //! What stays `non_normative!` here:
 //! - callout lists (`:colist`) and the list model (source lines 4686+): these
@@ -4932,7 +4932,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t001_should_not_parse_a_bare_dlist_delimiter_as_a_dlist() {
+    fn should_not_parse_a_bare_dlist_delimiter_as_a_dlist() {
         verifies!(
             r#"
     test 'should not parse a bare dlist delimiter as a dlist' do
@@ -4955,7 +4955,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t002_should_not_parse_an_indented_bare_dlist_delimiter_as_a_dlist() {
+    fn should_not_parse_an_indented_bare_dlist_delimiter_as_a_dlist() {
         verifies!(
             r#"
     test 'should not parse an indented bare dlist delimiter as a dlist' do
@@ -4978,7 +4978,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t003_should_parse_a_dlist_delimiter_preceded_by_a_blank_attribute_as_a_dlist() {
+    fn should_parse_a_dlist_delimiter_preceded_by_a_blank_attribute_as_a_dlist() {
         verifies!(
             r#"
     test 'should parse a dlist delimiter preceded by a blank attribute as a dlist' do
@@ -5003,7 +5003,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t004_should_parse_a_dlist_if_term_is_include_and_principal_text_is() {
+    fn should_parse_a_dlist_if_term_is_include_and_principal_text_is() {
         verifies!(
             r#"
     test 'should parse a dlist if term is include and principal text is []' do
@@ -5032,7 +5032,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t005_should_parse_a_dlist_if_term_is_include_and_principal_text_matches_macro_form() {
+    fn should_parse_a_dlist_if_term_is_include_and_principal_text_matches_macro_form() {
         verifies!(
             r#"
     test 'should parse a dlist if term is include and principal text matches macro form' do
@@ -5061,7 +5061,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t006_single_line_adjacent_elements() {
+    fn single_line_adjacent_elements() {
         verifies!(
             r#"
     test "single-line adjacent elements" do
@@ -5113,7 +5113,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t007_should_parse_sibling_items_using_same_rules() {
+    fn should_parse_sibling_items_using_same_rules() {
         verifies!(
             r#"
     test 'should parse sibling items using same rules' do
@@ -5165,7 +5165,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t008_should_allow_term_to_end_with_a_semicolon_when_using_double_semicolon_delimiter() {
+    fn should_allow_term_to_end_with_a_semicolon_when_using_double_semicolon_delimiter() {
         verifies!(
             r#"
     test 'should allow term to end with a semicolon when using double semicolon delimiter' do
@@ -5198,7 +5198,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t009_single_line_indented_adjacent_elements() {
+    fn single_line_indented_adjacent_elements() {
         verifies!(
             r#"
     test "single-line indented adjacent elements" do
@@ -5251,7 +5251,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t010_single_line_indented_adjacent_elements_with_tabs() {
+    fn single_line_indented_adjacent_elements_with_tabs() {
         verifies!(
             r#"
     test "single-line indented adjacent elements with tabs" do
@@ -5303,7 +5303,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t011_single_line_elements_separated_by_blank_line_should_create_a_single_list() {
+    fn single_line_elements_separated_by_blank_line_should_create_a_single_list() {
         verifies!(
             r#"
     test "single-line elements separated by blank line should create a single list" do
@@ -5332,7 +5332,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t012_a_line_comment_between_elements_should_divide_them_into_separate_lists() {
+    fn a_line_comment_between_elements_should_divide_them_into_separate_lists() {
         verifies!(
             r#"
     test "a line comment between elements should divide them into separate lists" do
@@ -5365,7 +5365,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t013_a_ruler_between_elements_should_divide_them_into_separate_lists() {
+    fn a_ruler_between_elements_should_divide_them_into_separate_lists() {
         verifies!(
             r#"
     test "a ruler between elements should divide them into separate lists" do
@@ -5400,7 +5400,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t014_a_block_title_between_elements_should_divide_them_into_separate_lists() {
+    fn a_block_title_between_elements_should_divide_them_into_separate_lists() {
         verifies!(
             r#"
     test "a block title between elements should divide them into separate lists" do
@@ -5438,7 +5438,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t015_multi_line_elements_with_paragraph_content() {
+    fn multi_line_elements_with_paragraph_content() {
         verifies!(
             r#"
     test "multi-line elements with paragraph content" do
@@ -5492,7 +5492,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t016_multi_line_elements_with_indented_paragraph_content() {
+    fn multi_line_elements_with_indented_paragraph_content() {
         verifies!(
             r#"
     test "multi-line elements with indented paragraph content" do
@@ -5547,7 +5547,7 @@ context "Description lists (:dlist)" do
     );
 
     #[test]
-    fn t017_multi_line_elements_with_indented_paragraph_content_that_includes_comment_lines() {
+    fn multi_line_elements_with_indented_paragraph_content_that_includes_comment_lines() {
         verifies!(
             r#"
     test "multi-line elements with indented paragraph content that includes comment lines" do
@@ -5607,7 +5607,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t018_should_not_strip_comment_line_in_literal_paragraph_block_attached_to_list_item() {
+    fn should_not_strip_comment_line_in_literal_paragraph_block_attached_to_list_item() {
         verifies!(
             r#"
     test "should not strip comment line in literal paragraph block attached to list item" do
@@ -5643,7 +5643,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t019_should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
+    fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
         verifies!(
             r#"
     test 'should escape special characters in all literal paragraphs attached to list item' do
@@ -5725,7 +5725,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t020_multi_line_element_with_multiple_terms() {
+    fn multi_line_element_with_multiple_terms() {
         verifies!(
             r#"
     test "multi-line element with multiple terms" do
@@ -5791,7 +5791,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t021_multi_line_elements_with_blank_line_before_paragraph_content() {
+    fn multi_line_elements_with_blank_line_before_paragraph_content() {
         verifies!(
             r#"
     test "multi-line elements with blank line before paragraph content" do
@@ -5847,7 +5847,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t022_multi_line_elements_with_paragraph_and_literal_content() {
+    fn multi_line_elements_with_paragraph_and_literal_content() {
         verifies!(
             r#"
     test "multi-line elements with paragraph and literal content" do
@@ -5908,7 +5908,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t023_mixed_single_and_multi_line_adjacent_elements() {
+    fn mixed_single_and_multi_line_adjacent_elements() {
         verifies!(
             r#"
     test "mixed single and multi-line adjacent elements" do
@@ -5986,7 +5986,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t024_missing_space_before_term_does_not_produce_description_list() {
+    fn missing_space_before_term_does_not_produce_description_list() {
         verifies!(
             r#"
     test "missing space before term does not produce description list" do
@@ -6010,7 +6010,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t025_literal_block_inside_description_list() {
+    fn literal_block_inside_description_list() {
         verifies!(
             r#"
     test "literal block inside description list" do
@@ -6050,7 +6050,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t026_literal_block_inside_description_list_with_trailing_line_continuation() {
+    fn literal_block_inside_description_list_with_trailing_line_continuation() {
         verifies!(
             r#"
     test "literal block inside description list with trailing line continuation" do
@@ -6091,7 +6091,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t027_multiple_listing_blocks_inside_description_list() {
+    fn multiple_listing_blocks_inside_description_list() {
         verifies!(
             r#"
     test "multiple listing blocks inside description list" do
@@ -6135,7 +6135,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t028_open_block_inside_description_list() {
+    fn open_block_inside_description_list() {
         verifies!(
             r#"
     test "open block inside description list" do
@@ -6167,7 +6167,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t029_paragraph_attached_by_a_list_continuation_on_either_side_in_a_description_list() {
+    fn paragraph_attached_by_a_list_continuation_on_either_side_in_a_description_list() {
         verifies!(
             r#"
     test "paragraph attached by a list continuation on either side in a description list" do
@@ -6214,7 +6214,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t030_paragraph_attached_by_a_list_continuation_on_either_side_to_a_multi_line_element_in_a_description_list(
+    fn paragraph_attached_by_a_list_continuation_on_either_side_to_a_multi_line_element_in_a_description_list(
     ) {
         verifies!(
             r#"
@@ -6263,7 +6263,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t031_should_continue_to_parse_subsequent_blocks_attached_to_list_item_after_first_block_is_dropped(
+    fn should_continue_to_parse_subsequent_blocks_attached_to_list_item_after_first_block_is_dropped(
     ) {
         verifies!(
             r#"
@@ -6304,7 +6304,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t032_verse_paragraph_inside_a_description_list() {
+    fn verse_paragraph_inside_a_description_list() {
         verifies!(
             r#"
     test "verse paragraph inside a description list" do
@@ -6338,7 +6338,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t033_list_inside_a_description_list() {
+    fn list_inside_a_description_list() {
         verifies!(
             r#"
     test "list inside a description list" do
@@ -6371,7 +6371,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t034_list_inside_a_description_list_offset_by_blank_lines() {
+    fn list_inside_a_description_list_offset_by_blank_lines() {
         verifies!(
             r#"
     test "list inside a description list offset by blank lines" do
@@ -6407,7 +6407,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t035_should_only_grab_one_line_following_last_item_if_item_has_no_inline_description() {
+    fn should_only_grab_one_line_following_last_item_if_item_has_no_inline_description() {
         verifies!(
             r#"
     test "should only grab one line following last item if item has no inline description" do
@@ -6466,8 +6466,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t036_should_only_grab_one_literal_line_following_last_item_if_item_has_no_inline_description(
-    ) {
+    fn should_only_grab_one_literal_line_following_last_item_if_item_has_no_inline_description() {
         verifies!(
             r#"
     test "should only grab one literal line following last item if item has no inline description" do
@@ -6527,7 +6526,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t037_should_append_subsequent_paragraph_literals_to_list_item_as_block_content() {
+    fn should_append_subsequent_paragraph_literals_to_list_item_as_block_content() {
         verifies!(
             r#"
     test "should append subsequent paragraph literals to list item as block content" do
@@ -6593,7 +6592,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t038_should_not_match_comment_line_that_looks_like_description_list_term() {
+    fn should_not_match_comment_line_that_looks_like_description_list_term() {
         verifies!(
             r#"
     test 'should not match comment line that looks like description list term' do
@@ -6621,7 +6620,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t039_should_not_match_comment_line_following_list_that_looks_like_description_list_term() {
+    fn should_not_match_comment_line_following_list_that_looks_like_description_list_term() {
         verifies!(
             r#"
     test 'should not match comment line following list that looks like description list term' do
@@ -6681,7 +6680,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t040_should_not_hang_on_description_list_item_in_list_that_begins_with() {
+    fn should_not_hang_on_description_list_item_in_list_that_begins_with() {
         verifies!(
             r#"
     test 'should not hang on description list item in list that begins with ///' do
@@ -6715,7 +6714,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t041_should_not_hang_on_sibling_description_list_item_that_begins_with() {
+    fn should_not_hang_on_sibling_description_list_item_that_begins_with() {
         verifies!(
             r#"
     test 'should not hang on sibling description list item that begins with ///' do
@@ -6766,7 +6765,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t042_more_than_4_consecutive_colons_should_become_part_of_description_list_term() {
+    fn more_than_4_consecutive_colons_should_become_part_of_description_list_term() {
         verifies!(
             r#"
     test 'more than 4 consecutive colons should become part of description list term' do
@@ -6849,7 +6848,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t043_should_not_parse_a_nested_dlist_delimiter_without_a_term_as_a_dlist() {
+    fn should_not_parse_a_nested_dlist_delimiter_without_a_term_as_a_dlist() {
         verifies!(
             r#"
     test 'should not parse a nested dlist delimiter without a term as a dlist' do
@@ -6875,7 +6874,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t044_should_not_parse_a_nested_indented_dlist_delimiter_without_a_term_as_a_dlist() {
+    fn should_not_parse_a_nested_indented_dlist_delimiter_without_a_term_as_a_dlist() {
         verifies!(
             r#"
     test 'should not parse a nested indented dlist delimiter without a term as a dlist' do
@@ -6908,7 +6907,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t045_single_line_adjacent_nested_elements() {
+    fn single_line_adjacent_nested_elements() {
         verifies!(
             r#"
     test "single-line adjacent nested elements" do
@@ -6971,7 +6970,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t046_single_line_adjacent_maximum_nested_elements() {
+    fn single_line_adjacent_maximum_nested_elements() {
         verifies!(
             r#"
     test "single-line adjacent maximum nested elements" do
@@ -7002,7 +7001,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t047_single_line_nested_elements_separated_by_blank_line_at_top_level() {
+    fn single_line_nested_elements_separated_by_blank_line_at_top_level() {
         verifies!(
             r#"
     test 'single-line nested elements separated by blank line at top level' do
@@ -7067,7 +7066,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t048_single_line_nested_elements_separated_by_blank_line_at_nested_level() {
+    fn single_line_nested_elements_separated_by_blank_line_at_nested_level() {
         verifies!(
             r#"
     test 'single-line nested elements separated by blank line at nested level' do
@@ -7134,7 +7133,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t049_single_line_adjacent_nested_elements_with_alternate_delimiters() {
+    fn single_line_adjacent_nested_elements_with_alternate_delimiters() {
         verifies!(
             r#"
     test "single-line adjacent nested elements with alternate delimiters" do
@@ -7197,7 +7196,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t050_multi_line_adjacent_nested_elements() {
+    fn multi_line_adjacent_nested_elements() {
         verifies!(
             r#"
     test "multi-line adjacent nested elements" do
@@ -7263,7 +7262,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t051_multi_line_nested_elements_separated_by_blank_line_at_nested_level_repeated() {
+    fn multi_line_nested_elements_separated_by_blank_line_at_nested_level_repeated() {
         verifies!(
             r#"
     test 'multi-line nested elements separated by blank line at nested level repeated' do
@@ -7334,7 +7333,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t052_multi_line_element_with_indented_nested_element() {
+    fn multi_line_element_with_indented_nested_element() {
         verifies!(
             r#"
     test "multi-line element with indented nested element" do
@@ -7408,7 +7407,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t053_mixed_single_and_multi_line_elements_with_indented_nested_elements() {
+    fn mixed_single_and_multi_line_elements_with_indented_nested_elements() {
         verifies!(
             r#"
     test "mixed single and multi-line elements with indented nested elements" do
@@ -7473,7 +7472,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t054_multi_line_elements_with_first_paragraph_folded_to_text_with_adjacent_nested_element() {
+    fn multi_line_elements_with_first_paragraph_folded_to_text_with_adjacent_nested_element() {
         verifies!(
             r#"
     test "multi-line elements with first paragraph folded to text with adjacent nested element" do
@@ -7531,7 +7530,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t055_nested_dlist_attached_by_list_continuation_should_not_consume_detached_paragraph() {
+    fn nested_dlist_attached_by_list_continuation_should_not_consume_detached_paragraph() {
         verifies!(
             r#"
     test 'nested dlist attached by list continuation should not consume detached paragraph' do
@@ -7564,7 +7563,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t056_nested_dlist_with_attached_block_offset_by_empty_line() {
+    fn nested_dlist_with_attached_block_offset_by_empty_line() {
         verifies!(
             r#"
     test 'nested dlist with attached block offset by empty line' do
@@ -7615,7 +7614,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t057_should_convert_glossary_list_with_proper_semantics() {
+    fn should_convert_glossary_list_with_proper_semantics() {
         verifies!(
             r#"
     test 'should convert glossary list with proper semantics' do
@@ -7699,7 +7698,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t058_should_set_col_widths_of_item_and_label_if_specified() {
+    fn should_set_col_widths_of_item_and_label_if_specified() {
         verifies!(
             r#"
     test 'should set col widths of item and label if specified' do
@@ -7761,7 +7760,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t059_should_add_strong_class_to_label_if_strong_option_is_set() {
+    fn should_add_strong_class_to_label_if_strong_option_is_set() {
         verifies!(
             r#"
     test 'should add strong class to label if strong option is set' do
@@ -7788,7 +7787,7 @@ def2 continued"]"#,
     );
 
     #[test]
-    fn t060_consecutive_terms_in_horizontal_list_should_share_same_cell() {
+    fn consecutive_terms_in_horizontal_list_should_share_same_cell() {
         verifies!(
             r#"
     test 'consecutive terms in horizontal list should share same cell' do
@@ -8182,7 +8181,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t001_folds_text_from_subsequent_line() {
+    fn folds_text_from_subsequent_line() {
         verifies!(
             r#"
     test 'folds text from subsequent line' do
@@ -8213,7 +8212,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t002_folds_text_from_first_line_after_blank_lines() {
+    fn folds_text_from_first_line_after_blank_lines() {
         verifies!(
             r#"
     test 'folds text from first line after blank lines' do
@@ -8246,7 +8245,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t003_folds_text_from_first_line_after_blank_line_and_immediately_preceding_next_item() {
+    fn folds_text_from_first_line_after_blank_line_and_immediately_preceding_next_item() {
         verifies!(
             r#"
     test 'folds text from first line after blank line and immediately preceding next item' do
@@ -8283,8 +8282,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t004_paragraph_offset_by_blank_lines_does_not_break_list_if_label_does_not_have_inline_text()
-    {
+    fn paragraph_offset_by_blank_lines_does_not_break_list_if_label_does_not_have_inline_text() {
         verifies!(
             r#"
     test 'paragraph offset by blank lines does not break list if label does not have inline text' do
@@ -8320,7 +8318,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t005_folds_text_from_first_line_after_comment_line() {
+    fn folds_text_from_first_line_after_comment_line() {
         verifies!(
             r#"
     test 'folds text from first line after comment line' do
@@ -8352,7 +8350,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t006_folds_text_from_line_following_comment_line_offset_by_blank_line() {
+    fn folds_text_from_line_following_comment_line_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text from line following comment line offset by blank line' do
@@ -8385,7 +8383,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t007_folds_text_from_subsequent_indented_line() {
+    fn folds_text_from_subsequent_indented_line() {
         verifies!(
             r#"
     test 'folds text from subsequent indented line' do
@@ -8417,7 +8415,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t008_folds_text_from_indented_line_after_blank_line() {
+    fn folds_text_from_indented_line_after_blank_line() {
         verifies!(
             r#"
     test 'folds text from indented line after blank line' do
@@ -8450,7 +8448,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t009_folds_text_that_looks_like_ruler_offset_by_blank_line() {
+    fn folds_text_that_looks_like_ruler_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text that looks like ruler offset by blank line' do
@@ -8482,7 +8480,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t010_folds_text_that_looks_like_ruler_offset_by_blank_line_and_line_comment() {
+    fn folds_text_that_looks_like_ruler_offset_by_blank_line_and_line_comment() {
         verifies!(
             r#"
     test 'folds text that looks like ruler offset by blank line and line comment' do
@@ -8515,7 +8513,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t011_folds_text_that_looks_like_ruler_and_the_line_following_it_offset_by_blank_line() {
+    fn folds_text_that_looks_like_ruler_and_the_line_following_it_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text that looks like ruler and the line following it offset by blank line' do
@@ -8552,7 +8550,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t012_folds_text_that_looks_like_title_offset_by_blank_line() {
+    fn folds_text_that_looks_like_title_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text that looks like title offset by blank line' do
@@ -8584,7 +8582,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t013_folds_text_that_looks_like_title_offset_by_blank_line_and_line_comment() {
+    fn folds_text_that_looks_like_title_offset_by_blank_line_and_line_comment() {
         verifies!(
             r#"
     test 'folds text that looks like title offset by blank line and line comment' do
@@ -8617,7 +8615,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t014_folds_text_that_looks_like_admonition_offset_by_blank_line() {
+    fn folds_text_that_looks_like_admonition_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text that looks like admonition offset by blank line' do
@@ -8653,7 +8651,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t015_folds_text_that_looks_like_section_title_offset_by_blank_line() {
+    fn folds_text_that_looks_like_section_title_offset_by_blank_line() {
         verifies!(
             r#"
     test 'folds text that looks like section title offset by blank line' do
@@ -8691,7 +8689,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t016_folds_text_of_first_literal_line_offset_by_blank_line_appends_subsequent_literals_offset_by_blank_line_as_blocks(
+    fn folds_text_of_first_literal_line_offset_by_blank_line_appends_subsequent_literals_offset_by_blank_line_as_blocks(
     ) {
         verifies!(
             r#"
@@ -8742,7 +8740,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t017_folds_text_of_subsequent_line_and_appends_following_literal_line_offset_by_blank_line_as_block_if_term_has_no_inline_description(
+    fn folds_text_of_subsequent_line_and_appends_following_literal_line_offset_by_blank_line_as_block_if_term_has_no_inline_description(
     ) {
         verifies!(
             r#"
@@ -8795,8 +8793,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t018_appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description(
-    ) {
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description() {
         verifies!(
             r#"
     test 'appends literal line attached by continuation as block if item has no inline description' do
@@ -8841,7 +8838,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t019_appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
     ) {
         verifies!(
             r#"
@@ -8891,7 +8888,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t020_appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
+    fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
     ) {
         verifies!(
             r#"
@@ -8940,7 +8937,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t021_appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_block(
+    fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_block(
     ) {
         verifies!(
             r#"
@@ -9001,7 +8998,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t022_appends_block_attached_by_continuation_but_not_subsequent_block_not_attached_by_continuation(
+    fn appends_block_attached_by_continuation_but_not_subsequent_block_not_attached_by_continuation(
     ) {
         verifies!(
             r#"
@@ -9063,7 +9060,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t023_appends_list_if_item_has_no_inline_description() {
+    fn appends_list_if_item_has_no_inline_description() {
         verifies!(
             r#"
     test 'appends list if item has no inline description' do
@@ -9099,7 +9096,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t024_appends_list_to_first_term_when_followed_immediately_by_second_term() {
+    fn appends_list_to_first_term_when_followed_immediately_by_second_term() {
         verifies!(
             r#"
     test 'appends list to first term when followed immediately by second term' do
@@ -9142,7 +9139,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t025_appends_indented_list_to_first_term_that_is_adjacent_to_second_term() {
+    fn appends_indented_list_to_first_term_that_is_adjacent_to_second_term() {
         verifies!(
             r#"
     test 'appends indented list to first term that is adjacent to second term' do
@@ -9219,7 +9216,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t026_appends_indented_list_to_first_term_that_is_attached_by_a_continuation_and_adjacent_to_second_term(
+    fn appends_indented_list_to_first_term_that_is_attached_by_a_continuation_and_adjacent_to_second_term(
     ) {
         verifies!(
             r#"
@@ -9297,7 +9294,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t027_appends_list_and_paragraph_block_when_line_following_list_attached_by_continuation() {
+    fn appends_list_and_paragraph_block_when_line_following_list_attached_by_continuation() {
         verifies!(
             r#"
     test 'appends list and paragraph block when line following list attached by continuation' do
@@ -9354,7 +9351,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t028_first_continued_line_associated_with_nested_list_item_and_second_continued_line_associated_with_term(
+    fn first_continued_line_associated_with_nested_list_item_and_second_continued_line_associated_with_term(
     ) {
         verifies!(
             r#"
@@ -9417,7 +9414,7 @@ context 'Description lists redux' do
     );
 
     #[test]
-    fn t029_literal_line_attached_by_continuation_swallows_adjacent_line_that_looks_like_term() {
+    fn literal_line_attached_by_continuation_swallows_adjacent_line_that_looks_like_term() {
         verifies!(
             r#"
     test 'literal line attached by continuation swallows adjacent line that looks like term' do
@@ -9469,8 +9466,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t030_line_attached_by_continuation_is_appended_as_paragraph_if_term_has_no_inline_description(
-    ) {
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_no_inline_description() {
         verifies!(
             r#"
     test 'line attached by continuation is appended as paragraph if term has no inline description' do
@@ -9576,7 +9572,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t031_appends_line_as_paragraph_if_attached_by_continuation_following_blank_line_and_line_comment_when_term_has_no_inline_description(
+    fn appends_line_as_paragraph_if_attached_by_continuation_following_blank_line_and_line_comment_when_term_has_no_inline_description(
     ) {
         verifies!(
             r#"
@@ -9623,7 +9619,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t032_line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_no_inline_description(
+    fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_no_inline_description(
     ) {
         verifies!(
             r#"
@@ -9669,7 +9665,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t033_delimited_block_breaks_list_even_when_term_has_no_inline_description() {
+    fn delimited_block_breaks_list_even_when_term_has_no_inline_description() {
         verifies!(
             r#"
     test 'delimited block breaks list even when term has no inline description' do
@@ -9712,7 +9708,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t034_block_attribute_line_above_delimited_block_that_breaks_a_dlist_is_not_duplicated() {
+    fn block_attribute_line_above_delimited_block_that_breaks_a_dlist_is_not_duplicated() {
         verifies!(
             r#"
     test 'block attribute line above delimited block that breaks a dlist is not duplicated' do
@@ -9748,8 +9744,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t035_block_attribute_line_above_paragraph_breaks_list_even_when_term_has_no_inline_description(
-    ) {
+    fn block_attribute_line_above_paragraph_breaks_list_even_when_term_has_no_inline_description() {
         verifies!(
             r#"
     test 'block attribute line above paragraph breaks list even when term has no inline description' do
@@ -9791,7 +9786,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t036_block_attribute_line_above_paragraph_that_breaks_a_dlist_is_not_duplicated() {
+    fn block_attribute_line_above_paragraph_that_breaks_a_dlist_is_not_duplicated() {
         verifies!(
             r#"
     test 'block attribute line above paragraph that breaks a dlist is not duplicated' do
@@ -9825,7 +9820,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t037_block_anchor_line_breaks_list_even_when_term_has_no_inline_description() {
+    fn block_anchor_line_breaks_list_even_when_term_has_no_inline_description() {
         verifies!(
             r#"
     test 'block anchor line breaks list even when term has no inline description' do
@@ -9867,7 +9862,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t038_block_attribute_lines_above_nested_horizontal_list_does_not_break_list() {
+    fn block_attribute_lines_above_nested_horizontal_list_does_not_break_list() {
         verifies!(
             r#"
     test 'block attribute lines above nested horizontal list does not break list' do
@@ -9906,7 +9901,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t039_block_attribute_lines_above_nested_list_with_style_does_not_break_list() {
+    fn block_attribute_lines_above_nested_list_with_style_does_not_break_list() {
         verifies!(
             r#"
     test 'block attribute lines above nested list with style does not break list' do
@@ -9942,7 +9937,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t040_multiple_block_attribute_lines_above_nested_list_does_not_break_list() {
+    fn multiple_block_attribute_lines_above_nested_list_does_not_break_list() {
         verifies!(
             r#"
     test 'multiple block attribute lines above nested list does not break list' do
@@ -9984,7 +9979,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t041_multiple_block_attribute_lines_separated_by_empty_line_above_nested_list_does_not_break_list(
+    fn multiple_block_attribute_lines_separated_by_empty_line_above_nested_list_does_not_break_list(
     ) {
         verifies!(
             r#"
@@ -10032,7 +10027,7 @@ notnestedterm:::"]"#,
     );
 
     #[test]
-    fn t042_folds_text_from_inline_description_and_subsequent_line() {
+    fn folds_text_from_inline_description_and_subsequent_line() {
         verifies!(
             r#"
     test 'folds text from inline description and subsequent line' do
@@ -10068,7 +10063,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t043_folds_text_from_inline_description_and_subsequent_lines() {
+    fn folds_text_from_inline_description_and_subsequent_lines() {
         verifies!(
             r#"
     test 'folds text from inline description and subsequent lines' do
@@ -10106,7 +10101,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t044_folds_text_from_inline_description_and_line_following_comment_line() {
+    fn folds_text_from_inline_description_and_line_following_comment_line() {
         verifies!(
             r#"
     test 'folds text from inline description and line following comment line' do
@@ -10143,7 +10138,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t045_folds_text_from_inline_description_and_subsequent_indented_line() {
+    fn folds_text_from_inline_description_and_subsequent_indented_line() {
         verifies!(
             r#"
     test 'folds text from inline description and subsequent indented line' do
@@ -10180,7 +10175,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t046_appends_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description() {
+    fn appends_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description() {
         verifies!(
             r#"
     test 'appends literal line offset by blank line as block if item has inline description' do
@@ -10225,7 +10220,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t047_appends_literal_line_offset_by_blank_line_as_block_and_appends_line_after_continuation_as_block_if_item_has_inline_description(
+    fn appends_literal_line_offset_by_blank_line_as_block_and_appends_line_after_continuation_as_block_if_item_has_inline_description(
     ) {
         verifies!(
             r#"
@@ -10285,7 +10280,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t048_appends_line_after_continuation_as_block_and_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description(
+    fn appends_line_after_continuation_as_block_and_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description(
     ) {
         verifies!(
             r#"
@@ -10345,7 +10340,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t049_appends_list_if_item_has_inline_description() {
+    fn appends_list_if_item_has_inline_description() {
         verifies!(
             r#"
     test 'appends list if item has inline description' do
@@ -10389,7 +10384,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t050_appends_literal_line_attached_by_continuation_as_block_if_item_has_inline_description_followed_by_ruler(
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_inline_description_followed_by_ruler(
     ) {
         verifies!(
             r#"
@@ -10439,7 +10434,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t051_line_offset_by_blank_line_breaks_list_if_term_has_inline_description() {
+    fn line_offset_by_blank_line_breaks_list_if_term_has_inline_description() {
         verifies!(
             r#"
     test 'line offset by blank line breaks list if term has inline description' do
@@ -10514,7 +10509,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t052_line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_paragraph(
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_paragraph(
     ) {
         verifies!(
             r#"
@@ -10573,7 +10568,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t053_line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_block(
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_block(
     ) {
         verifies!(
             r#"
@@ -10634,7 +10629,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t054_line_attached_by_continuation_offset_by_line_comment_is_appended_as_paragraph_if_term_has_inline_description(
+    fn line_attached_by_continuation_offset_by_line_comment_is_appended_as_paragraph_if_term_has_inline_description(
     ) {
         verifies!(
             r#"
@@ -10680,7 +10675,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t055_line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_inline_description(
+    fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_inline_description(
     ) {
         verifies!(
             r#"
@@ -10726,7 +10721,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t056_line_comment_offset_by_blank_line_divides_lists_because_item_has_text() {
+    fn line_comment_offset_by_blank_line_divides_lists_because_item_has_text() {
         verifies!(
             r#"
     test 'line comment offset by blank line divides lists because item has text' do
@@ -10756,7 +10751,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t057_ruler_offset_by_blank_line_divides_lists_because_item_has_text() {
+    fn ruler_offset_by_blank_line_divides_lists_because_item_has_text() {
         verifies!(
             r#"
     test 'ruler offset by blank line divides lists because item has text' do
@@ -10786,7 +10781,7 @@ continued"]"#,
     );
 
     #[test]
-    fn t058_block_title_offset_by_blank_line_divides_lists_and_becomes_title_of_second_list_because_item_has_text(
+    fn block_title_offset_by_blank_line_divides_lists_and_becomes_title_of_second_list_because_item_has_text(
     ) {
         verifies!(
             r#"
