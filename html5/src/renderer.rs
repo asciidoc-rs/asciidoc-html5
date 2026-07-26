@@ -647,7 +647,11 @@ pub(crate) fn render_document(
         out: String::new(),
         custom_stylesheet,
         standalone,
+        icons_set: document.is_attribute_set("icons"),
         icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
+        iconsdir: attribute_str(document, "iconsdir")
+            .unwrap_or_else(|| "./images/icons".to_string()),
+        icontype: attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string()),
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
@@ -680,9 +684,12 @@ enum SectionAnchors {
 
 /// The document-level render settings a nested AsciiDoc table cell inherits
 /// from its parent document, carried into the cell's sub-renderer.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct CellRenderConfig {
+    icons_set: bool,
     icons_font: bool,
+    iconsdir: String,
+    icontype: String,
     doc_tabsize: i64,
     source_indent: Option<i64>,
     prewrap: bool,
@@ -702,9 +709,22 @@ struct Renderer<'a> {
     /// body-only output (`false`).
     standalone: bool,
 
+    /// Whether the document sets `icons` to any value (Asciidoctor's `attr?
+    /// 'icons'`). It selects the icon-based rendering of callout lists (a
+    /// two-column `<table>` rather than the default `<ol>`).
+    icons_set: bool,
+
     /// Whether the document sets `:icons: font`, which selects Font Awesome
     /// checkbox glyphs for interactive-less checklists (matching Asciidoctor).
     icons_font: bool,
+
+    /// The document `iconsdir` attribute (default `./images/icons`), used to
+    /// build the callout-number image URIs of an icon-based callout list.
+    iconsdir: String,
+
+    /// The document `icontype` attribute (default `png`), the file extension of
+    /// the callout-number images of an icon-based callout list.
+    icontype: String,
 
     /// The document `tabsize` attribute as an integer (Asciidoctor's
     /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
@@ -1212,10 +1232,7 @@ impl Renderer<'_> {
                 ListType::Unordered => self.ulist(block, list),
                 ListType::Ordered => self.olist(block, list),
                 ListType::Description => self.dlist(block, list),
-
-                // Callout lists are not rendered yet; see ARCHITECTURE.md for
-                // the roadmap.
-                ListType::Callout => self.unsupported(&block.resolved_context()),
+                ListType::Callout => self.colist(block, list),
             },
             Block::Table(table) => self.table(block, table),
 
@@ -1635,6 +1652,104 @@ impl Renderer<'_> {
 
         self.line("</ol>");
         self.line("</div>");
+    }
+
+    /// A callout list: `<div class="colist arabic">…</div>`, matching
+    /// Asciidoctor's `convert_colist`. Each item annotates a numbered callout
+    /// (`<1>`, `<.>`, …) in a preceding verbatim block; the callout numbers
+    /// themselves are substituted into that block's content by the parser.
+    ///
+    /// Without icons the items render as a plain `<ol>` of `<li><p>…</p></li>`
+    /// (the same item shape as [`list_item`](Self::list_item)). When the
+    /// document sets `icons` the list becomes a two-column `<table>` whose
+    /// first cell holds the callout number – a Font Awesome `<i
+    /// class="conum">`/`<b>` pair under `:icons: font`, or an `<img>` of
+    /// the numbered callout icon otherwise – and whose second cell holds
+    /// the item's text and any attached blocks.
+    fn colist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        // Asciidoctor's classes are `['colist', node.style, node.role]`; a
+        // callout list's style is always `arabic`.
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("colist arabic", &block.roles())
+        ));
+        self.block_title(block);
+
+        if self.icons_set {
+            self.line("<table>");
+            for (index, item) in list.child_blocks().enumerate() {
+                self.colist_row(item, index + 1);
+            }
+            self.line("</table>");
+        } else {
+            self.line("<ol>");
+            for item in list.child_blocks() {
+                self.list_item(item, false, false);
+            }
+            self.line("</ol>");
+        }
+
+        self.line("</div>");
+    }
+
+    /// Emits one `<tr>` of an icon-based callout list: the `num`-th callout
+    /// icon in the first cell, then the item's principal text (and any attached
+    /// blocks) in the second, matching Asciidoctor's `convert_colist` table
+    /// branch.
+    fn colist_row<'src>(&mut self, item: &'src Block<'src>, num: usize) {
+        let Block::ListItem(list_item) = item else {
+            return;
+        };
+
+        // The Font Awesome pair carries the number in `<b>`; the image form
+        // points at `{iconsdir}/callouts/{num}.{icontype}`.
+        let num_label = if self.icons_font {
+            format!("<i class=\"conum\" data-value=\"{num}\"></i><b>{num}</b>")
+        } else {
+            format!(
+                "<img src=\"{}/callouts/{num}.{}\" alt=\"{num}\">",
+                self.iconsdir, self.icontype
+            )
+        };
+
+        self.line("<tr>");
+        self.line(&format!("<td>{num_label}</td>"));
+
+        // The first attached block is the item's principal text; the remainder
+        // (continuation paragraphs, nested lists) render as ordinary blocks
+        // appended inside the same `<td>`, matching Asciidoctor's
+        // `#{item.text}#{item.blocks? ? LF + item.content : ''}`.
+        let mut blocks = list_item.child_blocks();
+        let text = blocks
+            .next()
+            .and_then(|block| block.rendered_content())
+            .unwrap_or_default();
+
+        let content = self.render_blocks_to_string(blocks);
+        if content.is_empty() {
+            self.line(&format!("<td>{text}</td>"));
+        } else {
+            self.line(&format!("<td>{text}\n{content}</td>"));
+        }
+
+        self.line("</tr>");
+    }
+
+    /// Renders `blocks` into a standalone string using the current renderer
+    /// state, with no trailing newline – the counterpart to Asciidoctor's
+    /// `item.content` (its child blocks' output joined by line feeds). Returns
+    /// an empty string when there are no blocks.
+    fn render_blocks_to_string<'src>(
+        &mut self,
+        blocks: impl Iterator<Item = &'src Block<'src>>,
+    ) -> String {
+        let saved = std::mem::take(&mut self.out);
+        for block in blocks {
+            self.block(block);
+        }
+        let rendered = std::mem::replace(&mut self.out, saved);
+        rendered.strip_suffix('\n').unwrap_or(&rendered).to_string()
     }
 
     /// A description list (`term:: definition`), matching Asciidoctor's
@@ -2059,7 +2174,10 @@ impl Renderer<'_> {
                     ad.title(),
                     ad.is_inline(),
                     CellRenderConfig {
+                        icons_set: self.icons_set,
                         icons_font: self.icons_font,
+                        iconsdir: self.iconsdir.clone(),
+                        icontype: self.icontype.clone(),
                         doc_tabsize: self.doc_tabsize,
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
@@ -2539,7 +2657,10 @@ fn render_cell_document<'s>(
         out: String::new(),
         custom_stylesheet: None,
         standalone: false,
+        icons_set: config.icons_set,
         icons_font: config.icons_font,
+        iconsdir: config.iconsdir.clone(),
+        icontype: config.icontype.clone(),
         doc_tabsize: config.doc_tabsize,
         source_indent: config.source_indent,
         prewrap: config.prewrap,
@@ -2738,10 +2859,11 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        // Callout lists are not rendered yet, so they still emit the
-        // placeholder marker (unordered/ordered/description lists now render).
-        let html = convert("----\ncode <1>\n----\n\n<1> explanation");
-        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+        // Block images are not rendered yet, so they still emit the placeholder
+        // marker (all list types – unordered, ordered, description, callout –
+        // now render).
+        let html = convert("image::foo.png[Alt]");
+        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'image' -->"));
     }
 
     #[test]
@@ -2769,6 +2891,49 @@ mod tests {
         assert!(
             html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
         );
+    }
+
+    #[test]
+    fn callout_list_renders_ol() {
+        // A callout list annotating a verbatim block renders as `<div
+        // class="colist arabic"><ol>` of `<li><p>…</p></li>`, and the parser
+        // substitutes the callout numbers into the `<pre>` as `<b
+        // class="conum">(n)</b>`.
+        let html = convert("----\ncode <1>\nmore <2>\n----\n\n<1> first\n<2> second");
+        assert!(html.contains("code <b class=\"conum\">(1)</b>"));
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<ol>\n<li>\n<p>first</p>\n</li>\n<li>\n<p>second</p>\n</li>\n</ol>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_list_with_icons_renders_image_table() {
+        // With `icons` set, the list becomes a two-column `<table>` whose first
+        // cell is the numbered callout image.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new().attribute("icons", ""),
+        );
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<table>\n<tr>\n\
+             <td><img src=\"./images/icons/callouts/1.png\" alt=\"1\"></td>\n\
+             <td>first</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_list_with_icons_font_renders_conum_table() {
+        // Under `:icons: font`, the first cell holds the Font Awesome
+        // `<i class="conum">`/`<b>` pair.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<table>\n<tr>\n\
+             <td><i class=\"conum\" data-value=\"1\"></i><b>1</b></td>\n\
+             <td>first</td>\n</tr>\n</table>\n</div>"
+        ));
     }
 
     #[test]
