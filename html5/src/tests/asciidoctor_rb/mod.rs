@@ -14,6 +14,7 @@ mod attribute_list_test;
 mod blocks_test;
 mod extensions_test;
 mod fixtures;
+mod helpers_test;
 mod links_test;
 mod lists_test;
 mod logger_test;
