@@ -16,8 +16,8 @@
 //!   emit — unordered/description lists inside AsciiDoc cells (#161, #154),
 //!   table of contents (#86), footnotes (#162), `cellbgcolor` (#163), and
 //!   font-based admonition icons (#50);
-//! - compat-mode inline emphasis (single-quote `'text'`), unsupported by
-//!   `asciidoc-parser` (#166);
+//! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
+//!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
 //!   no rendered-HTML claim, and one whose assertion is the exact cursor of an
 //!   unresolved-include warning raised from a `Tempfile` (#167).
@@ -3649,7 +3649,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// not supported by `asciidoc-parser` (#166).
+// permanently out of scope – this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode can be activated in AsciiDoc table cell' do
@@ -3670,7 +3670,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// not supported by `asciidoc-parser` (#166).
+// permanently out of scope – this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell inherits from parent document' do
@@ -3700,7 +3700,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// not supported by `asciidoc-parser` (#166).
+// permanently out of scope – this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell can be unset if set in parent document' do
