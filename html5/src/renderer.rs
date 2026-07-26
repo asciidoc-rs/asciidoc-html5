@@ -2297,6 +2297,34 @@ mod tests {
     }
 
     #[test]
+    fn leading_anchors_len_matches_leading_anchors_rx() {
+        use super::leading_anchors_len;
+
+        // No leading anchor: bare text, or a title opening with some other
+        // element, consumes nothing.
+        assert_eq!(leading_anchors_len("Foo"), 0);
+        assert_eq!(leading_anchors_len("<em>Foo</em>"), 0);
+
+        // A single bare anchor is consumed up to and including its `</a>`; the
+        // trailing title text is left behind.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"></a>Foo"#), 15);
+
+        // Anchors are consumed greedily: a run of them all counts.
+        assert_eq!(
+            leading_anchors_len(r#"<a id="fu"></a><a id="bar"></a>Foo"#),
+            31
+        );
+
+        // The three non-match branches mirror the regex `<a id="[^"]+"></a>`:
+        // an unterminated id (no closing quote), an empty id (`[^"]+` needs one
+        // char), and an anchor not closed by `></a>` (e.g. a real link that
+        // carries an `id`) each stop the scan with nothing consumed.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"#), 0);
+        assert_eq!(leading_anchors_len(r#"<a id=""></a>Foo"#), 0);
+        assert_eq!(leading_anchors_len(r##"<a id="fu" href="#x">Foo</a>"##), 0);
+    }
+
+    #[test]
     fn preamble_is_wrapped() {
         let html = convert("= Doc\n\nIntro.\n\n== Section\n\nBody.");
         let body = content(&html);
