@@ -30,6 +30,7 @@ writing the result to standard output.
 than one file in a single invocation.
 * xref:control-warnings.adoc[Control Warnings] covers `-q` (`--quiet`), `-v`
 (`--verbose`), `-w` (`--warnings`), and `--failure-level`.
+* xref:report-timings.adoc[Report Timings] covers `-t` (`--timings`).
 
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].
