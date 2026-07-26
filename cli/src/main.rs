@@ -204,6 +204,20 @@ silently ignored."
     )]
     doctype: Option<String>,
 
+    /// Auto-number section titles (sets the `sectnums` attribute)
+    #[arg(
+        short = 'n',
+        long = "section-numbers",
+        long_help = "Auto-number section titles, the way Asciidoctor's -n option does.\n\n\
+Equivalent to setting the `sectnums` document attribute (`-a sectnums`): each \
+section heading is prefixed with its dotted section number (`1.`, `1.1.`, …), \
+nesting down to the `sectnumlevels` depth (3 by default). Numbering is off \
+unless this flag, or the attribute, turns it on.\n\n\
+This flag seeds `sectnums` before any -a option on the same command line, so an \
+explicit `-a sectnums!` still wins and leaves the headings unnumbered."
+    )]
+    section_numbers: bool,
+
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
@@ -373,7 +387,7 @@ fn run_with_streams(
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
-    let base_options = build_options(&cli.attribute)?
+    let base_options = build_options(cli.section_numbers, &cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
 
@@ -1090,10 +1104,21 @@ fn parse_failure_level(name: &str) -> io::Result<LogLevel> {
     }
 }
 
-/// Builds the conversion [`Options`] from the raw `-a`/`--attribute` specs,
-/// parsing each with [`apply_attribute_spec`].
-fn build_options(specs: &[String]) -> io::Result<Options> {
+/// Builds the conversion [`Options`] from the `-n`/`--section-numbers` flag and
+/// the raw `-a`/`--attribute` specs, parsing each spec with
+/// [`apply_attribute_spec`].
+///
+/// `-n` is Asciidoctor's shorthand for `-a sectnums`, so it is seeded as an
+/// override *before* the `-a` specs are applied. Because a later directive for
+/// the same name wins, an explicit `-a sectnums!` on the same command line
+/// still overrides `-n` and leaves headings unnumbered — matching
+/// `asciidoctor -n -a sectnums!`.
+fn build_options(section_numbers: bool, specs: &[String]) -> io::Result<Options> {
     let mut options = Options::new();
+    if section_numbers {
+        options = options.set("sectnums");
+    }
+
     for spec in specs {
         options = apply_attribute_spec(options, spec)?;
     }

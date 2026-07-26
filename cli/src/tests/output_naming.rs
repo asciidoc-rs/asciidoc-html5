@@ -95,15 +95,16 @@ fn derive_output_path_honors_the_destination_directory() {
 // it otherwise leaves this branch unexercised in the library's own coverage).
 #[test]
 fn build_options_rejects_a_nameless_attribute() {
-    let err = build_options(&["=value".to_string()]).expect_err("a nameless attribute is rejected");
+    let err = build_options(false, &["=value".to_string()])
+        .expect_err("a nameless attribute is rejected");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     assert!(err.to_string().contains("attribute name"));
 
     // A bare `!` is likewise nameless once the unset marker is stripped.
-    let err = build_options(&["!".to_string()]).expect_err("a bare bang is rejected");
+    let err = build_options(false, &["!".to_string()]).expect_err("a bare bang is rejected");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 
     // An empty spec is a nameless bare key (no value, no unset marker).
-    let err = build_options(&[String::new()]).expect_err("an empty spec is rejected");
+    let err = build_options(false, &[String::new()]).expect_err("an empty spec is rejected");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 }
