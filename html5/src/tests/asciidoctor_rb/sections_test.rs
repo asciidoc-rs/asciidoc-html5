@@ -17,8 +17,8 @@
 //!   doctypes are out of scope for 1.0 (like the DocBook-backend tests below);
 //! - `sectanchors` / `sectlinks` heading anchors (<https://github.com/asciidoc-rs/asciidoc-html5/issues/186>)
 //!   and the document-title id/role on `<body>` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/187>);
-//! - **setext** (two-line/underlined) titles, which this parser does not
-//!   recognize (<https://github.com/asciidoc-rs/asciidoc-html5/issues/191>);
+//! - **setext** (two-line/underlined) titles, which are intentionally out of
+//!   scope for this project;
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - `asciidoc-parser` parser-model assertions with no rendered-output
 //!   counterpart (`Section.new`, `sectnum`, `.numeral`/`.level`/`.context`,
@@ -531,8 +531,8 @@ mod ids {
         assert_xpath(&out, r#"//h2[@id="one"][text()="Section One"]"#, 1);
     }
 
-    // Not verified: setext (two-line/underlined) titles are not recognized by the
-    // parser (#191).
+    // Not verified: setext (two-line/underlined) titles are intentionally out of
+    // scope for this project.
     non_normative!(
         r#"
     test 'explicit id can be defined using an embedded anchor when using setext section titles' do
@@ -1172,8 +1172,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax" do
@@ -1186,8 +1186,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax, give a char" do
@@ -1200,8 +1200,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax, take a char" do
@@ -1214,8 +1214,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test 'document title with multiline syntax and unicode characters' do
@@ -1235,8 +1235,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the length-mismatch warning is likewise not produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project; the length-mismatch warning is likewise not
+        // produced.
         non_normative!(
             r#"
       test "not enough chars for a multiline document title" do
@@ -1256,8 +1257,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the length-mismatch warning is likewise not produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project; the length-mismatch warning is likewise not
+        // produced.
         non_normative!(
             r#"
       test "too many chars for a multiline document title" do
@@ -1277,8 +1279,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the leading-dot warning is likewise not produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project; the leading-dot warning is likewise not
+        // produced.
         non_normative!(
             r#"
       test "document title with multiline syntax cannot begin with a dot" do
@@ -1518,8 +1521,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1606,8 +1609,8 @@ mod levels {
             assert_css(&result, "h2", 0);
         }
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test 'should preprocess second line of setext section title' do
@@ -1624,8 +1627,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "heading title with multiline syntax cannot begin with a dot" do
@@ -1842,8 +1845,8 @@ mod levels {
             assert_xpath(&output, r#"//h2[@id="_视图"][text()="视图"]"#, 1);
         }
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test 'multiline syntax with only multibyte characters' do
@@ -1882,8 +1885,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1927,8 +1930,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1972,8 +1975,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191).
+        // Not verified: setext (two-line/underlined) titles are intentionally out of
+        // scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -2689,8 +2692,8 @@ mod discrete_heading {
 "#
     );
 
-    // Not verified: setext (two-line/underlined) titles are not recognized by the
-    // parser (#191).
+    // Not verified: setext (two-line/underlined) titles are intentionally out of
+    // scope for this project.
     non_normative!(
         r#"
     test 'should preprocess second line of setext discrete heading' do
@@ -5405,7 +5408,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
+    // Not verified: asserts a setext //h2, which is intentionally out of scope for
+    // this project.
     non_normative!(
         r#"
     test "should not interpret a listing block as a heading" do
@@ -5426,7 +5430,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
+    // Not verified: asserts a setext //h2, which is intentionally out of scope for
+    // this project.
     non_normative!(
         r#"
     test "should not interpret an open block as a heading" do
@@ -5480,7 +5485,8 @@ mod heading_patterns_in_blocks {
         );
     }
 
-    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
+    // Not verified: asserts a setext //h2, which is intentionally out of scope for
+    // this project.
     non_normative!(
         r#"
     test "should not match a heading in a description list" do
@@ -5509,7 +5515,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
+    // Not verified: asserts a setext //h2, which is intentionally out of scope for
+    // this project.
     non_normative!(
         r#"
     test "should not match a heading in a bulleted list" do
