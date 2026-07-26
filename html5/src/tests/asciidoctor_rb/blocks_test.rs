@@ -1921,8 +1921,6 @@ mod example_blocks {
         );
     }
 
-    // Collapsible example blocks (`%collapsible` → `<details>/<summary>`) are
-    // implemented; see <https://github.com/asciidoc-rs/asciidoc-html5/issues/114>.
     #[test]
     fn should_create_details_summary_set_if_collapsible_option_is_set() {
         verifies!(
