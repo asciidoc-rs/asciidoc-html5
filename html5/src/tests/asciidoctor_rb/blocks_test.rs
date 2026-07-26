@@ -2629,9 +2629,15 @@ mod preformatted_blocks {
         );
         assert_css(&output, "pre", 1);
         assert_css(&output, ".listingblock pre", 1);
+        // The Ruby assertion reads the `<pre>`'s full descendant text; a source
+        // block wraps its code in `<code>`, so the reindented content is that
+        // element's text (this crate renders a delimited `[source]` block as
+        // `<pre class="highlight"><code …>`, matching Asciidoctor — unlike a
+        // plain `[listing]`/`----` block, which keeps its text directly on the
+        // `<pre>`).
         assert_xpath(
             &output,
-            "//pre[text()=\" def names\n\n   @names.split\n\n end\"]",
+            "//pre/code[text()=\" def names\n\n   @names.split\n\n end\"]",
             1,
         );
     }
