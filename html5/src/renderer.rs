@@ -323,20 +323,17 @@ fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
     let mut entries: Vec<DlistEntry<'src>> = Vec::new();
     let mut pending_terms: Vec<String> = Vec::new();
 
-    for item in list.child_blocks() {
-        // Every child of a description list is a `ListItem` whose marker is a
-        // `DefinedTerm`; the `if let`s just narrow to that guaranteed shape and
-        // collect the already-rendered term text.
-        if let Block::ListItem(list_item) = item {
-            if let ListItemMarker::DefinedTerm { term, .. } = list_item.list_item_marker() {
-                pending_terms.push(term.rendered().to_string());
-            }
+    // Every child of a description list is a `ListItem` whose marker is a
+    // `DefinedTerm`, so the narrowing helpers never actually discard anything
+    // here; `filter_map`/`extend` let the loop stay branch-free (the narrowing
+    // itself lives in — and is covered through — the helpers).
+    for list_item in list.child_blocks().filter_map(as_list_item) {
+        pending_terms.extend(dlist_term_text(list_item));
 
-            // A described item (one with child blocks) closes the entry, taking
-            // the terms accumulated so far with it.
-            if list_item.child_blocks().next().is_some() {
-                entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
-            }
+        // A described item (one with child blocks) closes the entry, taking the
+        // terms accumulated so far with it.
+        if list_item.child_blocks().next().is_some() {
+            entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
         }
     }
 
@@ -346,6 +343,28 @@ fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
     }
 
     entries
+}
+
+/// Narrows a block to the list item it holds, or `None` for any other block.
+/// A [`ListBlock`] only ever holds list items, so list rendering never sees the
+/// `None` case; the narrowing lives here (rather than inline) so it can be
+/// exercised directly.
+fn as_list_item<'src>(block: &'src Block<'src>) -> Option<&'src ListItem<'src>> {
+    match block {
+        Block::ListItem(list_item) => Some(list_item),
+        _ => None,
+    }
+}
+
+/// The already-rendered term text of a description-list item (its `DefinedTerm`
+/// marker's content, with inline substitutions applied), or `None` for a list
+/// item carrying any other marker. A description list's items are always
+/// `DefinedTerm`, so the `None` case never arises during rendering.
+fn dlist_term_text(list_item: &ListItem<'_>) -> Option<String> {
+    match list_item.list_item_marker() {
+        ListItemMarker::DefinedTerm { term, .. } => Some(term.rendered().to_string()),
+        _ => None,
+    }
 }
 
 /// Whether a list-continuation (`+`) line separates a description item's term
@@ -2617,6 +2636,37 @@ mod tests {
         // label column carries its width, the item column is a bare `<col>`.
         let html = convert("[horizontal,labelwidth=30%]\nCPU:: brain");
         assert!(html.contains("<colgroup>\n<col style=\"width: 30%;\">\n<col>\n</colgroup>"));
+    }
+
+    #[test]
+    fn dlist_narrowing_helpers_handle_both_arms() {
+        // `dlist_entries` narrows through these helpers on the assumption that a
+        // description list only holds `DefinedTerm` list items. That always
+        // holds during rendering, so exercise both arms directly here: a
+        // non-list block and a non-description marker take the `None` paths a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        use super::{as_list_item, dlist_term_text};
+
+        // A bullet list: the `<ul>` block is not a list item, its child is, and
+        // that child's marker is not a description term. `child_blocks()` on the
+        // `&Block` descends into the list's items without a narrowing branch.
+        let mut parser = Parser::default();
+        let ulist = parser.parse("* bullet\n");
+        let list_block = ulist.child_blocks().next().unwrap();
+        assert!(as_list_item(list_block).is_none());
+
+        let bullet_item = as_list_item(list_block.child_blocks().next().unwrap())
+            .expect("a list's child is always a list item");
+        assert!(dlist_term_text(bullet_item).is_none());
+
+        // A description list: the item's `DefinedTerm` marker yields its term.
+        let mut parser = Parser::default();
+        let dlist = parser.parse("term:: def\n");
+        let dlist_block = dlist.child_blocks().next().unwrap();
+        let term_item = as_list_item(dlist_block.child_blocks().next().unwrap()).unwrap();
+        assert_eq!(dlist_term_text(term_item).as_deref(), Some("term"));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
