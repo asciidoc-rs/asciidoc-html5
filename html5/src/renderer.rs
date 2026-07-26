@@ -324,16 +324,19 @@ fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
     let mut pending_terms: Vec<String> = Vec::new();
 
     for item in list.child_blocks() {
-        let Block::ListItem(list_item) = item else {
-            continue;
-        };
+        // Every child of a description list is a `ListItem` whose marker is a
+        // `DefinedTerm`; the `if let`s just narrow to that guaranteed shape and
+        // collect the already-rendered term text.
+        if let Block::ListItem(list_item) = item {
+            if let ListItemMarker::DefinedTerm { term, .. } = list_item.list_item_marker() {
+                pending_terms.push(term.rendered().to_string());
+            }
 
-        pending_terms.push(dlist_term(list_item));
-
-        // A described item (one with child blocks) closes the entry, taking the
-        // terms accumulated so far with it.
-        if list_item.child_blocks().next().is_some() {
-            entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
+            // A described item (one with child blocks) closes the entry, taking
+            // the terms accumulated so far with it.
+            if list_item.child_blocks().next().is_some() {
+                entries.push((std::mem::take(&mut pending_terms), Some(list_item)));
+            }
         }
     }
 
@@ -353,28 +356,17 @@ fn dlist_entries<'src>(list: &'src ListBlock<'src>) -> Vec<DlistEntry<'src>> {
 fn continuation_before_first_child(item: &ListItem<'_>, first: &Block<'_>) -> bool {
     let item_span = item.span();
     let item_src = item_span.data();
+
+    // The first child lies within the item, so its offset is at or past the
+    // item's; `saturating_sub` and the `min` keep the slice in bounds even if a
+    // span were ever malformed.
     let start = item_span.byte_offset();
     let end = first.span().byte_offset();
-
-    let Some(len) = end.checked_sub(start) else {
-        return false;
-    };
-    let between = &item_src[..len.min(item_src.len())];
+    let between = &item_src[..end.saturating_sub(start).min(item_src.len())];
 
     // Skip the term line itself; a `+` alone on any later line is a
     // continuation that attached the first block.
     between.split('\n').skip(1).any(|line| line.trim() == "+")
-}
-
-/// The already-rendered term text of a description-list item — the
-/// `DefinedTerm` marker's content, with inline substitutions applied. A
-/// non-description item (which never appears in a description list) yields an
-/// empty string.
-fn dlist_term(list_item: &ListItem<'_>) -> String {
-    match list_item.list_item_marker() {
-        ListItemMarker::DefinedTerm { term, .. } => term.rendered().to_string(),
-        _ => String::new(),
-    }
 }
 
 /// The `labelwidth`/`itemwidth` value of a `horizontal` description list, with
@@ -1662,21 +1654,25 @@ impl Renderer<'_> {
     /// renders as an attached block.
     fn dlist_body(&mut self, description: &ListItem<'_>) {
         let blocks: Vec<&Block<'_>> = description.child_blocks().collect();
-        let Some((&first, rest)) = blocks.split_first() else {
-            return;
-        };
 
-        let foldable = first.resolved_context().as_ref() == "paragraph"
-            && !continuation_before_first_child(description, first);
+        // The first block folds into the principal text only when it is a
+        // paragraph the term did not attach with a `+` continuation. An entry
+        // reaching here always has at least one block (it is why the entry has a
+        // description at all), so `first` drives the decision without a separate
+        // empty case.
+        let foldable = blocks.first().is_some_and(|first| {
+            first.resolved_context().as_ref() == "paragraph"
+                && !continuation_before_first_child(description, first)
+        });
 
         let attached = if foldable {
-            let text = first.rendered_content().unwrap_or_default();
+            let text = blocks[0].rendered_content().unwrap_or_default();
             if !text.is_empty() {
                 self.line(&format!("<p>{text}</p>"));
             }
-            rest
+            &blocks[1..]
         } else {
-            blocks.as_slice()
+            &blocks[..]
         };
 
         for &block in attached {
@@ -2613,6 +2609,14 @@ mod tests {
             "<colgroup>\n<col style=\"width: 20%;\">\n<col style=\"width: 80%;\">\n</colgroup>"
         ));
         assert!(html.contains("<td class=\"hdlist1 strong\">"));
+    }
+
+    #[test]
+    fn horizontal_description_list_with_one_column_width_leaves_the_other_bare() {
+        // With only `labelwidth` set, Asciidoctor still emits both `<col>`s: the
+        // label column carries its width, the item column is a bare `<col>`.
+        let html = convert("[horizontal,labelwidth=30%]\nCPU:: brain");
+        assert!(html.contains("<colgroup>\n<col style=\"width: 30%;\">\n<col>\n</colgroup>"));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
