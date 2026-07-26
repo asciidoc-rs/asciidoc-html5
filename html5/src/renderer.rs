@@ -721,7 +721,30 @@ impl Renderer<'_> {
         self.docinfo(document, DocinfoLocation::Head);
 
         self.line("</head>");
-        self.line(&format!("<body class=\"{}\">", escape_attribute(&doctype)));
+
+        // An explicit id and/or role(s) on the document title (the `[#id.role]`
+        // shorthand above the doctitle) move onto the standalone `<body>`: the id
+        // becomes `id="…"` and each role is appended to the doctype class, matching
+        // Asciidoctor's `<body id="idname" class="article rolename">`. (The
+        // bracketed `[[id]]` anchor form is not yet recognized by asciidoc-parser
+        // above a doctitle – asciidoc-parser#968.)
+        let header = document.header();
+        let id_attr = header
+            .id()
+            .map(|id| format!(" id=\"{}\"", escape_attribute(id)))
+            .unwrap_or_default();
+
+        let mut classes = doctype;
+        for role in header.roles() {
+            classes.push(' ');
+            classes.push_str(role);
+        }
+
+        self.line(&format!(
+            "<body{} class=\"{}\">",
+            id_attr,
+            escape_attribute(&classes)
+        ));
 
         // Header docinfo is inserted immediately before the header `<div>`,
         // whether or not the header itself is suppressed by `noheader` — this
