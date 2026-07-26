@@ -20,7 +20,8 @@ documented behavior is guaranteed.
 Each option is described in depth on the page for the task it serves:
 
 * xref:output-file.adoc[Specify an Output File] covers `-o` (`--output`) to name
-the output file and `-D` (`--destination-dir`) to set the output directory.
+the output file, `-D` (`--destination-dir`) to set the output directory, and `-R`
+(`--source-dir`) to recreate the input's subdirectories under it.
 * xref:set-safe-mode.adoc[Set Safe Mode] covers `-S` (`--safe-mode`), `--safe`,
 and `-B` (`--base-dir`).
 * xref:io-piping.adoc[Pipe Content] covers reading from standard input and
@@ -32,6 +33,12 @@ than one file in a single invocation.
 
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].
+
+For compatibility with existing `asciidoctor` command lines, `adoc` also accepts
+`-b` (`--backend`). Because it produces only the HTML5 backend, the sole accepted
+value is `html5` — like `asciidoctor -b html5`, it is a no-op — while any other
+backend, such as `xhtml5` or `docbook5`, exits with an error instead of being
+silently ignored.
 
 [NOTE]
 .Known limitations
