@@ -146,6 +146,9 @@ mod dispatcher {
         );
     }
 
+    // Drives `apply_subs` over a mutated line array (`para.lines << ''`) and
+    // checks trailing-blank-line preservation — a parser-model line-buffer
+    // concern, not observable through `convert`.
     non_normative!(
         r#"
     test 'should not drop trailing blank lines when performing substitutions' do
@@ -162,6 +165,9 @@ mod dispatcher {
 "#
     );
 
+    // `expand_subs` returns the resolved list of substitution *symbols*
+    // (`[:specialcharacters, …]`) — a parser-model API this crate does not
+    // surface.
     non_normative!(
         r#"
     test 'should expand subs passed to expand_subs' do
@@ -175,6 +181,9 @@ mod dispatcher {
 "#
     );
 
+    // Passes an explicit `nil` subs argument to `apply_subs` — a parser-model
+    // API this crate does not surface (and a `[pass]` paragraph emits no `<p>`
+    // whose content could be read back).
     non_normative!(
         r#"
     test 'apply_subs should allow the subs argument to be nil' do
@@ -204,6 +213,8 @@ mod quotes {
 
     #[test]
     fn single_line_double_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line double-quoted string' do
@@ -226,6 +237,8 @@ mod quotes {
             "&#8220;a few quoted words&#8221;"
         );
 
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
       para = block_from_string(%q{"`a few quoted words`"}, backend: 'docbook')
@@ -238,6 +251,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_double_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line double-quoted string' do
@@ -274,6 +289,8 @@ mod quotes {
 
     #[test]
     fn multi_line_double_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'multi-line double-quoted string' do
@@ -300,6 +317,8 @@ mod quotes {
 
     #[test]
     fn double_quoted_string_with_inline_single_quote() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'double-quoted string with inline single quote' do
@@ -326,6 +345,8 @@ mod quotes {
 
     #[test]
     fn double_quoted_string_with_inline_backquote() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'double-quoted string with inline backquote' do
@@ -374,6 +395,8 @@ mod quotes {
 
     #[test]
     fn single_line_single_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line single-quoted string' do
@@ -396,6 +419,8 @@ mod quotes {
             "&#8216;a few quoted words&#8217;"
         );
 
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
       para = block_from_string(%q{'`a few quoted words`'}, backend: 'docbook')
@@ -408,6 +433,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_single_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line single-quoted string' do
@@ -434,6 +461,8 @@ mod quotes {
 
     #[test]
     fn multi_line_single_quoted_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'multi-line single-quoted string' do
@@ -460,6 +489,8 @@ mod quotes {
 
     #[test]
     fn single_quoted_string_with_inline_single_quote() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-quoted string with inline single quote' do
@@ -486,6 +517,8 @@ mod quotes {
 
     #[test]
     fn single_quoted_string_with_inline_backquote() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-quoted string with inline backquote' do
@@ -807,6 +840,8 @@ mod quotes {
 
     #[test]
     fn single_quoted_string_containing_an_emphasized_phrase() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-quoted string containing an emphasized phrase' do
@@ -833,6 +868,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_quotes_inside_emphasized_words_are_restored() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-quotes inside emphasized words are restored' do
@@ -911,6 +948,8 @@ mod quotes {
 
     #[test]
     fn single_line_constrained_monospaced_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line constrained monospaced string' do
@@ -941,6 +980,8 @@ mod quotes {
 
     #[test]
     fn single_line_constrained_monospaced_string_with_role() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line constrained monospaced string with role' do
@@ -971,6 +1012,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_constrained_monospaced_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line constrained monospaced string' do
@@ -998,6 +1041,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_constrained_monospaced_string_with_role() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line constrained monospaced string with role' do
@@ -1025,6 +1070,8 @@ mod quotes {
 
     #[test]
     fn escaped_role_on_single_line_constrained_monospaced_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped role on single-line constrained monospaced string' do
@@ -1052,6 +1099,8 @@ mod quotes {
 
     #[test]
     fn escaped_role_on_escaped_single_line_constrained_monospaced_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped role on escaped single-line constrained monospaced string' do
@@ -1133,6 +1182,8 @@ mod quotes {
 
     #[test]
     fn multi_line_constrained_monospaced_string() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'multi-line constrained monospaced string' do
@@ -1349,6 +1400,8 @@ mod quotes {
 
     #[test]
     fn single_line_constrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line constrained monospaced chars' do
@@ -1382,6 +1435,8 @@ mod quotes {
 
     #[test]
     fn single_line_constrained_monospaced_chars_with_role() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line constrained monospaced chars with role' do
@@ -1415,6 +1470,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_constrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line constrained monospaced chars' do
@@ -1441,6 +1498,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_constrained_monospaced_chars_with_role() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line constrained monospaced chars with role' do
@@ -1467,6 +1526,8 @@ mod quotes {
 
     #[test]
     fn escaped_role_on_single_line_constrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped role on single-line constrained monospaced chars' do
@@ -1493,6 +1554,8 @@ mod quotes {
 
     #[test]
     fn escaped_role_on_escaped_single_line_constrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped role on escaped single-line constrained monospaced chars' do
@@ -1535,6 +1598,8 @@ mod quotes {
 
     #[test]
     fn single_line_unconstrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'single-line unconstrained monospaced chars' do
@@ -1562,6 +1627,8 @@ mod quotes {
 
     #[test]
     fn escaped_single_line_unconstrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'escaped single-line unconstrained monospaced chars' do
@@ -1588,6 +1655,8 @@ mod quotes {
 
     #[test]
     fn multi_line_unconstrained_monospaced_chars() {
+        // Out of scope here (compat-mode input or another backend); the modern
+        // HTML form is verified in this test.
         non_normative!(
             r#"
     test 'multi-line unconstrained monospaced chars' do
@@ -1889,6 +1958,7 @@ mod quotes {
         );
     }
 
+    // DocBook backend (`<anchor>`/`<phrase>`) — out of scope.
     non_normative!(
         r#"
     test 'quoted text with id and role shorthand using docbook backend' do
@@ -2531,6 +2601,9 @@ mod macros {
         assert_eq!(subs_opts("image:tiger.svg[Tiger,fallback=tiger.png,opts=interactive]", &Options::new().safe_mode(SafeMode::Server).attribute("imagesdir", "images")), "<span class=\"image\"><object type=\"image/svg+xml\" data=\"images/tiger.svg\"><img src=\"images/tiger.png\" alt=\"Tiger\"></object></span>");
     }
 
+    // Inline SVG embeds a fixture file's own markup and Ruby asserts it with a
+    // regex (`assert_match`) — an asset-reading pipeline concern beyond these
+    // inline-substitution checks.
     non_normative!(
         r#"
     test 'an image macro with an inline SVG image should be converted to an svg element' do
@@ -2545,6 +2618,9 @@ mod macros {
 "#
     );
 
+    // As above (inline SVG from a fixture, asserted by regex), plus the `data-
+    // uri` variant — an asset-reading pipeline concern beyond these inline-
+    // substitution checks.
     non_normative!(
         r#"
     test 'an image macro with an inline SVG image should be converted to an svg element even when data-uri is set' do
@@ -2615,6 +2691,7 @@ mod macros {
         assert_eq!(subs("image:tiger.png[Tiger, 200, 100]"), "<span class=\"image\"><img src=\"tiger.png\" alt=\"Tiger\" width=\"200\" height=\"100\"></span>");
     }
 
+    // DocBook backend — out of scope.
     non_normative!(
         r#"
     test 'a single-line image macro with text and dimensions should be interpreted as an image with alt text and dimensions in docbook' do
@@ -2626,6 +2703,7 @@ mod macros {
 "#
     );
 
+    // DocBook backend — out of scope.
     non_normative!(
         r#"
     test 'a single-line image macro with scaledwidth attribute should be supported in docbook' do
@@ -2637,6 +2715,7 @@ mod macros {
 "#
     );
 
+    // DocBook backend — out of scope.
     non_normative!(
         r#"
     test 'a single-line image macro with scaled attribute should be supported in docbook' do
@@ -2648,6 +2727,7 @@ mod macros {
 "#
     );
 
+    // DocBook backend — out of scope.
     non_normative!(
         r#"
     test 'should pass through role on image macro to DocBook output' do
@@ -2676,6 +2756,7 @@ mod macros {
         assert_eq!(subs("image:tiger.png[Tiger, link=\"http://en.wikipedia.org/wiki/Tiger\"]"), "<span class=\"image\"><a class=\"image\" href=\"http://en.wikipedia.org/wiki/Tiger\"><img src=\"tiger.png\" alt=\"Tiger\"></a></span>");
     }
 
+    // DocBook backend — out of scope.
     non_normative!(
         r#"
     test 'an inline image macro with link should be interpreted as a linked image in docbook' do
@@ -2920,6 +3001,9 @@ mod macros {
         assert!(s.contains("image::tiger.png[]"));
     }
 
+    // Catalogs image assets discovered in a section title (`catalog[:images]`)
+    // under a memory logger — parser-model catalog and logging plumbing this
+    // crate does not surface.
     non_normative!(
         r#"
     test 'should substitute attributes in target of inline image in section title' do
@@ -3359,6 +3443,9 @@ mod macros {
         );
     }
 
+    // Manually seeds the reference catalog via `doc.register :refs` with a
+    // hand-built `Asciidoctor::Inline` anchor so the footnote's xref resolves —
+    // a parser-model API this crate does not surface.
     non_normative!(
         r##"
     test 'a footnote macro may contain a shorthand xref' do
@@ -3376,6 +3463,9 @@ mod macros {
 "##
     );
 
+    // As 1096: manually registers the `_install` ref via `doc.register :refs`
+    // before resolving the footnote's xref macro — a parser-model API this
+    // crate does not surface.
     non_normative!(
         r##"
     test 'a footnote macro may contain an xref macro' do
@@ -3414,6 +3504,7 @@ mod macros {
         assert_eq!(fns[0].text, "a <a id=\"b\"></a> [[c]] d");
     }
 
+    // DocBook backend (`<footnote><simpara>`) — out of scope.
     non_normative!(
         r#"
     test 'subsequent footnote macros with escaped URLs should be restored in DocBook' do
@@ -3459,6 +3550,8 @@ mod macros {
         assert_eq!(fns[1].text, "Another footnote.");
     }
 
+    // `footnoteref:[id, text]` requires compat mode (`attributes: { 'compat-
+    // mode' => '' }`) — permanently out of scope.
     non_normative!(
         r##"
     test 'a footnoteref macro with id and single-line text should be registered and output as a footnote' do
@@ -3474,6 +3567,8 @@ mod macros {
 "##
     );
 
+    // `footnoteref` with multi-line text requires compat mode — permanently out
+    // of scope.
     non_normative!(
         r##"
     test 'a footnoteref macro with id and multi-line text should be registered and output as a footnote without newlines' do
@@ -3489,6 +3584,8 @@ mod macros {
 "##
     );
 
+    // `footnoteref` back-reference by id requires compat mode — permanently out
+    // of scope.
     non_normative!(
         r##"
     test 'a footnoteref macro with id should refer to footnoteref with same id' do
@@ -3551,6 +3648,8 @@ mod macros {
             .any(|w| matches!(w.warning, WarningType::DeprecatedFootnoterefMacro(_))));
     }
 
+    // Defines and references a footnote (`footnote:sub[…]` /
+    // `footnoteref:[sub]`) in compat mode — permanently out of scope.
     non_normative!(
         r##"
     test 'inline footnote macro can be used to define and reference a footnote reference' do
@@ -3726,6 +3825,10 @@ mod macros {
         assert!(h.contains("<a href=\"#_footnoteref_1\">1</a>. See <a href=\"#gof\">[gof]</a> to find a collection of design patterns."));
     }
 
+    // Footnotes reached from a heading are numbered in document order here — a
+    // deliberate `asciidoc-parser` divergence from Asciidoctor's out-of-
+    // sequence heading numbering (documented in the parser's section
+    // rendering), so the expected `1 1 2` ordering does not hold.
     non_normative!(
         r#"
     test 'footnotes in headings are expected to be numbered out of sequence' do
@@ -4018,6 +4121,7 @@ mod macros {
         assert_eq!(subs("The tiger (Panthera tigris) is the largest cat species.\n(((Tiger (Panthera tigris))))"), "The tiger (Panthera tigris) is the largest cat species.\n");
     }
 
+    // DocBook `<indexterm>` output — out of scope.
     non_normative!(
         r#"
     test 'visible shorthand index term macro should not consume trailing round bracket' do
@@ -4039,6 +4143,7 @@ mod macros {
 "#
     );
 
+    // DocBook `<indexterm>` output — out of scope.
     non_normative!(
         r#"
     test 'visible shorthand index term macro should not consume leading round bracket' do
@@ -4231,6 +4336,7 @@ mod macros {
         );
     }
 
+    // DocBook `<indexterm>` see/seealso output — out of scope.
     non_normative!(
         r#"
     test 'should parse visible shorthand index term with see and seealso' do
@@ -4256,6 +4362,7 @@ mod macros {
 "#
     );
 
+    // DocBook `<indexterm>` see/seealso output — out of scope.
     non_normative!(
         r#"
     test 'should parse concealed shorthand index term with see and seealso' do
@@ -4281,6 +4388,7 @@ mod macros {
 "#
     );
 
+    // DocBook `<indexterm>` see/seealso output — out of scope.
     non_normative!(
         r#"
     test 'should parse visible index term macro with see and seealso' do
@@ -4306,6 +4414,7 @@ mod macros {
 "#
     );
 
+    // DocBook `<indexterm>` see/seealso output — out of scope.
     non_normative!(
         r#"
     test 'should parse concealed index term macro with see and seealso' do
@@ -4331,6 +4440,7 @@ mod macros {
 "#
     );
 
+    // DocBook `<indexterm>` primary/secondary/tertiary output — out of scope.
     non_normative!(
         r#"
     test 'should honor secondary and tertiary index terms when primary index term is quoted and contains equals sign' do
@@ -4392,6 +4502,7 @@ mod macros {
             );
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'btn macro for docbook backend' do
@@ -4454,6 +4565,7 @@ mod macros {
             );
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'kbd macro with single key, docbook backend' do
@@ -4500,6 +4612,7 @@ mod macros {
             );
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'kbd macro with key combination, docbook backend' do
@@ -4742,6 +4855,7 @@ mod macros {
             );
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'should process menu for docbook backend' do
@@ -4832,6 +4946,7 @@ mod macros {
             assert_eq!(subs_with("menu:Tools[More Tools &gt; Extensions]", &[("experimental", ""), ("icons", "font")]), "<span class=\"menuseq\"><b class=\"menu\">Tools</b>&#160;<i class=\"fa fa-angle-right caret\"></i> <b class=\"submenu\">More Tools</b>&#160;<i class=\"fa fa-angle-right caret\"></i> <b class=\"menuitem\">Extensions</b></span>");
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'should process menu with menu item for docbook backend' do
@@ -4857,6 +4972,7 @@ mod macros {
             assert_eq!(subs_with("menu:Tools[Project &gt; Build]", &[("experimental", "")]), "<span class=\"menuseq\"><b class=\"menu\">Tools</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"submenu\">Project</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"menuitem\">Build</b></span>");
         }
 
+        // DocBook backend — out of scope.
         non_normative!(
             r#"
       test 'should process menu with menu item in submenu for docbook backend' do
@@ -4882,6 +4998,8 @@ mod macros {
             assert_eq!(subs_with("menu:Tools[Project, Build]", &[("experimental", "")]), "<span class=\"menuseq\"><b class=\"menu\">Tools</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"submenu\">Project</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"menuitem\">Build</b></span>");
         }
 
+        // Inline menu syntax ("File > Save As") is not rendered by `asciidoc-
+        // parser`; only the `menu:File[…]` macro form is supported.
         non_normative!(
             r#"
       test 'should process menu with menu item using inline syntax' do
@@ -4892,6 +5010,8 @@ mod macros {
 "#
         );
 
+        // Inline menu syntax ("Tools > Project > Build") is not rendered by
+        // `asciidoc-parser`; only the `menu:…[…]` macro form is supported.
         non_normative!(
             r#"
       test 'should process menu with menu item in submenu using inline syntax' do
@@ -4932,6 +5052,8 @@ mod macros {
             assert_eq!(subs_with("menu:视图[放大, 重置]", &[("experimental", "")]), "<span class=\"menuseq\"><b class=\"menu\">视图</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"submenu\">放大</b>&#160;<b class=\"caret\">&#8250;</b> <b class=\"menuitem\">重置</b></span>");
         }
 
+        // Inline menu syntax with multibyte items is not rendered by `asciidoc-
+        // parser`; only the `menu:…[…]` macro form is supported.
         non_normative!(
             r#"
       test 'should process inline menu with items containing multibyte characters' do
@@ -4980,6 +5102,9 @@ mod macros {
             assert_xpath(&h, "//b[@class=\"menu\"][text()=\"File\"]", 1);
         }
 
+        // Inline menu syntax beginning with a character reference is not
+        // rendered by `asciidoc-parser`; only the `menu:…[…]` macro form is
+        // supported.
         non_normative!(
             r#"
       test 'should process an inline menu that begins with a character reference' do
@@ -5013,6 +5138,9 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the parser's internal passthrough collection
+    // (`extract_passthroughs`, the `@passthroughs` array, its `:text` and
+    // `:subs` entries) — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect inline triple plus passthroughs' do
@@ -5028,6 +5156,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection from
+    // `extract_passthroughs` — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect multi-line inline triple plus passthroughs' do
@@ -5043,6 +5173,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection (and its
+    // `:specialcharacters` subs entry) — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect inline double dollar passthroughs' do
@@ -5058,6 +5190,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection (and its
+    // `:specialcharacters` subs entry) — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect inline double plus passthroughs' do
@@ -5073,6 +5207,9 @@ mod passthroughs {
 "#
     );
 
+    // The role-enclosed-in-quotes robustness case renders differently here —
+    // this crate does not emit the `<span class="'role'">` wrapper the test
+    // asserts.
     non_normative!(
         r#"
     test 'should not crash if role on passthrough is enclosed in quotes' do
@@ -5123,6 +5260,8 @@ mod passthroughs {
         assert_eq!(subs("=[attrs]\\\\++text++"), "=[attrs]++text++");
     }
 
+    // Inspects the internal `@passthroughs` collection from
+    // `extract_passthroughs` — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect multi-line inline double dollar passthroughs' do
@@ -5138,6 +5277,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection from
+    // `extract_passthroughs` — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect multi-line inline double plus passthroughs' do
@@ -5153,6 +5294,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection (and resolved subs list)
+    // from an inline `pass:` macro — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect passthroughs from inline pass macro' do
@@ -5168,6 +5311,8 @@ mod passthroughs {
 "#
     );
 
+    // Inspects the internal `@passthroughs` collection from a multi-line
+    // `pass:` macro — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'collect multi-line passthroughs from inline pass macro' do
@@ -5199,6 +5344,9 @@ mod passthroughs {
         assert_eq!(subs("+first passthrough+ followed by link:$$http://example.com/__u_no_format_me__$$[] with passthrough"), "first passthrough followed by <a href=\"http://example.com/__u_no_format_me__\" class=\"bare\">http://example.com/__u_no_format_me__</a> with passthrough");
     }
 
+    // Inspects `@passthroughs` sub-shorthand resolution and drives
+    // `restore_passthroughs` directly — a parser-model API this crate does not
+    // surface.
     non_normative!(
         r#"
     test 'resolves sub shorthands on inline pass macro' do
@@ -5214,6 +5362,9 @@ mod passthroughs {
 "#
     );
 
+    // Inspects incremental-subs resolution on `@passthroughs` and drives
+    // `restore_passthroughs` directly — a parser-model API this crate does not
+    // surface.
     non_normative!(
         r#"
     test 'inline pass macro supports incremental subs' do
@@ -5274,6 +5425,8 @@ mod passthroughs {
             == WarningType::InvalidSubstitutionTypeForPassthroughMacro("bogus".to_string())));
     }
 
+    // Drives `extract_passthroughs`/`restore_passthroughs` on empty content
+    // directly — a parser-model API this crate does not surface.
     non_normative!(
         r#"
     test 'should allow content of inline pass macro to be empty' do
@@ -5288,6 +5441,9 @@ mod passthroughs {
 "#
     );
 
+    // Manually populates the `@passthroughs` array and calls
+    // `restore_passthroughs` on a hand-built placeholder — a parser-model API
+    // this crate does not surface.
     non_normative!(
         r##"
     test 'restore inline passthroughs without subs' do
@@ -5303,6 +5459,8 @@ mod passthroughs {
 "##
     );
 
+    // Manually populates two `@passthroughs` entries and calls
+    // `restore_passthroughs` — a parser-model API this crate does not surface.
     non_normative!(
         r##"
     test 'restore inline passthroughs with subs' do
@@ -5370,6 +5528,8 @@ mod passthroughs {
         );
     }
 
+    // Inspects the collected `@passthroughs` entries (their unescaped `:text`)
+    // from `extract_passthroughs` — machinery this crate does not surface.
     non_normative!(
         r#"
     test 'complex inline passthrough macro' do
@@ -5670,6 +5830,8 @@ mod passthroughs {
             assert_eq!(subs("asciimath:[a < b]"), "\\$a &lt; b\\$");
         }
 
+        // DocBook MathML conversion (via the optional `asciimath` gem) — out of
+        // scope.
         non_normative!(
             r#"
       test 'should convert contents of asciimath macro to MathML in DocBook output if asciimath gem is available' do
@@ -5692,6 +5854,8 @@ mod passthroughs {
 "#
         );
 
+        // DocBook `<mathphrase>` fallback when the `asciimath` gem is absent —
+        // out of scope.
         non_normative!(
             r#"
       test 'should not perform specialcharacters subs on asciimath macro content in Docbook output if asciimath gem not available' do
@@ -5815,6 +5979,7 @@ mod passthroughs {
             assert_eq!(subs("latexmath:[a < b]"), "\\(a &lt; b\\)");
         }
 
+        // DocBook `<inlineequation>` output for latexmath — out of scope.
         non_normative!(
             r#"
       test 'should not perform specialcharacters subs on latexmath macro content in docbook backend by default' do
@@ -5847,6 +6012,8 @@ mod passthroughs {
 
         #[test]
         fn should_passthrough_math_macro_inside_another_passthrough() {
+            // Out of scope here (compat-mode input or another backend); the
+            // modern HTML form is verified in this test.
             non_normative!(
                 r#"
       test 'should passthrough math macro inside another passthrough' do
@@ -6400,6 +6567,9 @@ mod post_replacements {
         );
     }
 
+    // Relies on the bare document-level `hardbreaks` attribute (break every
+    // unwrapped line), which `asciidoc-parser` does not honor; the
+    // `[%hardbreaks]` block option is supported and covered elsewhere.
     non_normative!(
         r#"
     test 'line break inserted after line wrap with hardbreaks enabled' do
@@ -6462,6 +6632,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should resolve subs for block' do
@@ -6475,6 +6649,9 @@ mod resolve_subs {
 "#
     );
 
+    // Resolves the `specialcharacters` sub to `:highlight` for a coderay source
+    // block — source highlighting is out of scope, and `block.subs` is a
+    // parser-model API this crate does not surface.
     non_normative!(
         r#"
     test 'should resolve specialcharacters sub as highlight for source block when source highlighter is coderay' do
@@ -6490,6 +6667,9 @@ mod resolve_subs {
 "#
     );
 
+    // As 2428 for pygments (gated on `PYGMENTS_VERSION`) — source highlighting
+    // is out of scope, and `block.subs` is a parser-model API this crate does
+    // not surface.
     non_normative!(
         r#"
     test 'should resolve specialcharacters sub as highlight for source block when source highlighter is pygments', if: ENV['PYGMENTS_VERSION'] do
@@ -6505,6 +6685,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should not replace specialcharacters sub with highlight for source block when source highlighter is not set' do
@@ -6520,6 +6704,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should not use subs if subs option passed to block constructor is nil' do
@@ -6533,6 +6721,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should not use subs if subs option passed to block constructor is empty array' do
@@ -6546,6 +6738,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should use subs from subs option passed to block constructor' do
@@ -6559,6 +6755,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should use subs from subs attribute if subs option is not passed to block constructor' do
@@ -6573,6 +6773,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should use subs from subs attribute if subs option passed to block constructor is :default' do
@@ -6586,6 +6790,10 @@ mod resolve_subs {
 "#
     );
 
+    // Constructs an `Asciidoctor::Block` and inspects `block.subs` after
+    // `commit_subs` — a parser-model substitution-resolution API this crate
+    // does not surface (this crate has no way to build or introspect a block's
+    // sub list; it only renders a parsed document).
     non_normative!(
         r#"
     test 'should use built-in subs if subs option passed to block constructor is :default and subs attribute is absent' do
