@@ -869,7 +869,7 @@ fn parse_safe_mode(name: &str) -> io::Result<SafeMode> {
 /// A diagnostic's severity, ordered least to most severe, over the subset
 /// `adoc` routes: the parser reports at the `Info` and `Warn` levels, and
 /// `--failure-level` additionally names the `Error` and `Fatal` thresholds.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum LogLevel {
     /// A low-severity, easily-a-false-positive diagnostic Asciidoctor shows
     /// only under `-v` (a missing-attribute reference, an unresolved cross

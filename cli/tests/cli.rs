@@ -826,3 +826,46 @@ fn destination_dir_same_basename_inputs_last_one_wins() {
         "the last input should win, got: {html}"
     );
 }
+
+/// Runs the binary with `--failure-level=WARN` on a document that provokes a
+/// parser warning and checks that it exits with a nonzero status while still
+/// converting — the documented "fail the build on a warning" behavior, driven
+/// through the real process so the exit-code mapping in `main` is exercised.
+#[test]
+fn failure_level_makes_a_warning_exit_nonzero() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("--failure-level=WARN")
+        .arg("-o")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn the adoc binary");
+
+    child
+        .stdin
+        .take()
+        .expect("child stdin is piped")
+        .write_all(b"1. first\n3. third\n")
+        .expect("write to child stdin");
+
+    let output = child.wait_with_output().expect("wait for the adoc binary");
+
+    // The out-of-sequence list item is a warning, so the run exits nonzero.
+    assert!(
+        !output.status.success(),
+        "adoc should fail at --failure-level=WARN on a warning, but exited with {}",
+        output.status
+    );
+
+    // The conversion still happened: the HTML is on standard output, and the
+    // warning is reported on standard error.
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    let stderr = String::from_utf8(output.stderr).expect("stderr is UTF-8");
+    assert!(
+        stderr.contains("WARNING"),
+        "expected a warning, got: {stderr}"
+    );
+}
