@@ -16,7 +16,11 @@ use std::{
     process::ExitCode,
 };
 
-use asciidoc_html5::{AssetWriter, DirAssetWriter, Options, SafeMode};
+use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, SafeMode};
+use asciidoc_parser::{
+    parser::SourceLine,
+    warnings::{Warning, WarningType},
+};
 use clap::Parser;
 
 /// Convert an AsciiDoc document to HTML5.
@@ -169,14 +173,78 @@ Embedded output omits the doctitle by default; add `-a showtitle` to include it 
 as a leading <h1>."
     )]
     embedded: bool,
+
+    /// Silence log messages, including parser warnings (default: off)
+    #[arg(
+        short = 'q',
+        long = "quiet",
+        conflicts_with = "verbose",
+        long_help = "Silence log messages, the way Asciidoctor's -q option does.\n\n\
+By default adoc prints the parser's warnings to standard error. With -q it \
+prints nothing, whatever the document contains. A --failure-level threshold is \
+still evaluated against the (now unprinted) diagnostics, so `-q \
+--failure-level=WARN` can still exit non-zero on a warning without emitting any \
+text.\n\n\
+Cannot be combined with -v/--verbose."
+    )]
+    quiet: bool,
+
+    /// Show verbose (info-level) log messages too (default: off)
+    #[arg(
+        short = 'v',
+        long = "verbose",
+        long_help = "Show verbose log messages, the way Asciidoctor's -v option does.\n\n\
+By default adoc reports only warnings. With -v it also reports the lower, \
+info-level diagnostics — for example a reference to a missing attribute, or a \
+cross reference whose target is not defined — which are otherwise suppressed as \
+likely false positives.\n\n\
+Cannot be combined with -q/--quiet."
+    )]
+    verbose: bool,
+
+    /// Accepted for compatibility with Asciidoctor's -w; has no effect
+    #[arg(
+        short = 'w',
+        long = "warnings",
+        long_help = "Accepted for compatibility with Asciidoctor's -w/--warnings option.\n\n\
+In Asciidoctor -w turns on the Ruby interpreter's script warnings, a concern \
+with no analog in this native binary, so adoc accepts the flag and does \
+nothing with it. Parser warnings are printed by default regardless (silence \
+them with -q); this flag does not govern them."
+    )]
+    warnings: bool,
+
+    /// Minimum level that yields a non-zero exit: INFO, WARN, ERROR, or FATAL
+    #[arg(
+        long = "failure-level",
+        value_name = "LEVEL",
+        default_value = "FATAL",
+        long_help = "Set the minimum log level that yields a non-zero exit code, the way \
+Asciidoctor's --failure-level option does.\n\n\
+Accepts `INFO`, `WARN` (`WARNING`), `ERROR`, or `FATAL` (case-insensitive). \
+When a diagnostic at or above this level is emitted, adoc exits with status 1 \
+after finishing the conversion. The parser's own diagnostics are warnings (with \
+a handful reported at the lower info level), so `--failure-level=WARN` turns any \
+warning into a failure and `--failure-level=INFO` turns any diagnostic into \
+one.\n\n\
+The default, `FATAL`, is effectively never reached by a parse — matching \
+Asciidoctor, whose conversions succeed despite warnings unless this option \
+lowers the bar."
+    )]
+    failure_level: String,
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
-    match run(&cli, &mut stdout) {
-        Ok(()) => ExitCode::SUCCESS,
+    let mut stderr = io::stderr().lock();
+    match run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr) {
+        // A run that reached the configured `--failure-level` finishes the
+        // conversion but exits non-zero, matching Asciidoctor.
+        Ok(false) => ExitCode::SUCCESS,
+        Ok(true) => ExitCode::FAILURE,
         Err(err) => {
             eprintln!("adoc: {err}");
             ExitCode::FAILURE
@@ -191,16 +259,38 @@ fn main() -> ExitCode {
 /// Threading the
 /// standard-output writer in as a parameter keeps the conversion pipeline
 /// testable without spawning the binary. Reads from the process's standard
-/// input; [`run_with_input`] is the same pipeline with an injectable reader, so
-/// the `-`/stdin read path can be exercised in tests.
+/// input, and prints parser warnings to the process's standard error;
+/// [`run_with_streams`] is the same pipeline with those two streams injectable,
+/// so the `-`/stdin read path and the warning output can be exercised in tests.
+///
+/// The failure-level exit code [`run_with_streams`] computes is discarded here
+/// (this returns only success or the propagated I/O error); the binary's
+/// entry point calls [`run_with_streams`] directly to honor it.
+///
+/// This convenience over [`run_with_streams`] is used by the tests, which
+/// exercise conversions that emit no warnings and so need neither the injected
+/// warning stream nor the exit code.
+#[cfg(test)]
 fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     let mut stdin = io::stdin().lock();
     run_with_input(cli, &mut stdin, stdout)
 }
 
 /// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
-/// files, converts each, and writes the HTML5 out — the testable core of
-/// [`run`].
+/// files, converts each, and writes the HTML5 out — the injectable-reader
+/// counterpart of [`run`], routing warnings to the process's standard error.
+///
+/// Like [`run`], the failure-level exit code is discarded; use
+/// [`run_with_streams`] to observe it and to capture the warning stream.
+#[cfg(test)]
+fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
+    let mut stderr = io::stderr().lock();
+    run_with_streams(cli, stdin, stdout, &mut stderr).map(|_| ())
+}
+
+/// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
+/// files, converts each, writes the HTML5 to `stdout`, and prints any parser
+/// warnings to `stderr` — the fully injectable core of [`run`].
 ///
 /// The command's positional arguments are first resolved into a list of
 /// [`InputSource`]s by [`resolve_inputs`], expanding any glob patterns the way
@@ -209,7 +299,19 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 /// source (the attributes, safe mode, and standalone/embedded choice) are built
 /// once; the per-source base directory and input file are layered on top for
 /// each.
-fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
+///
+/// Parsing surfaces warnings (see [`Document::warnings`]); how they reach
+/// `stderr`, and whether they raise the exit code, is governed by the
+/// `-q`/`-v`/`--failure-level` options, gathered once into a
+/// [`WarningReporter`]. Returns `true` when any source emits a diagnostic at or
+/// above the configured failure level (regardless of whether it was printed),
+/// so the caller exits non-zero; `false` otherwise.
+fn run_with_streams(
+    cli: &Cli,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<bool> {
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document — matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
@@ -218,6 +320,8 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
     let base_options = build_options(&cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
+
+    let reporter = WarningReporter::from_cli(cli)?;
 
     let sources = resolve_inputs(&cli.inputs)?;
 
@@ -230,27 +334,47 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
         .map(Path::to_path_buf)
         .collect();
 
+    // A single source reaching the failure level fails the whole invocation, but
+    // every source is still converted first — matching Asciidoctor, which sets
+    // its exit code from the highest severity seen across all inputs.
+    let mut failure_reached = false;
     for source in &sources {
-        convert_source(cli, &base_options, source, &input_paths, stdin, stdout)?;
+        failure_reached |= convert_source(
+            cli,
+            &base_options,
+            source,
+            &input_paths,
+            &reporter,
+            stdin,
+            stdout,
+            stderr,
+        )?;
     }
 
-    Ok(())
+    Ok(failure_reached)
 }
 
 /// Converts one [`InputSource`] and writes its HTML5 to the destination
-/// [`output_target_for`] picks for it.
+/// [`output_target_for`] picks for it, printing the source's parser warnings to
+/// `stderr` through `reporter`.
 ///
 /// The shared `base_options` are cloned and the source's own base directory and
 /// input file are applied, so a file's top-level `include::` targets resolve
 /// against its own directory and each file gets its own derived output name.
+///
+/// Returns whether this source emitted a diagnostic at or above the reporter's
+/// failure level, so the caller can raise the invocation's exit code.
+#[allow(clippy::too_many_arguments)]
 fn convert_source(
     cli: &Cli,
     base_options: &Options,
     source: &InputSource,
     input_paths: &[PathBuf],
+    reporter: &WarningReporter,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
-) -> io::Result<()> {
+    stderr: &mut dyn Write,
+) -> io::Result<bool> {
     let input = source.file();
     let options = apply_base_dir(cli, base_options.clone(), input)?;
     let target = output_target_for(cli, input);
@@ -283,6 +407,13 @@ fn convert_source(
 
     let source_text = read_input(input, stdin)?;
 
+    // Load the document once so its warnings can be surfaced to `stderr`, then
+    // render that same parse — rather than parsing a second time — to `stdout` or
+    // the output file. The reporter both prints the warnings (subject to
+    // `-q`/`-v`) and reports whether any reached the failure level.
+    let document = asciidoc_html5::load_with(&source_text, &options);
+    let failure_reached = reporter.report(&document, warning_document_name(input), stderr)?;
+
     match target {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
@@ -301,17 +432,30 @@ fn convert_source(
                 inner: DirAssetWriter::new(dir),
                 output: path.clone(),
             };
-            let html = asciidoc_html5::convert_with_writer(&source_text, &options, &mut writer)?;
-            fs::write(path, html)
+            let html =
+                asciidoc_html5::convert_document_with_writer(&document, &options, &mut writer)?;
+            fs::write(path, html)?;
         }
 
         // Writing to standard output has no directory to copy alongside, so
         // `copycss` is inert here — again matching Asciidoctor, which skips the
         // copy unless there is an output file.
         OutputTarget::Stdout => {
-            let html = asciidoc_html5::convert_with(&source_text, &options);
-            stdout.write_all(html.as_bytes())
+            let html = asciidoc_html5::convert_document_with(&document, &options);
+            stdout.write_all(html.as_bytes())?;
         }
+    }
+
+    Ok(failure_reached)
+}
+
+/// The document name to attach to a warning's location line: the input file's
+/// path, or the conventional `<stdin>` when the document was read from standard
+/// input — matching how Asciidoctor labels the source of a diagnostic.
+fn warning_document_name(input: Option<&Path>) -> String {
+    match input {
+        Some(path) => path.display().to_string(),
+        None => "<stdin>".to_string(),
     }
 }
 
@@ -653,6 +797,184 @@ fn parse_safe_mode(name: &str) -> io::Result<SafeMode> {
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("invalid safe mode '{name}': expected unsafe, safe, server, or secure"),
+        )),
+    }
+}
+
+/// A diagnostic's severity, ordered least to most severe, over the subset
+/// `adoc` routes: the parser reports at the `Info` and `Warn` levels, and
+/// `--failure-level` additionally names the `Error` and `Fatal` thresholds.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum LogLevel {
+    /// A low-severity, easily-a-false-positive diagnostic Asciidoctor shows
+    /// only under `-v` (a missing-attribute reference, an unresolved cross
+    /// reference).
+    Info,
+
+    /// The level of most parser diagnostics, shown by default.
+    Warn,
+
+    /// A threshold above `Warn`; no parse emits at this level, but
+    /// `--failure-level=ERROR` names it.
+    Error,
+
+    /// The default `--failure-level`; effectively never reached by a parse.
+    Fatal,
+}
+
+impl LogLevel {
+    /// The label Asciidoctor's basic formatter prints for this level (`WARN`
+    /// renders as `WARNING`, `FATAL` as `FAILED`).
+    fn label(self) -> &'static str {
+        match self {
+            LogLevel::Info => "INFO",
+            LogLevel::Warn => "WARNING",
+            LogLevel::Error => "ERROR",
+            LogLevel::Fatal => "FAILED",
+        }
+    }
+}
+
+/// The severity `adoc` reports a parser warning at.
+///
+/// Most parser diagnostics are warnings. A few — a reference to a missing
+/// attribute, an `include::` dropped because an attribute in its target is
+/// unset, and a cross reference whose target is not defined — are the lower,
+/// info-level diagnostics Asciidoctor reports only in verbose mode, so `adoc`
+/// classifies them the same way (suppressed unless `-v`). Any warning type not
+/// named here is a warning; the parser's warning set is `non_exhaustive`, so a
+/// newly-recognized condition defaults to `Warn` (printed by default) until it
+/// is deliberately reclassified.
+fn warning_severity(warning: &WarningType) -> LogLevel {
+    match warning {
+        WarningType::SkippingReferenceToMissingAttribute(_)
+        | WarningType::IncludeDroppedDueToMissingAttribute(_)
+        | WarningType::PossibleInvalidReference(_) => LogLevel::Info,
+        _ => LogLevel::Warn,
+    }
+}
+
+/// Gathers the `-q`/`-v`/`--failure-level` options that govern how a parse's
+/// warnings are reported, so every source's warnings are routed the same way.
+struct WarningReporter {
+    /// Whether `-q`/`--quiet` silences all warning output.
+    quiet: bool,
+
+    /// The lowest severity to print: `Info` under `-v`/`--verbose`, otherwise
+    /// `Warn`.
+    display_level: LogLevel,
+
+    /// The lowest severity that raises the exit code, from `--failure-level`.
+    failure_level: LogLevel,
+}
+
+impl WarningReporter {
+    /// Reads the reporting options off the parsed [`Cli`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::ErrorKind::InvalidInput`] error when `--failure-level`
+    /// names an unrecognized level.
+    fn from_cli(cli: &Cli) -> io::Result<Self> {
+        Ok(Self {
+            quiet: cli.quiet,
+            display_level: if cli.verbose {
+                LogLevel::Info
+            } else {
+                LogLevel::Warn
+            },
+            failure_level: parse_failure_level(&cli.failure_level)?,
+        })
+    }
+
+    /// Prints `document`'s warnings — those at or above the display level,
+    /// unless silenced by `-q` — to `stderr`, labeling each with `doc_name` and
+    /// its origin line. Returns whether any warning (printed or not) reached
+    /// the failure level.
+    ///
+    /// # Errors
+    ///
+    /// Returns any [`io::Error`] raised while writing to `stderr`.
+    fn report(
+        &self,
+        document: &Document<'_>,
+        doc_name: String,
+        stderr: &mut dyn Write,
+    ) -> io::Result<bool> {
+        let mut failure_reached = false;
+        for warning in document.warnings() {
+            let severity = warning_severity(&warning.warning);
+
+            // The failure code follows every diagnostic's severity, even one `-q`
+            // keeps off the screen — matching Asciidoctor, whose quiet logger
+            // still records the highest severity it saw.
+            if severity >= self.failure_level {
+                failure_reached = true;
+            }
+
+            if self.quiet || severity < self.display_level {
+                continue;
+            }
+
+            let (file, line) = warning_location(document, warning, &doc_name);
+            writeln!(
+                stderr,
+                "adoc: {label}: {file}: line {line}: {message}",
+                label = severity.label(),
+                message = warning.warning,
+            )?;
+        }
+        Ok(failure_reached)
+    }
+}
+
+/// Resolves the `(file, line)` a warning should be attributed to, matching
+/// Asciidoctor's `<path>: line N` diagnostic prefix.
+///
+/// A warning that carries its own [`origin`](Warning::origin) — one raised
+/// inside include-expanded content that never appears in the document source —
+/// names its file and line directly. Otherwise the warning's source span is
+/// resolved through the document's source map: an `include::`d file reports
+/// that file's name, and the root document (which the map leaves unnamed)
+/// reports `doc_name` — the input path, or `<stdin>`.
+fn warning_location(
+    document: &Document<'_>,
+    warning: &Warning<'_>,
+    doc_name: &str,
+) -> (String, usize) {
+    if let Some(SourceLine(file, line)) = &warning.origin {
+        let file = file.clone().unwrap_or_else(|| doc_name.to_string());
+        return (file, *line);
+    }
+
+    let origin = document.origin_of(warning.source);
+    let file = origin
+        .file
+        .map(str::to_string)
+        .unwrap_or_else(|| doc_name.to_string());
+
+    (file, origin.line)
+}
+
+/// Parses a `--failure-level` value (case-insensitive) into the [`LogLevel`]
+/// threshold at or above which a diagnostic makes `adoc` exit non-zero.
+///
+/// Accepts `info`, `warn`/`warning`, `error`, and `fatal`, matching the set
+/// Asciidoctor's `--failure-level` takes.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `name` is none of
+/// those.
+fn parse_failure_level(name: &str) -> io::Result<LogLevel> {
+    match name.to_lowercase().as_str() {
+        "info" => Ok(LogLevel::Info),
+        "warn" | "warning" => Ok(LogLevel::Warn),
+        "error" => Ok(LogLevel::Error),
+        "fatal" => Ok(LogLevel::Fatal),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid failure level '{name}': expected info, warn, error, or fatal"),
         )),
     }
 }
