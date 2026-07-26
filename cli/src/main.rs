@@ -868,11 +868,12 @@ fn relative_subdir(source_dir: &Path, input: &Path) -> Option<PathBuf> {
 /// Asciidoctor's `File.expand_path` performs.
 ///
 /// The path is first made absolute (prepending the current directory when it is
-/// relative) via [`std::path::absolute`], which does not itself collapse `..`;
-/// each `..` is then resolved by popping the preceding normal component, and a
-/// `..` at the root is dropped (as `File.expand_path` treats `/..` as `/`).
-/// Unlike [`Path::canonicalize`], symlinks are not resolved and the path need
-/// not exist, so two spellings compare by their textual structure alone.
+/// relative) via [`std::path::absolute`], which drops `.` components but leaves
+/// `..` intact; each `..` is then resolved here by popping the preceding normal
+/// component, and a `..` at the root is dropped (as `File.expand_path` treats
+/// `/..` as `/`). Unlike [`Path::canonicalize`], symlinks are not resolved and
+/// the path need not exist, so two spellings compare by their textual structure
+/// alone.
 ///
 /// Returns `None` only when the path cannot be made absolute (for example, an
 /// empty path with no current directory available).
@@ -882,16 +883,17 @@ fn normalize_lexically(path: &Path) -> Option<PathBuf> {
     let absolute = std::path::absolute(path).ok()?;
     let mut normalized = Vec::new();
     for component in absolute.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                // Climb out of the preceding directory, but never past the root
-                // (or a Windows prefix), where `..` is a no-op.
-                if matches!(normalized.last(), Some(Component::Normal(_))) {
-                    normalized.pop();
-                }
+        // `std::path::absolute` has already dropped every `.`, so only `..`
+        // needs collapsing; any other component is a root, prefix, or name to
+        // keep.
+        if component == Component::ParentDir {
+            // Climb out of the preceding directory, but never past the root (or
+            // a Windows prefix), where `..` is a no-op.
+            if matches!(normalized.last(), Some(Component::Normal(_))) {
+                normalized.pop();
             }
-            other => normalized.push(other),
+        } else {
+            normalized.push(component);
         }
     }
     Some(normalized.iter().collect())
