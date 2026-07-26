@@ -6599,9 +6599,11 @@ mod post_replacements {
         );
     }
 
-    // Relies on the bare document-level `hardbreaks` attribute (break every
-    // unwrapped line), which `asciidoc-parser` does not honor; the
-    // `[%hardbreaks]` block option is supported and covered elsewhere.
+    // Enables hardbreaks via the API `hardbreaks` document attribute
+    // (`attributes: { 'hardbreaks' => '' }`), which `asciidoc-parser` does not
+    // honor for paragraph line breaks — though the header `:hardbreaks:`
+    // assignment and the `[%hardbreaks]` block option both are. Tracked by
+    // asciidoc-parser#974.
     non_normative!(
         r#"
     test 'line break inserted after line wrap with hardbreaks enabled' do
