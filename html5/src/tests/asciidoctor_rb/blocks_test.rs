@@ -18,8 +18,7 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - deferred features, each tracked by an issue: example captions/counters (<https://github.com/asciidoc-rs/asciidoc-html5/issues/113>),
-//!   collapsible examples (#114).
+//! - the deferred example captions/counters feature, tracked by <https://github.com/asciidoc-rs/asciidoc-html5/issues/113>.
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -1923,11 +1922,10 @@ mod example_blocks {
         );
     }
 
-    // Collapsible example blocks (`%collapsible` → `<details>/<summary>`) are not
-    // implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/114>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_create_details_summary_set_if_collapsible_option_is_set() {
+        verifies!(
+            r#"
     test 'should create details/summary set if collapsible option is set' do
       input = <<~'EOS'
       .Toggle Me
@@ -1946,6 +1944,25 @@ mod example_blocks {
       assert_css 'details > summary.title + .content p', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            ".Toggle Me\n[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Toggle Me\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details[open]", 0);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Toggle Me"]"#, 1);
+        assert_css(&output, "details > summary.title + .content", 1);
+        assert_css(&output, "details > summary.title + .content p", 1);
+    }
+
+    #[test]
+    fn should_open_details_summary_set_if_collapsible_and_open_options_are_set() {
+        verifies!(
+            r#"
     test 'should open details/summary set if collapsible and open options are set' do
       input = <<~'EOS'
       .Toggle Me
@@ -1962,6 +1979,23 @@ mod example_blocks {
       assert_xpath '//details/summary[text()="Toggle Me"]', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            ".Toggle Me\n[%collapsible%open]\n====\n\
+             This content is revealed when the user clicks the words \"Toggle Me\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details[open]", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Toggle Me"]"#, 1);
+    }
+
+    #[test]
+    fn should_add_default_summary_element_if_collapsible_option_is_set_and_title_is_not_specifed() {
+        verifies!(
+            r#"
     test 'should add default summary element if collapsible option is set and title is not specifed' do
       input = <<~'EOS'
       [%collapsible]
@@ -1976,6 +2010,22 @@ mod example_blocks {
       assert_xpath '//details/summary[text()="Details"]', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            "[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Details\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Details"]"#, 1);
+    }
+
+    #[test]
+    fn should_not_allow_collapsible_block_to_increment_example_number() {
+        verifies!(
+            r#"
     test 'should not allow collapsible block to increment example number' do
       input = <<~'EOS'
       .Before
@@ -2004,7 +2054,32 @@ mod example_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert(
+            ".Before\n====\nbefore\n====\n\n\
+             .Show Me The Goods\n[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Show Me The Goods\".\n====\n\n\
+             .After\n====\nafter\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="title"][text()="Example 1. Before"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="title"][text()="Example 2. After"]"#,
+            1,
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(
+            &output,
+            r#"//details/summary[text()="Show Me The Goods"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn should_warn_if_example_block_is_not_terminated() {

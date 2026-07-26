@@ -1168,12 +1168,45 @@ impl Renderer<'_> {
     /// block's caption prefix (`Example N. `) ahead of the title text; an
     /// untitled example has no title div at all.
     fn example<'src>(&mut self, block: &'src Block<'src>) {
+        if block.has_option("collapsible") {
+            self.collapsible_example(block);
+            return;
+        }
+
         self.open_block_wrapper(block, "exampleblock");
         self.captioned_title(block);
         self.line("<div class=\"content\">");
         self.wrapped_content(block);
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// A collapsible example (`[%collapsible]`): a `<details>`/`<summary>`
+    /// disclosure widget in place of the standard `exampleblock`. The block's
+    /// id and roles carry onto the `<details>` element (`id="…"` and each role
+    /// as a class), matching Asciidoctor. The `open` option
+    /// (`[%collapsible%open]`) adds the boolean `open` attribute so the widget
+    /// starts expanded, and an untitled block falls back to a default `Details`
+    /// summary. A collapsible example is never captioned or numbered — the
+    /// parser suppresses its caption — so it does not consume an example
+    /// number.
+    fn collapsible_example<'src>(&mut self, block: &'src Block<'src>) {
+        let open = if block.has_option("open") {
+            " open"
+        } else {
+            ""
+        };
+        self.line(&format!(
+            "<details{}{}{open}>",
+            id_attribute(block.id()),
+            class_attribute("", &block.roles())
+        ));
+        let summary = block.title().unwrap_or("Details");
+        self.line(&format!("<summary class=\"title\">{summary}</summary>"));
+        self.line("<div class=\"content\">");
+        self.wrapped_content(block);
+        self.line("</div>");
+        self.line("</details>");
     }
 
     /// A quote block (`<div
