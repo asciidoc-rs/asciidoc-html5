@@ -29,9 +29,11 @@
 //!   support subsections emit no warning
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/189>), a `==` heading
 //!   inside a delimited block is treated as a section, a `leveloffset` that
-//!   would make a section level 0 is not coerced to the doctitle, and an xref to
+//!   would make a section level 0 is not coerced to the doctitle, an xref to
 //!   the doctitle is not resolved to its title text
-//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/965>).
+//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/965>), and a
+//!   discrete heading reports the context `section` rather than `floating_title`
+//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/966>).
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -2670,8 +2672,8 @@ mod discrete_heading {
 "#
     );
 
-    // Not verified: asserts the parser block context (:floating_title), a
-    // parser-model detail with no rendered form.
+    // Not verified: asserts the parser block context is :floating_title, but the
+    // parser reports "section" for a discrete heading (asciidoc-parser#966).
     non_normative!(
         r#"
     test 'discrete heading should be a block with context floating_title' do
