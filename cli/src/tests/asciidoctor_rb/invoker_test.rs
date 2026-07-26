@@ -16,12 +16,12 @@
 //!   constructor signatures, and the Ruby-only `--eruby`, `-E` stdio encoding,
 //!   `-r` require, and `Dir.home` fixtures.
 //! - Out of scope for this html5-only renderer: other backends (DocBook via
-//!   `-b`, manpage) and custom template engines (`-T`/`-E` haml/slim).
+//!   `-b`, manpage), the non-`article` doctypes (`book`, `manpage`, `inline`)
+//!   that `-d`/`--doctype` rejects, and custom template engines (`-T`/`-E`
+//!   haml/slim).
 //! - Tracked for later work: surfacing parser warnings with `-q`/`-w`/
 //!   `--failure-level` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/147>),
-//!   the `-d`/`--doctype` flag and the book/inline doctypes
-//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/149>), the coderay
-//!   source-highlighter stylesheet
+//!   the coderay source-highlighter stylesheet
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>), `-t` timings
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/151>), the document
 //!   date/time attributes and `SOURCE_DATE_EPOCH`
@@ -1405,11 +1405,10 @@ non_normative!(
 "#
 );
 
-// Not implemented (flag): `-d article` selects the doctype. `article` is
-// `adoc`'s default (verified above), but it has no `-d`/`--doctype` flag.
-// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
-non_normative!(
-    r#"
+#[test]
+fn should_set_doctype_to_article_if_specified() {
+    verifies!(
+        r#"
   test 'should set doctype to article if specified' do
     invoker = invoke_cli_to_buffer %w(-d article -o -)
     doc = invoker.document
@@ -1419,10 +1418,28 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: `-d book`, both the flag and book-doctype rendering.
-// Tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
+    // `article` is the only doctype `adoc` models, and its default, so `-d
+    // article` is accepted for `asciidoctor` compatibility as a no-op (the other
+    // doctypes are rejected — see below). The Ruby test reads `doctype` off the
+    // document model; `adoc` exposes only the rendered output, which carries the
+    // same fact: a standalone article renders with an `article` body class.
+    let project = Project::new("doctype-article");
+    let input = project.write("sample.adoc", "= Document Title\n\nBody paragraph.\n");
+    let output = String::from_utf8(
+        project
+            .run(&["-d", "article", "-o", "-", input.to_str().unwrap()])
+            .expect("adoc converts with -d article"),
+    )
+    .expect("output is UTF-8");
+
+    assert!(output.contains(r#"<body class="article""#));
+}
+
+// Out of scope: `adoc` models only the `article` doctype (`-d article` is
+// verified above), so `-d book` is rejected rather than rendering a book with a
+// `book` body class.
 non_normative!(
     r#"
   test 'should set doctype to book if specified' do
@@ -1436,9 +1453,9 @@ non_normative!(
 "#
 );
 
-// Not implemented: the `inline` doctype (`-d inline`) and its 'no inline
-// candidate' warning. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
+// Out of scope: `adoc`'s `-d`/`--doctype` flag rejects `-d inline` (it models
+// only `article`), so there is no CLI path to the `inline` doctype's 'no inline
+// candidate' warning.
 non_normative!(
     r#"
   test 'should warn if doctype is inline and the first block is not a candidate for inline conversion' do
@@ -1454,8 +1471,8 @@ non_normative!(
 "#
 );
 
-// Not implemented: `inline` doctype, empty-document case. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
+// Out of scope: the `inline` doctype's empty-document case; `-d inline` is
+// rejected here (see above).
 non_normative!(
     r#"
   test 'should not warn if doctype is inline and the document has no blocks' do
@@ -1469,8 +1486,8 @@ non_normative!(
 "#
 );
 
-// Not implemented: `inline` doctype, multi-block case. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/149>.
+// Out of scope: the `inline` doctype's multi-block case; `-d inline` is
+// rejected here (see above).
 non_normative!(
     r#"
   test 'should not warn if doctype is inline and the document contains multiple blocks' do

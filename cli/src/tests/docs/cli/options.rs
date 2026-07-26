@@ -1,6 +1,6 @@
 use clap::Parser as _;
 
-use crate::{check_backend, tests::sdd::*, Cli};
+use crate::{check_backend, check_doctype, tests::sdd::*, Cli};
 
 track_file!("docs/modules/cli/pages/options.adoc");
 
@@ -115,6 +115,36 @@ silently ignored.
         assert!(
             check_backend(&Cli::parse_from(["adoc", "-b", backend, "doc.adoc"])).is_err(),
             "-b {backend} is rejected"
+        );
+    }
+}
+
+// `-d` (`--doctype`) is accepted for `asciidoctor` compatibility: `article`
+// (the only doctype `adoc` models) is a no-op, and every other doctype fails
+// rather than being silently ignored. Driven through `check_doctype`, the gate
+// `adoc` applies to the parsed `--doctype` value.
+#[test]
+fn the_doctype_option_accepts_only_article() {
+    verifies!(
+        r#"
+Likewise, `adoc` accepts `-d` (`--doctype`). Because it models only the `article`
+doctype, the sole accepted value is `article` — like `asciidoctor -d article`, it
+is a no-op — while the other doctypes Asciidoctor defines, `book`, `manpage`, and
+`inline`, exit with an error instead of being silently ignored.
+
+"#
+    );
+
+    // `-d article` is accepted as a no-op, as is omitting the option entirely.
+    check_doctype(&Cli::parse_from(["adoc", "-d", "article", "doc.adoc"]))
+        .expect("-d article is accepted");
+    check_doctype(&Cli::parse_from(["adoc", "doc.adoc"])).expect("the default is accepted");
+
+    // Every other doctype exits with an error rather than being ignored.
+    for doctype in ["book", "manpage", "inline"] {
+        assert!(
+            check_doctype(&Cli::parse_from(["adoc", "-d", doctype, "doc.adoc"])).is_err(),
+            "-d {doctype} is rejected"
         );
     }
 }
