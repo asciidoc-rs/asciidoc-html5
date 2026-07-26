@@ -11,7 +11,7 @@
 
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -21,7 +21,7 @@ use asciidoc_parser::{
     parser::SourceLine,
     warnings::{Warning, WarningType},
 };
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 /// Convert an AsciiDoc document to HTML5.
 #[derive(Debug, Parser)]
@@ -301,6 +301,18 @@ lowers the bar."
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // A bare invocation (no input argument) at an interactive terminal would
+    // otherwise block reading standard input, which reads as a freeze. Print the
+    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
+    // when no input file is given. Piped or redirected input (standard input is
+    // not a terminal), and an explicit `-`, still read standard input, so the
+    // piping design keeps working.
+    if should_report_usage(&cli.inputs, io::stdin().is_terminal()) {
+        let mut stderr = io::stderr().lock();
+        let _ = print_usage(&mut stderr);
+        return ExitCode::FAILURE;
+    }
+
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
@@ -550,11 +562,35 @@ impl InputSource {
     }
 }
 
+/// Whether a bare invocation (no input argument) running at an interactive
+/// terminal should print usage instead of blocking on standard input.
+///
+/// With no input file, `adoc` normally reads standard input (its piping design,
+/// so `cat doc.adoc | adoc` works). But when standard input is a terminal there
+/// is nothing piped in, so reading it would hang until the user sends EOF,
+/// which reads as a freeze. In that case `adoc` prints usage and exits non-zero
+/// instead, matching Asciidoctor, which prints its option summary when no input
+/// file is given. An explicit `-` (which makes `inputs` non-empty) still
+/// selects standard input, even at a terminal, and piped or redirected input
+/// (standard input is not a terminal) is still read.
+fn should_report_usage(inputs: &[PathBuf], stdin_is_terminal: bool) -> bool {
+    inputs.is_empty() && stdin_is_terminal
+}
+
+/// Writes the command's help, which begins with the `Usage:` line, to `stderr`,
+/// the way Asciidoctor prints its option summary when no input file is given.
+fn print_usage(stderr: &mut dyn Write) -> io::Result<()> {
+    write!(stderr, "{}", Cli::command().render_help())
+}
+
 /// Resolves the command's positional arguments into the ordered list of sources
 /// to convert, mirroring how the Asciidoctor CLI treats its input arguments.
 ///
-/// With no arguments, or a lone `-`, `adoc` reads standard input. Otherwise
-/// each argument names a file to convert, except that an argument matching no
+/// With no arguments, or a lone `-`, `adoc` reads standard input. (The bare
+/// no-argument case at an interactive terminal is intercepted earlier by
+/// [`should_report_usage`], which prints usage rather than reaching this
+/// standard-input read.) Otherwise each argument names a file to convert,
+/// except that an argument matching no
 /// existing file is expanded as a glob pattern — the same portable, Ruby-style
 /// matching Asciidoctor performs, so `'*.adoc'` and `'**/*.adoc'` work the same
 /// on every platform regardless of what the shell would expand. A pattern that

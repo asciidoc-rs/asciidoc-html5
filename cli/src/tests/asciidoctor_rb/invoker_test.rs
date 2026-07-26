@@ -25,16 +25,16 @@
 //!   the document date/time attributes and `SOURCE_DATE_EPOCH` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/152>),
 //!   image-based admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
 //!   and the table of contents that `toc-title` renders into (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
-//! - Deliberate divergence (under re-evaluation): given no input file, `adoc`
-//!   reads standard input (its piping design) rather than printing a usage
-//!   message (<https://github.com/asciidoc-rs/asciidoc-html5/issues/160>).
 
 use std::path::PathBuf;
 
 use asciidoc_html5::SafeMode;
 use clap::Parser as _;
 
-use crate::{resolve_safe_mode, run, run_with_input, run_with_streams, tests::sdd::*, Cli};
+use crate::{
+    print_usage, resolve_safe_mode, run, run_with_input, run_with_streams, should_report_usage,
+    tests::sdd::*, Cli,
+};
 
 track_file!("ref/asciidoctor/test/invoker_test.rb");
 
@@ -726,13 +726,10 @@ fn should_return_non_zero_exit_code_if_failure_level_is_reached() {
     assert!(stderr.is_empty(), "expected no messages, got: {stderr}");
 }
 
-// Deliberate divergence (under re-evaluation): with no input file Asciidoctor
-// prints a usage message, whereas `adoc` reads the document from standard
-// input (its piping design), so there is no usage error to assert. Whether to
-// print usage when stdin is a terminal is tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/160>.
-non_normative!(
-    r#"
+#[test]
+fn should_report_usage_if_no_input_file_given() {
+    verifies!(
+        r#"
   test 'should report usage if no input file given' do
     redirect_streams do |out, err|
       invoke_cli [], nil
@@ -741,7 +738,30 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // With no input argument at an interactive terminal, `adoc` prints usage
+    // rather than blocking on standard input, matching Asciidoctor, which prints
+    // its option summary when no input file is given. Piped input (standard
+    // input is not a terminal) and an explicit `-` still read standard input,
+    // preserving the piping design.
+    assert!(should_report_usage(&Cli::parse_from(["adoc"]).inputs, true));
+    assert!(!should_report_usage(
+        &Cli::parse_from(["adoc"]).inputs,
+        false
+    ));
+    assert!(!should_report_usage(
+        &Cli::parse_from(["adoc", "-"]).inputs,
+        true
+    ));
+
+    // The usage text `adoc` prints to standard error matches the Ruby test's
+    // `/Usage:/`.
+    let mut stderr = Vec::new();
+    print_usage(&mut stderr).expect("write usage");
+    let usage = String::from_utf8(stderr).expect("usage is UTF-8");
+    assert!(usage.contains("Usage:"), "{usage}");
+}
 
 #[test]
 fn should_report_error_if_input_file_does_not_exist() {
