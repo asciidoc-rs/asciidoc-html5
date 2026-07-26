@@ -33,7 +33,7 @@ use clap::Parser as _;
 
 use crate::{
     print_usage, resolve_safe_mode, run, run_with_input, run_with_streams, should_report_usage,
-    tests::sdd::*, Cli,
+    tests::sdd::*, Cli, TEST_STDIN_NOT_A_TERMINAL,
 };
 
 track_file!("ref/asciidoctor/test/invoker_test.rb");
@@ -99,8 +99,14 @@ impl Project {
         let mut stdin = std::io::empty();
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        let failed =
-            run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+        let failed = run_with_streams(
+            &cli,
+            TEST_STDIN_NOT_A_TERMINAL,
+            &mut stdin,
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("adoc converts");
         (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
     }
 }
@@ -131,8 +137,14 @@ fn run_stdin_streams(args: &[&str], source: &str) -> (bool, String) {
     let mut stdin = source.as_bytes();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let failed =
-        run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    let failed = run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
 }
 
@@ -742,25 +754,34 @@ fn should_report_usage_if_no_input_file_given() {
 
     // With no input argument at an interactive terminal, `adoc` prints usage
     // rather than blocking on standard input, matching Asciidoctor, which prints
-    // its option summary when no input file is given. Piped input (standard
-    // input is not a terminal) and an explicit `-` still read standard input,
-    // preserving the piping design.
-    assert!(should_report_usage(&Cli::parse_from(["adoc"]).inputs, true));
-    assert!(!should_report_usage(
-        &Cli::parse_from(["adoc"]).inputs,
-        false
-    ));
+    // its option summary when no input file is given. Drive the whole pipeline:
+    // `run_with_streams` diverts to writing the `Usage:` summary to stderr and
+    // reports a non-zero exit, reading no standard input and producing no output.
+    let cli = Cli::parse_from(["adoc"]);
+    let mut stdin = std::io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let failed = run_with_streams(&cli, true, &mut stdin, &mut stdout, &mut stderr)
+        .expect("the usage path does not error");
+    let stderr = String::from_utf8(stderr).expect("stderr is UTF-8");
+    assert!(failed, "a bare invocation at a terminal exits non-zero");
+    assert!(stderr.contains("Usage:"), "{stderr}");
+    assert!(stdout.is_empty(), "the usage path converts nothing");
+
+    // Piped input (standard input is not a terminal) and an explicit `-` still
+    // read standard input, preserving the piping design.
+    assert!(!should_report_usage(&cli.inputs, false));
     assert!(!should_report_usage(
         &Cli::parse_from(["adoc", "-"]).inputs,
         true
     ));
 
-    // The usage text `adoc` prints to standard error matches the Ruby test's
-    // `/Usage:/`.
-    let mut stderr = Vec::new();
-    print_usage(&mut stderr).expect("write usage");
-    let usage = String::from_utf8(stderr).expect("usage is UTF-8");
-    assert!(usage.contains("Usage:"), "{usage}");
+    // The usage text alone matches the Ruby test's `/Usage:/`.
+    let mut usage = Vec::new();
+    print_usage(&mut usage).expect("write usage");
+    assert!(String::from_utf8(usage)
+        .expect("usage is UTF-8")
+        .contains("Usage:"));
 }
 
 #[test]

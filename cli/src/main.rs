@@ -301,24 +301,25 @@ lowers the bar."
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // A bare invocation (no input argument) at an interactive terminal would
-    // otherwise block reading standard input, which reads as a freeze. Print the
-    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
-    // when no input file is given. Piped or redirected input (standard input is
-    // not a terminal), and an explicit `-`, still read standard input, so the
-    // piping design keeps working.
-    if should_report_usage(&cli.inputs, io::stdin().is_terminal()) {
-        let mut stderr = io::stderr().lock();
-        let _ = print_usage(&mut stderr);
-        return ExitCode::FAILURE;
-    }
+    // Whether standard input is an interactive terminal decides the bare-
+    // invocation case inside [`run_with_streams`]: with no input argument and a
+    // terminal there is nothing piped in, so it prints usage instead of blocking
+    // on the read. Sampled before locking, though the lock does not change it.
+    let stdin_is_terminal = io::stdin().is_terminal();
 
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
-    match run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr) {
-        // A run that reached the configured `--failure-level` finishes the
-        // conversion but exits non-zero, matching Asciidoctor.
+    match run_with_streams(
+        &cli,
+        stdin_is_terminal,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    ) {
+        // A run that reached the configured `--failure-level` — or that printed
+        // usage for a bare invocation at a terminal — finishes but exits
+        // non-zero, matching Asciidoctor.
         Ok(false) => ExitCode::SUCCESS,
         Ok(true) => ExitCode::FAILURE,
         Err(err) => {
@@ -352,6 +353,14 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     run_with_input(cli, &mut stdin, stdout)
 }
 
+/// The `stdin_is_terminal` value the test helpers [`run`] and
+/// [`run_with_input`] pass into [`run_with_streams`]: `false`, so an injected
+/// reader is always read rather than being intercepted by the
+/// interactive-terminal usage path (which is exercised on its own by driving
+/// [`run_with_streams`] with `true`).
+#[cfg(test)]
+const TEST_STDIN_NOT_A_TERMINAL: bool = false;
+
 /// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
 /// files, converts each, and writes the HTML5 out — the injectable-reader
 /// counterpart of [`run`], routing warnings to the process's standard error.
@@ -361,7 +370,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 #[cfg(test)]
 fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
     let mut stderr = io::stderr().lock();
-    run_with_streams(cli, stdin, stdout, &mut stderr).map(|_| ())
+    run_with_streams(cli, TEST_STDIN_NOT_A_TERMINAL, stdin, stdout, &mut stderr).map(|_| ())
 }
 
 /// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
@@ -379,15 +388,35 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
 /// Parsing surfaces warnings (see [`Document::warnings`]); how they reach
 /// `stderr`, and whether they raise the exit code, is governed by the
 /// `-q`/`-v`/`--failure-level` options, gathered once into a
-/// [`WarningReporter`]. Returns `true` when any source emits a diagnostic at or
-/// above the configured failure level (regardless of whether it was printed),
-/// so the caller exits non-zero; `false` otherwise.
+/// [`WarningReporter`]. Returns `true` when the run should exit non-zero — a
+/// source emitted a diagnostic at or above the configured failure level
+/// (regardless of whether it was printed), or usage was printed for a bare
+/// invocation at an interactive terminal (see below) — and `false` otherwise.
+///
+/// `stdin_is_terminal` reports whether the process's standard input is an
+/// interactive terminal. With no input argument and a terminal, there is
+/// nothing piped in, so [`should_report_usage`] diverts to printing usage on
+/// `stderr` (returning `true`) rather than blocking on the read; the tests
+/// inject this flag to drive both the usage path and the ordinary conversion
+/// path.
 fn run_with_streams(
     cli: &Cli,
+    stdin_is_terminal: bool,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
+    // A bare invocation (no input argument) at an interactive terminal would
+    // otherwise block reading standard input, which reads as a freeze. Print the
+    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
+    // when no input file is given. Piped or redirected input (standard input is
+    // not a terminal), and an explicit `-`, fall through and read standard input,
+    // so the piping design keeps working.
+    if should_report_usage(&cli.inputs, stdin_is_terminal) {
+        print_usage(stderr)?;
+        return Ok(true);
+    }
+
     // Reject an unsupported backend or doctype before reading or converting
     // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
     // touching the input.
