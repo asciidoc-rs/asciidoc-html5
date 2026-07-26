@@ -4,11 +4,12 @@ use crate::{tests::sdd::*, Cli};
 
 track_file!("docs/modules/cli/pages/options.adoc");
 
-// This crate's "CLI Options" page. It is a landing page for the CLI module:
-// descriptive prose, cross-references to the task-specific option pages, and
-// the `adoc --help` invocation that lists the supported options. The prose and
-// cross-references carry no rule to verify; the `--help` invocation is driven
-// by the test below.
+// This crate's "CLI Options" page. It is the reference page for the CLI module:
+// descriptive prose, a table of the supported options, an out-of-scope section,
+// and cross-references to the task-specific option pages. The prose and
+// cross-references carry no rule to verify; the `--help` invocation, the
+// supported-options table, and the out-of-scope list are driven by the tests
+// below.
 
 non_normative!(
     r#"
@@ -66,9 +67,77 @@ documented behavior is guaranteed.
     );
 }
 
-// The remainder of the page cross-references the task-specific option pages and
-// records the known limitations of `adoc`'s option coverage; neither carries a
-// rule to verify here.
+// Every option listed in the "Supported options" table is one `adoc` actually
+// accepts, so it appears in the authoritative `--help` output.
+#[test]
+fn supported_options_table_matches_help() {
+    verifies!(
+        r#"
+== Supported options
+
+The options below mirror the `asciidoctor` command of the same name, so an
+existing invocation that uses only these options runs unchanged under `adoc`:
+
+[cols="1,3",options="header"]
+|===
+| Option | Description
+
+| `-o`, `--output` _FILE_
+| Write the rendered HTML5 to _FILE_ (default: derived from the input path); use `-o -` to write to standard output.
+
+| `-D`, `--destination-dir` _DIR_
+| Write output into _DIR_ instead of alongside the input file.
+
+| `-a`, `--attribute` _NAME[=VALUE]_
+| Set a document attribute in the form `name`, `name!`, or `name=value`; may be repeated.
+
+| `-B`, `--base-dir` _DIR_
+| Base directory that filesystem-relative resources (such as `include::` targets) resolve against.
+
+| `-S`, `--safe-mode` _SAFE_MODE_
+| Set the safe mode level explicitly: `unsafe`, `safe`, `server`, or `secure` (default: `unsafe`).
+
+| `--safe`
+| Set the safe mode level to `safe`; provided for compatibility with the `asciidoc` command.
+
+| `-e`, `--embedded`
+| Suppress the enclosing document structure and output an embedded document. Accepts `-s` and `--no-header-footer` as aliases.
+
+| `-h`, `--help`
+| Print the usage statement; the short `-h` prints a briefer summary.
+
+| `-V`, `--version`
+| Print the version.
+|===
+
+"#
+    );
+
+    // Each long flag documented in the table is present in the `--help` output,
+    // which the page names as the authoritative list of supported options.
+    let help = Cli::try_parse_from(["adoc", "--help"])
+        .expect_err("--help displays help")
+        .to_string();
+
+    for flag in [
+        "--output",
+        "--destination-dir",
+        "--attribute",
+        "--base-dir",
+        "--safe-mode",
+        "--safe",
+        "--embedded",
+        "--no-header-footer",
+        "--help",
+        "--version",
+    ] {
+        assert!(help.contains(flag), "help should document {flag}");
+    }
+}
+
+// The remainder of the page cross-references the task-specific option pages;
+// neither the cross-references nor the attribute pointer carries a rule to
+// verify here.
 non_normative!(
     r#"
 Each option is described in depth on the page for the task it serves:
@@ -85,14 +154,73 @@ than one file in a single invocation.
 Setting document attributes from the command line with `-a` (`--attribute`) is
 shown in xref:index.adoc[Process AsciiDoc Using the CLI].
 
+"#
+);
+
+// The out-of-scope options really are unknown to `adoc`: passing one is a parse
+// error rather than a silently accepted no-op.
+#[test]
+fn out_of_scope_options_are_rejected() {
+    verifies!(
+        r#"
+== Out-of-scope options
+
+A few `asciidoctor` options depend on the Ruby runtime or on output formats that
+`asciidoc-html5` does not produce. These are permanently out of scope: `adoc`
+will not implement them.
+
+* *Ruby template engines* -- `-T` (`--template-dir`), `-E` (`--template-engine`),
+and `--eruby` load custom converter templates through Ruby template engines such
+as Tilt and ERB. `adoc` is a native binary with no Ruby runtime and a single
+built-in HTML5 converter, so there is no template engine to load.
+* *Ruby runtime hooks* -- `-I` (`--load-path`) and `-r` (`--require`) extend the
+Ruby `$LOAD_PATH` and `require` additional Ruby libraries before processing. They
+have no meaning outside a Ruby process.
+* *Non-HTML5 backends* -- `asciidoctor -b` can select the `xhtml5`, `docbook5`, or
+`manpage` backends, among others. `asciidoc-html5` produces only the HTML5
+backend; `xhtml5` in particular is a permanent non-goal.
+
+"#
+    );
+
+    // The Ruby template-engine and runtime-hook options are not defined on the
+    // `adoc` CLI, so clap rejects each with an `UnknownArgument` error. (The
+    // `-b`/`--backend` flag is tracked separately in issue #179 and is
+    // deliberately left out of this check.)
+    for flag in [
+        "-T",
+        "--template-dir",
+        "-E",
+        "--template-engine",
+        "--eruby",
+        "-I",
+        "--load-path",
+        "-r",
+        "--require",
+    ] {
+        let err = Cli::try_parse_from(["adoc", flag, "value", "doc.adoc"])
+            .expect_err("out-of-scope option is rejected");
+
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::UnknownArgument,
+            "{flag} should be an unknown argument"
+        );
+    }
+}
+
+// The closing note records the known limitations of `adoc`'s option coverage;
+// it carries no rule to verify here.
+non_normative!(
+    r#"
 [NOTE]
 .Known limitations
 ====
-`adoc` implements a focused subset of the `asciidoctor` CLI. It does not accept
-the full option catalog that `asciidoctor` documents in its man page, and it has
-no `asciidoctor(1)` man page of its own, so `adoc --help` is the authoritative
-list of the options it supports. Generating a man(1) page for `adoc` is tracked
-in https://github.com/asciidoc-rs/asciidoc-html5/issues/94[issue #94].
+Beyond the out-of-scope options above, several `asciidoctor` options are simply
+not implemented yet. `adoc --help` is the authoritative list of the options it
+currently supports, and it has no `asciidoctor(1)` man page of its own.
+Generating a man(1) page for `adoc` is tracked in
+https://github.com/asciidoc-rs/asciidoc-html5/issues/94[issue #94].
 ====
 "#
 );
