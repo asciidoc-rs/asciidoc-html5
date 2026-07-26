@@ -30,7 +30,8 @@
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/189>), a `==` heading
 //!   inside a delimited block is treated as a section, a `leveloffset` that
 //!   would make a section level 0 is not coerced to the doctitle, and an xref to
-//!   the doctitle is not resolved to its title text.
+//!   the doctitle is not resolved to its title text
+//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/965>).
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -1464,7 +1465,7 @@ mod levels {
         }
 
         // Not verified: an xref to the document title is not resolved to its title text
-        // (parser).
+        // (asciidoc-parser#965).
         non_normative!(
             r#"
       test 'should compute xreftext to document title' do
