@@ -16,4 +16,5 @@ mod output_collision;
 mod output_naming;
 mod path_helpers;
 mod run_errors;
+mod section_numbers;
 mod warnings;

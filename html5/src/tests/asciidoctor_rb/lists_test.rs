@@ -1,33 +1,36 @@
-//! Port of Asciidoctor's `lists_test.rb` -- the **unordered (`:ulist`) and
-//! ordered (`:olist`) list contexts** (source lines 1-2106).
+//! Port of Asciidoctor's `lists_test.rb` -- the **unordered (`:ulist`),
+//! ordered (`:olist`), and description (`:dlist`) list contexts**.
 //!
-//! This crate now renders unordered and ordered lists: the `<div class="ulist">
-//! <ul>...` and `<div class="olist arabic"><ol ...>...` structures, including
-//! nested lists, principal text plus attached blocks (continuation paragraphs,
-//! literal and other blocks), marker/numbering styles, and block titles, so
-//! those two contexts port directly, driven through `convert` (embedded) /
-//! `convert_with(..standalone(true)..)`.
+//! This crate now renders unordered, ordered, and description lists: the
+//! `<div class="ulist"><ul>...`, `<div class="olist arabic"><ol ...>...`, and
+//! `<div class="dlist"><dl>...` (plus the `qanda` and `horizontal` dlist
+//! variants) structures, including nested lists, principal text plus attached
+//! blocks (continuation paragraphs, literal and other blocks), marker/numbering
+//! styles, and block titles, so those contexts port directly, driven through
+//! `convert` (embedded) / `convert_with(..standalone(true)..)`.
 //!
 //! The module tree mirrors the Ruby suite's `context` blocks: each `context`
 //! becomes a `mod`. The two top-level list contexts are kept as
 //! `bulleted_lists` / `ordered_lists` (rather than flattened away) only because
 //! both hold a `Simple lists` sub-context, which would otherwise collide at the
-//! module root. The Checklists context is verified too (checklist rendering —
-//! the default ballot-box, `%interactive`, and `icons=font` markers — is
-//! implemented).
+//! module root. The two description-list contexts are flattened into
+//! `description_lists` / `description_lists_redux`; their sub-contexts' test
+//! names happen not to collide, so no extra nesting is needed. The Checklists
+//! context is verified too (checklist rendering — the default ballot-box,
+//! `%interactive`, and `icons=font` markers — is implemented).
 //!
 //! What stays `non_normative!` here:
-//! - description lists (`:dlist`), callout lists (`:colist`), the list model,
-//!   and the description-list redux contexts (source lines 2107+): these
-//!   exercise list types this renderer does not build yet and are tracked for
-//!   follow-up (dlist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/154>,
-//!   colist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/155>);
-//! - a handful of ulist tests that assert on a rendered `dl` (mixed
-//!   bulleted/description input) — blocked on dlist rendering (#154);
+//! - callout lists (`:colist`) and the list model (source lines 4686+): these
+//!   exercise a list type this renderer does not build yet and are tracked for
+//!   follow-up (colist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/155>);
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - `asciidoc-parser` parser-model assertions that have no rendered-output
 //!   counterpart (`document_from_string` + `find_by(...).level`, the colist
 //!   `.style` check), reproduced but not re-expressed;
+//! - a few dlist tests blocked on behavior outside this crate: bibliography
+//!   `starts-with(following-sibling::text(), …)` assertions the `assert_html`
+//!   xpath subset does not implement, and a following-heading test that needs
+//!   setext (`~~~~`) section parsing `asciidoc-parser` does not provide;
 //! - two literal-paragraph tests whose `<pre>` content, and one wrapped
 //!   list-item paragraph, whose first line loses its leading indent because
 //!   `asciidoc-parser` strips it before the renderer sees it (standalone
@@ -118,18 +121,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n- Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dash_elements_using_spaces() {
@@ -145,18 +143,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" - Foo\n - Boo\n - Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dash_elements_using_tabs() {
@@ -172,18 +165,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t-\tFoo\n\t-\tBoo\n\t-\tBlech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_blank_lines_should_merge_lists() {
@@ -205,18 +193,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n- Boo\n\n\n- Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list() {
@@ -240,6 +223,7 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul/li', output, 3
       assert_xpath %((//ul/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n// line comment\n// another line comment\n- Boo\n// line comment\nmore text\n// another line comment\n- Blech\n");
@@ -252,12 +236,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_a_line_comment_offset_by_blank_lines_should_not_merge_lists()
@@ -281,6 +259,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n\n//\n\n- Blech\n");
@@ -288,12 +267,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists()
@@ -317,6 +290,7 @@ more text"]"#,
       assert_xpath '(//ul)[2]/li', output, 1
       assert_xpath '(//ul)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n\n.Also\n- Blech\n");
@@ -329,12 +303,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -356,6 +324,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n- Boo\n\n:foo: bar\n- Blech\n");
@@ -363,12 +332,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_is_folded_into_text_of_list_item() {
@@ -389,6 +352,7 @@ more text"]"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\nwrapped content']", output, 1
     end
+
 "#
             );
             let output =
@@ -402,12 +366,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_that_resembles_a_block_title_is_folded_into_text_of_list_item(
@@ -428,6 +386,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\n.wrapped content']", output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n.wrapped content\n- Boo\n- Blech\n");
@@ -440,12 +399,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_that_resembles_an_attribute_entry_is_folded_into_text_of_list_item(
@@ -466,6 +419,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\n:foo: bar']", output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n:foo: bar\n- Boo\n- Blech\n");
@@ -478,12 +432,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_list_item_with_a_nested_marker_terminates_non_indented_paragraph_for_text_of_list_item(
@@ -501,18 +449,13 @@ wrapped content']"#,
       assert_css 'ul ul', output, 1
       refute_includes output, '* Foo'
     end
+
 "#
             );
             let output = convert("- Foo\nBar\n* Foo\n");
             assert_css(&output, r#"ul ul"#, 1);
             assert!(!output.contains("* Foo"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: this test also asserts `ul dl` for the nested `term:: def`
         // list, which needs description-list rendering (#154); the `ul ol` half
@@ -540,11 +483,6 @@ wrapped content']"#,
       assert_css 'ul dl', output, 1
       refute_includes output, 'term:: def'
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -568,6 +506,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\nwrapped content']", output, 1
     end
+
 "#
             );
             let output =
@@ -581,12 +520,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts — via a node-text line comparison the harness
         // cannot express (#157) — that the wrapped line keeps its leading indent,
@@ -613,11 +546,6 @@ wrapped content']"#,
       assert_equal '  // not line comment', lines[1].chomp
       assert_equal 'second wrapped line', lines[2].chomp
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -638,18 +566,13 @@ wrapped content']"#,
       assert_css 'ul ul', output, 1
       refute_includes output, '* Foo'
     end
+
 "#
             );
             let output = convert("- Foo\n  Bar\n* Foo\n");
             assert_css(&output, r#"ul ul"#, 1);
             assert!(!output.contains("* Foo"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_list_item_that_starts_with_a_sequence_of_list_markers_characters_should_not_match_a_nested_list(
@@ -667,6 +590,7 @@ wrapped content']"#,
       assert_css 'ul li', output, 1
       assert_xpath "//ul/li/p[text()='first item\n*. normal text']", output, 1
     end
+
 "#
             );
             let output = convert(" * first item\n *. normal text\n");
@@ -679,12 +603,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: like its non-indented sibling above, asserts `ul dl` for
         // the nested `term:: def` list — description-list rendering is not built
@@ -713,11 +631,6 @@ wrapped content']"#,
       assert_css 'ul dl', output, 1
       refute_includes output, 'term:: def'
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -748,6 +661,7 @@ wrapped content']"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text() = "literal"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n  literal\n\n- Boo\n- Blech\n");
@@ -766,12 +680,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
@@ -797,6 +705,7 @@ wrapped content']"#,
       assert_xpath '((//li)[1]//pre)[1][text()="<code>text</code>"]', output, 1
       assert_xpath '((//li)[1]//pre)[2][text()="more <code>text</code>"]', output, 1
     end
+
 "#
             );
             let output = convert("* first item\n\n  <code>text</code>\n\n  more <code>text</code>\n\n* second item\n");
@@ -815,12 +724,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_literal_paragraph_offset_by_a_blank_line_in_list_content_followed_by_line_with_continuation_is_appended_as_two_blocks(
@@ -852,6 +755,7 @@ wrapped content']"#,
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
             );
             let output =
@@ -882,12 +786,6 @@ wrapped content']"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn an_admonition_paragraph_attached_by_a_line_continuation_to_a_list_item_with_wrapped_text_should_produce_admonition(
         ) {
@@ -910,6 +808,7 @@ wrapped content']"#,
       assert_css 'ul > li > p + .admonitionblock.note', output, 1
       assert_xpath '//ul/li/*[@class="admonitionblock note"]//td[@class="content"][normalize-space(text())="This is a note."]', output, 1
     end
+
 "#
             );
             let output = convert("- first-line text\n  wrapped text\n+\nNOTE: This is a note.\n");
@@ -929,12 +828,6 @@ wrapped text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn paragraph_like_blocks_attached_to_an_ancestor_list_item_by_a_list_continuation_should_produce_blocks(
@@ -963,6 +856,7 @@ wrapped text"]"#,
       assert_css 'ul ul hr', output, 0
       assert_xpath '(//ul)[1]/li/hr', output, 1
     end
+
 "#
             );
             let output = convert("* parent\n ** child\n\n+\nNOTE: This is a note.\n\n* another parent\n ** another child\n\n+\n'''\n");
@@ -975,12 +869,6 @@ wrapped text"]"#,
             assert_css(&output, r#"ul ul hr"#, 0);
             assert_xpath(&output, r#"(//ul)[1]/li/hr"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts `ul > li > .colist`, which needs callout-list
         // rendering (#155); it also drives parser-model APIs
@@ -1009,11 +897,6 @@ wrapped text"]"#,
       assert_css 'ul > li > .listingblock', output, 1
       assert_css 'ul > li > .colist', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1042,6 +925,7 @@ wrapped text"]"#,
       assert_css 'ul > li > .paragraph', output, 1
       assert_css 'ul > li > .exampleblock', output, 1
     end
+
 "#
             );
             let output = convert(
@@ -1050,12 +934,6 @@ wrapped text"]"#,
             assert_css(&output, r#"ul > li > .paragraph"#, 1);
             assert_css(&output, r#"ul > li > .exampleblock"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn appends_line_as_paragraph_if_attached_by_continuation_following_line_comment() {
@@ -1078,6 +956,7 @@ wrapped text"]"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="paragraph"]/p[text()="paragraph in list item 1"]', output, 1
       assert_xpath '(//ul/li)[2]/p[text()="list item 2"]', output, 1
     end
+
 "#
             );
             let output = convert(
@@ -1098,12 +977,6 @@ wrapped text"]"#,
             );
             assert_xpath(&output, r#"(//ul/li)[2]/p[text()="list item 2"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts the attached literal keeps its ` literal`
         // first-line indent, which the parser strips before the renderer sees it
@@ -1132,11 +1005,6 @@ wrapped text"]"#,
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1171,6 +1039,7 @@ wrapped text"]"#,
       assert_xpath '((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text()="literal"]', output, 1
       assert_xpath "((//ul/li)[1]/*[@class='literalblock'])[2]//pre[text()='more\nliteral']", output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1198,12 +1067,6 @@ literal']"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         // Non-normative: asserts the attached literal keeps its ` literal`
         // first-line indent, which the parser strips before the renderer sees it
         // (#168).
@@ -1229,11 +1092,6 @@ literal']"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath "((//ul/li)[1]/*[@class='literalblock'])[1]//pre[text() = '  literal\n- Boo\n- Blech']", output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1255,18 +1113,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n* Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_asterisk_elements_using_spaces() {
@@ -1282,18 +1135,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" * Foo\n * Boo\n * Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_unicode_bullet_elements_using_spaces() {
@@ -1309,18 +1157,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" \u{2022} Foo\n \u{2022} Boo\n \u{2022} Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_asterisk_elements_using_tabs() {
@@ -1336,18 +1179,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t*\tFoo\n\t*\tBoo\n\t*\tBlech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_block_style_as_style_class() {
@@ -1366,6 +1204,7 @@ literal']"#,
         assert_css ".ulist.#{style} ul.#{style}", output, 1
       end
     end
+
 "#
             );
             for style in ["disc", "square", "circle"] {
@@ -1375,12 +1214,6 @@ literal']"#,
                 assert_css(&output, &format!(".ulist.{style} ul.{style}"), 1);
             }
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_blank_lines_should_merge_lists() {
@@ -1402,18 +1235,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n\n* Boo\n\n\n* Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list()
@@ -1438,6 +1266,7 @@ literal']"#,
       assert_xpath '//ul/li', output, 3
       assert_xpath %((//ul/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n* Foo\n// line comment\n// another line comment\n* Boo\n// line comment\nmore text\n// another line comment\n* Blech\n");
@@ -1450,12 +1279,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_a_line_comment_offset_by_blank_lines_should_not_merge_lists(
@@ -1479,6 +1302,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n\n//\n\n* Blech\n");
@@ -1486,12 +1310,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists(
@@ -1515,6 +1333,7 @@ more text"]"#,
       assert_xpath '(//ul)[2]/li', output, 1
       assert_xpath '(//ul)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n\n.Also\n* Blech\n");
@@ -1527,12 +1346,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -1554,6 +1367,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n* Foo\n* Boo\n\n:foo: bar\n* Blech\n");
@@ -1561,12 +1375,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_should_terminate_before_next_lower_section_heading() {
@@ -1589,6 +1397,7 @@ more text"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//h2[text() = "Section"]', output, 1
     end
+
 "#
             );
             let output =
@@ -1597,12 +1406,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//h2[text() = "Section"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_should_terminate_before_next_lower_section_heading_with_implicit_id() {
@@ -1626,6 +1429,7 @@ more text"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//h2[@id = "sec"][text() = "Section"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1635,12 +1439,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//h2[@id = "sec"][text() = "Section"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_find_section_title_immediately_below_last_list_item() {
@@ -1660,6 +1458,7 @@ more text"]"#,
       assert_includes output, '== Not a section'
       assert_xpath %((//li)[2]/p[text() = "second\n== Not a section"]), output, 1
     end
+
 "#
             );
             let output = convert("* first\n* second\n== Not a section\n");
@@ -1674,12 +1473,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_trailing_line_separator_in_text_of_list_item() {
@@ -1696,18 +1489,13 @@ more text"]"#,
       assert_css 'li', output, 3
       assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}"]), output, 1
     end
+
 "#
             );
             let output = convert_standalone("* a\n* b\u{2028}\n* c");
             assert_css(&output, r#"li"#, 3);
             assert_xpath(&output, r#"(//li)[2]/p[text()="b "]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_line_separator_in_text_of_list_item() {
@@ -1734,15 +1522,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod lists_with_inline_markup {
         use super::*;
@@ -1773,6 +1556,7 @@ more text"]"#,
       assert_xpath '(//ul/li)[2]//em', output, 1
       assert_xpath '(//ul/li)[3]//code', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1784,12 +1568,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul/li)[2]//em"#, 1);
             assert_xpath(&output, r#"(//ul/li)[3]//code"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn attribute_substitutions() {
@@ -1810,6 +1588,7 @@ more text"]"#,
       assert_xpath '(//ul/li)[1]//p[text() = "side a | side b"]', output, 1
       assert_xpath '(//ul/li)[2]//p[text() = "Take me to a bar."]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1824,12 +1603,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn leading_dot_is_treated_as_text_not_block_title() {
@@ -1848,6 +1621,7 @@ more text"]"#,
         assert_xpath "(//ul/li)[#{index + 1}]//p[text() = '#{text}']", output, 1
       end
     end
+
 "#
             );
             let output = convert_standalone("* .first\n* .second\n* .third\n");
@@ -1857,12 +1631,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul/li)[2]//p[text() = '.second']"#, 1);
             assert_xpath(&output, r#"(//ul/li)[3]//p[text() = '.third']"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn word_ending_sentence_on_continuing_line_not_treated_as_a_list_item() {
@@ -1879,6 +1647,7 @@ more text"]"#,
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 2
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1887,12 +1656,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 2);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_unordered_list_item_text_and_register_it_as_a_reference(
@@ -1918,6 +1681,7 @@ more text"]"#,
       assert_xpath '(//p)[1]/a[@href="#grays-peak"][text()="Grays Peak"]', output, 1
       assert_xpath '(//p)[1]/a[@href="#mount-evans"][text()="Mount Evans"]', output, 1
     end
+
 "##
             );
             let input = "The highest peak in the Front Range is <<grays-peak>>, which tops <<mount-evans>> by just a few feet.\n\n* [[mount-evans,Mount Evans]]At 14,271 feet, Mount Evans is the highest summit of the Chicago Peaks in the Front Range of the Rocky Mountains.\n* [[grays-peak,Grays Peak]]\nGrays Peak rises to 14,278 feet, making it the highest summit in the Front Range of the Rocky Mountains.\n* Longs Peak is a 14,259-foot high, prominent mountain summit in the northern Front Range of the Rocky Mountains.\n* Pikes Peak is the highest summit of the southern Front Range of the Rocky Mountains at 14,115 feet.\n";
@@ -1936,12 +1700,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_ordered_list_item_text_and_register_it_as_a_reference(
@@ -1967,6 +1725,7 @@ more text"]"#,
       assert_xpath '(//p)[1]/a[@href="#step-2"][text()="Step 2"]', output, 1
       assert_xpath '(//p)[1]/a[@href="#step-4"][text()="Step 4"]', output, 1
     end
+
 "##
             );
             let input = "This is a cross-reference to <<step-2>>.\nThis is a cross-reference to <<step-4>>.\n\n. Ordered list, item 1, without anchor\n. [[step-2,Step 2]]Ordered list, item 2, with anchor\n. Ordered list, item 3, without anchor\n. [[step-4,Step 4]]Ordered list, item 4, with anchor\n";
@@ -1985,12 +1744,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_callout_list_item_text_and_register_it_as_a_reference(
@@ -2036,15 +1789,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod nested_lists {
         use super::*;
@@ -2074,6 +1822,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n* Boo\n- Blech\n");
@@ -2082,12 +1831,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_element_mixed_with_asterisks_elements_should_be_nested() {
@@ -2108,6 +1851,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n- Boo\n* Blech\n");
@@ -2116,12 +1860,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn lines_prefixed_with_alternating_list_markers_separated_by_blank_lines_should_be_nested()
@@ -2146,6 +1884,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n* Boo\n\n\n- Blech\n");
@@ -2154,12 +1893,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_2_with_asterisks() {
@@ -2180,6 +1913,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n** Boo\n* Blech\n");
@@ -2188,12 +1922,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_3_with_asterisks() {
@@ -2215,6 +1943,7 @@ more text"]"#,
       assert_xpath '((//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '(((//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n** Boo\n*** Snoo\n* Blech\n");
@@ -2223,12 +1952,6 @@ more text"]"#,
             assert_xpath(&output, r#"((//ul)[1]/li//ul)[1]/li"#, 1);
             assert_xpath(&output, r#"(((//ul)[1]/li//ul)[1]/li//ul)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_4_with_asterisks() {
@@ -2252,6 +1975,7 @@ more text"]"#,
       assert_xpath '(((//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output =
@@ -2266,12 +1990,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_5_with_asterisks() {
@@ -2297,6 +2015,7 @@ more text"]"#,
       assert_xpath '((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '(((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -2318,12 +2037,6 @@ more text"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn nested_arbitrary_depth_with_asterisks() {
             verifies!(
@@ -2337,6 +2050,7 @@ more text"]"#,
       refute_includes output, '*'
       assert_css 'li', output, 26
     end
+
 "#
             );
             let mut parts: Vec<String> = Vec::new();
@@ -2347,12 +2061,6 @@ more text"]"#,
             assert!(!output.contains('*'));
             assert_css(&output, r#"li"#, 26);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: parser-model only — asserts `find_by(context:
         // :ulist)[i].level`, which has no rendered-output counterpart (list level
@@ -2382,11 +2090,6 @@ more text"]"#,
       assert_equal 1, lists[2].level
       assert_equal 2, lists[3].level
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -2401,18 +2104,13 @@ more text"]"#,
       assert_xpath '//ul', output, 0
       assert_includes output, '•'
     end
+
 "#
             );
             let output = convert_standalone("\u{2022}\u{2022} Boo");
             assert_xpath(&output, r#"//ul"#, 0);
             assert!(output.contains("•"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_elements_2() {
@@ -2433,6 +2131,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[1]/li//ol/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n.. Boo\n. Blech\n");
@@ -2441,12 +2140,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[1]/li//ol/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_elements_3() {
@@ -2468,6 +2161,7 @@ more text"]"#,
       assert_xpath '((//ol)[1]/li//ol)[1]/li', output, 1
       assert_xpath '(((//ol)[1]/li//ol)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n.. Boo\n... Snoo\n. Blech\n");
@@ -2476,12 +2170,6 @@ more text"]"#,
             assert_xpath(&output, r#"((//ol)[1]/li//ol)[1]/li"#, 1);
             assert_xpath(&output, r#"(((//ol)[1]/li//ol)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_arbitrary_depth_with_dot_marker() {
@@ -2496,6 +2184,7 @@ more text"]"#,
       refute_includes output, '.'
       assert_css 'li', output, 26
     end
+
 "#
             );
             let mut parts: Vec<String> = Vec::new();
@@ -2506,12 +2195,6 @@ more text"]"#,
             assert!(!output.contains('.'));
             assert_css(&output, r#"li"#, 26);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: parser-model only — asserts `find_by(context:
         // :olist)[i].level`, which has no rendered-output counterpart (list level
@@ -2541,11 +2224,6 @@ more text"]"#,
       assert_equal 1, lists[2].level
       assert_equal 2, lists[3].level
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -2569,6 +2247,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '((//ol)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n* Boo\n. Blech\n");
@@ -2577,12 +2256,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ol)[1]/li//ul)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_inside_unordered_elements() {
@@ -2603,6 +2276,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '((//ul)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n. Boo\n* Blech\n");
@@ -2611,12 +2285,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ul)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn three_levels_of_alternating_unordered_and_ordered_elements() {
@@ -2642,6 +2310,7 @@ more text"]"#,
       assert_css '.ulist > ul > li > p + .olist > ol > li > p + .ulist > ul > li > p', output, 1
       assert_css '.ulist > ul > li + li > p', output, 1
     end
+
 "#
             );
             let output =
@@ -2663,12 +2332,6 @@ more text"]"#,
             );
             assert_css(&output, r#".ulist > ul > li + li > p"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn lines_with_alternating_markers_of_unordered_and_ordered_list_types_separated_by_blank_lines_should_be_nested(
@@ -2693,6 +2356,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '((//ul)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n\n. Boo\n\n\n* Blech\n");
@@ -2701,12 +2365,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ul)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_with_literal_content_should_not_consume_nested_list_of_different_type() {
@@ -2737,6 +2395,7 @@ more text"]"#,
       assert_xpath '//*[@class="literalblock"]/following-sibling::*[@class="olist arabic"]', output, 1
       assert_xpath '//*[@class="literalblock"]/following-sibling::*[@class="olist arabic"]//p[text()="numbered"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -2771,12 +2430,6 @@ hungry"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn nested_list_item_does_not_eat_the_title_of_the_following_detached_block() {
             verifies!(
@@ -2802,6 +2455,7 @@ hungry"]"#,
       assert_xpath '(//*[@class="ulist"])[1]/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '(//*[@class="ulist"])[1]/following-sibling::*[@class="literalblock"]/*[@class="title"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- bullet\n  * nested bullet 1\n  * nested bullet 2\n\n.Title\n....\nliteral\n....\n");
@@ -2818,16 +2472,10 @@ hungry"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
-        // Non-normative: asserts `//dl`/`dl/dt`/`dl/dd` for the nested `term1::
-        // def1` list — description-list rendering is not built yet (#154).
-        non_normative!(
-            r#"
+        #[test]
+        fn alternating_bulleted_and_description_markers_should_be_nested() {
+            verifies!(
+                r#"
     test "lines with alternating markers of bulleted and description list types separated by blank lines should be nested" do
       input = <<~'EOS'
       List
@@ -2846,14 +2494,16 @@ hungry"]"#,
       assert_xpath '//ul[1]/li//dl[1]/dt', output, 1
       assert_xpath '//ul[1]/li//dl[1]/dd', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
-        );
+            );
+            let output = convert_standalone("List\n====\n\n* Foo\n\nterm1:: def1\n\n* Blech\n");
+            assert_xpath(&output, r#"//ul"#, 1);
+            assert_xpath(&output, r#"//dl"#, 1);
+            assert_xpath(&output, r#"//ul[1]/li"#, 2);
+            assert_xpath(&output, r#"//ul[1]/li//dl[1]/dt"#, 1);
+            assert_xpath(&output, r#"//ul[1]/li//dl[1]/dd"#, 1);
+        }
 
         #[test]
         fn nested_ordered_with_attribute_inside_unordered_elements() {
@@ -2887,15 +2537,10 @@ hungry"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod list_continuations {
         use super::*;
@@ -2929,6 +2574,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/p[text() = "Item one, paragraph one"]', output, 1
       assert_xpath '//ul/li[1]/*[@class = "paragraph"]/p[text() = "Item one, paragraph two"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\nItem one, paragraph two\n+\n* Item two\n");
@@ -2947,12 +2593,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn adjacent_list_continuation_line_attaches_following_block() {
@@ -2977,6 +2617,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/p', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@class = "literalblock"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n....\nItem one, literal block\n....\n+\n* Item two\n");
@@ -2989,12 +2630,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn adjacent_list_continuation_line_attaches_following_block_with_block_attributes() {
@@ -3025,6 +2660,7 @@ hungry"]"#,
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@id="beck"]/div[@class="title"][starts-with(text(),"Read")]', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@id="beck"]//code[@data-lang="ruby"][starts-with(text(),"5.times")]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n:foo: bar\n[[beck]]\n.Read the following aloud to yourself\n[source, ruby]\n----\n5.times { print \"Odelay!\" }\n----\n\n* Item two\n");
@@ -3048,12 +2684,6 @@ hungry"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_block_attribute_line_attached_by_continuation_should_not_create_block() {
             verifies!(
@@ -3075,6 +2705,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath '//ul/li//*[@class="listingblock"]', output, 0
     end
+
 "#
             );
             let output = convert_standalone(
@@ -3085,12 +2716,6 @@ hungry"]"#,
             assert_xpath(&output, r#"//ul/li[1]/*"#, 1);
             assert_xpath(&output, r#"//ul/li//*[@class="listingblock"]"#, 0);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn trailing_block_title_line_attached_by_continuation_should_not_create_block() {
@@ -3112,6 +2737,7 @@ hungry"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//ul/li[1]/*', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n.Disappears into the ether\n\n* Item two\n");
@@ -3119,12 +2745,6 @@ hungry"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//ul/li[1]/*"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn consecutive_blocks_in_list_continuation_attach_to_list_item() {
@@ -3154,6 +2774,7 @@ hungry"]"#,
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@class = "literalblock"]', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[2][@class = "quoteblock"]', output, 1
     end
+
 "#
             );
             let output = convert("Lists\n=====\n\n* Item one, paragraph one\n+\n....\nItem one, literal block\n....\n+\n____\nItem one, quote block\n____\n+\n* Item two\n");
@@ -3171,12 +2792,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_with_hanging_indent_followed_by_block_attached_by_list_continuation() {
@@ -3204,6 +2819,7 @@ hungry"]"#,
       assert_xpath '(//ol/li)[1]/p/following-sibling::*[@class="openblock"]//p[text()="open block in list item 1"]', output, 1
       assert_xpath %((//ol/li)[2]/p[text()="list item 2"]), output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n  continued\n+\n--\nopen block in list item 1\n--\n\n. list item 2\n");
@@ -3227,12 +2843,6 @@ continued"]"#,
             );
             assert_xpath(&output, r#"(//ol/li)[2]/p[text()="list item 2"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_paragraph_in_list_item_and_nested_list_item() {
@@ -3266,6 +2876,7 @@ continued"]"#,
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="ulist"]/ul/li/p[text()="nested list item"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="ulist"]/ul/li/p/following-sibling::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\nlist item 1 paragraph\n\n* nested list item\n+\nnested list item paragraph\n\n. list item 2\n");
@@ -3307,12 +2918,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_attach_to_list_items_at_respective_levels() {
             verifies!(
@@ -3349,6 +2954,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3396,12 +3002,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_attach_to_list_items_of_different_types_at_respective_levels(
         ) {
@@ -3442,6 +3042,7 @@ continued"]"#,
       assert_xpath '((//ul)[1]/li)[1]/div/ol/li/div[@class="ulist"]/ul/li/*', output, 1
       assert_xpath '((//ul)[1]/li)[1]/div/ol/li/div[@class="ulist"]/ul/li/p[text()="bullet 1.1.1"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n* bullet 1\n. numbered 1.1\n** bullet 1.1.1\n\n+\nnumbered 1.1 paragraph\n\n+\nbullet 1 paragraph\n\n* bullet 2\n");
@@ -3492,12 +3093,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_should_attach_to_list_items_at_respective_levels() {
             verifies!(
@@ -3542,6 +3137,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3604,12 +3200,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_attached_directly_to_list_item_should_attach_to_list_items_at_respective_levels(
         ) {
@@ -3655,6 +3245,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3717,12 +3308,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_should_attach_to_list_items_at_respective_levels_ignoring_blank_lines(
         ) {
@@ -3769,6 +3354,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3831,12 +3417,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_ignore_preceding_blank_lines() {
             verifies!(
@@ -3881,6 +3461,7 @@ continued"]"#,
       assert_xpath '(((//ul)[1]/li)[1]/div[@class="ulist"]/ul/li/div[@class="ulist"]/ul/li/*)[1]/self::p', output, 1
       assert_xpath '(((//ul)[1]/li)[1]/div[@class="ulist"]/ul/li/div[@class="ulist"]/ul/li/*)[2]/self::div[@class="openblock"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n* bullet 1\n** bullet 1.1\n*** bullet 1.1.1\n+\n--\nopen block\n--\n\n\n+\nbullet 1.1 paragraph\n\n\n+\nbullet 1 paragraph\n\n* bullet 2\n");
@@ -3943,12 +3524,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn indented_outline_list_item_with_different_marker_offset_by_a_blank_line_should_be_recognized_as_a_nested_list(
         ) {
@@ -3986,6 +3561,7 @@ continued"]"#,
         assert_xpath "((((//ul/li)[1]/*)[2]/self::div/ol/li)[#{idx}]/*)[2]/self::div[@class=\"paragraph\"]", output, 1
       end
     end
+
 "#
             );
             let output = convert("* item 1\n\n  . item 1.1\n+\nattached paragraph\n\n  . item 1.2\n+\nattached paragraph\n\n* item 2\n");
@@ -4018,16 +3594,10 @@ continued"]"#,
             }
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
-        // Non-normative: asserts a nested description list (`ul dl`, `dl/dt`,
-        // `dl/dd`) — description-list rendering is not built yet (#154).
-        non_normative!(
-            r#"
+        #[test]
+        fn indented_description_list_item_inside_outline_list_item_offset_by_blank_line() {
+            verifies!(
+                r#"
     test 'indented description list item inside outline list item offset by a blank line should be recognized as a nested list' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -4062,7 +3632,39 @@ continued"]"#,
       end
     end
 "#
-        );
+            );
+            let output = convert(
+                "* item 1\n\n  term a:: description a\n+\nattached paragraph\n\n  term b:: description b\n+\nattached paragraph\n\n* item 2\n",
+            );
+            assert_css(&output, r#"ul"#, 1);
+            assert_css(&output, r#"dl"#, 1);
+            assert_css(&output, r#"ul dl"#, 1);
+            assert_css(&output, r#"ul > li"#, 2);
+            assert_xpath(&output, r#"((//ul/li)[1]/*)"#, 2);
+            assert_xpath(&output, r#"((//ul/li)[1]/*)[1]/self::p"#, 1);
+            assert_xpath(&output, r#"((//ul/li)[1]/*)[2]/self::div/dl"#, 1);
+            assert_xpath(&output, r#"((//ul/li)[1]/*)[2]/self::div/dl/dt"#, 2);
+            assert_xpath(&output, r#"((//ul/li)[1]/*)[2]/self::div/dl/dd"#, 2);
+            for idx in 1..=2 {
+                assert_xpath(
+                    &output,
+                    &format!("(((//ul/li)[1]/*)[2]/self::div/dl/dd)[{idx}]/*"),
+                    2,
+                );
+                assert_xpath(
+                    &output,
+                    &format!("((((//ul/li)[1]/*)[2]/self::div/dl/dd)[{idx}]/*)[1]/self::p"),
+                    1,
+                );
+                assert_xpath(
+                    &output,
+                    &format!(
+                        "((((//ul/li)[1]/*)[2]/self::div/dl/dd)[{idx}]/*)[2]/self::div[@class=\"paragraph\"]"
+                    ),
+                    1,
+                );
+            }
+        }
 
         non_normative!(
             r#"
@@ -4100,6 +3702,7 @@ continued"]"#,
       # NOTE this is a negative assertion
       assert_xpath %(//ul/li[1]//p[text() = "+\nItem one, paragraph two"]), output, 1
     end
+
 "#
             );
             let output = convert("Lists\n=====\n\n* Item one, paragraph one\n+\n+\nItem one, paragraph two\n+\n+\n* Item two\n+\n+\n");
@@ -4119,12 +3722,6 @@ Item one, paragraph two"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_unterminated_block_is_detected_in_list_item() {
@@ -4174,15 +3771,10 @@ Item one, paragraph two"]"#,
     non_normative!(
         r#"
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 mod ordered_lists {
     use super::*;
@@ -4219,18 +3811,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n. Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dot_elements_using_spaces() {
@@ -4246,18 +3833,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" . Foo\n . Boo\n . Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dot_elements_using_tabs() {
@@ -4273,18 +3855,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t.\tFoo\n\t.\tBoo\n\t.\tBlech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_explicit_role_attribute_as_style_class() {
@@ -4302,18 +3879,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.arabic.dry', output, 1
       assert_css '.olist ol.arabic', output, 1
     end
+
 "#
             );
             let output = convert("[role=\"dry\"]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.arabic.dry"#, 1);
             assert_css(&output, r#".olist ol.arabic"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_base_list_style_on_marker_length_rather_than_list_depth() {
@@ -4331,6 +3903,7 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.lowerroman .olist.loweralpha', output, 1
       assert_css '.olist.lowerroman .olist.loweralpha .olist.arabic', output, 1
     end
+
 "#
             );
             let output = convert("... parent\n.. child\n. grandchild\n");
@@ -4342,12 +3915,6 @@ context "Ordered lists (:olist)" do
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_allow_list_style_to_be_specified_explicitly_when_using_markers_with_implicit_style(
@@ -4366,18 +3933,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha', output, 1
       assert_css '.olist.lowerroman', output, 0
     end
+
 "#
             );
             let output = convert("[loweralpha]\ni) 1\nii) 2\niii) 3\n");
             assert_css(&output, r#".olist.loweralpha"#, 1);
             assert_css(&output, r#".olist.lowerroman"#, 0);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_custom_numbering_and_explicit_role_attribute_as_style_classes() {
@@ -4395,18 +3957,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha.dry', output, 1
       assert_css '.olist ol.loweralpha', output, 1
     end
+
 "#
             );
             let output = convert("[loweralpha, role=\"dry\"]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.loweralpha.dry"#, 1);
             assert_css(&output, r#".olist ol.loweralpha"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_set_reversed_attribute_on_list_if_reversed_option_is_set() {
@@ -4424,17 +3981,12 @@ context "Ordered lists (:olist)" do
       output = convert_string_to_embedded input
       assert_css 'ol[reversed][start="3"]', output, 1
     end
+
 "#
             );
             let output = convert("[%reversed, start=3]\n. three\n. two\n. one\n. blast off!\n");
             assert_css(&output, r#"ol[reversed][start="3"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_implicit_role_attribute_as_style_class() {
@@ -4452,18 +4004,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.arabic.dry', output, 1
       assert_css '.olist ol.arabic', output, 1
     end
+
 "#
             );
             let output = convert("[.dry]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.arabic.dry"#, 1);
             assert_css(&output, r#".olist ol.arabic"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_custom_numbering_and_implicit_role_attribute_as_style_classes() {
@@ -4481,18 +4028,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha.dry', output, 1
       assert_css '.olist ol.loweralpha', output, 1
     end
+
 "#
             );
             let output = convert("[loweralpha.dry]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.loweralpha.dry"#, 1);
             assert_css(&output, r#".olist ol.loweralpha"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_blank_lines_should_merge_lists() {
@@ -4514,18 +4056,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n\n. Boo\n\n\n. Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
@@ -4551,6 +4088,7 @@ context "Ordered lists (:olist)" do
       assert_xpath '((//li)[1]//pre)[1][text()="<code>text</code>"]', output, 1
       assert_xpath '((//li)[1]//pre)[2][text()="more <code>text</code>"]', output, 1
     end
+
 "#
             );
             let output = convert(". first item\n\n  <code>text</code>\n\n  more <code>text</code>\n\n. second item\n");
@@ -4569,12 +4107,6 @@ context "Ordered lists (:olist)" do
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list() {
@@ -4598,6 +4130,7 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol/li', output, 3
       assert_xpath %((//ol/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n. Foo\n// line comment\n// another line comment\n. Boo\n// line comment\nmore text\n// another line comment\n. Blech\n");
@@ -4610,12 +4143,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_line_comment_offset_by_blank_lines_should_not_merge_lists() {
@@ -4638,6 +4165,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n\n//\n\n. Blech\n");
@@ -4645,12 +4173,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists() {
@@ -4673,6 +4195,7 @@ more text"]"#,
       assert_xpath '(//ol)[2]/li', output, 1
       assert_xpath '(//ol)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n\n.Also\n. Blech\n");
@@ -4685,12 +4208,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -4712,6 +4229,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n. Foo\n. Boo\n\n:foo: bar\n. Blech\n");
@@ -4719,12 +4237,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: exercises the DocBook backend (`backend: 'docbook5'`);
         // this crate targets only the `html5` backend.
@@ -4744,11 +4256,6 @@ more text"]"#,
       assert_xpath '(//orderedlist)/listitem', output, 2
       assert_xpath '(//orderedlist)[@startingnumber = "7"]', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -4768,18 +4275,13 @@ more text"]"#,
       assert_css 'li', output, 3
       assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}"]), output, 1
     end
+
 "#
             );
             let output = convert_standalone(". a\n. b\u{2028}\n. c");
             assert_css(&output, r#"li"#, 3);
             assert_xpath(&output, r#"(//li)[2]/p[text()="b "]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_line_separator_in_text_of_list_item() {
@@ -4806,15 +4308,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_warn_if_explicit_uppercase_roman_numerals_in_list_are_out_of_sequence() {
@@ -4831,18 +4328,13 @@ more text"]"#,
       assert_message logger, :WARN, '<stdin>: line 2: list item index: expected II, got III', Hash
     end
   end
+
 "#
         );
         let output = convert("I) one\nIII) three\n");
         assert_xpath(&output, r#"//ol/li"#, 2);
         assert_out_of_sequence_warning("I) one\nIII) three\n", 2, "II", "III");
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_warn_if_explicit_lowercase_roman_numerals_in_list_are_out_of_sequence() {
@@ -4869,22 +4361,25 @@ more text"]"#,
     non_normative!(
         r#"
 end
+
 "#
     );
 }
 
-non_normative!(
-    r#"
+mod description_lists {
+    use super::*;
 
-"#
-);
-
-// The entire Description lists (`:dlist`) context is reproduced but
-// non-normative: this crate does not render description lists yet (#154).
-non_normative!(
-    r##"
+    non_normative!(
+        r#"
 context "Description lists (:dlist)" do
   context "Simple lists" do
+"#
+    );
+
+    #[test]
+    fn should_not_parse_a_bare_dlist_delimiter_as_a_dlist() {
+        verifies!(
+            r#"
     test 'should not parse a bare dlist delimiter as a dlist' do
       input = '::'
       output = convert_string_to_embedded input
@@ -4892,6 +4387,17 @@ context "Description lists (:dlist)" do
       assert_xpath '//p[text()="::"]', output, 1
     end
 
+"#
+        );
+        let output = convert("::");
+        assert_css(&output, r#"dl"#, 0);
+        assert_xpath(&output, r#"//p[text()="::"]"#, 1);
+    }
+
+    #[test]
+    fn should_not_parse_an_indented_bare_dlist_delimiter_as_a_dlist() {
+        verifies!(
+            r#"
     test 'should not parse an indented bare dlist delimiter as a dlist' do
       input = ' ::'
       output = convert_string_to_embedded input
@@ -4899,6 +4405,17 @@ context "Description lists (:dlist)" do
       assert_xpath '//pre[text()="::"]', output, 1
     end
 
+"#
+        );
+        let output = convert(" ::");
+        assert_css(&output, r#"dl"#, 0);
+        assert_xpath(&output, r#"//pre[text()="::"]"#, 1);
+    }
+
+    #[test]
+    fn should_parse_a_dlist_delimiter_preceded_by_a_blank_attribute_as_a_dlist() {
+        verifies!(
+            r#"
     test 'should parse a dlist delimiter preceded by a blank attribute as a dlist' do
       input = '{blank}::'
       output = convert_string_to_embedded input
@@ -4907,6 +4424,18 @@ context "Description lists (:dlist)" do
       assert_css 'dl > dt:empty', output, 1
     end
 
+"#
+        );
+        let output = convert("{blank}::");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_css(&output, r#"dl > dt:empty"#, 1);
+    }
+
+    #[test]
+    fn should_parse_a_dlist_if_term_is_include_and_principal_text_is() {
+        verifies!(
+            r#"
     test 'should parse a dlist if term is include and principal text is []' do
       input = 'include:: []'
       output = convert_string_to_embedded input
@@ -4915,6 +4444,22 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "[]"]', output, 1
     end
 
+"#
+        );
+        let output = convert("include:: []");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "[]"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_parse_a_dlist_if_term_is_include_and_principal_text_matches_macro_form() {
+        verifies!(
+            r#"
     test 'should parse a dlist if term is include and principal text matches macro form' do
       input = 'include:: pass:[${placeholder}]'
       output = convert_string_to_embedded input
@@ -4923,6 +4468,22 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "${placeholder}"]', output, 1
     end
 
+"#
+        );
+        let output = convert("include:: pass:[${placeholder}]");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "${placeholder}"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_adjacent_elements() {
+        verifies!(
+            r#"
     test "single-line adjacent elements" do
       input = <<~'EOS'
       term1:: def1
@@ -4938,6 +4499,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_parse_sibling_items_using_same_rules() {
+        verifies!(
+            r#"
     test 'should parse sibling items using same rules' do
       input = <<~'EOS'
       term1;; ;; def1
@@ -4953,6 +4546,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = ";; def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1;; ;; def1\nterm2;; ;; def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = ";; def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = ";; def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_allow_term_to_end_with_a_semicolon_when_using_double_semicolon_delimiter() {
+        verifies!(
+            r#"
     test 'should allow term to end with a semicolon when using double semicolon delimiter' do
       input = <<~'EOS'
       term;;; def
@@ -4964,6 +4589,23 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "def"]', output, 1
     end
 
+"#
+        );
+        let output = convert("term;;; def\n");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_xpath(&output, r#"(//dl/dt)[1][text() = "term;"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_indented_adjacent_elements() {
+        verifies!(
+            r#"
     test "single-line indented adjacent elements" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -4980,6 +4622,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n term2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_indented_adjacent_elements_with_tabs() {
+        verifies!(
+            r#"
     test "single-line indented adjacent elements with tabs" do
       input = <<~EOS
       term1::\tdef1
@@ -4995,6 +4669,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\tdef1\n\tterm2::\tdef2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_elements_separated_by_blank_line_should_create_a_single_list() {
+        verifies!(
+            r#"
     test "single-line elements separated by blank line should create a single list" do
       input = <<~'EOS'
       term1:: def1
@@ -5007,6 +4713,18 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl/dt/following-sibling::dd', output, 2
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+    }
+
+    #[test]
+    fn a_line_comment_between_elements_should_divide_them_into_separate_lists() {
+        verifies!(
+            r#"
     test "a line comment between elements should divide them into separate lists" do
       input = <<~'EOS'
       term1:: def1
@@ -5022,6 +4740,19 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[2]/dt', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n\n//\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"(//dl)[1]/dt"#, 1);
+        assert_xpath(&output, r#"(//dl)[2]/dt"#, 1);
+    }
+
+    #[test]
+    fn a_ruler_between_elements_should_divide_them_into_separate_lists() {
+        verifies!(
+            r#"
     test "a ruler between elements should divide them into separate lists" do
       input = <<~'EOS'
       term1:: def1
@@ -5038,6 +4769,20 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[2]/dt', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n\n'''\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl//hr"#, 0);
+        assert_xpath(&output, r#"(//dl)[1]/dt"#, 1);
+        assert_xpath(&output, r#"(//dl)[2]/dt"#, 1);
+    }
+
+    #[test]
+    fn a_block_title_between_elements_should_divide_them_into_separate_lists() {
+        verifies!(
+            r#"
     test "a block title between elements should divide them into separate lists" do
       input = <<~'EOS'
       term1:: def1
@@ -5053,6 +4798,24 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[2]/preceding-sibling::*[@class="title"][text() = "Some more"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n\n.Some more\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"(//dl)[1]/dt"#, 1);
+        assert_xpath(&output, r#"(//dl)[2]/dt"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[2]/preceding-sibling::*[@class="title"][text() = "Some more"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_elements_with_paragraph_content() {
+        verifies!(
+            r#"
     test "multi-line elements with paragraph content" do
       input = <<~'EOS'
       term1::
@@ -5070,6 +4833,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\ndef1\nterm2::\ndef2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_elements_with_indented_paragraph_content() {
+        verifies!(
+            r#"
     test "multi-line elements with indented paragraph content" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5088,6 +4883,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\n def1\nterm2::\n  def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_elements_with_indented_paragraph_content_that_includes_comment_lines() {
+        verifies!(
+            r#"
     test "multi-line elements with indented paragraph content that includes comment lines" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5109,6 +4936,40 @@ context "Description lists (:dlist)" do
       assert_xpath %((//dl/dt)[2]/following-sibling::dd/p[text() = "def2\ndef2 continued"]), output, 1
     end
 
+"#
+        );
+        let output =
+            convert("term1::\n def1\n// comment\nterm2::\n  def2\n// comment\n  def2 continued\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2
+def2 continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_not_strip_comment_line_in_literal_paragraph_block_attached_to_list_item() {
+        verifies!(
+            r#"
     test "should not strip comment line in literal paragraph block attached to list item" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5123,6 +4984,23 @@ context "Description lists (:dlist)" do
       assert_xpath %(//*[@class="literalblock"]//pre[text()=" line 1\n// not a comment\n line 3"]), output, 1
     end
 
+"#
+        );
+        let output = convert("term1::\n+\n line 1\n// not a comment\n line 3\n");
+        assert_xpath(&output, r#"//*[@class="literalblock"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="literalblock"]//pre[text()=" line 1
+// not a comment
+ line 3"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
+        verifies!(
+            r#"
     test 'should escape special characters in all literal paragraphs attached to list item' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5147,6 +5025,32 @@ context "Description lists (:dlist)" do
       assert_xpath '((//dd)[2]//p)[1][text()="<code>text</code> in a paragraph"]', output, 1
     end
 
+"#
+        );
+        let output = convert("term:: desc\n\n  <code>text</code>\n\n  more <code>text</code>\n\nanother term::\n\n  <code>text</code> in a paragraph\n");
+        assert_css(&output, r#"dt"#, 2);
+        assert_css(&output, r#"code"#, 0);
+        assert_css(&output, r#"dd:first-of-type > *"#, 3);
+        assert_css(&output, r#"dd:first-of-type pre"#, 2);
+        assert_xpath(
+            &output,
+            r#"((//dd)[1]//pre)[1][text()="<code>text</code>"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"((//dd)[1]//pre)[2][text()="more <code>text</code>"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"((//dd)[2]//p)[1][text()="<code>text</code> in a paragraph"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'multi-line element with paragraph starting with multiple dashes should not be seen as list' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5167,6 +5071,13 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn multi_line_element_with_multiple_terms() {
+        verifies!(
+            r#"
     test "multi-line element with multiple terms" do
       input = <<~'EOS'
       term1::
@@ -5183,6 +5094,28 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\nterm2::\ndef2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dd"#, 1);
+        assert_xpath(&output, r#"(//dl/dt)[1]/following-sibling::dt"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"(//dl/dt)[2]/following-sibling::dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'consecutive terms share same varlistentry in docbook' do
       input = <<~'EOS'
       term::
@@ -5199,6 +5132,13 @@ context "Description lists (:dlist)" do
       assert_xpath '(//varlistentry)[2]/listitem[normalize-space(text())=""]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn multi_line_elements_with_blank_line_before_paragraph_content() {
+        verifies!(
+            r#"
     test "multi-line elements with blank line before paragraph content" do
       input = <<~'EOS'
       term1::
@@ -5218,6 +5158,38 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\n\ndef1\nterm2::\n\ndef2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_elements_with_paragraph_and_literal_content() {
+        verifies!(
+            r#"
     test "multi-line elements with paragraph and literal content" do
       # blank line following literal paragraph is required or else it will gobble up the second term
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
@@ -5241,6 +5213,39 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\ndef1\n\n  literal\n\nterm2::\n  def2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd//pre"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn mixed_single_and_multi_line_adjacent_elements() {
+        verifies!(
+            r#"
     test "mixed single and multi-line adjacent elements" do
       input = <<~'EOS'
       term1:: def1
@@ -5257,6 +5262,36 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\nterm2::\ndef2\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r##"
     test 'should discover anchor at start of description term text and register it as a reference' do
       input = <<~'EOS'
       The highest peak in the Front Range is <<grays-peak>>, which tops <<mount-evans>> by just a few feet.
@@ -5277,6 +5312,13 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2]/a[@id="grays-peak"]', output, 1
     end
 
+"##
+    );
+
+    #[test]
+    fn missing_space_before_term_does_not_produce_description_list() {
+        verifies!(
+            r#"
     test "missing space before term does not produce description list" do
       input = <<~'EOS'
       term1::def1
@@ -5286,6 +5328,16 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl', output, 0
     end
 
+"#
+        );
+        let output = convert_standalone("term1::def1\nterm2::def2\n");
+        assert_xpath(&output, r#"//dl"#, 0);
+    }
+
+    #[test]
+    fn literal_block_inside_description_list() {
+        verifies!(
+            r#"
     test "literal block inside description list" do
       input = <<~'EOS'
       term::
@@ -5305,6 +5357,22 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term::\n+\n....\nliteral, line 1\n\nliteral, line 2\n....\nanotherterm:: def\n",
+        );
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"//dl/dd//pre"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="literalblock"]//pre"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
+    }
+
+    #[test]
+    fn literal_block_inside_description_list_with_trailing_line_continuation() {
+        verifies!(
+            r#"
     test "literal block inside description list with trailing line continuation" do
       input = <<~'EOS'
       term::
@@ -5325,6 +5393,22 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term::\n+\n....\nliteral, line 1\n\nliteral, line 2\n....\n+\nanotherterm:: def\n",
+        );
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"//dl/dd//pre"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="literalblock"]//pre"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
+    }
+
+    #[test]
+    fn multiple_listing_blocks_inside_description_list() {
+        verifies!(
+            r#"
     test "multiple listing blocks inside description list" do
       input = <<~'EOS'
       term::
@@ -5350,6 +5434,20 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term::\n+\n----\nlisting, line 1\n\nlisting, line 2\n----\n+\n----\nlisting, line 1\n\nlisting, line 2\n----\nanotherterm:: def\n");
+        assert_xpath(&output, r#"//dl/dt"#, 2);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"//dl/dd//pre"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="listingblock"]//pre"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
+    }
+
+    #[test]
+    fn open_block_inside_description_list() {
+        verifies!(
+            r#"
     test "open block inside description list" do
       input = <<~'EOS'
       term::
@@ -5366,6 +5464,17 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[1]//*[@class="openblock"]//p', output, 2
     end
 
+"#
+        );
+        let output = convert_standalone("term::\n+\n--\nOpen block as description of term.\n\nAnd some more detail...\n--\nanotherterm:: def\n");
+        assert_xpath(&output, r#"//dl/dd//p"#, 3);
+        assert_xpath(&output, r#"(//dl/dd)[1]//*[@class="openblock"]//p"#, 2);
+    }
+
+    #[test]
+    fn paragraph_attached_by_a_list_continuation_on_either_side_in_a_description_list() {
+        verifies!(
+            r#"
     test "paragraph attached by a list continuation on either side in a description list" do
       input = <<~'EOS'
       term1:: def1
@@ -5382,6 +5491,33 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n+\nmore detail\n+\nterm2:: def2\n");
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text())="term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text())="term2"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"(//dl/dd)[1]//p"#, 2);
+        assert_xpath(&output, r#"((//dl/dd)[1]//p)[1][text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn paragraph_attached_by_a_list_continuation_on_either_side_to_a_multi_line_element_in_a_description_list(
+    ) {
+        verifies!(
+            r#"
     test "paragraph attached by a list continuation on either side to a multi-line element in a description list" do
       input = <<~'EOS'
       term1::
@@ -5399,6 +5535,33 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\ndef1\n+\nmore detail\n+\nterm2:: def2\n");
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[1][normalize-space(text())="term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dt)[2][normalize-space(text())="term2"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"(//dl/dd)[1]//p"#, 2);
+        assert_xpath(&output, r#"((//dl/dd)[1]//p)[1][text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_continue_to_parse_subsequent_blocks_attached_to_list_item_after_first_block_is_dropped(
+    ) {
+        verifies!(
+            r#"
     test 'should continue to parse subsequent blocks attached to list item after first block is dropped' do
       input = <<~'EOS'
       :attribute-missing: drop-line
@@ -5418,6 +5581,22 @@ context "Description lists (:dlist)" do
       assert_css 'dl > dt + dd > .paragraph', output, 1
     end
 
+"#
+        );
+        let output = convert(
+            ":attribute-missing: drop-line\n\nterm::\n+\nimage::{unresolved}[]\n+\nparagraph\n",
+        );
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_css(&output, r#"dl > dt + dd"#, 1);
+        assert_css(&output, r#"dl > dt + dd > .imageblock"#, 0);
+        assert_css(&output, r#"dl > dt + dd > .paragraph"#, 1);
+    }
+
+    #[test]
+    fn verse_paragraph_inside_a_description_list() {
+        verifies!(
+            r#"
     test "verse paragraph inside a description list" do
       input = <<~'EOS'
       term1:: def
@@ -5432,6 +5611,21 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dd)[1]/*[@class="verseblock"]/pre[text() = "la la la"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def\n+\n[verse]\nla la la\n\nterm2:: def\n");
+        assert_xpath(&output, r#"//dl/dd//p"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//dl/dd)[1]/*[@class="verseblock"]/pre[text() = "la la la"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn list_inside_a_description_list() {
+        verifies!(
+            r#"
     test "list inside a description list" do
       input = <<~'EOS'
       term1::
@@ -5447,6 +5641,19 @@ context "Description lists (:dlist)" do
       assert_xpath '((//dl/dd)[1]//ul)[1]//ul', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\n* level 1\n** level 2\n* level 1\nterm2:: def\n");
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"//dl/dd/p"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[1]//ul"#, 2);
+        assert_xpath(&output, r#"((//dl/dd)[1]//ul)[1]//ul"#, 1);
+    }
+
+    #[test]
+    fn list_inside_a_description_list_offset_by_blank_lines() {
+        verifies!(
+            r#"
     test "list inside a description list offset by blank lines" do
       input = <<~'EOS'
       term1::
@@ -5464,6 +5671,20 @@ context "Description lists (:dlist)" do
       assert_xpath '((//dl/dd)[1]//ul)[1]//ul', output, 1
     end
 
+"#
+        );
+        let output =
+            convert_standalone("term1::\n\n* level 1\n** level 2\n* level 1\n\nterm2:: def\n");
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"//dl/dd/p"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[1]//ul"#, 2);
+        assert_xpath(&output, r#"((//dl/dd)[1]//ul)[1]//ul"#, 1);
+    }
+
+    #[test]
+    fn should_only_grab_one_line_following_last_item_if_item_has_no_inline_description() {
+        verifies!(
+            r#"
     test "should only grab one line following last item if item has no inline description" do
       input = <<~'EOS'
       term1::
@@ -5488,6 +5709,36 @@ context "Description lists (:dlist)" do
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1::\n\ndef1\n\nterm2::\n\ndef2\n\nA new paragraph\n\nAnother new paragraph\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[1]/p[text() = "def1"]"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def2"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            2,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_only_grab_one_literal_line_following_last_item_if_item_has_no_inline_description() {
+        verifies!(
+            r#"
     test "should only grab one literal line following last item if item has no inline description" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5513,6 +5764,36 @@ context "Description lists (:dlist)" do
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1::\n\ndef1\n\nterm2::\n\n  def2\n\nA new paragraph\n\nAnother new paragraph\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[1]/p[text() = "def1"]"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def2"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            2,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_append_subsequent_paragraph_literals_to_list_item_as_block_content() {
+        verifies!(
+            r#"
     test "should append subsequent paragraph literals to list item as block content" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5539,6 +5820,41 @@ context "Description lists (:dlist)" do
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph."]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1::\n\ndef1\n\nterm2::\n\n  def2\n\n  literal\n\nA new paragraph.\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dd"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[1]/p[text() = "def1"]"#, 1);
+        assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def2"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl/dd)[2]/p/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl/dd)[2]/p/following-sibling::*[@class="literalblock"]//pre[text() = "literal"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph."]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_not_match_comment_line_that_looks_like_description_list_term() {
+        verifies!(
+            r#"
     test 'should not match comment line that looks like description list term' do
       input = <<~'EOS'
       before
@@ -5552,6 +5868,16 @@ context "Description lists (:dlist)" do
       assert_css 'dl', output, 0
     end
 
+"#
+        );
+        let output = convert("before\n\n//key:: val\n\nafter\n");
+        assert_css(&output, r#"dl"#, 0);
+    }
+
+    #[test]
+    fn should_not_match_comment_line_following_list_that_looks_like_description_list_term() {
+        verifies!(
+            r#"
     test 'should not match comment line following list that looks like description list term' do
       input = <<~'EOS'
       * item
@@ -5569,6 +5895,21 @@ context "Description lists (:dlist)" do
       assert_xpath '/*[@class="ulist"]/following-sibling::*[@class="sect1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("* item\n\n//term:: desc\n== Section\n\nsection text\n");
+        assert_xpath(&output, r#"/*[@class="ulist"]"#, 1);
+        assert_xpath(&output, r#"/*[@class="sect1"]"#, 1);
+        assert_xpath(&output, r#"/*[@class="sect1"]/h2[text()="Section"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"/*[@class="ulist"]/following-sibling::*[@class="sect1"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'should not match comment line that looks like sibling description list term' do
       input = <<~'EOS'
       before
@@ -5585,6 +5926,13 @@ context "Description lists (:dlist)" do
       refute_includes output, 'yin'
     end
 
+"#
+    );
+
+    #[test]
+    fn should_not_hang_on_description_list_item_in_list_that_begins_with() {
+        verifies!(
+            r#"
     test 'should not hang on description list item in list that begins with ///' do
       input = <<~'EOS'
       * a
@@ -5600,6 +5948,20 @@ context "Description lists (:dlist)" do
       assert_xpath '//dd/p[text()="c"]', output, 1
     end
 
+"#
+        );
+        let output = convert("* a\n///b::\nc\n");
+        assert_css(&output, r#"ul"#, 1);
+        assert_css(&output, r#"ul li dl"#, 1);
+        assert_xpath(&output, r#"//ul/li/p[text()="a"]"#, 1);
+        assert_xpath(&output, r#"//dt[text()="///b"]"#, 1);
+        assert_xpath(&output, r#"//dd/p[text()="c"]"#, 1);
+    }
+
+    #[test]
+    fn should_not_hang_on_sibling_description_list_item_that_begins_with() {
+        verifies!(
+            r#"
     test 'should not hang on sibling description list item that begins with ///' do
       input = <<~'EOS'
       a::
@@ -5614,6 +5976,17 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl/dd/p[text()="c"]', output, 1
     end
 
+"#
+        );
+        let output = convert("a::\n///b::\nc\n");
+        assert_css(&output, r#"dl"#, 1);
+        assert_xpath(&output, r#"(//dl/dt)[1][text()="a"]"#, 1);
+        assert_xpath(&output, r#"(//dl/dt)[2][text()="///b"]"#, 1);
+        assert_xpath(&output, r#"//dl/dd/p[text()="c"]"#, 1);
+    }
+
+    non_normative!(
+        r#"
     test 'should skip dlist term that begins with // unless it begins with ///' do
       input = <<~'EOS'
       category a::
@@ -5628,6 +6001,13 @@ context "Description lists (:dlist)" do
       assert_xpath '//dt[text()="///term"]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn more_than_4_consecutive_colons_should_become_part_of_description_list_term() {
+        verifies!(
+            r#"
     test 'more than 4 consecutive colons should become part of description list term' do
       input = <<~'EOS'
       A term::::: a description
@@ -5640,6 +6020,17 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl/dd/p[text()="a description"]', output, 1
     end
 
+"#
+        );
+        let output = convert("A term::::: a description\n");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 1);
+        assert_xpath(&output, r#"//dl/dt[text()="A term:"]"#, 1);
+        assert_xpath(&output, r#"//dl/dd/p[text()="a description"]"#, 1);
+    }
+
+    non_normative!(
+        r#"
     test 'text method of dd node should return nil if dd node only contains blocks' do
       input = <<~'EOS'
       term::
@@ -5652,6 +6043,11 @@ context "Description lists (:dlist)" do
       assert_nil dd.text
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should match trailing line separator in text of list item' do
       input = <<~EOS.chop
       A:: a
@@ -5664,6 +6060,11 @@ context "Description lists (:dlist)" do
       assert_xpath %((//dd)[2]/p[text()="b#{decode_char 8232}"]), output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should match line separator in text of list item' do
       input = <<~EOS.chop
       A:: a
@@ -5678,6 +6079,13 @@ context "Description lists (:dlist)" do
   end
 
   context "Nested lists" do
+"#
+    );
+
+    #[test]
+    fn should_not_parse_a_nested_dlist_delimiter_without_a_term_as_a_dlist() {
+        verifies!(
+            r#"
     test 'should not parse a nested dlist delimiter without a term as a dlist' do
       input = <<~'EOS'
       t::
@@ -5688,6 +6096,17 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl/dd/p[text()=";;"]', output, 1
     end
 
+"#
+        );
+        let output = convert("t::\n;;\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"//dl/dd/p[text()=";;"]"#, 1);
+    }
+
+    #[test]
+    fn should_not_parse_a_nested_indented_dlist_delimiter_without_a_term_as_a_dlist() {
+        verifies!(
+            r#"
     test 'should not parse a nested indented dlist delimiter without a term as a dlist' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5700,6 +6119,22 @@ context "Description lists (:dlist)" do
       assert_xpath %(//dl/dd/p[text()="desc\n  ;;"]), output, 1
     end
 
+"#
+        );
+        let output = convert("t::\ndesc\n  ;;\n");
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"//dl/dd/p[text()="desc
+  ;;"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_adjacent_nested_elements() {
+        verifies!(
+            r#"
     test "single-line adjacent nested elements" do
       input = <<~'EOS'
       term1:: def1
@@ -5717,6 +6152,47 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\nlabel1::: detail1\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_adjacent_maximum_nested_elements() {
+        verifies!(
+            r#"
     test "single-line adjacent maximum nested elements" do
       input = <<~'EOS'
       term1:: def1
@@ -5730,6 +6206,19 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl//dl//dl//dl', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1:: def1\nlabel1::: detail1\nname1:::: value1\nitem1;; price1\nterm2:: def2\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 4);
+        assert_xpath(&output, r#"//dl//dl//dl//dl"#, 1);
+    }
+
+    #[test]
+    fn single_line_nested_elements_separated_by_blank_line_at_top_level() {
+        verifies!(
+            r#"
     test 'single-line nested elements separated by blank line at top level' do
       input = <<~'EOS'
       term1:: def1
@@ -5749,6 +6238,47 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n\nlabel1::: detail1\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_nested_elements_separated_by_blank_line_at_nested_level() {
+        verifies!(
+            r#"
     test 'single-line nested elements separated by blank line at nested level' do
       input = <<~'EOS'
       term1:: def1
@@ -5768,6 +6298,49 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1:: def1\nlabel1::: detail1\n\nlabel2::: detail2\nterm2:: def2\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn single_line_adjacent_nested_elements_with_alternate_delimiters() {
+        verifies!(
+            r#"
     test "single-line adjacent nested elements with alternate delimiters" do
       input = <<~'EOS'
       term1:: def1
@@ -5785,6 +6358,47 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\nlabel1;; detail1\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_adjacent_nested_elements() {
+        verifies!(
+            r#"
     test "multi-line adjacent nested elements" do
       input = <<~'EOS'
       term1::
@@ -5805,6 +6419,47 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1::\ndef1\nlabel1:::\ndetail1\nterm2::\ndef2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_nested_elements_separated_by_blank_line_at_nested_level_repeated() {
+        verifies!(
+            r#"
     test 'multi-line nested elements separated by blank line at nested level repeated' do
       input = <<~'EOS'
       term1::
@@ -5828,6 +6483,49 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl//dl/dt)[2]/following-sibling::dd/p[text() = "detail2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone(
+            "term1::\ndef1\nlabel1:::\n\ndetail1\nlabel2:::\ndetail2\n\nterm2:: def2\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl//dl/dt)[1][normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl//dl/dt)[1]/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl//dl/dt)[2][normalize-space(text()) = "label2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl//dl/dt)[2]/following-sibling::dd/p[text() = "detail2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_element_with_indented_nested_element() {
+        verifies!(
+            r#"
     test "multi-line element with indented nested element" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5852,6 +6550,51 @@ context "Description lists (:dlist)" do
       assert_xpath '((//dl)[1]/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output =
+            convert_standalone("term1::\n  def1\n  label1;;\n   detail1\nterm2::\n  def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(&output, r#"(//dl)[1]/dt"#, 2);
+        assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"((//dl)[1]/dt)[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"((//dl)[1]/dt)[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//dl//dl/dt"#, 1);
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"((//dl)[1]/dt)[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"((//dl)[1]/dt)[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn mixed_single_and_multi_line_elements_with_indented_nested_elements() {
+        verifies!(
+            r#"
     test "mixed single and multi-line elements with indented nested elements" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -5871,6 +6614,47 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert_standalone("term1:: def1\n  label1:::\n   detail1\nterm2:: def2\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[text() = "def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2][normalize-space(text()) = "term2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn multi_line_elements_with_first_paragraph_folded_to_text_with_adjacent_nested_element() {
+        verifies!(
+            r#"
     test "multi-line elements with first paragraph folded to text with adjacent nested element" do
       input = <<~'EOS'
       term1:: def1
@@ -5888,6 +6672,42 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("term1:: def1\ncontinued\nlabel1:::\ndetail1\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "term1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[starts-with(text(), "def1")]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1]/following-sibling::dd/p[contains(text(), "continued")]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt[normalize-space(text()) = "label1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn nested_dlist_attached_by_list_continuation_should_not_consume_detached_paragraph() {
+        verifies!(
+            r#"
     test 'nested dlist attached by list continuation should not consume detached paragraph' do
       input = <<~'EOS'
       term:: text
@@ -5903,6 +6723,19 @@ context "Description lists (:dlist)" do
       assert_css '.dlist + .paragraph', output, 1
     end
 
+"#
+        );
+        let output = convert("term:: text\n+\nnested term::: text\n\nparagraph\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_css(&output, r#".dlist .paragraph"#, 0);
+        assert_css(&output, r#".dlist + .paragraph"#, 1);
+    }
+
+    #[test]
+    fn nested_dlist_with_attached_block_offset_by_empty_line() {
+        verifies!(
+            r#"
     test 'nested dlist with attached block offset by empty line' do
       input = <<~'EOS'
       category::
@@ -5920,9 +6753,40 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]//dl/dt[1][normalize-space(text()) = "term 1"]', output, 1
       assert_xpath '(//dl)[1]//dl/dt[1]/following-sibling::dd//p[starts-with(text(), "def 1")]', output, 1
     end
+"#
+        );
+        let output = convert("category::\n\nterm 1:::\n+\n--\ndef 1\n--\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"//dl//dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]/dt[1][normalize-space(text()) = "category"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]//dl/dt[1][normalize-space(text()) = "term 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//dl)[1]//dl/dt[1]/following-sibling::dd//p[starts-with(text(), "def 1")]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
   end
 
   context 'Special lists' do
+"#
+    );
+
+    #[test]
+    fn should_convert_glossary_list_with_proper_semantics() {
+        verifies!(
+            r#"
     test 'should convert glossary list with proper semantics' do
       input = <<~'EOS'
       [glossary]
@@ -5934,6 +6798,15 @@ context "Description lists (:dlist)" do
       assert_css '.dlist dt:not([class])', output, 2
     end
 
+"#
+        );
+        let output = convert("[glossary]\nterm 1:: def 1\nterm 2:: def 2\n");
+        assert_css(&output, r#".dlist.glossary"#, 1);
+        assert_css(&output, r#".dlist dt:not([class])"#, 2);
+    }
+
+    non_normative!(
+        r#"
     test 'consecutive glossary terms should share same glossentry element in docbook' do
       input = <<~'EOS'
       [glossary]
@@ -5951,6 +6824,11 @@ context "Description lists (:dlist)" do
       assert_xpath '(/glossentry)[2]/glossdef[normalize-space(text())=""]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert horizontal list with proper markup' do
       input = <<~'EOS'
       [horizontal]
@@ -5981,6 +6859,13 @@ context "Description lists (:dlist)" do
       assert_xpath '((//tr)[2]/td)[2]/p[normalize-space(text())="description"]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn should_set_col_widths_of_item_and_label_if_specified() {
+        verifies!(
+            r#"
     test 'should set col widths of item and label if specified' do
       input = <<~'EOS'
       [horizontal]
@@ -5996,6 +6881,26 @@ context "Description lists (:dlist)" do
       assert_xpath '(//table/colgroup/col)[2][@style="width: 75%;"]', output, 1
     end
 
+"#
+        );
+        let output = convert("[horizontal]\n[labelwidth=\"25\", itemwidth=\"75\"]\nterm:: def\n");
+        assert_css(&output, r#"table"#, 1);
+        assert_css(&output, r#"table > colgroup"#, 1);
+        assert_css(&output, r#"table > colgroup > col"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//table/colgroup/col)[1][@style="width: 25%;"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//table/colgroup/col)[2][@style="width: 75%;"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'should set col widths of item and label in docbook if specified' do
       input = <<~'EOS'
       [horizontal]
@@ -6011,6 +6916,13 @@ context "Description lists (:dlist)" do
       assert_xpath '(/informaltable/tgroup/colspec)[2][@colwidth="75*"]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn should_add_strong_class_to_label_if_strong_option_is_set() {
+        verifies!(
+            r#"
     test 'should add strong class to label if strong option is set' do
       input = <<~'EOS'
       [horizontal, options="strong"]
@@ -6022,6 +6934,17 @@ context "Description lists (:dlist)" do
       assert_css '.hdlist td.hdlist1.strong', output, 1
     end
 
+"#
+        );
+        let output = convert("[horizontal, options=\"strong\"]\nterm:: def\n");
+        assert_css(&output, r#".hdlist"#, 1);
+        assert_css(&output, r#".hdlist td.hdlist1.strong"#, 1);
+    }
+
+    #[test]
+    fn consecutive_terms_in_horizontal_list_should_share_same_cell() {
+        verifies!(
+            r#"
     test 'consecutive terms in horizontal list should share same cell' do
       input = <<~'EOS'
       [horizontal]
@@ -6040,6 +6963,17 @@ context "Description lists (:dlist)" do
       assert_xpath '(//tr)[2]/td[@class="hdlist2"]', output, 1
     end
 
+"#
+        );
+        let output = convert("[horizontal]\nterm::\nalt term::\ndescription\n\nlast::\n");
+        assert_xpath(&output, r#"//tr"#, 2);
+        assert_xpath(&output, r#"(//tr)[1]/td[@class="hdlist1"]"#, 1);
+        assert_xpath(&output, r#"(//tr)[1]/td[@class="hdlist1"]/br"#, 1);
+        assert_xpath(&output, r#"(//tr)[2]/td[@class="hdlist2"]"#, 1);
+    }
+
+    non_normative!(
+        r#"
     test 'consecutive terms in horizontal list should share same entry in docbook' do
       input = <<~'EOS'
       [horizontal]
@@ -6057,6 +6991,11 @@ context "Description lists (:dlist)" do
       assert_xpath '((//row)[2]/entry)[2][normalize-space(text())=""]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert horizontal list in docbook with proper markup' do
       input = <<~'EOS'
       .Terms
@@ -6077,6 +7016,11 @@ context "Description lists (:dlist)" do
       assert_xpath '((/table//row)[1]/entry)[2]/simpara', output, 2
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert qanda list in HTML with proper semantics' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6102,6 +7046,11 @@ context "Description lists (:dlist)" do
       assert_xpath "/*[@class = 'qlist qanda']/ol/li[2]/p[2]/following-sibling::div[@class='admonitionblock note']", output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert qanda list in DocBook with proper semantics' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6127,6 +7076,11 @@ context "Description lists (:dlist)" do
       assert_xpath "/qandaset/qandaentry[2]/answer/simpara/following-sibling::note", output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'consecutive questions should share same question element in docbook' do
       input = <<~'EOS'
       [qanda]
@@ -6145,6 +7099,11 @@ context "Description lists (:dlist)" do
       assert_xpath '(//qandaentry)[2]/answer[normalize-space(text())=""]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert bibliography list with proper semantics' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6165,6 +7124,11 @@ context "Description lists (:dlist)" do
       assert_xpath '(//a)[1][starts-with(following-sibling::text(), "[taoup] ")]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should convert bibliography list with proper semantics to DocBook' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6187,6 +7151,11 @@ context "Description lists (:dlist)" do
       assert_xpath '(//bibliomixed)[2]/bibliomisc/anchor[starts-with(following-sibling::text(), "[walsh-muellner] Norman")]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should warn if a bibliography ID is already in use' do
       input = <<~'EOS'
       [bibliography]
@@ -6204,6 +7173,11 @@ context "Description lists (:dlist)" do
       end
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should automatically add bibliography style to top-level lists in bibliography section' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6227,6 +7201,11 @@ context "Description lists (:dlist)" do
       assert_equal ulists[1].style, 'bibliography'
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should not recognize bibliography anchor that begins with a digit' do
       input = <<~'EOS'
       [bibliography]
@@ -6238,6 +7217,11 @@ context "Description lists (:dlist)" do
       assert_xpath '//a[@id="1984"]', output, 0
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should recognize bibliography anchor that contains a digit but does not start with one' do
       input = <<~'EOS'
       [bibliography]
@@ -6250,6 +7234,11 @@ context "Description lists (:dlist)" do
       assert_xpath '//a[@id="_1984"]', output, 1
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'should catalog bibliography anchors in bibliography list' do
       input = <<~'EOS'
       = Article Title
@@ -6266,6 +7255,11 @@ context "Description lists (:dlist)" do
       assert doc.catalog[:refs].key? 'Fowler_1997'
     end
 
+"#
+    );
+
+    non_normative!(
+        r##"
     test 'should use reftext from bibliography anchor at xref and entry' do
       input = <<~'EOS'
       = Article Title
@@ -6298,6 +7292,11 @@ context "Description lists (:dlist)" do
       assert_xpath '(//a[@id="TMMM"])[1][starts-with(following-sibling::text(), "[TMMM] ")]', result, 1
     end
 
+"##
+    );
+
+    non_normative!(
+        r#"
     test 'should assign reftext of bibliography anchor to xreflabel in DocBook backend' do
       input = <<~'EOS'
       [bibliography]
@@ -6309,23 +7308,27 @@ context "Description lists (:dlist)" do
     end
   end
 end
-"##
-);
-
-non_normative!(
-    r#"
 
 "#
-);
+    );
+}
 
-// The entire `Description lists redux` context is non-normative for the
-// same reason: description-list rendering is not built yet (#154).
-non_normative!(
-    r#"
+mod description_lists_redux {
+    use super::*;
+
+    non_normative!(
+        r#"
 context 'Description lists redux' do
 
   context 'Label without text on same line' do
 
+"#
+    );
+
+    #[test]
+    fn folds_text_from_subsequent_line() {
+        verifies!(
+            r#"
     test 'folds text from subsequent line' do
       input = <<~'EOS'
       == Lists
@@ -6340,6 +7343,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\ndef1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_first_line_after_blank_lines() {
+        verifies!(
+            r#"
     test 'folds text from first line after blank lines' do
       input = <<~'EOS'
       == Lists
@@ -6356,6 +7371,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n\ndef1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_first_line_after_blank_line_and_immediately_preceding_next_item() {
+        verifies!(
+            r#"
     test 'folds text from first line after blank line and immediately preceding next item' do
       input = <<~'EOS'
       == Lists
@@ -6372,6 +7399,22 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\ndef1\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p[text()="def1"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn paragraph_offset_by_blank_lines_does_not_break_list_if_label_does_not_have_inline_text() {
+        verifies!(
+            r#"
     test 'paragraph offset by blank lines does not break list if label does not have inline text' do
       input = <<~'EOS'
       == Lists
@@ -6390,6 +7433,19 @@ context 'Description lists redux' do
       assert_xpath '(//dl/dd)[1]/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\ndef1\n\nterm2:: def2\n");
+        assert_css(&output, r#"dl"#, 1);
+        assert_css(&output, r#"dl > dt"#, 2);
+        assert_css(&output, r#"dl > dd"#, 2);
+        assert_xpath(&output, r#"(//dl/dd)[1]/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_first_line_after_comment_line() {
+        verifies!(
+            r#"
     test 'folds text from first line after comment line' do
       input = <<~'EOS'
       == Lists
@@ -6405,6 +7461,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n// comment\ndef1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_line_following_comment_line_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text from line following comment line offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6421,6 +7489,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n// comment\ndef1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_subsequent_indented_line() {
+        verifies!(
+            r#"
     test 'folds text from subsequent indented line' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6436,6 +7516,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n  def1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_from_indented_line_after_blank_line() {
+        verifies!(
+            r#"
     test 'folds text from indented line after blank line' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6452,6 +7544,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n  def1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_ruler_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text that looks like ruler offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6467,6 +7571,18 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="'''"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n'''\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="'''"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_ruler_offset_by_blank_line_and_line_comment() {
+        verifies!(
+            r#"
     test 'folds text that looks like ruler offset by blank line and line comment' do
       input = <<~'EOS'
       == Lists
@@ -6483,6 +7599,18 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="'''"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n// comment\n'''\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="'''"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_ruler_and_the_line_following_it_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text that looks like ruler and the line following it offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6499,6 +7627,22 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[normalize-space(text())="''' continued"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n'''\ncontinued\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[normalize-space(text())="''' continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_title_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text that looks like title offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6514,6 +7658,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()=".def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n.def1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()=".def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_title_offset_by_blank_line_and_line_comment() {
+        verifies!(
+            r#"
     test 'folds text that looks like title offset by blank line and line comment' do
       input = <<~'EOS'
       == Lists
@@ -6530,6 +7686,18 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()=".def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n// comment\n.def1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()=".def1"]"#, 1);
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_admonition_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text that looks like admonition offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6545,6 +7713,22 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="NOTE: def1"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\nNOTE: def1\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="NOTE: def1"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn folds_text_that_looks_like_section_title_offset_by_blank_line() {
+        verifies!(
+            r#"
     test 'folds text that looks like section title offset by blank line' do
       input = <<~'EOS'
       == Lists
@@ -6561,6 +7745,24 @@ context 'Description lists redux' do
       assert_xpath '//h2', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n== Another Section\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="== Another Section"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//h2"#, 1);
+    }
+
+    #[test]
+    fn folds_text_of_first_literal_line_offset_by_blank_line_appends_subsequent_literals_offset_by_blank_line_as_blocks(
+    ) {
+        verifies!(
+            r#"
     test 'folds text of first literal line offset by blank line appends subsequent literals offset by blank line as blocks' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6584,6 +7786,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 2
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n  def1\n\n  literal\n\n\n  literal\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]"#,
+            2,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            2,
+        );
+    }
+
+    #[test]
+    fn folds_text_of_subsequent_line_and_appends_following_literal_line_offset_by_blank_line_as_block_if_term_has_no_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'folds text of subsequent line and appends following literal line offset by blank line as block if term has no inline description' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6605,6 +7830,32 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\ndef1\n\n  literal\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p[text()="def1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'appends literal line attached by continuation as block if item has no inline description' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6623,6 +7874,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\n  literal\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
+    ) {
+        verifies!(
+            r#"
     test 'appends literal line attached by continuation as block if item has no inline description followed by ruler' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6644,6 +7918,30 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\n  literal\n\n'''\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
+    }
+
+    #[test]
+    fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
+    ) {
+        verifies!(
+            r#"
     test 'appends line attached by continuation as block if item has no inline description followed by ruler' do
       input = <<~'EOS'
       == Lists
@@ -6664,6 +7962,30 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\npara\n\n'''\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
+    }
+
+    #[test]
+    fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_block(
+    ) {
+        verifies!(
+            r#"
     test 'appends line attached by continuation as block if item has no inline description followed by block' do
       input = <<~'EOS'
       == Lists
@@ -6687,6 +8009,39 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\npara\n\n....\nliteral\n....\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_block_attached_by_continuation_but_not_subsequent_block_not_attached_by_continuation(
+    ) {
+        verifies!(
+            r#"
     test 'appends block attached by continuation but not subsequent block not attached by continuation' do
       input = <<~'EOS'
       == Lists
@@ -6711,6 +8066,38 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\n....\nliteral\n....\n....\ndetached\n....\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_list_if_item_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'appends list if item has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -6729,6 +8116,19 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd//ul/li', output, 3
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd//ul/li"#, 3);
+    }
+
+    #[test]
+    fn appends_list_to_first_term_when_followed_immediately_by_second_term() {
+        verifies!(
+            r#"
     test 'appends list to first term when followed immediately by second term' do
       input = <<~'EOS'
       == Lists
@@ -6749,6 +8149,24 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[2]/p[text()="def2"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 2);
+        assert_xpath(&output, r#"(//*[@class="dlist"]//dd)[1]/p"#, 0);
+        assert_xpath(&output, r#"(//*[@class="dlist"]//dd)[1]//ul/li"#, 3);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[2]/p[text()="def2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_indented_list_to_first_term_that_is_adjacent_to_second_term() {
+        verifies!(
+            r#"
     test 'appends indented list to first term that is adjacent to second term' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6778,6 +8196,50 @@ context 'Description lists redux' do
       assert_css '.dlist + .paragraph', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nlabel 1::\n  description 1\n\n  * one\n  * two\n  * three\nlabel 2::\n  description 2\n\nparagraph\n");
+        assert_css(&output, r#".dlist > dl"#, 1);
+        assert_css(&output, r#".dlist dt"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dt)[1][normalize-space(text())="label 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dt)[2][normalize-space(text())="label 2"]"#,
+            1,
+        );
+        assert_css(&output, r#".dlist dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p[text()="description 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[2]/p[text()="description 2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]//li"#,
+            3,
+        );
+        assert_css(&output, r#".dlist + .paragraph"#, 1);
+    }
+
+    #[test]
+    fn appends_indented_list_to_first_term_that_is_attached_by_a_continuation_and_adjacent_to_second_term(
+    ) {
+        verifies!(
+            r#"
     test 'appends indented list to first term that is attached by a continuation and adjacent to second term' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6807,6 +8269,49 @@ context 'Description lists redux' do
       assert_css '.dlist + .paragraph', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nlabel 1::\n  description 1\n+\n  * one\n  * two\n  * three\nlabel 2::\n  description 2\n\nparagraph\n");
+        assert_css(&output, r#".dlist > dl"#, 1);
+        assert_css(&output, r#".dlist dt"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dt)[1][normalize-space(text())="label 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dt)[2][normalize-space(text())="label 2"]"#,
+            1,
+        );
+        assert_css(&output, r#".dlist dd"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p[text()="description 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[2]/p[text()="description 2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]//li"#,
+            3,
+        );
+        assert_css(&output, r#".dlist + .paragraph"#, 1);
+    }
+
+    #[test]
+    fn appends_list_and_paragraph_block_when_line_following_list_attached_by_continuation() {
+        verifies!(
+            r#"
     test 'appends list and paragraph block when line following list attached by continuation' do
       input = <<~'EOS'
       == Lists
@@ -6831,6 +8336,35 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\n\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/*[@class="ulist"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/ul/li"#,
+            3,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn first_continued_line_associated_with_nested_list_item_and_second_continued_line_associated_with_term(
+    ) {
+        verifies!(
+            r#"
     test 'first continued line associated with nested list item and second continued line associated with term' do
       input = <<~'EOS'
       == Lists
@@ -6855,6 +8389,39 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="term1 para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n* one\n+\nnested list para\n\n+\nterm1 para\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/*[@class="ulist"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/ul/li"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/ul/li/*[@class="paragraph"]/p[text()="nested list para"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="term1 para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn literal_line_attached_by_continuation_swallows_adjacent_line_that_looks_like_term() {
+        verifies!(
+            r#"
     test 'literal line attached by continuation swallows adjacent line that looks like term' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -6877,6 +8444,31 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="  literal\nnotnestedterm:::"]), output, 2
     end
 
+"#
+        );
+        let output = convert(
+            "== Lists\n\nterm1::\n+\n  literal\nnotnestedterm:::\n+\n  literal\nnotnestedterm:::\n",
+        );
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]"#,
+            2,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="  literal
+notnestedterm:::"]"#,
+            2,
+        );
+    }
+
+    #[test]
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'line attached by continuation is appended as paragraph if term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -6894,6 +8486,26 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'attached paragraph does not break on adjacent nested description list term' do
       input = <<~'EOS'
       term1:: def
@@ -6910,6 +8522,11 @@ context 'Description lists redux' do
     end
 
     # FIXME this is a negative test; the behavior should be the other way around
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'attached paragraph is terminated by adjacent sibling description list term' do
       input = <<~'EOS'
       term1:: def
@@ -6925,6 +8542,11 @@ context 'Description lists redux' do
       refute_includes output, 'not a term:: def'
     end
 
+"#
+    );
+
+    non_normative!(
+        r#"
     test 'attached styled paragraph does not break on adjacent nested description list term' do
       input = <<~'EOS'
       term1:: def
@@ -6941,6 +8563,14 @@ context 'Description lists redux' do
       assert_includes output, 'not a term::: def'
     end
 
+"#
+    );
+
+    #[test]
+    fn appends_line_as_paragraph_if_attached_by_continuation_following_blank_line_and_line_comment_when_term_has_no_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'appends line as paragraph if attached by continuation following blank line and line comment when term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -6960,6 +8590,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n// comment\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_no_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'line attached by continuation offset by blank line is appended as paragraph if term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -6978,6 +8631,28 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn delimited_block_breaks_list_even_when_term_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'delimited block breaks list even when term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -6995,6 +8670,27 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="exampleblock"]//p[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n====\ndetached\n====\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="exampleblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="exampleblock"]//p[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn block_attribute_line_above_delimited_block_that_breaks_a_dlist_is_not_duplicated() {
+        verifies!(
+            r#"
     test 'block attribute line above delimited block that breaks a dlist is not duplicated' do
       input = <<~'EOS'
       == Lists
@@ -7011,6 +8707,21 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="listingblock rolename"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm:: desc\n[.rolename]\n----\ndetached\n----\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="listingblock rolename"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn block_attribute_line_above_paragraph_breaks_list_even_when_term_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'block attribute line above paragraph breaks list even when term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -7027,6 +8738,27 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="verseblock"]/pre[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n[verse]\ndetached\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="verseblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="verseblock"]/pre[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn block_attribute_line_above_paragraph_that_breaks_a_dlist_is_not_duplicated() {
+        verifies!(
+            r#"
     test 'block attribute line above paragraph that breaks a dlist is not duplicated' do
       input = <<~'EOS'
       == Lists
@@ -7041,6 +8773,21 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph rolename"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm:: desc\n[.rolename]\ndetached\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph rolename"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn block_anchor_line_breaks_list_even_when_term_has_no_inline_description() {
+        verifies!(
+            r#"
     test 'block anchor line breaks list even when term has no inline description' do
       input = <<~'EOS'
       == Lists
@@ -7057,6 +8804,27 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1::\n[[id]]\ndetached\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn block_attribute_lines_above_nested_horizontal_list_does_not_break_list() {
+        verifies!(
+            r#"
     test 'block attribute lines above nested horizontal list does not break list' do
       input = <<~'EOS'
       Operating Systems::
@@ -7077,6 +8845,20 @@ context 'Description lists redux' do
       assert_xpath '((//dl)[1]/dd)[2]//table', output, 0
     end
 
+"#
+        );
+        let output = convert("Operating Systems::\n[horizontal]\n  Linux::: Fedora\n  BSD::: OpenBSD\n\nCloud Providers::\n  PaaS::: OpenShift\n  IaaS::: AWS\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"/*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[1]//table"#, 1);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[2]//table"#, 0);
+    }
+
+    #[test]
+    fn block_attribute_lines_above_nested_list_with_style_does_not_break_list() {
+        verifies!(
+            r#"
     test 'block attribute lines above nested list with style does not break list' do
       input = <<~'EOS'
       TODO List::
@@ -7094,6 +8876,20 @@ context 'Description lists redux' do
       assert_xpath '((//dl)[1]/dd)[2]//ul[@class="square"]', output, 1
     end
 
+"#
+        );
+        let output = convert(
+            "TODO List::\n* get groceries\nGrocery List::\n[square]\n* bread\n* milk\n* lettuce\n",
+        );
+        assert_xpath(&output, r#"//dl"#, 1);
+        assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[2]//ul[@class="square"]"#, 1);
+    }
+
+    #[test]
+    fn multiple_block_attribute_lines_above_nested_list_does_not_break_list() {
+        verifies!(
+            r#"
     test 'multiple block attribute lines above nested list does not break list' do
       input = <<~'EOS'
       Operating Systems::
@@ -7116,6 +8912,22 @@ context 'Description lists redux' do
       assert_xpath '((//dl)[1]/dd)[2]//table', output, 0
     end
 
+"#
+        );
+        let output = convert("Operating Systems::\n[[variants]]\n[horizontal]\n  Linux::: Fedora\n  BSD::: OpenBSD\n\nCloud Providers::\n  PaaS::: OpenShift\n  IaaS::: AWS\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"/*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
+        assert_xpath(&output, r#"(//dl)[1]/dd/*[@id="variants"]"#, 1);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[1]//table"#, 1);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[2]//table"#, 0);
+    }
+
+    #[test]
+    fn multiple_block_attribute_lines_separated_by_empty_line_above_nested_list_does_not_break_list(
+    ) {
+        verifies!(
+            r#"
     test 'multiple block attribute lines separated by empty line above nested list does not break list' do
       input = <<~'EOS'
       Operating Systems::
@@ -7139,10 +8951,30 @@ context 'Description lists redux' do
       assert_xpath '((//dl)[1]/dd)[1]//table', output, 1
       assert_xpath '((//dl)[1]/dd)[2]//table', output, 0
     end
+"#
+        );
+        let output = convert("Operating Systems::\n[[variants]]\n\n[horizontal]\n\n  Linux::: Fedora\n  BSD::: OpenBSD\n\nCloud Providers::\n  PaaS::: OpenShift\n  IaaS::: AWS\n");
+        assert_xpath(&output, r#"//dl"#, 2);
+        assert_xpath(&output, r#"/*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
+        assert_xpath(&output, r#"(//dl)[1]/dd/*[@id="variants"]"#, 1);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[1]//table"#, 1);
+        assert_xpath(&output, r#"((//dl)[1]/dd)[2]//table"#, 0);
+    }
+
+    non_normative!(
+        r#"
   end
 
   context 'Item with text inline' do
 
+"#
+    );
+
+    #[test]
+    fn folds_text_from_inline_description_and_subsequent_line() {
+        verifies!(
+            r#"
     test 'folds text from inline description and subsequent line' do
       input = <<~'EOS'
       == Lists
@@ -7157,6 +8989,23 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\ncontinued\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="def1
+continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn folds_text_from_inline_description_and_subsequent_lines() {
+        verifies!(
+            r#"
     test 'folds text from inline description and subsequent lines' do
       input = <<~'EOS'
       == Lists
@@ -7172,6 +9021,24 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued\ncontinued"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\ncontinued\ncontinued\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="def1
+continued
+continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn folds_text_from_inline_description_and_line_following_comment_line() {
+        verifies!(
+            r#"
     test 'folds text from inline description and line following comment line' do
       input = <<~'EOS'
       == Lists
@@ -7187,6 +9054,23 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n// comment\ncontinued\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="def1
+continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn folds_text_from_inline_description_and_subsequent_indented_line() {
+        verifies!(
+            r#"
     test 'folds text from inline description and subsequent indented line' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7202,6 +9086,23 @@ context 'Description lists redux' do
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
 
+"#
+        );
+        let output = convert("== List\n\nterm1:: def1\n  continued\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p[text()="def1
+continued"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description() {
+        verifies!(
+            r#"
     test 'appends literal line offset by blank line as block if item has inline description' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7220,6 +9121,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n  literal\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_literal_line_offset_by_blank_line_as_block_and_appends_line_after_continuation_as_block_if_item_has_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'appends literal line offset by blank line as block and appends line after continuation as block if item has inline description' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7242,6 +9166,39 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n  literal\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_line_after_continuation_as_block_and_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'appends line after continuation as block and literal line offset by blank line as block if item has inline description' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7264,6 +9221,38 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\n  literal\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/*[@class="paragraph"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn appends_list_if_item_has_inline_description() {
+        verifies!(
+            r#"
     test 'appends list if item has inline description' do
       input = <<~'EOS'
       == Lists
@@ -7282,6 +9271,28 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="ulist"]/ul/li', output, 3
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n* one\n* two\n* three\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="ulist"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="ulist"]/ul/li"#,
+            3,
+        );
+    }
+
+    #[test]
+    fn appends_literal_line_attached_by_continuation_as_block_if_item_has_inline_description_followed_by_ruler(
+    ) {
+        verifies!(
+            r#"
     test 'appends literal line attached by continuation as block if item has inline description followed by ruler' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7303,6 +9314,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n+\n  literal\n\n'''\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
+    }
+
+    #[test]
+    fn line_offset_by_blank_line_breaks_list_if_term_has_inline_description() {
+        verifies!(
+            r#"
     test 'line offset by blank line breaks list if term has inline description' do
       input = <<~'EOS'
       == Lists
@@ -7320,6 +9354,26 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\ndetached\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
     test 'nested term with description does not consume following heading' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -7346,6 +9400,14 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="sect2"]/h3[text()="Detached"]', output, 1
     end
 
+"#
+    );
+
+    #[test]
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_paragraph(
+    ) {
+        verifies!(
+            r#"
     test 'line attached by continuation is appended as paragraph if term has inline description followed by detached paragraph' do
       input = <<~'EOS'
       == Lists
@@ -7367,6 +9429,39 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\ndetached\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_block(
+    ) {
+        verifies!(
+            r#"
     test 'line attached by continuation is appended as paragraph if term has inline description followed by detached block' do
       input = <<~'EOS'
       == Lists
@@ -7390,6 +9485,39 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="sidebarblock"]//p[text()="detached"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\n****\ndetached\n****\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="sidebarblock"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]/following-sibling::*[@class="sidebarblock"]//p[text()="detached"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn line_attached_by_continuation_offset_by_line_comment_is_appended_as_paragraph_if_term_has_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'line attached by continuation offset by line comment is appended as paragraph if term has inline description' do
       input = <<~'EOS'
       == Lists
@@ -7408,6 +9536,29 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n// comment\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_inline_description(
+    ) {
+        verifies!(
+            r#"
     test 'line attached by continuation offset by blank line is appended as paragraph if term has inline description' do
       input = <<~'EOS'
       == Lists
@@ -7426,6 +9577,28 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n+\npara\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
+        assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn line_comment_offset_by_blank_line_divides_lists_because_item_has_text() {
+        verifies!(
+            r#"
     test 'line comment offset by blank line divides lists because item has text' do
       input = <<~'EOS'
       == Lists
@@ -7441,6 +9614,16 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/dl', output, 2
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n//\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 2);
+    }
+
+    #[test]
+    fn ruler_offset_by_blank_line_divides_lists_because_item_has_text() {
+        verifies!(
+            r#"
     test 'ruler offset by blank line divides lists because item has text' do
       input = <<~'EOS'
       == Lists
@@ -7456,6 +9639,17 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/dl', output, 2
     end
 
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n'''\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 2);
+    }
+
+    #[test]
+    fn block_title_offset_by_blank_line_divides_lists_and_becomes_title_of_second_list_because_item_has_text(
+    ) {
+        verifies!(
+            r#"
     test 'block title offset by blank line divides lists and becomes title of second list because item has text' do
       input = <<~'EOS'
       == Lists
@@ -7471,16 +9665,25 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/dl', output, 2
       assert_xpath '(//*[@class="dlist"])[2]/*[@class="title"][text()="title"]', output, 1
     end
+"#
+        );
+        let output = convert("== Lists\n\nterm1:: def1\n\n.title\n\nterm2:: def2\n");
+        assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@class="dlist"])[2]/*[@class="title"][text()="title"]"#,
+            1,
+        );
+    }
+
+    non_normative!(
+        r#"
   end
 end
-"#
-);
-
-non_normative!(
-    r#"
 
 "#
-);
+    );
+}
 
 // The entire Callout lists (`:colist`) context is non-normative: this crate
 // does not render callout lists yet (#155).
@@ -8127,13 +10330,8 @@ context 'Callout lists' do
     assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}b"]), output, 1
   end
 end
+
 "##
-);
-
-non_normative!(
-    r#"
-
-"#
 );
 
 mod checklists {
@@ -8175,6 +10373,7 @@ context 'Checklists' do
     assert_xpath %((/*[@class="ulist checklist"]/ul/li)[4]/p[text()="#{decode_char 10003} another done"]), output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[5]/p[text()="plain"]', output, 1
   end
+
 "##
         );
         let output =
@@ -8207,12 +10406,6 @@ context 'Checklists' do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn entry_is_not_a_checklist_item_if_the_closing_bracket_is_not_immediately_followed_by_the_space_character(
     ) {
@@ -8235,6 +10428,7 @@ context 'Checklists' do
     refute checklist.items[2].attr?('checkbox')
     refute checklist.items[3].attr?('checkbox')
   end
+
 "#
         );
         let output =
@@ -8245,12 +10439,6 @@ context 'Checklists' do
         assert_xpath(&output, r#"(//ul/li)[3]/p[contains(text(), "[ ]")]"#, 1);
         assert_xpath(&output, r#"(//ul/li)[4]/p[contains(text(), "[x]")]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_create_checklist_with_font_icons_if_at_least_one_item_has_checkbox_syntax_and_icons_attribute_is_font(
@@ -8270,6 +10458,7 @@ context 'Checklists' do
     assert_css '.ulist.checklist li i.fa-square-o', output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[3]/p[text()="plain"]', output, 1
   end
+
 "#
         );
         let output = convert_with(
@@ -8285,12 +10474,6 @@ context 'Checklists' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_create_interactive_checklist_if_interactive_option_is_set_even_with_icons_attribute_is_font(
@@ -8317,6 +10500,7 @@ context 'Checklists' do
     assert_css '.ulist.checklist li input[type="checkbox"][disabled]', output, 0
     assert_css '.ulist.checklist li input[type="checkbox"][checked]', output, 1
   end
+
 "#
         );
         let output = convert(":icons: font\n\n[%interactive]\n- [ ] todo\n- [x] done\n");
@@ -8333,12 +10517,6 @@ context 'Checklists' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_create_checklist_if_checkbox_on_item_is_followed_by_a_tab() {
@@ -8373,15 +10551,10 @@ context 'Checklists' do
     non_normative!(
         r#"
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 // The entire Lists model context is non-normative: it asserts parser-model
 // state (block structure and attributes), which the parser crate's own

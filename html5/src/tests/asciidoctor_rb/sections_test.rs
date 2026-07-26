@@ -1358,8 +1358,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
+        // Not verified: the bracketed block-anchor form `[[idname]]` above the
+        // document title is not recognized by asciidoc-parser (header title/id come
+        // back empty), so the id never reaches the `<body>` (asciidoc-parser#968).
+        // The equivalent `[#idname]` shorthand is verified just below.
         non_normative!(
             r#"
       test 'should assign id on document title to body' do
@@ -1376,10 +1378,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_assign_id_defined_using_shorthand_syntax_on_document_title_to_body() {
+            verifies!(
+                r#"
       test 'should assign id defined using shorthand syntax on document title to body' do
         input = <<~'EOS'
         [#idname]
@@ -1392,12 +1394,16 @@ mod levels {
       end
 
 "#
-        );
+            );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+            let output = convert_standalone("[#idname]\n= Document Title\n\ncontent\n");
+            assert_css(&output, "body#idname", 1);
+        }
+
+        #[test]
+        fn should_use_id_defined_in_block_attributes_instead_of_id_defined_inline() {
+            verifies!(
+                r#"
       test 'should use ID defined in block attributes instead of ID defined inline' do
         input = <<~'EOS'
         [#idname-block]
@@ -1410,10 +1416,18 @@ mod levels {
       end
 
 "#
-        );
+            );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
+            let output = convert_standalone(
+                "[#idname-block]\n= Document Title [[idname-inline]]\n\ncontent\n",
+            );
+            assert_css(&output, "body#idname-block", 1);
+        }
+
+        // Not verified: the bracketed block-anchor form `[[reference]]` above the
+        // document title is not recognized by asciidoc-parser (header title/id come
+        // back empty), so the id reaches neither the document nor the `<body>`
+        // (asciidoc-parser#968).
         non_normative!(
             r#"
       test 'block id above document title sets id on document' do
@@ -1485,10 +1499,10 @@ mod levels {
 "#
         );
 
-        // Not verified: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_discard_style_role_and_options_shorthand_attributes_defined_on_document_title() {
+            verifies!(
+                r#"
       test 'should discard style, role and options shorthand attributes defined on document title' do
         input = <<~'EOS'
         [style#idname.rolename%optionname]
@@ -1505,7 +1519,18 @@ mod levels {
         assert_css 'body.rolename', output, 1
       end
 "#
-        );
+            );
+
+            // The style (`style`) and options (`%optionname`) shorthand are discarded;
+            // only the id and role survive, landing on the `<body>` element.
+            let output = convert_standalone(
+                "[style#idname.rolename%optionname]\n= Document Title\n\ncontent\n",
+            );
+            assert_css(&output, "#idname", 1);
+            assert_css(&output, "body#idname", 1);
+            assert_css(&output, ".rolename", 1);
+            assert_css(&output, "body.rolename", 1);
+        }
 
         non_normative!(
             r#"
