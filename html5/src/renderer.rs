@@ -3047,6 +3047,38 @@ mod tests {
     }
 
     #[test]
+    fn is_line_comment_paragraph_classifies_sources() {
+        use super::is_line_comment_paragraph;
+
+        // A single line comment, and several stacked comment lines, are comment
+        // paragraphs; the multi-line case exercises the per-line scan.
+        assert!(is_line_comment_paragraph("// a comment"));
+        assert!(is_line_comment_paragraph("//c1\n//c2\n//c3"));
+
+        // A bare `//` (empty comment) still counts.
+        assert!(is_line_comment_paragraph("//"));
+
+        // A whitespace-only line among the comments is skipped, not treated as
+        // non-comment content — the branch a paragraph's own source never
+        // reaches (a blank line ends the paragraph), so it is pinned here.
+        assert!(is_line_comment_paragraph("//c1\n   \n//c2"));
+        assert!(is_line_comment_paragraph("//c1\n\t\n//c2"));
+
+        // Any non-comment line disqualifies the whole paragraph: real text, an
+        // empty inline passthrough (the #200 case), or a `///` that is ordinary
+        // text rather than a comment marker.
+        assert!(!is_line_comment_paragraph("pass:[]"));
+        assert!(!is_line_comment_paragraph("$$$$"));
+        assert!(!is_line_comment_paragraph("/// not a comment"));
+        assert!(!is_line_comment_paragraph("//c1\ntext"));
+        assert!(!is_line_comment_paragraph("text\n//c1"));
+
+        // A source with no non-blank line is not a comment paragraph.
+        assert!(!is_line_comment_paragraph(""));
+        assert!(!is_line_comment_paragraph("   \n\t"));
+    }
+
+    #[test]
     fn block_comment_at_end_of_document_creates_no_paragraph() {
         // Trailing newlines after a closing comment block must not produce a
         // spurious empty paragraph.
