@@ -5,6 +5,78 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.2...asciidoc-html5-v0.1.3)
+_26 July 2026_
+
+### Added
+
+* *(html5)* Render section-heading anchors for sectanchors and sectlinks ([#197](https://github.com/asciidoc-rs/asciidoc-html5/pull/197))
+* *(html5)* Assign document-title id and roles to standalone <body> ([#196](https://github.com/asciidoc-rs/asciidoc-html5/pull/196))
+* *(html5)* Render description lists (dlist) ([#192](https://github.com/asciidoc-rs/asciidoc-html5/pull/192))
+* *(cli)* Surface parser warnings to stderr with -q/-v/-w/--failure-level ([#185](https://github.com/asciidoc-rs/asciidoc-html5/pull/185))
+* *(html5)* Render collapsible example blocks and port the spec page ([#173](https://github.com/asciidoc-rs/asciidoc-html5/pull/173))
+* *(html5)* Render unordered and ordered lists ([#158](https://github.com/asciidoc-rs/asciidoc-html5/pull/158))
+* *(html5)* Caption titled listing blocks via listing-caption ([#172](https://github.com/asciidoc-rs/asciidoc-html5/pull/172))
+* *(html5)* Render AsciiDoc tables ([#165](https://github.com/asciidoc-rs/asciidoc-html5/pull/165))
+* *(html5)* Normalize verbatim block content and render passthrough blocks ([#153](https://github.com/asciidoc-rs/asciidoc-html5/pull/153))
+* Render sidebar and example blocks and the inline doctype ([#101](https://github.com/asciidoc-rs/asciidoc-html5/pull/101))
+* *(html5)* Render source/open/quote/verse/admonition blocks and port paragraphs_test.rb ([#93](https://github.com/asciidoc-rs/asciidoc-html5/pull/93))
+* Honor an explicit docdir attribute as a piped include base directory ([#90](https://github.com/asciidoc-rs/asciidoc-html5/pull/90))
+* Honor notitle as the inverse of showtitle for the embedded title ([#88](https://github.com/asciidoc-rs/asciidoc-html5/pull/88))
+* Match Asciidoctor's embedded/standalone output defaults and add -e/--embedded ([#76](https://github.com/asciidoc-rs/asciidoc-html5/pull/76))
+* Add convert_outline API and port the generate-html-toc page ([#72](https://github.com/asciidoc-rs/asciidoc-html5/pull/72))
+* *(html5)* Honor the safe mode for the doctype attribute ([#67](https://github.com/asciidoc-rs/asciidoc-html5/pull/67))
+* Implement the docfile/docdir/docname/docfilesuffix attributes ([#65](https://github.com/asciidoc-rs/asciidoc-html5/pull/65))
+* Add native load/load_file API and port the convert-files page ([#64](https://github.com/asciidoc-rs/asciidoc-html5/pull/64))
+* *(html5)* Honor the safe mode for the backend attribute ([#63](https://github.com/asciidoc-rs/asciidoc-html5/pull/63))
+* *(html5)* Implement copycss stylesheet copying ([#57](https://github.com/asciidoc-rs/asciidoc-html5/pull/57))
+* *(cli)* Add -n/--section-numbers to set the sectnums attribute ([#195](https://github.com/asciidoc-rs/asciidoc-html5/pull/195))
+* *(cli)* Accept -d/--doctype for compatibility, error on non-article ([#190](https://github.com/asciidoc-rs/asciidoc-html5/pull/190))
+* *(cli)* Accept -b/--backend for compatibility, error on non-html5 ([#184](https://github.com/asciidoc-rs/asciidoc-html5/pull/184))
+* *(cli)* Add -R/--source-dir to preserve input structure under -D ([#182](https://github.com/asciidoc-rs/asciidoc-html5/pull/182))
+* *(cli)* Convert multiple files and expand globs in one invocation ([#83](https://github.com/asciidoc-rs/asciidoc-html5/pull/83))
+
+### Documented
+
+* *(html5)* Clean up dangling "tables not rendered" references ([#174](https://github.com/asciidoc-rs/asciidoc-html5/pull/174))
+* *(html5)* Mark compat-mode as permanently out of scope (won't-do) ([#171](https://github.com/asciidoc-rs/asciidoc-html5/pull/171))
+* Port the API Options page ([#100](https://github.com/asciidoc-rs/asciidoc-html5/pull/100))
+* Port the sourcemap API page ([#81](https://github.com/asciidoc-rs/asciidoc-html5/pull/81))
+* Port the reference-safe-mode page ([#84](https://github.com/asciidoc-rs/asciidoc-html5/pull/84))
+* *(safe-modes)* Drop docinfo from the not-yet-surfaced list ([#80](https://github.com/asciidoc-rs/asciidoc-html5/pull/80))
+* Port the docinfo relocation stub and add a Docinfo Files page ([#78](https://github.com/asciidoc-rs/asciidoc-html5/pull/78))
+* Port the find-blocks API page ([#75](https://github.com/asciidoc-rs/asciidoc-html5/pull/75))
+* Port the convert-strings API page ([#69](https://github.com/asciidoc-rs/asciidoc-html5/pull/69))
+* Port the CLI Options page ([#92](https://github.com/asciidoc-rs/asciidoc-html5/pull/92))
+* Port the output-file CLI page and add -D/--destination-dir ([#82](https://github.com/asciidoc-rs/asciidoc-html5/pull/82))
+* Port the io-piping CLI page ([#70](https://github.com/asciidoc-rs/asciidoc-html5/pull/70))
+
+### Other
+
+* *(html5)* Port Asciidoctor's substitutions_test.rb ([#199](https://github.com/asciidoc-rs/asciidoc-html5/pull/199))
+* *(html5)* Port sections_test.rb and render section numbers/appendix captions ([#194](https://github.com/asciidoc-rs/asciidoc-html5/pull/194))
+* *(html5)* Verify ulist/olist assertions inside AsciiDoc table cells ([#161](https://github.com/asciidoc-rs/asciidoc-html5/pull/161)) ([#181](https://github.com/asciidoc-rs/asciidoc-html5/pull/181))
+* *(html5)* Port helpers_test.rb Ruby test suite ([#180](https://github.com/asciidoc-rs/asciidoc-html5/pull/180))
+* *(html5)* Cover passthrough blocks and raw-block blank-line stripping ([#118](https://github.com/asciidoc-rs/asciidoc-html5/pull/118)) ([#176](https://github.com/asciidoc-rs/asciidoc-html5/pull/176))
+* *(html5)* Verify utf8 encoding html-backend tests now that lists render ([#175](https://github.com/asciidoc-rs/asciidoc-html5/pull/175))
+* *(html5)* Port reader_test.rb, verifying document-visible preprocessor behavior ([#135](https://github.com/asciidoc-rs/asciidoc-html5/pull/135))
+* *(html5)* Verify verse escaped-brace subs after asciidoc-parser 0.27.1 ([#143](https://github.com/asciidoc-rs/asciidoc-html5/pull/143))
+* *(html5)* Verify leading-period block title now that parser recognizes it ([#144](https://github.com/asciidoc-rs/asciidoc-html5/pull/144))
+* *(html5)* Port links_test.rb ([#123](https://github.com/asciidoc-rs/asciidoc-html5/pull/123))
+* *(html5)* Port the front half of blocks_test.rb ([#122](https://github.com/asciidoc-rs/asciidoc-html5/pull/122))
+* *(html5)* Port text_test.rb inline-substitution suite ([#119](https://github.com/asciidoc-rs/asciidoc-html5/pull/119))
+* *(html5)* Track paths_test.rb as non-normative ([#109](https://github.com/asciidoc-rs/asciidoc-html5/pull/109))
+* *(html5)* Track parser-internal and out-of-scope Asciidoctor suites as non-normative ([#108](https://github.com/asciidoc-rs/asciidoc-html5/pull/108))
+* *(html5)* Track the migrate module pages as non-normative ([#98](https://github.com/asciidoc-rs/asciidoc-html5/pull/98))
+* *(html5)* Add HTML-output assertion harness and port preamble_test.rb ([#85](https://github.com/asciidoc-rs/asciidoc-html5/pull/85))
+* *(cli)* Verify -b html5 backend selection in invoker port ([#193](https://github.com/asciidoc-rs/asciidoc-html5/pull/193))
+* *(cli)* Port invoker_test.rb ([#145](https://github.com/asciidoc-rs/asciidoc-html5/pull/145))
+* *(cli)* Track the asciidoctor(1) man page as non-normative ([#91](https://github.com/asciidoc-rs/asciidoc-html5/pull/91))
+
+### Updated dependencies
+
+* *(deps)* Bump asciidoc-parser from 0.19.2 to 0.20.0 ([#62](https://github.com/asciidoc-rs/asciidoc-html5/pull/62))
+
 ## [0.1.2](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.1...asciidoc-html5-v0.1.2)
 _11 July 2026_
 
