@@ -1,5 +1,6 @@
 * xref:index.adoc[Introduction]
 * xref:convert-your-first-file.adoc[Convert Your First File]
+* xref:collapsible.adoc[Collapsible Blocks]
 * xref:generate-html:index.adoc[Generate HTML]
 ** xref:generate-html:default-stylesheet.adoc[Default Stylesheet]
 ** xref:generate-html:stylesheet-modes.adoc[Stylesheet Modes]

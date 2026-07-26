@@ -24,15 +24,16 @@
 //! it only under the verbose mode the Ruby tests enter with `in_verbose_mode`.)
 //!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
-//! DocBook-backend tests (this crate targets only the `html5` backend); tests
-//! for inline behavior `asciidoc-parser` diverges on (compat-mode xref
-//! targets, an inter-document `xref:` whose path names the current document via
-//! `docname`, and not resolving a forward xref during parsing); the AsciiDoc
-//! table cell (tables are not rendered yet); and the tests that inject or
-//! resolve `catalog[:includes]` state, which need an include processed against
-//! a real fixture file (or hand-set catalog state this crate cannot inject).
-//! Every such divergence (DocBook aside) cites the issue tracking the work to
-//! make it compatible (#124–#128).
+//! DocBook-backend tests (this crate targets only the `html5` backend); the
+//! compat-mode xref-target tests, which are permanently out of scope – this
+//! crate will not implement compat mode; other inline behavior
+//! `asciidoc-parser` diverges on (an inter-document `xref:` whose path
+//! names the current document via `docname` – including inside an AsciiDoc
+//! table cell – and not resolving a forward xref during parsing); and the
+//! tests that inject or resolve `catalog[:includes]` state, which need an
+//! include processed against a real fixture file (or hand-set catalog state
+//! this crate cannot inject). Every such divergence (DocBook and compat mode
+//! aside) cites the issue tracking the work to make it compatible (#125–#128).
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -2326,9 +2327,9 @@ fn xref_using_angled_bracket_syntax_with_quoted_label() {
     );
 }
 
-// Compat-mode xref-target handling is an `asciidoc-parser` inline concern
-// this crate does not drive; the parser renders the inter-document form
-// instead of the plain internal reference — a divergence. Tracked by #124.
+// Compat-mode xref-target handling is permanently out of scope – this crate
+// will not implement compat mode; the parser renders the inter-document form
+// instead of the plain internal reference.
 non_normative!(
     r###"
   test 'should not interpret path sans extension in xref with angled bracket syntax in compat mode' do
@@ -2695,9 +2696,9 @@ fn xref_using_angled_bracket_syntax_with_path_and_extension_with_fragment() {
     );
 }
 
-// Compat-mode xref-target handling is an `asciidoc-parser` inline concern
-// this crate does not drive; the parser renders the inter-document form
-// instead of the plain internal reference — a divergence. Tracked by #124.
+// Compat-mode xref-target handling is permanently out of scope – this crate
+// will not implement compat mode; the parser renders the inter-document form
+// instead of the plain internal reference.
 non_normative!(
     r###"
   test 'xref using macro syntax with path and extension in compat mode' do
@@ -3520,8 +3521,10 @@ non_normative!(
 );
 
 // Combines the `docname` self-reference divergence (#125) with an AsciiDoc
-// table cell; this crate does not yet render tables (#126), so the anchor
-// under test is not emitted at all.
+// table cell. The cell content now renders (tables landed in #165), so the
+// anchor is emitted; but `asciidoc-parser` still resolves `xref:test.adoc[]`
+// as an inter-document link rather than collapsing it to a self-reference, so
+// the expected `#`-fragment fallback text is not produced. Tracked by #125.
 non_normative!(
     r###"
   test 'should use doctitle of root document as fallback link text for inter-document xref in AsciiDoc table cell that resolves to current doc' do

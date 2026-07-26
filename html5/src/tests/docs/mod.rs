@@ -5,6 +5,7 @@
 //! is verified by ordinary tests in the same module.
 
 mod api;
+mod collapsible;
 mod convert_your_first_file;
 mod generate_html;
 mod index;

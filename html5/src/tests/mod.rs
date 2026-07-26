@@ -5,6 +5,7 @@
 //! code. This tree holds the tests that are tied to a tracked specification or
 //! documentation file, plus the shared no-op coverage markers in [`sdd`].
 
+mod asciidoc_lang;
 mod asciidoctor;
 mod asciidoctor_rb;
 mod assert_html;

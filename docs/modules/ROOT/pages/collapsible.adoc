@@ -1,0 +1,140 @@
+= Collapsible Blocks
+:navtitle: Collapsible Blocks
+:description: How asciidoc-html5 renders collapsible example blocks as HTML disclosure widgets.
+
+An example block marked with the `collapsible` option renders as an HTML
+disclosure widget -- a `<details>`/`<summary>` pair -- whose content the reader
+reveals by clicking the summary. `asciidoc-html5` produces the same markup as
+Asciidoctor's `html5` backend, so no stylesheet or script is needed for the
+toggle to work.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Make a block collapsible
+
+Add the `%collapsible` option to an example block -- the `====` delimited
+container:
+
+[,asciidoc]
+----
+[%collapsible]
+====
+Click the summary to reveal this content.
+====
+----
+
+The renderer emits a disclosure widget. It is closed by default, and because the
+block has no title, the summary falls back to the default label `Details`:
+
+[,html]
+----
+<details>
+<summary class="title">Details</summary>
+<div class="content">
+<div class="paragraph">
+<p>Click the summary to reveal this content.</p>
+</div>
+</div>
+</details>
+----
+
+Because the block is a disclosure widget rather than a numbered example, it does
+not consume an example number: a `Example N.` caption elsewhere in the document
+is unaffected.
+
+== Customize the summary text
+
+Give the block a title to set the toggle text. Unlike an example block, a
+collapsible block is not numbered and carries no `Example N.` caption prefix, so
+the title is used verbatim:
+
+[,asciidoc]
+----
+.Click to reveal the answer
+[%collapsible]
+====
+This is the answer.
+====
+----
+
+The title becomes the `<summary>`:
+
+[,html]
+----
+<summary class="title">Click to reveal the answer</summary>
+----
+
+== Open by default
+
+Add the `%open` option alongside `%collapsible` to render the widget expanded.
+The `<details>` element then carries the boolean `open` attribute:
+
+[,asciidoc]
+----
+[%collapsible%open]
+====
+This content is revealed by default.
+====
+----
+
+[,html]
+----
+<details open>
+<summary class="title">Details</summary>
+----
+
+== Collapsible paragraph
+
+When the content is a single paragraph, the example paragraph style
+`[example%collapsible]` produces the same widget without the delimiters:
+
+[,asciidoc]
+----
+[example%collapsible]
+Click the summary to reveal this content.
+----
+
+== Use as an enclosure
+
+Like an open block, a collapsible block is an enclosure: nest other blocks inside
+it to make them collapsible together. Here a literal block sits behind a
+"`Show stacktrace`" summary:
+
+[,asciidoc]
+----
+.Show stacktrace
+[%collapsible]
+====
+....
+Error: repository not found
+....
+====
+----
+
+The nested literal block is rendered inside the widget's content:
+
+[,html]
+----
+<details>
+<summary class="title">Show stacktrace</summary>
+<div class="content">
+<div class="literalblock">
+<div class="content">
+<pre>Error: repository not found</pre>
+</div>
+</div>
+</div>
+</details>
+----
+
+== Known limitations
+
+The collapsible block is fully supported: the default and custom-title forms, the
+`%open` option, the collapsible paragraph, and the enclosure form all match
+Asciidoctor's output. To see exactly which other markup the renderer supports
+today, see the xref:ROOT:index.adoc[introduction].
