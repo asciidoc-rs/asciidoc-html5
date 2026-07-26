@@ -68,9 +68,9 @@ documented behavior is guaranteed.
 }
 
 // Every option listed in the "Supported options" table is one `adoc` actually
-// accepts, so it appears in the authoritative `--help` output.
+// accepts, in each of the forms the table documents.
 #[test]
-fn supported_options_table_matches_help() {
+fn supported_options_table_is_accepted() {
     verifies!(
         r#"
 == Supported options
@@ -113,25 +113,48 @@ existing invocation that uses only these options runs unchanged under `adoc`:
 "#
     );
 
-    // Each long flag documented in the table is present in the `--help` output,
-    // which the page names as the authoritative list of supported options.
-    let help = Cli::try_parse_from(["adoc", "--help"])
-        .expect_err("--help displays help")
-        .to_string();
+    // Every option form the table documents -- short flag, long flag, and
+    // alias alike -- is one the parser actually accepts, so parsing an
+    // invocation that uses it never fails with an `UnknownArgument` error.
+    // (Checking long-option substrings in `--help` would let a dropped short
+    // flag or alias, such as `-s`, slip through while the table still lists
+    // it.) Value-taking options are given a minimal valid value; `-h`/`--help`
+    // and `-V`/`--version` short-circuit with their own recognized error kinds
+    // rather than `UnknownArgument`.
+    let forms: &[&[&str]] = &[
+        &["-o", "out.html"],
+        &["--output", "out.html"],
+        &["-D", "build"],
+        &["--destination-dir", "build"],
+        &["-a", "name=value"],
+        &["--attribute", "name=value"],
+        &["-B", "base"],
+        &["--base-dir", "base"],
+        &["-S", "unsafe"],
+        &["--safe-mode", "unsafe"],
+        &["--safe"],
+        &["-e"],
+        &["--embedded"],
+        &["-s"],
+        &["--no-header-footer"],
+        &["-h"],
+        &["--help"],
+        &["-V"],
+        &["--version"],
+    ];
 
-    for flag in [
-        "--output",
-        "--destination-dir",
-        "--attribute",
-        "--base-dir",
-        "--safe-mode",
-        "--safe",
-        "--embedded",
-        "--no-header-footer",
-        "--help",
-        "--version",
-    ] {
-        assert!(help.contains(flag), "help should document {flag}");
+    for form in forms {
+        let mut argv = vec!["adoc"];
+        argv.extend_from_slice(form);
+        argv.push("doc.adoc");
+
+        if let Err(e) = Cli::try_parse_from(argv) {
+            assert_ne!(
+                e.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "documented option form {form:?} should be accepted"
+            );
+        }
     }
 }
 
