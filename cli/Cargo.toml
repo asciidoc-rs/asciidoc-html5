@@ -12,5 +12,6 @@ version.workspace = true
 
 [dependencies]
 asciidoc-html5 = { path = "../html5", version = "=0.1.2" }
+asciidoc-parser.workspace = true
 clap = { version = "4", features = ["derive"] }
 glob = "0.3"
