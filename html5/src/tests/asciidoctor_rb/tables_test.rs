@@ -13,9 +13,9 @@
 //!
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - tests whose assertions depend on constructs this renderer does not yet
-//!   emit — unordered/description lists inside AsciiDoc cells (#161, #154),
-//!   table of contents (#86), footnotes (#162), `cellbgcolor` (#163), and
-//!   font-based admonition icons (#50);
+//!   emit — description lists inside AsciiDoc cells (#154), table of contents
+//!   (#86), footnotes (#162), `cellbgcolor` (#163), and font-based admonition
+//!   icons (#50);
 //! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
@@ -1604,10 +1604,11 @@ fn should_format_first_cell_as_literal_if_there_is_no_implicit_header_row_and_co
     assert_css(&output, r#"tbody p.tableblock"#, 1);
 }
 
-// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
-// cell; unordered/ordered list rendering is not implemented yet (#161).
-non_normative!(
-    r#"
+#[test]
+fn should_format_first_cell_as_asciidoc_if_there_is_no_implicit_header_row_and_column_has_a_style()
+{
+    verifies!(
+        r#"
     test 'should format first cell as AsciiDoc if there is no implicit header row and column has a style' do
       input = <<~'EOS'
       [cols="1a,1"]
@@ -1623,7 +1624,13 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "[cols=\"1a,1\"]\n|===\n| * list\n| normal\n|===\n";
+    let output = convert(input);
+    assert_css(&output, "tbody .ulist", 1);
+    assert_css(&output, "tbody p.tableblock", 1);
+}
 
 #[test]
 fn should_interpret_leading_indent_if_first_cell_is_asciidoc_and_there_is_no_implicit_header_row() {
@@ -1654,10 +1661,10 @@ fn should_interpret_leading_indent_if_first_cell_is_asciidoc_and_there_is_no_imp
     assert_css(&output, "tbody p.tableblock", 1);
 }
 
-// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
-// cell; unordered/ordered list rendering is not implemented yet (#161).
-non_normative!(
-    r#"
+#[test]
+fn should_format_first_cell_as_asciidoc_if_there_is_no_implicit_header_row_and_cell_has_a_style() {
+    verifies!(
+        r#"
     test 'should format first cell as AsciiDoc if there is no implicit header row and cell has a style' do
       input = <<~'EOS'
       |===
@@ -1672,12 +1679,18 @@ non_normative!(
     end
 
 "#
-);
+    );
 
-// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
-// cell; unordered/ordered list rendering is not implemented yet (#161).
-non_normative!(
-    r#"
+    let input = "|===\na| * list\n| normal\n|===\n";
+    let output = convert(input);
+    assert_css(&output, "tbody .ulist", 1);
+    assert_css(&output, "tbody p.tableblock", 1);
+}
+
+#[test]
+fn no_implicit_header_row_if_asciidoc_cell_in_first_line_spans_multiple_lines() {
+    verifies!(
+        r#"
     test 'no implicit header row if AsciiDoc cell in first line spans multiple lines' do
       input = <<~'EOS'
       [cols=2*]
@@ -1704,7 +1717,17 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "[cols=2*]\n|===\na|contains AsciiDoc content\n\n* a\n* b\n* c\na|contains no AsciiDoc content\n\njust text\n|A2\n|B2\n|===\n";
+    let output = convert(input);
+    assert_css(&output, "table", 1);
+    assert_css(&output, "table > colgroup > col", 2);
+    assert_css(&output, "table > thead", 0);
+    assert_css(&output, "table > tbody", 1);
+    assert_css(&output, "table > tbody > tr", 2);
+    assert_xpath(&output, "(//td)[1]//ul", 1);
+}
 
 #[test]
 fn no_implicit_header_row_if_first_line_blank() {
@@ -1830,10 +1853,10 @@ fn styles_not_applied_to_header_cells() {
     assert_css(&output, r#"table > tbody > tr > td > p > em > a"#, 1);
 }
 
-// Asserts on list rendering (`.ulist`/`//ul`) produced inside an AsciiDoc
-// cell; unordered/ordered list rendering is not implemented yet (#161).
-non_normative!(
-    r#"
+#[test]
+fn should_apply_text_formatting_to_cells_in_implicit_header_row_when_column_has_a_style() {
+    verifies!(
+        r#"
     test 'should apply text formatting to cells in implicit header row when column has a style' do
       input = <<~'EOS'
       [cols="2*a"]
@@ -1852,7 +1875,15 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "[cols=\"2*a\"]\n|===\n| _foo_ | *bar*\n\n| * list item\n| paragraph\n|===\n";
+    let output = convert(input);
+    assert_xpath(&output, r#"(//thead/tr/th)[1]/em[text()="foo"]"#, 1);
+    assert_xpath(&output, r#"(//thead/tr/th)[2]/strong[text()="bar"]"#, 1);
+    assert_css(&output, "tbody .ulist", 1);
+    assert_css(&output, "tbody .paragraph", 1);
+}
 
 #[test]
 fn should_apply_style_and_text_formatting_to_cells_in_first_row_if_no_implicit_header() {
@@ -3244,8 +3275,8 @@ fn showtitle_can_be_disabled_in_asciidoc_table_cell_if_set_by_api() {
     }
 }
 
-// Asserts on list and description-list rendering (`.ulist`, `div.dlist`)
-// inside AsciiDoc cells; neither is implemented yet (#161, #154).
+// Asserts on description-list rendering (`div.dlist`) inside an AsciiDoc
+// cell; description lists are not implemented yet (#154).
 non_normative!(
     r#"
     test 'AsciiDoc content' do
@@ -4043,11 +4074,11 @@ fn should_warn_if_table_block_is_not_terminated() {
     });
 }
 
-// Asserts on a table nested inside a list item (`//ul//table`); list
-// rendering is not implemented yet, so the list — and the table it holds — is
-// not emitted (#161).
-non_normative!(
-    r#"
+#[test]
+fn should_show_correct_line_number_in_warning_about_unterminated_block_inside_asciidoc_table_cell()
+{
+    verifies!(
+        r#"
     test 'should show correct line number in warning about unterminated block inside AsciiDoc table cell' do
       input = <<~'EOS'
       outside
@@ -4073,7 +4104,15 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "outside\n\n* list item\n+\n|===\n|cell\na|inside\n\n====\nunterminated example block\n|===\n\neof\n";
+    let output = convert(input);
+    assert_xpath(&output, "//ul//table", 1);
+    assert_warning(input, 9, |w| {
+        matches!(w, WarningType::UnterminatedDelimitedBlock)
+    });
+}
 
 #[test]
 fn custom_separator_for_an_asciidoc_table_cell() {
