@@ -5145,7 +5145,7 @@ mod passthroughs {
     // (`extract_passthroughs`, the `@passthroughs` array, its `:text` and
     // `:subs` entries) — machinery this crate does not surface. (The rendered
     // `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'collect inline triple plus passthroughs' do
@@ -5164,7 +5164,7 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection from
     // `extract_passthroughs` — machinery this crate does not surface. (The
     // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'collect multi-line inline triple plus passthroughs' do
@@ -5183,7 +5183,8 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection (and its
     // `:specialcharacters` subs entry) — machinery this crate does not surface.
     // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.)
+    // internal collection is unverifiable here.) Porting tracked by asciidoc-
+    // html5#202.
     non_normative!(
         r#"
     test 'collect inline double dollar passthroughs' do
@@ -5202,7 +5203,8 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection (and its
     // `:specialcharacters` subs entry) — machinery this crate does not surface.
     // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.)
+    // internal collection is unverifiable here.) Porting tracked by asciidoc-
+    // html5#202.
     non_normative!(
         r#"
     test 'collect inline double plus passthroughs' do
@@ -5275,7 +5277,7 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection from
     // `extract_passthroughs` — machinery this crate does not surface. (The
     // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'collect multi-line inline double dollar passthroughs' do
@@ -5294,7 +5296,7 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection from
     // `extract_passthroughs` — machinery this crate does not surface. (The
     // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'collect multi-line inline double plus passthroughs' do
@@ -5313,7 +5315,8 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection (and resolved subs list)
     // from an inline `pass:` macro — machinery this crate does not surface.
     // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.)
+    // internal collection is unverifiable here.) Porting tracked by asciidoc-
+    // html5#202.
     non_normative!(
         r#"
     test 'collect passthroughs from inline pass macro' do
@@ -5332,7 +5335,7 @@ mod passthroughs {
     // Inspects the internal `@passthroughs` collection from a multi-line
     // `pass:` macro — machinery this crate does not surface. (The rendered
     // `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'collect multi-line passthroughs from inline pass macro' do
@@ -5367,7 +5370,8 @@ mod passthroughs {
     // Inspects `@passthroughs` sub-shorthand resolution and drives
     // `restore_passthroughs` directly — a parser-model API this crate does not
     // surface. (The rendered `convert` output matches Asciidoctor exactly; only
-    // the internal collection is unverifiable here.)
+    // the internal collection is unverifiable here.) Porting tracked by
+    // asciidoc-html5#202.
     non_normative!(
         r#"
     test 'resolves sub shorthands on inline pass macro' do
@@ -5386,7 +5390,8 @@ mod passthroughs {
     // Inspects incremental-subs resolution on `@passthroughs` and drives
     // `restore_passthroughs` directly — a parser-model API this crate does not
     // surface. (The rendered `convert` output matches Asciidoctor exactly; only
-    // the internal collection is unverifiable here.)
+    // the internal collection is unverifiable here.) Porting tracked by
+    // asciidoc-html5#202.
     non_normative!(
         r#"
     test 'inline pass macro supports incremental subs' do
@@ -5467,7 +5472,7 @@ mod passthroughs {
 
     // Manually populates the `@passthroughs` array and calls
     // `restore_passthroughs` on a hand-built placeholder — a parser-model API
-    // this crate does not surface.
+    // this crate does not surface. Porting tracked by asciidoc-html5#202.
     non_normative!(
         r##"
     test 'restore inline passthroughs without subs' do
@@ -5485,6 +5490,7 @@ mod passthroughs {
 
     // Manually populates two `@passthroughs` entries and calls
     // `restore_passthroughs` — a parser-model API this crate does not surface.
+    // Porting tracked by asciidoc-html5#202.
     non_normative!(
         r##"
     test 'restore inline passthroughs with subs' do
@@ -5555,7 +5561,7 @@ mod passthroughs {
     // Inspects the collected `@passthroughs` entries (their unescaped `:text`)
     // from `extract_passthroughs` — machinery this crate does not surface. (The
     // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.)
+    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
     non_normative!(
         r#"
     test 'complex inline passthrough macro' do
