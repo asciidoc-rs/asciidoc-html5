@@ -188,6 +188,22 @@ than being silently ignored."
     )]
     backend: Option<String>,
 
+    /// Select the document type; only `article` is supported (default: article)
+    #[arg(
+        short = 'd',
+        long = "doctype",
+        value_name = "DOCTYPE",
+        long_help = "Select the document type, the way Asciidoctor's -d option does.\n\n\
+adoc models only the `article` doctype, so the sole accepted value is `article` \
+(case-insensitive), which — like omitting the option — is a no-op accepted for \
+command-line compatibility, so an existing `asciidoctor -d article …` invocation \
+runs unchanged.\n\n\
+The other doctypes Asciidoctor defines (`book`, `manpage`, and `inline`) are not \
+implemented here, so each is rejected with a non-zero exit rather than being \
+silently ignored."
+    )]
+    doctype: Option<String>,
+
     /// Produce embedded (body-only) output instead of a standalone document
     #[arg(
         short = 'e',
@@ -346,9 +362,11 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
-    // Reject an unsupported backend before reading or converting anything, so an
-    // `-b docbook5` invocation fails cleanly without touching the input.
+    // Reject an unsupported backend or doctype before reading or converting
+    // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
+    // touching the input.
     check_backend(cli)?;
+    check_doctype(cli)?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document — matching Asciidoctor's command, which writes a full
@@ -822,6 +840,34 @@ fn check_backend(cli: &Cli) -> io::Result<()> {
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             format!("unsupported backend '{name}': adoc only produces the html5 backend"),
+        )),
+    }
+}
+
+/// Validates the `-d`/`--doctype` selection, accepting only the article
+/// doctype.
+///
+/// `adoc` models solely the `article` doctype, so `-d article`
+/// (case-insensitive) and the default (no `-d`) are accepted as a no-op, purely
+/// for command-line compatibility with `asciidoctor -d article …`. The other
+/// doctypes Asciidoctor defines — `book`, `manpage`, and `inline` — are not
+/// implemented here, so each is rejected rather than silently ignored, and a
+/// caller expecting different output finds out immediately.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error naming the unsupported
+/// doctype.
+fn check_doctype(cli: &Cli) -> io::Result<()> {
+    let Some(name) = &cli.doctype else {
+        return Ok(());
+    };
+
+    match name.to_lowercase().as_str() {
+        "article" => Ok(()),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unsupported doctype '{name}': adoc only produces the article doctype"),
         )),
     }
 }
