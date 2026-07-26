@@ -4431,10 +4431,10 @@ mod special_sections {
 "#
     );
 
-    // Not verified: checks parser sectname/numeral/number on the appendix –
-    // parser-model (the caption is verified via 2098).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_assign_sectname_caption_and_numeral_to_appendix_section_by_default() {
+        verifies!(
+            r#"
     test 'should assign sectname, caption, and numeral to appendix section by default' do
       input = <<~'EOS'
       [appendix]
@@ -4452,7 +4452,20 @@ mod special_sections {
     end
 
 "#
-    );
+        );
+
+        // The Ruby test reads the parser fields directly; the caption ("Appendix A: ")
+        // and numeral ("A") both surface in the rendered heading, so parse the output
+        // to confirm them. (`sectname == "appendix"` and `numbered == true` have no
+        // rendered form and are the parser's own concern.)
+        let output = convert("[appendix]\n== Attribute Options\n\nDetails\n");
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_attribute_options"][text()="Appendix A: Attribute Options"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//h2[starts-with(text(), "Appendix A: ")]"#, 1);
+    }
 
     #[test]
     fn should_prefix_appendix_title_by_numbered_label_even_when_section_numbering_is_disabled() {
