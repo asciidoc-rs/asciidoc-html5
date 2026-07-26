@@ -795,11 +795,10 @@ impl Renderer<'_> {
         self.line("</head>");
 
         // An explicit id and/or role(s) on the document title (the `[#id.role]`
-        // shorthand above the doctitle) move onto the standalone `<body>`: the id
-        // becomes `id="…"` and each role is appended to the doctype class, matching
-        // Asciidoctor's `<body id="idname" class="article rolename">`. (The
-        // bracketed `[[id]]` anchor form is not yet recognized by asciidoc-parser
-        // above a doctitle – asciidoc-parser#968.)
+        // shorthand, or the bracketed `[[id]]` anchor form, above the doctitle)
+        // move onto the standalone `<body>`: the id becomes `id="…"` and each role
+        // is appended to the doctype class, matching Asciidoctor's
+        // `<body id="idname" class="article rolename">`.
         let header = document.header();
         let id_attr = header
             .id()
