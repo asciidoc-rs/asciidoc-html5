@@ -531,8 +531,8 @@ mod ids {
         assert_xpath(&out, r#"//h2[@id="one"][text()="Section One"]"#, 1);
     }
 
-    // non_normative: setext (two-line/underlined) titles are not recognized by the
-    // parser (#191)
+    // Not verified: setext (two-line/underlined) titles are not recognized by the
+    // parser (#191).
     non_normative!(
         r#"
     test 'explicit id can be defined using an embedded anchor when using setext section titles' do
@@ -804,8 +804,8 @@ mod ids {
 "#
     );
 
-    // non_normative: relies on the Compliance.unique_id_start_index global, which
-    // has no equivalent here
+    // Not verified: relies on the Compliance.unique_id_start_index global, which
+    // has no equivalent here.
     non_normative!(
         r#"
     test 'can set start index of synthetic ids' do
@@ -1172,8 +1172,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "document title with multiline syntax" do
@@ -1186,8 +1186,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "document title with multiline syntax, give a char" do
@@ -1200,8 +1200,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "document title with multiline syntax, take a char" do
@@ -1214,8 +1214,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test 'document title with multiline syntax and unicode characters' do
@@ -1235,8 +1235,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the length-mismatch warning is likewise not produced
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191); the length-mismatch warning is likewise not produced.
         non_normative!(
             r#"
       test "not enough chars for a multiline document title" do
@@ -1256,8 +1256,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the length-mismatch warning is likewise not produced
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191); the length-mismatch warning is likewise not produced.
         non_normative!(
             r#"
       test "too many chars for a multiline document title" do
@@ -1277,8 +1277,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191); the leading-dot warning is likewise not produced
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191); the leading-dot warning is likewise not produced.
         non_normative!(
             r#"
       test "document title with multiline syntax cannot begin with a dot" do
@@ -1330,8 +1330,8 @@ mod levels {
             );
         }
 
-        // non_normative: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle (parser)
+        // Not verified: a leveloffset that would make a section level 0 is not coerced
+        // to the doctitle (parser).
         non_normative!(
             r#"
       test 'document title created from leveloffset shift defined in document' do
@@ -1341,8 +1341,8 @@ mod levels {
 "#
         );
 
-        // non_normative: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle (parser)
+        // Not verified: a leveloffset that would make a section level 0 is not coerced
+        // to the doctitle (parser).
         non_normative!(
             r#"
       test 'document title created from leveloffset shift defined in API' do
@@ -1352,8 +1352,8 @@ mod levels {
 "#
         );
 
-        // non_normative: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187)
+        // Not verified: asserts the doctitle id/role on the <body> element, which is
+        // not rendered (#187).
         non_normative!(
             r#"
       test 'should assign id on document title to body' do
@@ -1370,8 +1370,8 @@ mod levels {
 "#
         );
 
-        // non_normative: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187)
+        // Not verified: asserts the doctitle id/role on the <body> element, which is
+        // not rendered (#187).
         non_normative!(
             r#"
       test 'should assign id defined using shorthand syntax on document title to body' do
@@ -1388,8 +1388,8 @@ mod levels {
 "#
         );
 
-        // non_normative: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187)
+        // Not verified: asserts the doctitle id/role on the <body> element, which is
+        // not rendered (#187).
         non_normative!(
             r#"
       test 'should use ID defined in block attributes instead of ID defined inline' do
@@ -1406,8 +1406,8 @@ mod levels {
 "#
         );
 
-        // non_normative: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187)
+        // Not verified: asserts the doctitle id/role on the <body> element, which is
+        // not rendered (#187).
         non_normative!(
             r#"
       test 'block id above document title sets id on document' do
@@ -1460,8 +1460,8 @@ mod levels {
             );
         }
 
-        // non_normative: an xref to the document title is not resolved to its title
-        // text (parser)
+        // Not verified: an xref to the document title is not resolved to its title text
+        // (parser).
         non_normative!(
             r#"
       test 'should compute xreftext to document title' do
@@ -1479,8 +1479,8 @@ mod levels {
 "#
         );
 
-        // non_normative: asserts the doctitle id/role on the <body> element, which is
-        // not rendered (#187)
+        // Not verified: asserts the doctitle id/role on the <body> element, which is
+        // not rendered (#187).
         non_normative!(
             r#"
       test 'should discard style, role and options shorthand attributes defined on document title' do
@@ -1518,8 +1518,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1606,8 +1606,8 @@ mod levels {
             assert_css(&result, "h2", 0);
         }
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test 'should preprocess second line of setext section title' do
@@ -1624,8 +1624,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "heading title with multiline syntax cannot begin with a dot" do
@@ -1842,8 +1842,8 @@ mod levels {
             assert_xpath(&output, r#"//h2[@id="_视图"][text()="视图"]"#, 1);
         }
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test 'multiline syntax with only multibyte characters' do
@@ -1882,8 +1882,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1927,8 +1927,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1972,8 +1972,8 @@ mod levels {
 "#
         );
 
-        // non_normative: setext (two-line/underlined) titles are not recognized by the
-        // parser (#191)
+        // Not verified: setext (two-line/underlined) titles are not recognized by the
+        // parser (#191).
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -2160,7 +2160,7 @@ mod nesting {
         );
     }
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should warn if chapter title is out of sequence' do
@@ -2249,8 +2249,8 @@ mod nesting {
         let _ = convert_with(input, &opts);
     }
 
-    // non_normative: the parser emits no "...sections do not support nested
-    // sections" error (#189)
+    // Not verified: the parser emits no "...sections do not support nested
+    // sections" error (#189).
     non_normative!(
         r#"
     test 'should log error if subsections are found in special sections in article that do not support subsections' do
@@ -2297,7 +2297,7 @@ mod nesting {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should log error if subsections are found in special sections in book that do not support subsections' do
@@ -2512,8 +2512,8 @@ mod discrete_heading {
 "#
     );
 
-    // non_normative: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189)
+    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
+    // doctitle (#189).
     non_normative!(
         r#"
     test 'should create discrete heading instead of section if style is float' do
@@ -2618,8 +2618,8 @@ mod discrete_heading {
         );
     }
 
-    // non_normative: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189)
+    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
+    // doctitle (#189).
     non_normative!(
         r#"
     test 'should create discrete heading if style is float with shorthand role and id' do
@@ -2642,8 +2642,8 @@ mod discrete_heading {
 "#
     );
 
-    // non_normative: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189)
+    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
+    // doctitle (#189).
     non_normative!(
         r#"
     test 'should create discrete heading if style is discrete with shorthand role and id' do
@@ -2666,8 +2666,8 @@ mod discrete_heading {
 "#
     );
 
-    // non_normative: asserts the parser block context (:floating_title), a
-    // parser-model detail with no rendered form
+    // Not verified: asserts the parser block context (:floating_title), a
+    // parser-model detail with no rendered form.
     non_normative!(
         r#"
     test 'discrete heading should be a block with context floating_title' do
@@ -2689,8 +2689,8 @@ mod discrete_heading {
 "#
     );
 
-    // non_normative: setext (two-line/underlined) titles are not recognized by the
-    // parser (#191)
+    // Not verified: setext (two-line/underlined) titles are not recognized by the
+    // parser (#191).
     non_normative!(
         r#"
     test 'should preprocess second line of setext discrete heading' do
@@ -2736,7 +2736,7 @@ mod discrete_heading {
         assert_xpath(&convert(input), r#"//h3[@id="unchained"]"#, 1);
     }
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not include discrete heading in toc' do
@@ -2987,8 +2987,8 @@ mod level_offset {
 "#
     );
 
-    // non_normative: the parser emits no level-0-section error for this simulated
-    // include (parser)
+    // Not verified: the parser emits no level-0-section error for this simulated
+    // include (parser).
     non_normative!(
         r#"
     test 'should print error if standalone document is included without level offset' do
@@ -3248,8 +3248,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form
+    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with one entry for level 1' do
@@ -3262,8 +3262,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form
+    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with two entries for level 2' do
@@ -3278,8 +3278,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form
+    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with three entries for level 3' do
@@ -3296,8 +3296,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form
+    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number for second section in level' do
@@ -3314,8 +3314,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: checks Section#sectnum delimiter/append options —
-    // parser-model, no rendered form
+    // Not verified: checks Section#sectnum delimiter/append options – parser-model,
+    // no rendered form.
     non_normative!(
         r#"
     test 'sectnum should use specified delimiter and append string' do
@@ -3509,7 +3509,7 @@ mod section_numbering {
         );
     }
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not crash if child section of part is out of sequence and part numbering is disabled' do
@@ -3533,7 +3533,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not hang if relative leveloffset attempts to make resolved section level negative' do
@@ -3557,7 +3557,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should number parts when doctype is book and partnums attributes is set' do
@@ -3588,8 +3588,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: checks the parser numeral on book parts — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser numeral on book parts – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should assign sequential roman numerals to book parts' do
@@ -3622,7 +3622,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should prepend value of part-signifier attribute to title of numbered part' do
@@ -3654,7 +3654,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should prepend value of chapter-signifier attribute to title of numbered chapter' do
@@ -3686,7 +3686,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should allow chapter number to be controlled using chapter-number attribute' do
@@ -3710,8 +3710,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: checks the parser block level accessor — parser-model, no
-    // rendered form
+    // Not verified: checks the parser block level accessor – parser-model, no
+    // rendered form.
     non_normative!(
         r#"
     test 'blocks should have level' do
@@ -3930,8 +3930,8 @@ mod section_numbering {
         );
     }
 
-    // non_normative: an API-level `numbered!` lock is not honored here, so
-    // numbering is not forced off
+    // Not verified: an API-level `numbered!` lock is not honored here, so numbering
+    // is not forced off.
     non_normative!(
         r#"
     test 'section numbers cannot be toggled even if numbered attribute is disabled via the API' do
@@ -4122,7 +4122,7 @@ mod section_numbering {
         );
     }
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not number parts when doctype is book' do
@@ -4155,7 +4155,7 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r##"
     test 'should number chapters sequentially even when divided into parts' do
@@ -4195,8 +4195,8 @@ mod section_numbering {
 "##
     );
 
-    // non_normative: exercises reindex_sections, a parser mutation API with no
-    // rendered form
+    // Not verified: exercises reindex_sections, a parser mutation API with no
+    // rendered form.
     non_normative!(
         r#"
     test 'reindex_sections should correct section enumeration after sections are modified' do
@@ -4227,8 +4227,8 @@ mod section_numbering {
 "#
     );
 
-    // non_normative: mutates the parser numeral/number properties, a parser API
-    // with no rendered form
+    // Not verified: mutates the parser numeral/number properties, a parser API with
+    // no rendered form.
     non_normative!(
         r#"
     test 'should allow sections to be renumbered using numeral or deprecated number property' do
@@ -4277,8 +4277,8 @@ mod links_and_anchors {
 "#
     );
 
-    // non_normative: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186)
+    // Not verified: sectanchors/sectlinks inject heading anchors that are not
+    // rendered (#186).
     non_normative!(
         r##"
     test 'should include anchor if sectanchors document attribute is set' do
@@ -4304,8 +4304,8 @@ mod links_and_anchors {
 "##
     );
 
-    // non_normative: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186)
+    // Not verified: sectanchors/sectlinks inject heading anchors that are not
+    // rendered (#186).
     non_normative!(
         r##"
     test 'should position after title text if sectanchors is set to after' do
@@ -4331,8 +4331,8 @@ mod links_and_anchors {
 "##
     );
 
-    // non_normative: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186)
+    // Not verified: sectanchors/sectlinks inject heading anchors that are not
+    // rendered (#186).
     non_normative!(
         r##"
     test 'should link section if sectlinks document attribute is set' do
@@ -4358,8 +4358,8 @@ mod links_and_anchors {
 "##
     );
 
-    // non_normative: sectanchors/sectlinks inject heading anchors that are not
-    // rendered (#186)
+    // Not verified: sectanchors/sectlinks inject heading anchors that are not
+    // rendered (#186).
     non_normative!(
         r#"
     test 'should start section link after supplemental anchors when sectlinks is set' do
@@ -4397,8 +4397,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should ignore style if it matches sectN' do
@@ -4425,8 +4425,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: checks parser sectname/numeral/number on the appendix —
-    // parser-model (the caption is verified via 2098)
+    // Not verified: checks parser sectname/numeral/number on the appendix –
+    // parser-model (the caption is verified via 2098).
     non_normative!(
         r#"
     test 'should assign sectname, caption, and numeral to appendix section by default' do
@@ -4886,7 +4886,7 @@ mod special_sections {
         assert_xpath(&output, r#"(//h2)[4][text()="Glossary"]"#, 1);
     }
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not number sections or subsections in toc in regions where numbered is off' do
@@ -4929,7 +4929,7 @@ mod special_sections {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should only number sections in toc up to value defined by sectnumlevels attribute' do
@@ -4955,7 +4955,7 @@ mod special_sections {
 "##
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not number special sections or their subsections by default except for appendices' do
@@ -5007,7 +5007,7 @@ mod special_sections {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not number special sections or their subsections in toc by default except for appendices' do
@@ -5060,7 +5060,7 @@ mod special_sections {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should number special sections and their subsections when sectnums is all' do
@@ -5112,7 +5112,7 @@ mod special_sections {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should number special sections and their subsections in toc when sectnums is all' do
@@ -5165,7 +5165,7 @@ mod special_sections {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'level 0 special sections in multipart book should be coerced to level 1' do
@@ -5193,8 +5193,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should output docbook elements that correspond to special sections in book doctype' do
@@ -5309,8 +5309,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'abstract section maps to abstract element in docbook for article doctype' do
@@ -5332,8 +5332,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should allow a special section to be nested at arbitrary depth in DocBook output' do
@@ -5367,8 +5367,8 @@ mod special_sections {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should drop title on special section in DocBook output if notitle or untitled option is set' do
@@ -5405,7 +5405,7 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // non_normative: asserts a setext //h2 the parser does not recognize (#191)
+    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
     non_normative!(
         r#"
     test "should not interpret a listing block as a heading" do
@@ -5426,7 +5426,7 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // non_normative: asserts a setext //h2 the parser does not recognize (#191)
+    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
     non_normative!(
         r#"
     test "should not interpret an open block as a heading" do
@@ -5480,7 +5480,7 @@ mod heading_patterns_in_blocks {
         );
     }
 
-    // non_normative: asserts a setext //h2 the parser does not recognize (#191)
+    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
     non_normative!(
         r#"
     test "should not match a heading in a description list" do
@@ -5509,7 +5509,7 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // non_normative: asserts a setext //h2 the parser does not recognize (#191)
+    // Not verified: asserts a setext //h2 the parser does not recognize (#191).
     non_normative!(
         r#"
     test "should not match a heading in a bulleted list" do
@@ -5537,8 +5537,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // non_normative: the parser treats a `==` heading inside a delimited block as a
-    // section rather than content (#189)
+    // Not verified: the parser treats a `==` heading inside a delimited block as a
+    // section rather than content (#189).
     non_normative!(
         r#"
     test "should not match a heading in a block" do
@@ -5573,7 +5573,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should output unnumbered table of contents in header if toc attribute is set' do
@@ -5615,7 +5615,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should output numbered table of contents in header if toc and numbered attributes are set' do
@@ -5655,7 +5655,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should output a table of contents that honors numbered setting at position of section in document' do
@@ -5695,7 +5695,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not number parts in table of contents for book doctype when numbered attribute is set' do
@@ -5738,7 +5738,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should output table of contents in header if toc2 attribute is set' do
@@ -5765,7 +5765,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should set toc position if toc attribute is set to position' do
@@ -5792,7 +5792,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should set toc position if toc and toc-position attributes are set' do
@@ -5820,7 +5820,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should set toc position if toc2 and toc-position attribute are set' do
@@ -5848,7 +5848,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should set toc position if toc attribute is set to direction' do
@@ -5875,7 +5875,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should set toc placement to preamble if toc attribute is set to preamble' do
@@ -5902,7 +5902,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should use document attributes toc-class, toc-title and toclevels to create toc' do
@@ -5938,7 +5938,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should only show parts in toc if toclevels is 0' do
@@ -5967,7 +5967,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should coerce minimum toclevels to 1 if first section of document is not a part' do
@@ -5990,7 +5990,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not output table of contents if toc-placement attribute is unset' do
@@ -6015,7 +6015,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should output table of contents at location of toc macro' do
@@ -6045,7 +6045,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should output table of contents at location of toc macro in embedded document' do
@@ -6075,7 +6075,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should output table of contents at default location in embedded document if toc attribute is set' do
@@ -6104,7 +6104,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not activate toc macro if toc-placement is not set' do
@@ -6136,7 +6136,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should only output toc at toc macro if toc is macro' do
@@ -6168,7 +6168,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should use global attributes for toc-title, toc-class and toclevels for toc macro' do
@@ -6213,7 +6213,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should honor id, title, role and level attributes on toc macro' do
@@ -6262,7 +6262,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'child toc levels should not have additional bullet at parent level in html' do
@@ -6302,7 +6302,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r#"
     test 'should not display a table of contents if document has no sections' do
@@ -6327,7 +6327,7 @@ mod table_of_contents {
 "#
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should drop anchors from contents of entries in table of contents' do
@@ -6360,7 +6360,7 @@ mod table_of_contents {
 "##
     );
 
-    // non_normative: the table of contents is not rendered yet (#86)
+    // Not verified: the table of contents is not rendered yet (#86).
     non_normative!(
         r##"
     test 'should not remove non-anchor tags from contents of entries in table of contents' do
@@ -6410,8 +6410,8 @@ mod article_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should create only sections in docbook backend' do
@@ -6474,7 +6474,7 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'document title with level 0 headings' do
@@ -6563,7 +6563,7 @@ mod book_doctype {
         );
     }
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should add class matching role to part' do
@@ -6594,8 +6594,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser sectname for each section type —
-    // parser-model plus non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser sectname for each section type – parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should assign appropriate sectname for section type' do
@@ -6633,8 +6633,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should allow part intro to be defined using special section' do
@@ -6665,8 +6665,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser partintro style/context – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should add partintro style to child paragraph of part' do
@@ -6696,8 +6696,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser partintro style/context – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should preserve title on partintro defined as partintro paragraph' do
@@ -6723,8 +6723,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser partintro style/context – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not promote title on partintro defined as normal paragraph' do
@@ -6750,8 +6750,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser partintro style/context – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should add partintro style to child open block of part' do
@@ -6779,8 +6779,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0
+    // Not verified: checks the parser partintro style/context – parser-model plus
+    // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should wrap child paragraphs of part in partintro open block' do
@@ -6810,8 +6810,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should wrap abstract in implicit part intro in info tag when converting to DocBook' do
@@ -6837,8 +6837,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should wrap abstract in part intro section in info tag when converting to DocBook' do
@@ -6868,7 +6868,7 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: non-article (book) doctypes are out of scope for 1.0
+    // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should warn if part has no sections' do
@@ -6891,8 +6891,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'should create parts and chapters in docbook backend' do
@@ -6941,8 +6941,8 @@ mod book_doctype {
 "#
     );
 
-    // non_normative: asserts DocBook-backend output; this crate targets only the
-    // html5 backend
+    // Not verified: asserts DocBook-backend output; this crate targets only the
+    // html5 backend.
     non_normative!(
         r#"
     test 'subsections in preface and appendix should start at level 2' do
