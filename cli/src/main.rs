@@ -93,6 +93,24 @@ names."
     )]
     destination_dir: Option<PathBuf>,
 
+    /// Source root for recreating input subdirectories under `-D`
+    #[arg(
+        short = 'R',
+        long = "source-dir",
+        value_name = "DIR",
+        long_help = "Set the source root directory, the way Asciidoctor's -R option does.\n\n\
+Names a directory that the input files live under, so that -D recreates each \
+input's subdirectory structure inside the destination directory. With both set, \
+converting `src/sub/index.adoc` under `-R src -D out` writes `out/sub/index.html` \
+rather than flattening it to `out/index.html`. Only inputs actually located \
+below the source directory are relocated this way; an input elsewhere keeps the \
+plain -D behavior.\n\n\
+Has no effect without -D (there is no destination directory to build the tree \
+under), and none on a document read from standard input (there is no input path \
+to take a subdirectory from)."
+    )]
+    source_dir: Option<PathBuf>,
+
     /// Set a document attribute (`name`, `name=value`, or `name!` to unset)
     #[arg(
         short = 'a',
@@ -777,8 +795,14 @@ fn output_target(cli: &Cli) -> OutputTarget {
 /// is written alongside its input. Because the destination applies to whichever
 /// `input` this is called for, `-D build` with several inputs writes each
 /// derived name into `build`.
+///
+/// `-R`/`--source-dir` refines the destination per input: when the input file
+/// lives under the source root, its subdirectory beneath that root is recreated
+/// inside `-D` (see [`destination_dir_for`]), so the derived name (or a
+/// relative `-o`) lands in the mirrored subdirectory rather than flat in `-D`.
 fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
-    let dir = cli.destination_dir.as_deref();
+    let dir = destination_dir_for(cli, input);
+    let dir = dir.as_deref();
     match cli.output.as_deref() {
         Some(path) if path.as_os_str() == "-" => OutputTarget::Stdout,
         Some(path) => OutputTarget::File(resolve_in_dir(dir, path)),
@@ -787,6 +811,52 @@ fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
             None => OutputTarget::Stdout,
         },
     }
+}
+
+/// The destination directory to place this `input`'s output in, applying
+/// `-D`/`--destination-dir` and `-R`/`--source-dir` together, mirroring
+/// Asciidoctor's `-R` behavior.
+///
+/// Without `-D` there is no destination directory, so the result is `None` and
+/// `-R` is inert (matching Asciidoctor, which only consults the source root
+/// when a destination directory is set). With `-D` but no `-R`, the destination
+/// is the `-D` directory as given.
+///
+/// With both, and an on-disk `input` located below the `-R` source root, the
+/// input's subdirectory relative to that root is appended to the `-D`
+/// directory, so `-R src -D out` sends `src/sub/index.adoc` to `out/sub`. An
+/// input that is not under the source root (or a document read from standard
+/// input, where `input` is `None`) keeps the plain `-D` directory.
+fn destination_dir_for(cli: &Cli, input: Option<&Path>) -> Option<PathBuf> {
+    let dest = cli.destination_dir.as_deref()?;
+
+    // `-R` only recreates structure when both a source root and an on-disk input
+    // are present; otherwise the destination is the `-D` directory unchanged.
+    match (cli.source_dir.as_deref(), input) {
+        (Some(source_dir), Some(input)) => match relative_subdir(source_dir, input) {
+            Some(subdir) => Some(dest.join(subdir)),
+            None => Some(dest.to_path_buf()),
+        },
+        _ => Some(dest.to_path_buf()),
+    }
+}
+
+/// The directory of `input` relative to `source_dir`, or `None` when `input` is
+/// not located below `source_dir`.
+///
+/// Both paths are made absolute (without resolving symlinks, matching
+/// Asciidoctor's lexical `File.expand_path`) before the input's parent
+/// directory is stripped of the source-root prefix. An input directly inside
+/// the source root yields an empty relative path (joining it onto `-D` leaves
+/// the directory unchanged); an input outside the root yields `None`.
+fn relative_subdir(source_dir: &Path, input: &Path) -> Option<PathBuf> {
+    let abs_source = std::path::absolute(source_dir).ok()?;
+    let abs_input = std::path::absolute(input).ok()?;
+    let abs_input_dir = abs_input.parent()?;
+    abs_input_dir
+        .strip_prefix(&abs_source)
+        .ok()
+        .map(Path::to_path_buf)
 }
 
 /// The file-name suffix `adoc` derives a default output name with, honoring an

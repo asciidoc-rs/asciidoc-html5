@@ -19,7 +19,6 @@
 //!   `-b`, manpage) and custom template engines (`-T`/`-E` haml/slim).
 //! - Tracked for later work: surfacing parser warnings with `-q`/`-w`/
 //!   `--failure-level` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/147>),
-//!   `-R`/`--source-dir` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/148>),
 //!   the `-d`/`--doctype` flag and the book/inline doctypes
 //!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/149>), the coderay
 //!   source-highlighter stylesheet
@@ -807,11 +806,10 @@ fn should_output_to_file_in_destination_directory_if_set() {
     assert!(dest.join("sample.html").exists());
 }
 
-// Not implemented: `-R`/`--source-dir` recreates the input's subdirectory tree
-// under `-D`. `adoc` has no `-R` and flattens outputs by base name. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/148>.
-non_normative!(
-    r#"
+#[test]
+fn should_preserve_directory_structure_in_destination_directory_if_source_directory_is_set() {
+    verifies!(
+        r#"
   test 'should preserve directory structure in destination directory if source directory is set' do
     sample_inpath = 'subdir/index.adoc'
     destination_path = 'test_output'
@@ -830,7 +828,39 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `-R`/`--source-dir` names a source root so that `-D` recreates the input's
+    // subdirectory beneath it. Here the input `fixtures/subdir/index.adoc` sits
+    // one level under the source root `fixtures`, so its output lands in the
+    // mirrored `subdir` under the destination, not flat in it.
+    let project = Project::new("source-dir");
+    let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
+    let dest = project.path("test_output");
+    let source_dir = project.path("fixtures");
+    project
+        .run(&[
+            "-D",
+            dest.to_str().unwrap(),
+            "-R",
+            source_dir.to_str().unwrap(),
+            input.to_str().unwrap(),
+        ])
+        .expect("adoc converts");
+    assert!(project.path("test_output/subdir").is_dir());
+    assert!(project.exists("test_output/subdir/index.html"));
+
+    // Without `-R`, the same input flattens to the destination directory by base
+    // name — the behavior `-R` opts out of.
+    let project = Project::new("source-dir-flat");
+    let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
+    let dest = project.path("test_output");
+    project
+        .run(&["-D", dest.to_str().unwrap(), input.to_str().unwrap()])
+        .expect("adoc converts");
+    assert!(project.exists("test_output/index.html"));
+    assert!(!project.exists("test_output/subdir/index.html"));
+}
 
 #[test]
 fn should_output_to_file_specified() {

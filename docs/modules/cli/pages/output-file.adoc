@@ -58,6 +58,22 @@ into [.path]_build_:
 
  $ adoc -D build '*.adoc'
 
+== Preserve the input directory structure
+
+By itself, `-D` writes every output into one flat directory, so inputs that live
+in different subdirectories but share a base name would collide. The `-R`
+(longhand `--source-dir`) option names a source root, and `adoc` then recreates
+each input's subdirectory beneath that root inside the `-D` directory:
+
+ $ adoc -D out -R src src/guide/intro.adoc
+
+Because [.path]_src/guide/intro.adoc_ sits under the [.path]_src_ source root, its
+output is written to [.path]_out/guide/intro.html_ rather than flattened to
+[.path]_out/intro.html_. An input that is not located under the source root, and
+a document read from standard input, are unaffected and keep the plain `-D`
+behavior. `-R` has no effect unless `-D` is also given, since without a
+destination directory there is nowhere to build the tree.
+
 == Write a file when piping
 
 When you pipe content to `adoc`, the default is to write the output to standard
