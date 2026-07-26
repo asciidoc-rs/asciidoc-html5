@@ -1,0 +1,81 @@
+= Control Warnings
+:navtitle: Control Warnings
+:description: How the adoc command reports parser warnings, and the options that silence them, add detail, or turn them into a failing exit code.
+
+When `adoc` parses a document, anything ambiguous or likely unintended -- an
+ordered list whose item numbers skip, a delimited block that is never closed, a
+cross reference to an id that is not defined -- is reported as a warning. By
+default `adoc` prints these warnings to standard error and still writes the
+converted HTML, matching Asciidoctor.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Warnings print to standard error
+
+Give a document that provokes a warning -- here an ordered list whose explicit
+item numbers skip from 1 to 3 -- and `adoc` prints a warning line to standard
+error while the HTML goes to standard output:
+
+ $ printf '1. first\n3. third\n' | adoc -o -
+
+The warning names the source (`<stdin>` for piped input, or the input file's
+path), the line, and what was found:
+
+ adoc: WARNING: <stdin>: line 2: list item index: expected 2, got 3
+
+Because warnings go to standard error, they never mix into the converted HTML on
+standard output.
+
+== Silence warnings with -q
+
+Pass `-q` (`--quiet`) to suppress all log output, warnings included. The
+conversion still runs and its HTML is still written; only the messages are
+silenced:
+
+ $ printf '1. first\n3. third\n' | adoc -q -o -
+
+== Show more detail with -v
+
+A few low-severity diagnostics -- a reference to a missing attribute, or a cross
+reference whose target is not defined -- are held back by default, since they are
+easily false positives. Pass `-v` (`--verbose`) to report them too, at the `INFO`
+level:
+
+ $ printf 'See {no-such-attr}.\n' | adoc -v -a attribute-missing=warn -o -
+
+The reference above then reports:
+
+ adoc: INFO: <stdin>: line 1: skipping reference to missing attribute: no-such-attr
+
+`-q` and `-v` are opposites and cannot be combined.
+
+== Fail the build with --failure-level
+
+By default a warning does not change the exit code: `adoc` reports it and exits
+0. Pass `--failure-level` to make diagnostics at or above a level fail the run
+instead, so a build script can stop on them. The accepted levels are `INFO`,
+`WARN`, `ERROR`, and `FATAL` (the default, effectively never reached by a
+parse).
+
+Setting the level to `WARN` makes any warning exit non-zero:
+
+ $ printf '1. first\n3. third\n' | adoc --failure-level=WARN -o -
+
+The failure level is evaluated even under `-q`, so you can fail the build on a
+warning without printing anything:
+
+ $ printf '1. first\n3. third\n' | adoc -q --failure-level=WARN -o -
+
+== Compatibility with asciidoctor -w
+
+Asciidoctor's `-w` (`--warnings`) turns on the Ruby interpreter's own script
+warnings, which have no analog in this native binary. `adoc` accepts `-w` so
+`asciidoctor -w` invocations keep working, but the flag has no effect: parser
+warnings are printed by default regardless, and `-q` is what silences them.
+
+ $ printf '1. first\n3. third\n' | adoc -w -o -

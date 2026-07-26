@@ -4,6 +4,7 @@
 //! These pages document the `adoc` command line interface. This crate verifies
 //! the invocations they show; the module grows a page per CLI topic.
 
+mod control_warnings;
 mod index;
 mod io_piping;
 mod options;
