@@ -158,13 +158,27 @@ the heading. Discrete headings ([`SectionType::Discrete`]) render as a bare
 output](#standalone-vs-embedded-output)). In **standalone** mode it emits the
 full shell: `<!DOCTYPE html>`, `<html lang>`, a `<head>` (charset,
 `X-UA-Compatible`, viewport, generator, `<title>`, stylesheet), `<body
-class="article">`, the header, `<div id="content">`, and the footer.
+class="article">`, the header, `<div id="content">`, the footnotes block, and
+the footer.
 
 `header()` emits `<div id="header">` with the `<h1>` doctitle and, when present,
 a `<div class="details">` block carrying `<span id="author">` / `<span
 id="email">` (numbered for co-authors) and `<span id="revnumber/revdate/
 revremark">`, matching the shapes asserted in
 [`ref/asciidoctor/test/document_test.rb`](../ref/asciidoctor/test/document_test.rb).
+
+### Footnotes
+
+`footnotes()` emits the document-level `<div id="footnotes">` block — an `<hr>`
+followed by one `<div class="footnote" id="_footnotedef_N">` per registered
+footnote, each linking back to its inline reference — whenever the document has
+footnotes and they are not suppressed by `nofootnotes`. It runs in *both* the
+standalone (between `#content` and the footer) and embedded paths, matching
+Asciidoctor's `convert_string_to_embedded`. The inline `<sup>` references
+themselves are produced by the parser's inline substitution pass; the footnote
+definitions come from `Document::catalog().footnotes()`, whose `text` is an
+already-substituted (and, once references resolve, cross-reference-resolved)
+inline fragment emitted verbatim.
 
 ### Standalone vs. embedded output
 

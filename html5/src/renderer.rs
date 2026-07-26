@@ -631,6 +631,10 @@ impl Renderer<'_> {
         self.blocks(document.child_blocks());
         self.line("</div>");
 
+        // The footnotes block sits between the content and the footer, matching
+        // Asciidoctor's standalone layout.
+        self.footnotes(document);
+
         // The footer is suppressed by `nofooter`. The "Last updated …" text is
         // deferred until a docdatetime attribute is threaded in by the caller.
         if !document.is_attribute_set("nofooter") {
@@ -671,6 +675,43 @@ impl Renderer<'_> {
         }
 
         self.blocks(document.child_blocks());
+
+        // Embedded output still carries the footnotes block, matching
+        // Asciidoctor's `convert_string_to_embedded`.
+        self.footnotes(document);
+    }
+
+    /// Emits the document-level footnotes block — Asciidoctor's `#footnotes`
+    /// section listing every registered footnote's definition, each linking
+    /// back to its reference — when the document has footnotes and they are not
+    /// suppressed by the `nofootnotes` attribute.
+    ///
+    /// Each footnote's [`text`](asciidoc_parser::document::Footnote::text) is
+    /// already a substituted inline HTML fragment (with cross references
+    /// resolved once the document's references are), so it is emitted verbatim,
+    /// like all other block content.
+    fn footnotes(&mut self, document: &Document<'_>) {
+        let footnotes = document.catalog().footnotes();
+        if footnotes.is_empty() || document.is_attribute_set("nofootnotes") {
+            return;
+        }
+
+        self.line("<div id=\"footnotes\">");
+        self.line("<hr>");
+
+        for footnote in footnotes {
+            let index = &footnote.index;
+            self.line(&format!(
+                "<div class=\"footnote\" id=\"_footnotedef_{index}\">"
+            ));
+            self.line(&format!(
+                "<a href=\"#_footnoteref_{index}\">{index}</a>. {text}",
+                text = footnote.text
+            ));
+            self.line("</div>");
+        }
+
+        self.line("</div>");
     }
 
     /// Emits the output for the `inline` doctype: the inline content of the
@@ -2127,6 +2168,32 @@ mod tests {
         assert!(html.contains("<body class=\"article\">"));
         assert!(html.contains("<div id=\"header\">\n<h1>Title</h1>\n</div>"));
         assert!(html.trim_end().ends_with("</body>\n</html>"));
+    }
+
+    #[test]
+    fn footnotes_block_lists_registered_footnotes() {
+        // A registered footnote renders both its inline `<sup>` reference and,
+        // at the document level, a `#footnotes` definition block — in both the
+        // embedded and standalone paths.
+        let embedded = convert("text.footnote:[a note] more.footnote:[another]");
+        assert!(embedded.contains(
+            "<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_1\">\n\
+             <a href=\"#_footnoteref_1\">1</a>. a note\n</div>\n\
+             <div class=\"footnote\" id=\"_footnotedef_2\">\n\
+             <a href=\"#_footnoteref_2\">2</a>. another\n</div>\n</div>"
+        ));
+
+        // Standalone output carries the same block, between the content and the
+        // footer.
+        let standalone = convert_with(
+            "text.footnote:[a note]",
+            &crate::Options::new().standalone(true),
+        );
+        assert!(standalone.contains("</div>\n<div id=\"footnotes\">\n<hr>\n"));
+
+        // A document with no footnotes emits no `#footnotes` block.
+        assert!(!convert("plain text").contains("id=\"footnotes\""));
     }
 
     #[test]
