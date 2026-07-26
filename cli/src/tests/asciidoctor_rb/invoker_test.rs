@@ -1372,11 +1372,10 @@ fn should_output_a_trailing_newline_to_stdout() {
     assert!(output.ends_with('\n'));
 }
 
-// Out of scope (flag): `-b html5` selects the backend explicitly. html5 is the
-// only backend `adoc` produces (its default output is verified above), and it
-// exposes no `-b` flag to choose one.
-non_normative!(
-    r#"
+#[test]
+fn should_set_backend_to_html5_if_specified() {
+    verifies!(
+        r#"
   test 'should set backend to html5 if specified' do
     invoker = invoke_cli_to_buffer %w(-b html5 -o -)
     doc = invoker.document
@@ -1387,10 +1386,23 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Out of scope: the DocBook backend (`-b docbook5`). This crate renders only
-// the html5 backend.
+    // `-b html5` selects the backend explicitly. html5 is the only backend
+    // `adoc` produces, so passing it is accepted purely for command-line
+    // compatibility and yields the same standalone html5 document as the
+    // default: a `<!DOCTYPE html>` prologue and an `<html>` root element.
+    let output = String::from_utf8(
+        run_stdin(&["-b", "html5", "-o", "-", "-"], "= T\n\nx\n").expect("adoc converts"),
+    )
+    .expect("output is UTF-8");
+    assert!(output.contains("<!DOCTYPE html>"));
+    assert!(output.contains("<html"));
+}
+
+// Deliberate divergence: the DocBook backend (`-b docbook5`). `adoc` models
+// only the html5 backend, so `-b docbook5` is rejected rather than producing
+// DocBook output.
 non_normative!(
     r#"
   test 'should set backend to docbook5 if specified' do
