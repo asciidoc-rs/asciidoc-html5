@@ -14,21 +14,24 @@
 //! ([`FsIncludeFileHandler`](crate::include_handler)), so it is driven for real
 //! against the vendored `fixtures/encoding.adoc`.
 //!
+//! The UTF-8 *encoding* document/embedded pair is verified too: it converts the
+//! whole `:encoding` sample (which ends in a bulleted list — now rendered — so
+//! its fourth `<p>` comes from the list item) and counts four `<p>` and one
+//! `<a>`. Encoding itself is not a concern here — this crate converts `&str`
+//! that is already valid UTF-8.
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy:
 //!
-//! * The UTF-8 *encoding* document/embedded pair converts the whole `:encoding`
-//!   sample. The sample ends in a bulleted list, so its fourth `<p>` comes from
-//!   a list item, which this crate does not yet emit — revisit those two once
-//!   lists land (#120). Encoding itself is not a concern here — this crate
-//!   converts `&str` that is already valid UTF-8. The matching DocBook-backend
-//!   tests are out of scope, and the `arbitrary block` test reaches for the
-//!   `PreprocessorReader` / `Parser.next_block` Ruby APIs (its verse-`<pre>`
-//!   behavior is already covered by the paragraphs suite).
-//! * *Compat mode* is not implemented by `asciidoc-parser`. A test that carries
-//!   both a compat-mode and a modern assertion is split *within* its `#[test]`:
-//!   the modern lines sit in `verifies!` blocks (driven in Rust) and the
-//!   compat-mode lines in interleaved `non_normative!` blocks, so the coverage
-//!   tool never counts an unverified compat-mode assertion as verified.
+//! * The matching DocBook-backend encoding tests are out of scope, and the
+//!   `arbitrary block` test reaches for the `PreprocessorReader` /
+//!   `Parser.next_block` Ruby APIs (its verse-`<pre>` behavior is already
+//!   covered by the paragraphs suite).
+//! * *Compat mode* is permanently out of scope – this crate will not implement
+//!   it. A test that carries both a compat-mode and a modern assertion is split
+//!   *within* its `#[test]`: the modern lines sit in `verifies!` blocks (driven
+//!   in Rust) and the compat-mode lines in interleaved `non_normative!` blocks,
+//!   so the coverage tool never counts an out-of-scope compat-mode assertion as
+//!   verified.
 //!
 //! The `markdown horizontal rules` (positive) test spans six variants at four
 //! leading offsets. This crate recognizes all six variants (`---`, `- - -`,
@@ -53,6 +56,17 @@ use crate::{
 
 track_file!("ref/asciidoctor/test/text_test.rb");
 
+/// Reads the `:encoding` sample (`fixtures/encoding.adoc`), the same file
+/// Asciidoctor's `example_document(:encoding)` loads. It lives under the pinned
+/// `ref/asciidoctor` tree (as with the include-handler test below), so we point
+/// at it rather than re-vendoring a copy into this crate's test tree.
+fn encoding_sample() -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ref/asciidoctor/test/fixtures/encoding.adoc");
+
+    std::fs::read_to_string(path).expect("read fixtures/encoding.adoc")
+}
+
 non_normative!(
     r#"
 # frozen_string_literal: true
@@ -62,12 +76,19 @@ context "Text" do
 "#
 );
 
-// UTF-8 encoding test: converts the whole `:encoding` sample standalone. The
-// sample ends in a bulleted list, so the fourth `<p>` the test counts comes
-// from a list item, which this crate does not yet render (light this up once
-// lists land — #120); encoding itself is not a parser concern here.
-non_normative!(
-    r#"
+// UTF-8 encoding: converts the whole `:encoding` sample as a standalone
+// document and counts its paragraphs and its one anchor. The sample ends in a
+// bulleted list whose single item supplies the fourth `<p>`
+// (`<li><p>…</p></li>`); the first three come from the two lead paragraphs and
+// the `tag::romé[]` block. Encoding itself is not a parser concern here — this
+// crate converts `&str` that is already valid UTF-8. Asciidoctor's
+// `example_document(:encoding)` loads `fixtures/encoding.adoc`; here we read
+// that same fixture and drive `convert_with(.., standalone(true))` — the
+// counterpart to Ruby's default (standalone) `convert`.
+#[test]
+fn proper_encoding_to_handle_utf8_characters_in_document_using_html_backend() {
+    verifies!(
+        r#"
   test "proper encoding to handle utf8 characters in document using html backend" do
     output = example_document(:encoding).convert
     assert_xpath '//p', output, 4
@@ -75,11 +96,20 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// As above, for the embedded (`standalone: false`) HTML conversion.
-non_normative!(
-    r#"
+    let html = convert_with(&encoding_sample(), &Options::new().standalone(true));
+    assert_xpath(&html, "//p", 4);
+    assert_xpath(&html, "//a", 1);
+}
+
+// As above, for the embedded (`standalone: false`) HTML conversion, driven
+// through `convert` — this crate's embedded counterpart. The paragraph and
+// anchor counts are the same as in the standalone document.
+#[test]
+fn proper_encoding_to_handle_utf8_characters_in_embedded_document_using_html_backend() {
+    verifies!(
+        r#"
   test "proper encoding to handle utf8 characters in embedded document using html backend" do
     output = example_document(:encoding, standalone: false).convert
     assert_xpath '//p', output, 4
@@ -87,7 +117,12 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    let html = convert(&encoding_sample());
+    assert_xpath(&html, "//p", 4);
+    assert_xpath(&html, "//a", 1);
+}
 
 // DocBook backend is out of scope for this crate.
 non_normative!(
@@ -216,8 +251,9 @@ fn single_and_double_quoted_text() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first form's two assertions are
-    // tracked non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the first form's two assertions stay non-normative rather than
+    // counted as verified.
     non_normative!(
         r#"
     output = convert_string_to_embedded(%q(``Where?,'' she said, flipping through her copy of `The New Yorker.'), attributes: { 'compat-mode' => '' })
@@ -251,8 +287,9 @@ fn multiple_double_quoted_text_on_a_single_line() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first `assert_equal` is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the first `assert_equal` stays non-normative rather than counted as
+    // verified.
     non_normative!(
         r#"
     assert_equal '&#8220;Our business is constantly changing&#8221; or &#8220;We need faster time to market.&#8221;',
@@ -509,8 +546,9 @@ fn emphasized_text_with_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the first assertion stays non-normative rather than counted as
+    // verified.
     non_normative!(
         r#"
     assert_xpath %(//em[text()="Johnny#{rsquo}s"]), convert_string(%q(It's 'Johnny's' phone), attributes: { 'compat-mode' => '' })
@@ -543,8 +581,9 @@ fn emphasized_text_with_escaped_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the first assertion stays non-normative rather than counted as
+    // verified.
     non_normative!(
         r#"
     assert_xpath %(//em[text()="Johnny's"]), convert_string(%q(It's 'Johnny\\'s' phone), attributes: { 'compat-mode' => '' })
@@ -593,8 +632,9 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
 "#
     );
 
-    // Compat mode is unimplemented, so the two compat-mode assertions are tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the two compat-mode assertions stay non-normative rather than
+    // counted as verified.
     non_normative!(
         r#"
     assert_xpath %(//p[text()="A 'single quoted string' example"]), convert_string_to_embedded(%(A \\'single quoted string' example), attributes: { 'compat-mode' => '' })
@@ -697,8 +737,9 @@ fn backticks_and_straight_quotes_in_text() {
 "#
     );
 
-    // Compat mode is unimplemented, so the first assertion is tracked
-    // non-normatively rather than counted as verified.
+    // Compat mode is permanently out of scope – this crate will not implement
+    // it, so the first assertion stays non-normative rather than counted as
+    // verified.
     non_normative!(
         r#"
     assert_equal %q(run <code>foo</code> <em>dog</em>), convert_inline_string(%q(run `foo` 'dog'), attributes: { 'compat-mode' => '' })
@@ -859,8 +900,9 @@ mod basic_styling {
 "#
         );
 
-        // The second assertion is compat-mode (unimplemented), so it is tracked
-        // non-normatively rather than counted as verified.
+        // The second assertion is compat-mode, which is permanently out of scope
+        // – this crate will not implement it, so it stays non-normative rather
+        // than counted as verified.
         non_normative!(
             r#"
       assert_xpath "//code", convert_string("This is +passed through and monospaced+.", attributes: { 'compat-mode' => '' }), 1
@@ -890,8 +932,9 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unimplemented, so its output and two assertions are
-        // tracked non-normatively rather than counted as verified.
+        // Compat mode is permanently out of scope – this crate will not
+        // implement it, so its output and two assertions stay non-normative
+        // rather than counted as verified.
         non_normative!(
             r#"
       output = convert_string("Winning *big _time_* in the +city *boyeeee*+.", attributes: { 'compat-mode' => '' })
@@ -930,8 +973,9 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is unimplemented, so its output and four assertions are
-        // tracked non-normatively rather than counted as verified.
+        // Compat mode is permanently out of scope – this crate will not
+        // implement it, so its output and four assertions stay non-normative
+        // rather than counted as verified.
         non_normative!(
             r#"
       output = convert_string('**B**__I__++M++[role]++M++', attributes: { 'compat-mode' => '' })

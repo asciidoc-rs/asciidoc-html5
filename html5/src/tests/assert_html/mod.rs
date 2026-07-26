@@ -47,9 +47,14 @@ use scraper::{Html, Selector};
 /// [`rewrite_root_for_fragment`]).
 fn parse(html: &str) -> (Html, bool) {
     let head = html.trim_start();
-    if head.len() >= 5 && head[..5].eq_ignore_ascii_case("<html")
-        || head.len() >= 9 && head[..9].eq_ignore_ascii_case("<!doctype")
-    {
+    // Compare on bytes, not a `head[..n]` string slice: an embedded fragment can
+    // begin with a multi-byte character (e.g. `<h1>人</h1>`), and slicing to a
+    // fixed byte length that lands inside such a character would panic.
+    let starts_with_ci = |prefix: &str| {
+        head.len() >= prefix.len()
+            && head.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
+    };
+    if starts_with_ci("<html") || starts_with_ci("<!doctype") {
         (Html::parse_document(html), false)
     } else {
         (Html::parse_fragment(html), true)
@@ -228,6 +233,30 @@ mod tests {
         );
     }
 
+    // A row of header cells whose text repeats, so a value predicate and a
+    // positional predicate select different nodes depending on their order.
+    const HEADER_ROW: &str = r#"<table><tbody>
+<tr><th id="a">X</th><th id="b">B</th><th id="c">B</th></tr>
+</tbody></table>"#;
+
+    #[test]
+    fn xpath_predicates_apply_in_source_order() {
+        // `[text()="B"][2]` filters to the two B cells first, then takes the
+        // second of those — the third `th` (`id="c"`).
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][2][@id="c"]"#, 1);
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][2][@id="b"]"#, 0);
+
+        // `[2][text()="B"]` takes the second `th` first (`id="b"`), then checks
+        // its text — a different node from the case above, though both are "B".
+        assert_xpath(HEADER_ROW, r#"//th[2][text()="B"][@id="b"]"#, 1);
+        assert_xpath(HEADER_ROW, r#"//th[2][text()="B"][@id="c"]"#, 0);
+
+        // `[1]` is the first `th` (`id="a"`, text "X"), so filtering it by
+        // `text()="B"` afterward yields nothing.
+        assert_xpath(HEADER_ROW, r#"//th[1][text()="B"]"#, 0);
+        assert_xpath(HEADER_ROW, r#"//th[text()="B"][1][@id="b"]"#, 1);
+    }
+
     #[test]
     fn xpath_grouped_predicate_value_may_contain_brackets_and_parens() {
         // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding the
@@ -361,6 +390,29 @@ Famous quote.
         // holds two text runs ("See " and ".)") around the single `<a>`.
         assert_xpath(html, r#"//p/text()"#, 2);
         assert_xpath(html, r#"//p/*"#, 1);
+    }
+
+    #[test]
+    fn xpath_self_axis_names_a_positionally_selected_node() {
+        // A list item whose element children are a principal `<p>` and a nested
+        // `.ulist` div — the shape the list-continuation suite asserts on with
+        // grouped-positional `self::` steps.
+        let html = r#"<div class="olist"><ol><li>
+<p>one</p>
+<div class="ulist"><ul><li><p>nested</p></li></ul></div>
+</li></ol></div>"#;
+
+        // `self::` keeps the context node only when it matches the node test.
+        assert_xpath(html, r#"((//ol/li)[1]/*)[2]/self::div[@class="ulist"]"#, 1);
+        assert_xpath(html, r#"((//ol/li)[1]/*)[1]/self::p[text()="one"]"#, 1);
+        // The second child is a div, not a p, so `self::p` keeps nothing.
+        assert_xpath(html, r#"((//ol/li)[1]/*)[2]/self::p"#, 0);
+        // A step chained after `self::` continues from the kept node.
+        assert_xpath(
+            html,
+            r#"((//ol/li)[1]/*)[2]/self::div/ul/li/p[text()="nested"]"#,
+            1,
+        );
     }
 
     #[test]

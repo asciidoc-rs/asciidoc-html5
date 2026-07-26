@@ -1,14 +1,15 @@
-//! Port of Asciidoctor's `blocks_test.rb` — **front half only** (through the
-//! `Open Blocks` context, source lines 1–1748).
+//! Port of Asciidoctor's `blocks_test.rb` — the front half plus the
+//! `Passthrough Blocks` context (through source line 1841).
 //!
-//! This crate already renders the block types the front half exercises — layout
-//! breaks, comments, sidebar/quote/verse/example/admonition/open blocks, and
-//! verbatim (listing/literal/source) blocks — so those contexts port directly,
-//! driven through `convert` (embedded) / `convert_with(..standalone(true)..)`.
+//! This crate already renders the block types these contexts exercise — layout
+//! breaks, comments, sidebar/quote/verse/example/admonition/open blocks,
+//! verbatim (listing/literal/source) blocks, and passthrough blocks — so they
+//! port directly, driven through `convert` (embedded) /
+//! `convert_with(..standalone(true)..)`.
 //!
-//! The back half (Passthrough, Math, Images, Media, Admonition icons, Source
-//! code, Abstract/Part Intro, Substitutions, References — lines 1749+) hits
-//! block types this renderer does not implement yet and is deliberately not
+//! The remaining back half (Math, Images, Media, Admonition icons, Source code,
+//! Abstract/Part Intro, Substitutions, References — lines 1842+) hits block
+//! types this renderer does not implement yet and is deliberately not
 //! reproduced here; it is being sequenced as its own implement-then-port work.
 //!
 //! What stays `non_normative!` in the front half:
@@ -17,12 +18,7 @@
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
 //! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - the verse escaped-brace subs test (`\{` is not unescaped by
-//!   `asciidoc-parser` yet — asciidoc-parser#962);
-//! - deferred features, each tracked by an issue: verbatim `indent` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/110>),
-//!   `tabsize` (#111), `nowrap`/`prewrap` (#112), example captions/counters
-//!   (#113), collapsible examples (#114), `listing-caption` (#115),
-//!   leading-period block titles (#116), verbatim blank-line strip (#118).
+//! - the deferred example captions/counters feature, tracked by <https://github.com/asciidoc-rs/asciidoc-html5/issues/113>.
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -1627,11 +1623,10 @@ mod quote_and_verse_blocks {
         assert_warning(input, 5, |w| matches!(w, WarningType::NoCalloutFound(1)));
     }
 
-    // The `\{` escape is not yet unescaped by `asciidoc-parser` (same pending
-    // parser work as the paragraphs port's verse-subs test); tracked upstream in
-    // <https://github.com/asciidoc-rs/asciidoc-parser/issues/962>.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_perform_normal_subs_on_a_verse_block() {
+        verifies!(
+            r##"
     test 'should perform normal subs on a verse block' do
       input = <<~'EOS'
       [verse]
@@ -1646,7 +1641,13 @@ mod quote_and_verse_blocks {
   end
 
 "##
-    );
+        );
+
+        let output = convert("[verse]\n____\n_GET /groups/link:#group-id[\\{group-id\\}]_\n____\n");
+        assert!(output.contains(
+            r##"<pre class="content"><em>GET /groups/<a href="#group-id">{group-id}</a></em></pre>"##
+        ));
+    }
 }
 
 mod example_blocks {
@@ -1921,11 +1922,10 @@ mod example_blocks {
         );
     }
 
-    // Collapsible example blocks (`%collapsible` → `<details>/<summary>`) are not
-    // implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/114>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_create_details_summary_set_if_collapsible_option_is_set() {
+        verifies!(
+            r#"
     test 'should create details/summary set if collapsible option is set' do
       input = <<~'EOS'
       .Toggle Me
@@ -1944,6 +1944,25 @@ mod example_blocks {
       assert_css 'details > summary.title + .content p', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            ".Toggle Me\n[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Toggle Me\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details[open]", 0);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Toggle Me"]"#, 1);
+        assert_css(&output, "details > summary.title + .content", 1);
+        assert_css(&output, "details > summary.title + .content p", 1);
+    }
+
+    #[test]
+    fn should_open_details_summary_set_if_collapsible_and_open_options_are_set() {
+        verifies!(
+            r#"
     test 'should open details/summary set if collapsible and open options are set' do
       input = <<~'EOS'
       .Toggle Me
@@ -1960,6 +1979,23 @@ mod example_blocks {
       assert_xpath '//details/summary[text()="Toggle Me"]', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            ".Toggle Me\n[%collapsible%open]\n====\n\
+             This content is revealed when the user clicks the words \"Toggle Me\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details[open]", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Toggle Me"]"#, 1);
+    }
+
+    #[test]
+    fn should_add_default_summary_element_if_collapsible_option_is_set_and_title_is_not_specifed() {
+        verifies!(
+            r#"
     test 'should add default summary element if collapsible option is set and title is not specifed' do
       input = <<~'EOS'
       [%collapsible]
@@ -1974,6 +2010,22 @@ mod example_blocks {
       assert_xpath '//details/summary[text()="Details"]', output, 1
     end
 
+"#
+        );
+
+        let output = convert(
+            "[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Details\".\n====\n",
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(&output, r#"//details/summary[text()="Details"]"#, 1);
+    }
+
+    #[test]
+    fn should_not_allow_collapsible_block_to_increment_example_number() {
+        verifies!(
+            r#"
     test 'should not allow collapsible block to increment example number' do
       input = <<~'EOS'
       .Before
@@ -2002,7 +2054,32 @@ mod example_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert(
+            ".Before\n====\nbefore\n====\n\n\
+             .Show Me The Goods\n[%collapsible]\n====\n\
+             This content is revealed when the user clicks the words \"Show Me The Goods\".\n====\n\n\
+             .After\n====\nafter\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="title"][text()="Example 1. Before"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="title"][text()="Example 2. After"]"#,
+            1,
+        );
+        assert_css(&output, "details", 1);
+        assert_css(&output, "details > summary.title", 1);
+        assert_xpath(
+            &output,
+            r#"//details/summary[text()="Show Me The Goods"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn should_warn_if_example_block_is_not_terminated() {
@@ -2388,11 +2465,10 @@ mod preformatted_blocks {
         }
     }
 
-    // Stripping leading/trailing blank lines (plus `subs=attributes` expanding
-    // `{empty}`) on verbatim blocks is not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/118>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_strip_leading_and_trailing_blank_lines_when_converting_verbatim_block() {
+        verifies!(
+            r#"
     test 'should strip leading and trailing blank lines when converting verbatim block' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2417,7 +2493,18 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        // The `block.lines` assertion inspects the parser's line buffer (verified
+        // in `asciidoc-parser`); here we drive the rendered output. The
+        // `subs="attributes"` step expands `{empty}` to nothing (the parser's
+        // job), leaving a run of trailing blank lines the renderer then trims
+        // along with the leading ones.
+        let output = convert(
+            "[subs=\"attributes\"]\n....\n\n\n  first line\n\nlast line\n\n{empty}\n\n....\n",
+        );
+        assert_xpath(&output, "//pre[text()=\"  first line\n\nlast line\"]", 1);
+    }
 
     #[test]
     fn should_process_block_with_crlf_line_endings() {
@@ -2448,12 +2535,10 @@ mod preformatted_blocks {
         );
     }
 
-    // The `indent`/`source-indent` attribute (indent removal/normalization) is
-    // not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/110>. Only the
-    // `indent="-1"` (leave-as-is) case matches today and is verified below.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_remove_block_indent_if_indent_attribute_is_0() {
+        verifies!(
+            r#"
     test 'should remove block indent if indent attribute is 0' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2484,7 +2569,18 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output =
+            convert("[indent=\"0\"]\n----\n    def names\n\n      @names.split\n\n    end\n----\n");
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\"def names\n\n  @names.split\n\nend\"]",
+            1,
+        );
+    }
 
     #[test]
     fn should_not_remove_block_indent_if_indent_attribute_is_minus_1() {
@@ -2527,9 +2623,11 @@ mod preformatted_blocks {
         );
     }
 
-    // Indent normalization (`indent="1"` / `source-indent`) — see #110.
-    non_normative!(
-        r#"
+    // Indent normalization (`indent="1"` / `source-indent`).
+    #[test]
+    fn should_set_block_indent_to_value_specified_by_indent_attribute() {
+        verifies!(
+            r#"
     test 'should set block indent to value specified by indent attribute' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2552,6 +2650,27 @@ mod preformatted_blocks {
       assert_equal expected, result
     end
 
+"#
+        );
+
+        // `expected` replaces the four-space block indent with a single space on
+        // each of the five content lines: ` def names`, ``, `   @names.split`,
+        // ``, ` end`.
+        let output =
+            convert("[indent=\"1\"]\n----\n    def names\n\n      @names.split\n\n    end\n----\n");
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\" def names\n\n   @names.split\n\n end\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_block_indent_to_value_specified_by_indent_document_attribute() {
+        verifies!(
+            r#"
     test 'should set block indent to value specified by indent document attribute' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -2577,12 +2696,32 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
 
-    // Tab expansion (`tabsize`) is not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/111>.
-    non_normative!(
-        r#"
+        // The `source-indent` document attribute supplies the indent for the
+        // source block, normalizing the four-space indent to one space.
+        let output = convert(
+            ":source-indent: 1\n\n[source,ruby]\n----\n    def names\n\n      @names.split\n\n    end\n----\n",
+        );
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        // The Ruby assertion reads the `<pre>`'s full descendant text; a source
+        // block wraps its code in `<code>`, so the reindented content is that
+        // element's text (this crate renders a delimited `[source]` block as
+        // `<pre class="highlight"><code …>`, matching Asciidoctor — unlike a
+        // plain `[listing]`/`----` block, which keeps its text directly on the
+        // `<pre>`).
+        assert_xpath(
+            &output,
+            "//pre/code[text()=\" def names\n\n   @names.split\n\n end\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_expand_tabs_if_tabsize_attribute_is_positive() {
+        verifies!(
+            r#"
     test 'should expand tabs if tabsize attribute is positive' do
       input = <<~EOS
       :tabsize: 4
@@ -2614,13 +2753,27 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
 
-    // The `nowrap` option / `prewrap` attribute (`pre.nowrap`) is not
-    // implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/112>.
-    non_normative!(
-        r#"
+        // Each leading tab expands to four spaces on the tab stop, then the
+        // `indent=0` normalization removes the resulting four-space block
+        // indent, leaving the second line indented four spaces.
+        let output = convert(
+            ":tabsize: 4\n\n[indent=0]\n----\n\tdef names\n\n\t\t@names.split\n\n\tend\n----\n",
+        );
+        assert_css(&output, "pre", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_xpath(
+            &output,
+            "//pre[text()=\"def names\n\n    @names.split\n\nend\"]",
+            1,
+        );
+    }
+
+    #[test]
+    fn literal_block_should_honor_nowrap_option() {
+        verifies!(
+            r#"
     test 'literal block should honor nowrap option' do
       input = <<~'EOS'
       [options="nowrap"]
@@ -2633,6 +2786,18 @@ mod preformatted_blocks {
       assert_css 'pre.nowrap', output, 1
     end
 
+"#
+        );
+
+        let output =
+            convert("[options=\"nowrap\"]\n----\nDo not wrap me if I get too long.\n----\n");
+        assert_css(&output, "pre.nowrap", 1);
+    }
+
+    #[test]
+    fn literal_block_should_set_nowrap_class_if_prewrap_document_attribute_is_disabled() {
+        verifies!(
+            r#"
     test 'literal block should set nowrap class if prewrap document attribute is disabled' do
       input = <<~'EOS'
       :prewrap!:
@@ -2647,7 +2812,11 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert(":prewrap!:\n\n----\nDo not wrap me if I get too long.\n----\n");
+        assert_css(&output, "pre.nowrap", 1);
+    }
 
     #[test]
     fn should_preserve_guard_in_front_of_callout_if_icons_are_not_enabled() {
@@ -2809,11 +2978,10 @@ mod preformatted_blocks {
         assert_eq!(output.trim_end(), output2.trim_end());
     }
 
-    // A block title whose first character is a period (`..gitignore`) is not
-    // recognized as a title yet (upstream `asciidoc-parser`); tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/116>.
-    non_normative!(
-        r#"
+    #[test]
+    fn first_character_of_block_title_may_be_a_period_if_not_followed_by_space() {
+        verifies!(
+            r#"
     test 'first character of block title may be a period if not followed by space' do
       input = <<~'EOS'
       ..gitignore
@@ -2829,7 +2997,11 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert("..gitignore\n----\n/.bundle/\n/build/\n/Gemfile.lock\n----\n");
+        assert_xpath(&output, r#"//*[@class="title"][text()=".gitignore"]"#, 1);
+    }
 
     // DocBook-backend output is out of scope (this crate targets only `html5`).
     non_normative!(
@@ -2890,11 +3062,11 @@ mod preformatted_blocks {
         );
     }
 
-    // `listing-caption` / caption-counter on listing titles is not implemented
-    // yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/115>.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_prepend_caption_specified_by_listing_caption_attribute_and_number_to_title_of_listing_block_with_title(
+    ) {
+        verifies!(
+            r#"
     test 'should prepend caption specified by listing-caption attribute and number to title of listing block with title' do
       input = <<~'EOS'
       :listing-caption: Listing
@@ -2909,6 +3081,23 @@ mod preformatted_blocks {
       assert_xpath '/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. title"]', output, 1
     end
 
+"#
+        );
+
+        let output =
+            convert(":listing-caption: Listing\n\n.title\n----\nlisting block content\n----\n");
+        assert_xpath(
+            &output,
+            r#"/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. title"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_prepend_caption_specified_by_caption_attribute_on_listing_block_even_if_listing_caption_attribute_is_not_set(
+    ) {
+        verifies!(
+            r#"
     test 'should prepend caption specified by caption attribute on listing block even if listing-caption attribute is not set' do
       input = <<~'EOS'
       [caption="Listing {counter:listing-number}. "]
@@ -2923,7 +3112,16 @@ mod preformatted_blocks {
     end
 
 "#
-    );
+        );
+
+        let output =
+            convert("[caption=\"Listing {counter:listing-number}. \"]\n.Behold!\n----\nlisting block content\n----\n");
+        assert_xpath(
+            &output,
+            r#"/*[@class="listingblock"][1]/*[@class="title"][text()="Listing 1. Behold!"]"#,
+            1,
+        );
+    }
 
     // The listing/source-promotion tests assert `asciidoc-parser` model state
     // (`find_by`, `style`, `attr 'language'`), and the last two target DocBook.
@@ -3186,4 +3384,179 @@ mod open_blocks {
 
 "#
     );
+}
+
+mod passthrough_blocks {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Passthrough Blocks' do
+"#
+    );
+
+    // `block_from_string` + `block.lines`/`block.source` inspect the parser's
+    // block model, which `asciidoc-parser` verifies; this crate has no rendered
+    // output to re-express for it.
+    non_normative!(
+        r#"
+    test 'can parse a passthrough block' do
+      input = <<~'EOS'
+      ++++
+      This is a passthrough block.
+      ++++
+      EOS
+
+      block = block_from_string input
+      refute_nil block
+      assert_equal 1, block.lines.size
+      assert_equal 'This is a passthrough block.', block.source
+    end
+
+"#
+    );
+
+    #[test]
+    fn does_not_perform_subs_on_a_passthrough_block_by_default() {
+        verifies!(
+            r#"
+    test 'does not perform subs on a passthrough block by default' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      ++++
+      This is a '{type}' block.
+      http://asciidoc.org
+      image:tiger.png[]
+      ++++
+      EOS
+
+      expected = %(This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[])
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n++++\nThis is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]\n++++\n";
+        let expected = "This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]";
+
+        // The crate's embedded output carries a single trailing newline, which
+        // Ruby's `output.strip` removes; `trim` mirrors that here.
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn does_not_perform_subs_on_a_passthrough_block_with_pass_style_by_default() {
+        verifies!(
+            r#"
+    test 'does not perform subs on a passthrough block with pass style by default' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      [pass]
+      ++++
+      This is a '{type}' block.
+      http://asciidoc.org
+      image:tiger.png[]
+      ++++
+      EOS
+
+      expected = %(This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[])
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n[pass]\n++++\nThis is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]\n++++\n";
+        let expected = "This is a '{type}' block.\nhttp://asciidoc.org\nimage:tiger.png[]";
+
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn passthrough_block_honors_explicit_subs_list() {
+        verifies!(
+            r#"
+    test 'passthrough block honors explicit subs list' do
+      input = <<~'EOS'
+      :type: passthrough
+
+      [subs="attributes,quotes,macros"]
+      ++++
+      This is a _{type}_ block.
+      http://asciidoc.org
+      ++++
+      EOS
+
+      expected = %(This is a <em>passthrough</em> block.\n<a href="http://asciidoc.org" class="bare">http://asciidoc.org</a>)
+      output = convert_string_to_embedded input
+      assert_equal expected, output.strip
+    end
+
+"#
+        );
+
+        let input =
+            ":type: passthrough\n\n[subs=\"attributes,quotes,macros\"]\n++++\nThis is a _{type}_ block.\nhttp://asciidoc.org\n++++\n";
+        let expected =
+            "This is a <em>passthrough</em> block.\n<a href=\"http://asciidoc.org\" class=\"bare\">http://asciidoc.org</a>";
+
+        assert_eq!(convert(input).trim(), expected);
+    }
+
+    #[test]
+    fn should_strip_leading_and_trailing_blank_lines_when_converting_raw_block() {
+        verifies!(
+            r#"
+    test 'should strip leading and trailing blank lines when converting raw block' do
+      # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
+      input = <<~EOS
+      ++++
+      line above
+      ++++
+
+      ++++
+
+
+        first line
+
+      last line
+
+
+      ++++
+
+      ++++
+      line below
+      ++++
+      EOS
+
+      doc = document_from_string input, standalone: false
+      block = doc.blocks[1]
+      assert_equal ['', '', '  first line', '', 'last line', '', ''], block.lines
+      result = doc.convert
+      assert_equal "line above\n  first line\n\nlast line\nline below", result, 1
+    end
+  end
+
+"#
+        );
+
+        // The `block.lines` assertion inspects the parser's line buffer (verified
+        // in `asciidoc-parser`); here we drive the rendered output. Each raw
+        // block trims its own leading and trailing blank lines, so the three
+        // passthrough blocks emit only their non-blank content.
+        let input = "++++\nline above\n++++\n\n++++\n\n\n  first line\n\nlast line\n\n\n++++\n\n++++\nline below\n++++\n";
+
+        // Ruby's `result` has no trailing newline; the crate's embedded output —
+        // matching the `asciidoctor` CLI — carries the usual single trailing one.
+        let expected = "line above\n  first line\n\nlast line\nline below\n";
+
+        assert_eq!(convert(input), expected);
+    }
 }

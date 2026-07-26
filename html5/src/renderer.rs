@@ -28,11 +28,13 @@
 
 use asciidoc_parser::{
     blocks::{
-        AdmonitionBlock, Block, Break, BreakType, CompoundDelimitedContext, ContentModel,
-        FindBlocks, IsBlock, QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle,
+        AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
+        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListType,
+        QuoteBlock, QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock,
+        TableCell, TableCellContent, TableColumn, TableRow, VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue},
-    Document, SafeMode,
+    Document, HasSpan, SafeMode,
 };
 
 use crate::html::{class_attribute, escape_attribute, id_attribute};
@@ -71,6 +73,13 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 ///   paragraph is dropped rather than rendered as an empty `<p></p>`.
 fn renders_nothing(block: &Block<'_>) -> bool {
     if block.resolved_context().as_ref() == "comment" || block.declared_style() == Some("comment") {
+        return true;
+    }
+
+    // A document-attribute entry (`:name: value`) that survives into the block
+    // stream — as happens inside an AsciiDoc table cell's nested document — sets
+    // an attribute and renders nothing, matching Asciidoctor.
+    if block.resolved_context().as_ref() == "attribute" {
         return true;
     }
 
@@ -272,6 +281,214 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
+/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
+/// for an olist: an explicit numbering keyword from the block's declared style
+/// (`[loweralpha]`, `[upperroman]`, …) wins, otherwise the style implied by the
+/// first item's marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to
+/// `arabic`, which a bare `.` marker also yields.
+fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
+    const ORDERED_LIST_STYLES: [&str; 5] = [
+        "arabic",
+        "loweralpha",
+        "lowerroman",
+        "upperalpha",
+        "upperroman",
+    ];
+
+    if let Some(style) = block.declared_style() {
+        if ORDERED_LIST_STYLES.contains(&style) {
+            return style;
+        }
+    }
+
+    list.marker_style().unwrap_or("arabic")
+}
+
+/// Parses the leading integer of `value`, matching Ruby's `String#to_i`: an
+/// optional sign followed by ASCII digits, with any trailing text ignored, and
+/// `0` when no digits lead the string. This is how Asciidoctor coerces the
+/// `tabsize`, `indent`, and `source-indent` attributes.
+fn ruby_to_i(value: &str) -> i64 {
+    let value = value.trim_start();
+    let (sign, digits) = match value.strip_prefix('-') {
+        Some(rest) => (-1, rest),
+        None => (1, value.strip_prefix('+').unwrap_or(value)),
+    };
+
+    let magnitude: i64 = digits
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0i64, |acc, b| {
+            acc.saturating_mul(10).saturating_add((b - b'0') as i64)
+        });
+
+    sign * magnitude
+}
+
+/// The number of leading whitespace characters on `line` — Asciidoctor's
+/// `line.length - line.lstrip.length`. Only the ASCII whitespace Ruby's
+/// `String#lstrip` strips is counted; every such byte is one column, so the
+/// count doubles as a byte offset into the line.
+fn leading_whitespace_len(line: &str) -> usize {
+    line.bytes()
+        .take_while(|b| matches!(b, b' ' | b'\t' | b'\r' | 0x0b | 0x0c | 0))
+        .count()
+}
+
+/// Expands the tabs in one verbatim line to spaces on `tab_size`-column tab
+/// stops, a direct port of the tab-expansion arm of Asciidoctor's
+/// `Parser.adjust_indentation!`. `full_tab_space` is `tab_size` spaces, reused
+/// across lines by the caller.
+fn expand_tabs(line: &str, tab_size: usize, full_tab_space: &str) -> String {
+    if line.is_empty() || !line.contains('\t') {
+        return line.to_string();
+    }
+
+    // A run of leading tabs expands directly to whole tab widths.
+    let mut line = line.to_string();
+    if line.starts_with('\t') {
+        let leading_tabs = line.bytes().take_while(|&b| b == b'\t').count();
+        line = format!(
+            "{}{}",
+            full_tab_space.repeat(leading_tabs),
+            &line[leading_tabs..]
+        );
+    }
+
+    // If that cleared every tab, the line is done; otherwise embedded tabs
+    // remain for the per-stop loop below.
+    if !line.contains('\t') {
+        return line;
+    }
+
+    // Remaining tabs advance to the next tab stop, tracking how many spaces
+    // have been added so each stop is measured against the output column.
+    let mut spaces_added = 0usize;
+    let mut result = String::new();
+    for (idx, c) in line.chars().enumerate() {
+        if c == '\t' {
+            let offset = idx + spaces_added;
+            if offset.is_multiple_of(tab_size) {
+                spaces_added += tab_size - 1;
+                result.push_str(full_tab_space);
+            } else {
+                let spaces = tab_size - (offset % tab_size);
+                if spaces != 1 {
+                    spaces_added += spaces - 1;
+                }
+                result.push_str(&" ".repeat(spaces));
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// The largest reindent margin (`indent`/`source-indent`) this crate will act
+/// on. These values come from document-supplied attributes, so an absurd one
+/// (e.g. `:source-indent: 999999999999`) would otherwise saturate to `i64::MAX`
+/// and drive an unbounded space allocation, aborting the process on untrusted
+/// input.
+///
+/// No real verbatim block needs anywhere near this much of a margin (100 spaces
+/// is already well past plausible), so this is a deliberate divergence from
+/// Asciidoctor (which bounds neither), guarding availability while leaving
+/// every realistic document byte-identical.
+const MAX_VERBATIM_INDENT: i64 = 100;
+
+/// The largest `tabsize` this crate will act on — the number of spaces a single
+/// tab expands to. Unlike a block margin, this is the width of *one* tab, and
+/// no real document uses more than a handful (2/4/8, occasionally 16); a value
+/// like `:tabsize: 100` — let alone `i64::MAX` — is nonsensical. Capping it
+/// here both avoids the unbounded allocation and keeps tab expansion's
+/// amplification (one tab → `tabsize` spaces) to a small, sane factor. As with
+/// the margin cap this is a deliberate divergence from Asciidoctor, invisible
+/// to any real document.
+const MAX_TAB_SIZE: i64 = 16;
+
+/// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
+/// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
+/// and a tab is present), then — unless `indent_size` is negative — removes the
+/// common block indent and re-adds `indent_size` spaces of margin. Empty lines
+/// are left untouched throughout.
+fn adjust_indentation(lines: &mut [String], indent_size: i64, tab_size: i64) {
+    if lines.is_empty() {
+        return;
+    }
+
+    // Clamp the document-supplied sizes so they cannot drive an unbounded
+    // allocation. The margin and a single tab's width are bounded separately
+    // (see [`MAX_VERBATIM_INDENT`] and [`MAX_TAB_SIZE`]). `min` preserves a
+    // negative `indent_size`, which is the "leave indentation as-is" sentinel.
+    let indent_size = indent_size.min(MAX_VERBATIM_INDENT);
+    let tab_size = tab_size.min(MAX_TAB_SIZE);
+
+    if tab_size > 0 && lines.iter().any(|line| line.contains('\t')) {
+        let full_tab_space = " ".repeat(tab_size as usize);
+        for line in lines.iter_mut() {
+            *line = expand_tabs(line, tab_size as usize, &full_tab_space);
+        }
+    }
+
+    // A negative indent preserves the existing indentation.
+    if indent_size < 0 {
+        return;
+    }
+
+    // The block indent is the smallest indent over the non-empty lines; a line
+    // flush against the margin (indent 0) means there is nothing to remove.
+    let mut block_indent: Option<usize> = None;
+    for line in lines.iter() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let line_indent = leading_whitespace_len(line);
+        if line_indent == 0 {
+            block_indent = None;
+            break;
+        }
+
+        block_indent = Some(match block_indent {
+            Some(current) if current < line_indent => current,
+            _ => line_indent,
+        });
+    }
+
+    let margin = " ".repeat(indent_size.max(0) as usize);
+    for line in lines.iter_mut() {
+        if line.is_empty() {
+            continue;
+        }
+
+        let body = match block_indent {
+            Some(indent) => &line[indent..],
+            None => line.as_str(),
+        };
+        *line = format!("{margin}{body}");
+    }
+}
+
+/// Strips leading and trailing blank lines from a verbatim (or raw) block's
+/// `lines`, matching the whitespace trimming in Asciidoctor's `Block#content`.
+/// A line counts as blank when it holds only whitespace, and — as in
+/// Asciidoctor — the trimming applies only once the block has more than one
+/// line, so a lone (even blank) line is preserved.
+fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
+    if lines.len() < 2 {
+        return;
+    }
+
+    while lines.first().is_some_and(|line| line.trim_end().is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|line| line.trim_end().is_empty()) {
+        lines.pop();
+    }
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -294,6 +511,10 @@ pub(crate) fn render_document(
         out: String::new(),
         custom_stylesheet,
         standalone,
+        icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
+        doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
+        source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
+        prewrap: document.is_attribute_set("prewrap"),
     };
     renderer.document(document);
     renderer.out
@@ -310,6 +531,25 @@ struct Renderer<'a> {
     /// Whether to emit the standalone document shell (`true`) or embedded,
     /// body-only output (`false`).
     standalone: bool,
+
+    /// Whether the document sets `:icons: font`, which selects Font Awesome
+    /// checkbox glyphs for interactive-less checklists (matching Asciidoctor).
+    icons_font: bool,
+
+    /// The document `tabsize` attribute as an integer (Asciidoctor's
+    /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
+    /// own `tabsize` attribute overrides this; a positive value expands tabs.
+    doc_tabsize: i64,
+
+    /// The document `source-indent` attribute as an integer, when present. It
+    /// supplies the `indent` for *source* verbatim blocks that carry no
+    /// explicit `indent` attribute, matching Asciidoctor.
+    source_indent: Option<i64>,
+
+    /// Whether the document `prewrap` attribute is set. Asciidoctor sets it by
+    /// default; when it is unset (`:prewrap!:`) every verbatim `<pre>` gains
+    /// the `nowrap` class.
+    prewrap: bool,
 }
 
 impl Renderer<'_> {
@@ -711,8 +951,13 @@ impl Renderer<'_> {
             Block::Preamble(_) => self.preamble(block),
             Block::Break(brk) => self.break_block(brk),
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
+                // A `[source]`-styled delimited listing renders like a source
+                // block (the `<pre class="highlight"><code …>` shape), matching
+                // Asciidoctor; a plain `----` listing is a verbatim block.
+                "listing" if block.declared_style() == Some("source") => self.source(block),
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
+                "pass" => self.pass_block(block),
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -722,6 +967,17 @@ impl Renderer<'_> {
             },
             Block::Quote(quote) => self.quote(block, quote),
             Block::Admonition(admonition) => self.admonition(block, admonition),
+            Block::List(list) => match list.type_() {
+                ListType::Unordered => self.ulist(block, list),
+                ListType::Ordered => self.olist(block, list),
+
+                // Description and callout lists are not rendered yet; see
+                // ARCHITECTURE.md for the roadmap.
+                ListType::Description | ListType::Callout => {
+                    self.unsupported(&block.resolved_context())
+                }
+            },
+            Block::Table(table) => self.table(block, table),
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -742,13 +998,23 @@ impl Renderer<'_> {
     /// class="content"><pre>…</pre></div></div>`.
     ///
     /// Verbatim content keeps its literal line breaks, so it is emitted inside
-    /// the `<pre>` without added newlines around the text.
+    /// the `<pre>` without added newlines around the text. The content is first
+    /// reindented and blank-line-trimmed by
+    /// [`verbatim_content`](Self::verbatim_content), and the `<pre>` gains a
+    /// `nowrap` class when the block opts out of wrapping.
+    ///
+    /// The title is captioned: a titled listing block gains its `Listing N. `
+    /// caption prefix when `listing-caption` is set (or an explicit
+    /// `[caption=]` override is given). A literal block is never
+    /// captionable, so [`captioned_title`](Self::captioned_title) falls
+    /// back to its bare title.
     fn verbatim<'src>(&mut self, block: &'src Block<'src>, wrapper_class: &str) {
         self.open_block_wrapper(block, wrapper_class);
-        self.block_title(block);
+        self.captioned_title(block);
         self.line("<div class=\"content\">");
-        let content = block.rendered_content().unwrap_or_default();
-        self.line(&format!("<pre>{content}</pre>"));
+        let is_source = block.declared_style() == Some("source");
+        let content = self.verbatim_content(block, is_source);
+        self.line(&format!("<pre{}>{content}</pre>", self.nowrap_class(block)));
         self.line("</div>");
         self.line("</div>");
     }
@@ -758,12 +1024,25 @@ impl Renderer<'_> {
     /// the language (`class="language-…" data-lang="…"`) when one is
     /// declared. This matches Asciidoctor's default output even when no
     /// syntax highlighter is active.
+    ///
+    /// A source block resolves to the `listing` context, so its title is
+    /// captioned the same way a listing block's is (see
+    /// [`verbatim`](Self::verbatim)).
     fn source<'src>(&mut self, block: &'src Block<'src>) {
         self.open_block_wrapper(block, "listingblock");
-        self.block_title(block);
+        self.captioned_title(block);
         self.line("<div class=\"content\">");
 
-        let content = block.rendered_content().unwrap_or_default();
+        let content = self.verbatim_content(block, true);
+
+        // A `nowrap` block (or a document with `prewrap` disabled) adds the
+        // class after `highlight`, matching Asciidoctor's `pre class="highlight
+        // nowrap"`.
+        let highlight = if self.is_nowrap(block) {
+            "highlight nowrap"
+        } else {
+            "highlight"
+        };
 
         // The language is the second positional attribute of `[source, lang]`
         // (the first is the `source` style itself), or an explicit `language=`.
@@ -776,17 +1055,84 @@ impl Renderer<'_> {
             Some(language) => {
                 let language = escape_attribute(language);
                 self.line(&format!(
-                    "<pre class=\"highlight\"><code class=\"language-{language}\" \
+                    "<pre class=\"{highlight}\"><code class=\"language-{language}\" \
                      data-lang=\"{language}\">{content}</code></pre>"
                 ));
             }
             None => self.line(&format!(
-                "<pre class=\"highlight\"><code>{content}</code></pre>"
+                "<pre class=\"{highlight}\"><code>{content}</code></pre>"
             )),
         }
 
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// A passthrough block (`++++`): its content is emitted raw and unescaped,
+    /// with no wrapping element, matching Asciidoctor's `convert_pass`. Like
+    /// other verbatim/raw content, leading and trailing blank lines are
+    /// trimmed.
+    fn pass_block<'src>(&mut self, block: &'src Block<'src>) {
+        let content = block.rendered_content().unwrap_or_default();
+        let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+        strip_surrounding_blank_lines(&mut lines);
+        self.line(&lines.join("\n"));
+    }
+
+    /// The reindented, blank-line-trimmed inner text of a verbatim block's
+    /// `<pre>`, applying Asciidoctor's `tabsize`/`indent`/`source-indent`
+    /// handling and its leading/trailing blank-line trimming.
+    ///
+    /// The parser has already applied inline substitutions (so special
+    /// characters are escaped), but leaves indentation and surrounding blank
+    /// lines untouched; those are normalized here. `is_source` selects whether
+    /// the document `source-indent` attribute supplies a default indent, which
+    /// Asciidoctor applies only to source blocks.
+    fn verbatim_content<'src>(&self, block: &'src Block<'src>, is_source: bool) -> String {
+        let content = block.rendered_content().unwrap_or_default();
+        let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+
+        // A block-level `tabsize` overrides the document one; `indent` (falling
+        // back to `source-indent` for source blocks) drives reindentation.
+        let tab_size = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("tabsize"))
+            .map(|attr| ruby_to_i(attr.value()))
+            .unwrap_or(self.doc_tabsize);
+
+        let indent_size = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("indent"))
+            .map(|attr| ruby_to_i(attr.value()))
+            .or(if is_source { self.source_indent } else { None });
+
+        // Asciidoctor reindents when an indent is in force, or (to expand tabs
+        // only) when a positive tabsize is set with the indentation preserved.
+        match indent_size {
+            Some(indent) => adjust_indentation(&mut lines, indent, tab_size),
+            None if tab_size > 0 => adjust_indentation(&mut lines, -1, tab_size),
+            None => {}
+        }
+
+        strip_surrounding_blank_lines(&mut lines);
+        lines.join("\n")
+    }
+
+    /// Whether a verbatim block's `<pre>` should carry the `nowrap` class: the
+    /// block declares the `nowrap` option, or the document has disabled
+    /// `prewrap` (`:prewrap!:`).
+    fn is_nowrap(&self, block: &Block<'_>) -> bool {
+        block.has_option("nowrap") || !self.prewrap
+    }
+
+    /// The `class="nowrap"` attribute for a bare verbatim `<pre>`, or an empty
+    /// string when wrapping is left enabled.
+    fn nowrap_class(&self, block: &Block<'_>) -> &'static str {
+        if self.is_nowrap(block) {
+            " class=\"nowrap\""
+        } else {
+            ""
+        }
     }
 
     /// An open block: `<div class="openblock"><div
@@ -822,12 +1168,45 @@ impl Renderer<'_> {
     /// block's caption prefix (`Example N. `) ahead of the title text; an
     /// untitled example has no title div at all.
     fn example<'src>(&mut self, block: &'src Block<'src>) {
+        if block.has_option("collapsible") {
+            self.collapsible_example(block);
+            return;
+        }
+
         self.open_block_wrapper(block, "exampleblock");
         self.captioned_title(block);
         self.line("<div class=\"content\">");
         self.wrapped_content(block);
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// A collapsible example (`[%collapsible]`): a `<details>`/`<summary>`
+    /// disclosure widget in place of the standard `exampleblock`. The block's
+    /// id and roles carry onto the `<details>` element (`id="…"` and each role
+    /// as a class), matching Asciidoctor. The `open` option
+    /// (`[%collapsible%open]`) adds the boolean `open` attribute so the widget
+    /// starts expanded, and an untitled block falls back to a default `Details`
+    /// summary. A collapsible example is never captioned or numbered — the
+    /// parser suppresses its caption — so it does not consume an example
+    /// number.
+    fn collapsible_example<'src>(&mut self, block: &'src Block<'src>) {
+        let open = if block.has_option("open") {
+            " open"
+        } else {
+            ""
+        };
+        self.line(&format!(
+            "<details{}{}{open}>",
+            id_attribute(block.id()),
+            class_attribute("", &block.roles())
+        ));
+        let summary = block.title().unwrap_or("Details");
+        self.line(&format!("<summary class=\"title\">{summary}</summary>"));
+        self.line("<div class=\"content\">");
+        self.wrapped_content(block);
+        self.line("</div>");
+        self.line("</details>");
     }
 
     /// A quote block (`<div
@@ -910,6 +1289,389 @@ impl Renderer<'_> {
         self.line("</tr>");
         self.line("</table>");
         self.line("</div>");
+    }
+
+    /// An unordered list: `<div class="ulist …"><ul …><li>…</li>…</ul></div>`,
+    /// matching Asciidoctor's `convert_ulist`.
+    ///
+    /// The wrapper `<div>` carries the `ulist` class, then (for a checklist) a
+    /// `checklist` class, then the list's declared style (`square`, `circle`,
+    /// `none`, …) and any roles. The inner `<ul>` carries `class="checklist"`
+    /// for a checklist, otherwise the declared style as its class, or no class
+    /// at all for a plain bullet list.
+    fn ulist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let checklist = list.is_checklist();
+        let style = block.declared_style();
+
+        // `['ulist', ('checklist')?, style, *roles]` — the checklist class sits
+        // right after `ulist`, ahead of the style and roles.
+        let mut base = String::from("ulist");
+        if checklist {
+            base.push_str(" checklist");
+        }
+        if let Some(style) = style {
+            base.push(' ');
+            base.push_str(style);
+        }
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&base, &block.roles())
+        ));
+        self.block_title(block);
+
+        // A checklist's `<ul>` always carries `class="checklist"`; otherwise a
+        // declared style becomes the `<ul>` class, and a plain list gets none.
+        let ul_class = if checklist {
+            " class=\"checklist\"".to_string()
+        } else if let Some(style) = style {
+            format!(" class=\"{}\"", escape_attribute(style))
+        } else {
+            String::new()
+        };
+        self.line(&format!("<ul{ul_class}>"));
+
+        let interactive = block.has_option("interactive");
+        for item in list.child_blocks() {
+            self.list_item(item, checklist, interactive);
+        }
+
+        self.line("</ul>");
+        self.line("</div>");
+    }
+
+    /// An ordered list: `<div class="olist <style>"><ol
+    /// class="<style>" …><li>…</li>…</ol></div>`, matching Asciidoctor's
+    /// `convert_olist`.
+    ///
+    /// The numbering style (`arabic`, `loweralpha`, `lowerroman`, `upperalpha`,
+    /// `upperroman`) names both the wrapper `<div>` class and the `<ol>` class;
+    /// the `<ol>` additionally carries an HTML `type` for the alphabetic and
+    /// roman styles, a `start` when `[start=N]` is set, and a bare `reversed`
+    /// under the `%reversed` option.
+    fn olist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        let style = olist_style(block, list);
+
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&format!("olist {style}"), &block.roles())
+        ));
+        self.block_title(block);
+
+        // The HTML `type` mirrors Asciidoctor's `ORDERED_LIST_KEYWORDS`: arabic
+        // needs none, the others carry the matching numbering letter.
+        let type_attr = match style {
+            "loweralpha" => " type=\"a\"",
+            "lowerroman" => " type=\"i\"",
+            "upperalpha" => " type=\"A\"",
+            "upperroman" => " type=\"I\"",
+            _ => "",
+        };
+
+        // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor emits
+        // its value verbatim (an explicit first marker like `7.` does not).
+        let start_attr = list
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("start"))
+            .map(|attr| format!(" start=\"{}\"", escape_attribute(attr.value())))
+            .unwrap_or_default();
+
+        let reversed_attr = if block.has_option("reversed") {
+            " reversed"
+        } else {
+            ""
+        };
+
+        self.line(&format!(
+            "<ol class=\"{}\"{type_attr}{start_attr}{reversed_attr}>",
+            escape_attribute(style)
+        ));
+
+        for item in list.child_blocks() {
+            self.list_item(item, false, false);
+        }
+
+        self.line("</ol>");
+        self.line("</div>");
+    }
+
+    /// Emits one `<li>…</li>` for a list item: the principal text as a bare
+    /// `<p>`, followed by any attached blocks (continuation paragraphs, nested
+    /// lists), matching Asciidoctor's `convert_ulist`/`convert_olist` item
+    /// loop.
+    ///
+    /// An item's own id/roles decorate the `<li>`. When `checklist` is set and
+    /// the item carries a checkbox, the principal text is prefixed with the
+    /// checkbox marker selected by [`checkbox_marker`](Self::checkbox_marker).
+    fn list_item<'src>(&mut self, item: &'src Block<'src>, checklist: bool, interactive: bool) {
+        let Block::ListItem(list_item) = item else {
+            return;
+        };
+
+        // `<li id="…" class="…">`, `<li class="…">`, or a bare `<li>`, following
+        // Asciidoctor: the id (if any) comes first, then the item's roles.
+        let li_open = if let Some(id) = item.id() {
+            format!(
+                "<li id=\"{}\"{}>",
+                escape_attribute(id),
+                class_attribute("", &item.roles())
+            )
+        } else if !item.roles().is_empty() {
+            format!("<li{}>", class_attribute("", &item.roles()))
+        } else {
+            "<li>".to_string()
+        };
+        self.line(&li_open);
+
+        // The first attached block is the item's principal text, emitted as a
+        // bare `<p>`; the remainder render as ordinary nested blocks.
+        let mut blocks = list_item.child_blocks();
+        let principal = blocks
+            .next()
+            .and_then(|block| block.rendered_content())
+            .unwrap_or_default();
+
+        match (checklist, list_item.checkbox()) {
+            (true, Some(checked)) => {
+                let marker = self.checkbox_marker(checked, interactive);
+                self.line(&format!("<p>{marker}{principal}</p>"));
+            }
+            _ => self.line(&format!("<p>{principal}</p>")),
+        }
+
+        for block in blocks {
+            self.block(block);
+        }
+
+        self.line("</li>");
+    }
+
+    /// The checkbox glyph that prefixes a checklist item's text, mirroring
+    /// Asciidoctor's `convert_ulist`: an interactive `<input>` under the
+    /// `%interactive` option, a Font Awesome icon when `:icons: font` is set,
+    /// and the plain-text ballot-box entities otherwise. The trailing space is
+    /// part of the marker.
+    fn checkbox_marker(&self, checked: bool, interactive: bool) -> &'static str {
+        match (interactive, self.icons_font, checked) {
+            (true, _, true) => "<input type=\"checkbox\" data-item-complete=\"1\" checked> ",
+            (true, _, false) => "<input type=\"checkbox\" data-item-complete=\"0\"> ",
+            (false, true, true) => "<i class=\"fa fa-check-square-o\"></i> ",
+            (false, true, false) => "<i class=\"fa fa-square-o\"></i> ",
+            (false, false, true) => "&#10003; ",
+            (false, false, false) => "&#10063; ",
+        }
+    }
+
+    /// A table: `<table class="tableblock …">` wrapping an optional
+    /// `<caption>`, a `<colgroup>`, and `<thead>`/`<tbody>`/`<tfoot>` sections,
+    /// mirroring Asciidoctor's `html5` `convert_table`.
+    fn table<'src>(&mut self, block: &'src Block<'src>, table: &'src TableBlock<'src>) {
+        // The class list follows Asciidoctor's order exactly: `tableblock`, the
+        // frame and grid classes, an optional stripes class, then the
+        // width-driven class (`fit-content`/`stretch`) or an inline width style,
+        // then an optional float class, then the block's roles.
+        let frame = match table.frame() {
+            Frame::All => "all",
+            Frame::Ends => "ends",
+            Frame::Sides => "sides",
+            Frame::None => "none",
+        };
+        let grid = match table.grid() {
+            Grid::All => "all",
+            Grid::Rows => "rows",
+            Grid::Cols => "cols",
+            Grid::None => "none",
+        };
+        let mut classes = format!("tableblock frame-{frame} grid-{grid}");
+
+        if let Some(stripes) = table_stripes_class(table) {
+            classes.push(' ');
+            classes.push_str(&stripes);
+        }
+
+        // `autowidth` sizes the table (and columns) to content; `fit-content`
+        // marks that in HTML. Otherwise a table at the full content width gets
+        // `stretch`, and any other width becomes an inline `style`.
+        let autowidth = table.is_autowidth();
+        let has_width = table.width().is_some();
+        let mut style_attr = String::new();
+        if autowidth && !has_width {
+            classes.push_str(" fit-content");
+        } else {
+            let tablewidth = table.width().unwrap_or(100);
+            if tablewidth == 100 {
+                classes.push_str(" stretch");
+            } else {
+                style_attr = format!(" style=\"width: {tablewidth}%;\"");
+            }
+        }
+
+        if let Some(float) = table
+            .attrlist()
+            .and_then(|a| a.named_attribute("float"))
+            .map(|attr| attr.value())
+        {
+            classes.push(' ');
+            classes.push_str(float);
+        }
+
+        for role in block.roles() {
+            classes.push(' ');
+            classes.push_str(role);
+        }
+
+        self.line(&format!(
+            "<table{}{}{}>",
+            id_attribute(block.id()),
+            class_attribute(&classes, &[]),
+            style_attr
+        ));
+
+        // A titled table is captioned: the ready-made caption prefix
+        // (e.g. `"Table 1. "`) sits ahead of the title text.
+        if let Some(title) = block.title() {
+            let caption = block.caption().unwrap_or_default();
+            self.line(&format!(
+                "<caption class=\"title\">{caption}{title}</caption>"
+            ));
+        }
+
+        // Asciidoctor emits the colgroup and rows only when the table has at
+        // least one row; a table whose rows were all dropped (e.g. an overrun)
+        // is just an empty `<table></table>`.
+        let rowcount = table.header_row().is_some() as usize
+            + table.body_rows().len()
+            + table.footer_row().is_some() as usize;
+        if rowcount > 0 {
+            self.colgroup(table, autowidth);
+
+            if let Some(header) = table.header_row() {
+                self.line("<thead>");
+                self.table_row(header, TableSection::Head);
+                self.line("</thead>");
+            }
+            if !table.body_rows().is_empty() {
+                self.line("<tbody>");
+                for row in table.body_rows() {
+                    self.table_row(row, TableSection::Body);
+                }
+                self.line("</tbody>");
+            }
+            if let Some(footer) = table.footer_row() {
+                self.line("<tfoot>");
+                self.table_row(footer, TableSection::Foot);
+                self.line("</tfoot>");
+            }
+        }
+
+        self.line("</table>");
+    }
+
+    /// Emits the `<colgroup>` of `<col>` elements. An autowidth table (or an
+    /// autowidth column) emits a bare `<col>`; every other column carries its
+    /// computed percentage width as an inline style.
+    fn colgroup(&mut self, table: &TableBlock<'_>, autowidth: bool) {
+        self.line("<colgroup>");
+        if autowidth {
+            for _ in table.columns() {
+                self.line("<col>");
+            }
+        } else {
+            let pcwidths = column_pcwidths(table.columns());
+            for (col, pcwidth) in table.columns().iter().zip(pcwidths) {
+                if col.is_autowidth() {
+                    self.line("<col>");
+                } else {
+                    self.line(&format!("<col style=\"width: {pcwidth}%;\">"));
+                }
+            }
+        }
+        self.line("</colgroup>");
+    }
+
+    /// Emits one `<tr>` and its cells, tagging the section so header cells (and
+    /// the first row of a header section) render as `<th>`.
+    fn table_row<'src>(&mut self, row: &'src TableRow<'src>, section: TableSection) {
+        self.line("<tr>");
+        for cell in row.cells() {
+            self.table_cell(cell, section);
+        }
+        self.line("</tr>");
+    }
+
+    /// Emits one table cell. The tag is `<th>` for a header-section cell or a
+    /// cell in a `h`-styled column, `<td>` otherwise; the content is rendered
+    /// per the cell's [style](ColumnStyle).
+    fn table_cell<'src>(&mut self, cell: &'src TableCell<'src>, section: TableSection) {
+        let is_head = section == TableSection::Head;
+
+        // The content variant follows the cell's style: an AsciiDoc (`a`) cell
+        // carries block content, every other style carries inline `Simple`
+        // content. Matching the variant (rather than the style) keeps the two
+        // impossible pairings — an AsciiDoc-content header cell, a Simple-content
+        // AsciiDoc cell — off the map entirely.
+        let content = match cell.content() {
+            // An AsciiDoc cell never appears in the header row (the header is
+            // forced to the default style), so this is always a body cell.
+            TableCellContent::AsciiDoc(ad) => format!(
+                "<div class=\"content\">{}</div>",
+                render_cell_document(
+                    ad.blocks(),
+                    ad.title(),
+                    ad.is_inline(),
+                    self.icons_font,
+                    self.doc_tabsize,
+                    self.source_indent,
+                    self.prewrap,
+                )
+            ),
+            TableCellContent::Simple(simple) => {
+                if is_head {
+                    // A header cell is plain inline text, never paragraph-split
+                    // or style-wrapped.
+                    simple.rendered().to_string()
+                } else if cell.style() == ColumnStyle::Literal {
+                    format!(
+                        "<div class=\"literal\"><pre>{}</pre></div>",
+                        simple.rendered()
+                    )
+                } else {
+                    cell_paragraphs(cell, simple.rendered())
+                }
+            }
+        };
+
+        let tag = if is_head || cell.style() == ColumnStyle::Header {
+            "th"
+        } else {
+            "td"
+        };
+        let h_align = match cell.h_align() {
+            HorizontalAlignment::Left => "left",
+            HorizontalAlignment::Center => "center",
+            HorizontalAlignment::Right => "right",
+        };
+        let v_align = match cell.v_align() {
+            VerticalAlignment::Top => "top",
+            VerticalAlignment::Middle => "middle",
+            VerticalAlignment::Bottom => "bottom",
+        };
+        let colspan = if cell.colspan() > 1 {
+            format!(" colspan=\"{}\"", cell.colspan())
+        } else {
+            String::new()
+        };
+        let rowspan = if cell.rowspan() > 1 {
+            format!(" rowspan=\"{}\"", cell.rowspan())
+        } else {
+            String::new()
+        };
+
+        self.line(&format!(
+            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}>{content}</{tag}>"
+        ));
     }
 
     /// Emits the inner content shared by wrapper blocks (open, quote,
@@ -1026,6 +1788,261 @@ impl Renderer<'_> {
         self.line(&format!(
             "<!-- asciidoc-html5: unsupported block context '{context}' -->"
         ));
+    }
+}
+
+/// Which horizontal band of a table a row belongs to. The head band renders its
+/// cells as `<th>` and never paragraph-wraps or style-wraps them.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TableSection {
+    Head,
+    Body,
+    Foot,
+}
+
+/// The `stripes-<value>` class for a table, or `None` when no striping applies.
+///
+/// Asciidoctor emits the class whenever the resolved `stripes` value is truthy
+/// — an explicit `stripes` attribute on the table (even `stripes=none`) or a
+/// `table-stripes` document default. The parser folds the document default into
+/// [`TableBlock::stripes`], so a non-`None` value means striping is on; an
+/// explicit attribute is honored on top of that so `[stripes=none]` still emits
+/// `stripes-none`.
+fn table_stripes_class(table: &TableBlock<'_>) -> Option<String> {
+    let has_attr = table
+        .attrlist()
+        .and_then(|a| a.named_attribute("stripes"))
+        .is_some();
+    let stripes = table.stripes();
+    if !has_attr && stripes == Stripes::None {
+        return None;
+    }
+    let value = match stripes {
+        Stripes::None => "none",
+        Stripes::Even => "even",
+        Stripes::Odd => "odd",
+        Stripes::All => "all",
+        Stripes::Hover => "hover",
+    };
+    Some(format!("stripes-{value}"))
+}
+
+/// The formatted percentage-width string for every column, mirroring
+/// Asciidoctor's `Table#assign_column_widths` (round to 4 decimal places,
+/// donating any balance to the final column).
+///
+/// A `~` autowidth column contributes no proportional width; the remaining
+/// 100% is split evenly across the autowidth columns. The strings are used only
+/// for non-autowidth columns' `<col style>`, but every column is computed so
+/// the balance donation lands on the correct final column.
+///
+/// Asciidoctor also has a "no base" path that divides the width equally when
+/// the column-width total is zero; `asciidoc-parser` clamps every column width
+/// to at least 1 (a `0` specifier keeps the default width of 1), so that total
+/// is never zero and the path is unreachable here.
+fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
+    let n = columns.len();
+
+    // Autowidth (`~`) columns carry no proportional width; `width_base` is the
+    // sum of the remaining columns' widths (matching Asciidoctor, which excludes
+    // the `-1` autowidth widths from the base).
+    let autowidth_count = columns.iter().filter(|c| c.is_autowidth()).count();
+    let width_base: f64 = columns
+        .iter()
+        .filter(|c| !c.is_autowidth())
+        .map(|c| c.width() as f64)
+        .sum();
+
+    // The autowidth columns absorb whatever the fixed columns leave of the 100%,
+    // split evenly; the base then becomes the full 100. With any fixed column
+    // `width_base` is already positive, and an all-autowidth table lands here,
+    // so `base` is never zero.
+    let mut base = width_base;
+    let mut autowidth_value = 0.0;
+    if autowidth_count > 0 && width_base <= 100.0 {
+        autowidth_value = truncate4((100.0 - width_base) / autowidth_count as f64);
+        base = 100.0;
+    }
+
+    let mut pcwidths = vec![0.0_f64; n];
+    let mut total = 0.0_f64;
+    let mut last = 0.0_f64;
+    for (i, col) in columns.iter().enumerate() {
+        let width = if col.is_autowidth() {
+            autowidth_value
+        } else {
+            col.width() as f64
+        };
+        let pc = truncate4(width * 100.0 / base);
+        pcwidths[i] = pc;
+        total += pc;
+        last = pc;
+    }
+
+    // Any rounding balance is donated to the final column (half-up rounding).
+    if n > 0 && (total - 100.0).abs() > f64::EPSILON {
+        pcwidths[n - 1] = round4(100.0 - total + last);
+    }
+
+    pcwidths.iter().map(|pc| format_pcwidth(*pc)).collect()
+}
+
+/// Truncates `value` toward zero to four decimal places (Ruby's
+/// `Float#truncate 4`).
+fn truncate4(value: f64) -> f64 {
+    (value * 10000.0).trunc() / 10000.0
+}
+
+/// Rounds `value` half away from zero to four decimal places (Ruby's
+/// `Float#round 4`).
+fn round4(value: f64) -> f64 {
+    (value * 10000.0).round() / 10000.0
+}
+
+/// Formats a percentage width the way Ruby prints it: a whole number drops its
+/// decimals (`50`), otherwise up to four decimals with trailing zeros trimmed
+/// (`33.3333`, `17.647`).
+fn format_pcwidth(value: f64) -> String {
+    let scaled = (value * 10000.0).round() as i64;
+    let whole = scaled / 10000;
+    let frac = (scaled % 10000).abs();
+    if frac == 0 {
+        return whole.to_string();
+    }
+    let frac = format!("{frac:04}");
+    let frac = frac.trim_end_matches('0');
+    format!("{whole}.{frac}")
+}
+
+/// Renders the paragraph content of a non-header, non-literal, non-AsciiDoc
+/// cell, mirroring Asciidoctor's `Table::Cell#content`. `content` is the cell's
+/// already-substituted inline text (its `Simple` rendered value).
+///
+/// The cell text is split into paragraphs on blank lines — but only when the
+/// *raw* cell text contains a blank line, so a line reduced to blank by a
+/// substitution (e.g. `{blank}`) does not split the paragraph. Each paragraph
+/// is wrapped in `<p class="tableblock">`, and a styled column additionally
+/// wraps the text in the style's inline element (`<em>`/`<strong>`/`<code>`).
+/// An empty cell renders no `<p>` at all.
+fn cell_paragraphs(cell: &TableCell<'_>, content: &str) -> String {
+    // The style's inline wrapper (`e`/`s`/`m`); the default and header styles
+    // add none.
+    let (open, close) = match cell.style() {
+        ColumnStyle::Emphasis => ("<em>", "</em>"),
+        ColumnStyle::Strong => ("<strong>", "</strong>"),
+        ColumnStyle::Monospace => ("<code>", "</code>"),
+        _ => ("", ""),
+    };
+    let wrap = |para: &str| {
+        if open.is_empty() {
+            para.to_string()
+        } else {
+            format!("{open}{para}{close}")
+        }
+    };
+
+    // The split decision keys off the raw (untrimmed, but stripped) cell source,
+    // matching Asciidoctor's `@text.include? DOUBLE_LF`.
+    let raw = cell.span().data().trim();
+    let paragraphs: Vec<String> = if raw.contains("\n\n") {
+        split_blank_lines(content).map(wrap).collect()
+    } else if content.is_empty() {
+        vec![]
+    } else {
+        vec![wrap(content)]
+    };
+
+    if paragraphs.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p class=\"tableblock\">{}</p>",
+            paragraphs.join("</p>\n<p class=\"tableblock\">")
+        )
+    }
+}
+
+/// Splits `text` on runs of two or more newlines (Asciidoctor's
+/// `BlankLineRx = /\n{2,}/`), dropping any trailing empty segment the way
+/// Ruby's `String#split` does.
+fn split_blank_lines(text: &str) -> impl Iterator<Item = &str> {
+    let mut parts: Vec<&str> = vec![];
+    let bytes = text.as_bytes();
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\n' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j] == b'\n' {
+                j += 1;
+            }
+            if j - i >= 2 {
+                parts.push(&text[start..i]);
+                start = j;
+                i = j;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    parts.push(&text[start..]);
+
+    // Ruby's default split trims trailing empty strings.
+    while parts.last() == Some(&"") {
+        parts.pop();
+    }
+    parts.into_iter()
+}
+
+/// Renders the nested document of an AsciiDoc (`a`) table cell to a body-only
+/// HTML fragment (no trailing newline), the way Asciidoctor's
+/// `cell.content` calls `@inner_document.convert`.
+///
+/// An `inline`-doctype cell renders just the inline content of its first block.
+/// Otherwise the cell's blocks are rendered as embedded output, preceded by the
+/// nested-document `<h1>` when the cell's title is shown.
+fn render_cell_document<'s>(
+    blocks: &'s [Block<'s>],
+    title: Option<&str>,
+    inline: bool,
+    icons_font: bool,
+    doc_tabsize: i64,
+    source_indent: Option<i64>,
+    prewrap: bool,
+) -> String {
+    if inline {
+        // The inline doctype renders the first block's inline content; skip any
+        // leading attribute-entry blocks (which carry no rendered content) so the
+        // real first paragraph is what shows.
+        return blocks
+            .iter()
+            .find_map(|block| block.rendered_content())
+            .unwrap_or_default()
+            .to_string();
+    }
+
+    // The cell is a nested document that inherits the parent's verbatim-layout
+    // attributes (`tabsize`, `source-indent`, `prewrap`), so the sub-renderer
+    // carries them forward.
+    let mut renderer = Renderer {
+        out: String::new(),
+        custom_stylesheet: None,
+        standalone: false,
+        icons_font,
+        doc_tabsize,
+        source_indent,
+        prewrap,
+    };
+    if let Some(title) = title {
+        renderer.line(&format!("<h1>{title}</h1>"));
+    }
+    renderer.blocks(blocks.iter());
+
+    // `convert` joins its lines with no trailing newline; drop the one the
+    // line-oriented renderer left behind.
+    match renderer.out.strip_suffix('\n') {
+        Some(trimmed) => trimmed.to_string(),
+        None => renderer.out,
     }
 }
 
@@ -1154,8 +2171,90 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        let html = convert("* one\n* two");
+        // Description lists are not rendered yet, so they still emit the
+        // placeholder marker (unordered/ordered lists now render).
+        let html = convert("term:: definition");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    }
+
+    #[test]
+    fn unordered_list_renders_ulist() {
+        let html = convert("* one\n* two");
+        assert!(html.contains(
+            "<div class=\"ulist\">\n<ul>\n<li>\n<p>one</p>\n</li>\n<li>\n<p>two</p>\n</li>\n</ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn ordered_list_renders_olist_with_style() {
+        let html = convert(". one\n. two");
+        assert!(html.contains(
+            "<div class=\"olist arabic\">\n<ol class=\"arabic\">\n<li>\n<p>one</p>\n</li>"
+        ));
+    }
+
+    #[test]
+    fn ordered_list_honors_an_explicit_numbering_style() {
+        // An explicit `[loweralpha]` overrides the marker-derived style (the
+        // marker here is a plain `.`, which alone would be arabic), driving both
+        // the wrapper/`<ol>` class and the HTML `type`.
+        let html = convert("[loweralpha]\n. one\n. two");
+        assert!(
+            html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
+        );
+    }
+
+    #[test]
+    fn checklist_renders_default_ballot_markers() {
+        // An unordered list with any checkbox item becomes a checklist: the
+        // wrapper and `<ul>` gain the `checklist` class, and each checkbox item's
+        // text is prefixed with the ballot-box entity — `&#10063;` unchecked,
+        // `&#10003;` checked. A plain item in the same list keeps a bare `<p>`.
+        let html = convert("* [ ] todo\n* [x] done\n* plain");
+        assert!(html.contains("<div class=\"ulist checklist\">"));
+        assert!(html.contains("<ul class=\"checklist\">"));
+        assert!(html.contains("<p>&#10063; todo</p>"));
+        assert!(html.contains("<p>&#10003; done</p>"));
+        assert!(html.contains("<p>plain</p>"));
+    }
+
+    #[test]
+    fn checklist_interactive_renders_input_checkboxes() {
+        // The `%interactive` option swaps the entity markers for real
+        // `<input type="checkbox">` controls, `checked` for a checked item.
+        let html = convert("[%interactive]\n* [ ] todo\n* [x] done");
+        assert!(html.contains("<p><input type=\"checkbox\" data-item-complete=\"0\"> todo</p>"));
+        assert!(
+            html.contains("<p><input type=\"checkbox\" data-item-complete=\"1\" checked> done</p>")
+        );
+    }
+
+    #[test]
+    fn checklist_with_icons_font_renders_font_awesome_markers() {
+        // Under `:icons: font`, a non-interactive checklist uses Font Awesome
+        // glyphs instead of the ballot-box entities.
+        let html = crate::convert_with(
+            "* [ ] todo\n* [x] done",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains("<p><i class=\"fa fa-square-o\"></i> todo</p>"));
+        assert!(html.contains("<p><i class=\"fa fa-check-square-o\"></i> done</p>"));
+    }
+
+    #[test]
+    fn list_item_id_and_role_decorate_the_li() {
+        // When the parser attaches an id and/or roles to a list item (here via a
+        // block anchor / shorthand before the item), the renderer places them on
+        // the `<li>`, matching Asciidoctor's `convert_ulist` item loop: id first,
+        // then the item's roles as its class.
+        let id_only = convert("* one\n[[second]]\n* two");
+        assert!(id_only.contains("<li id=\"second\">\n<p>two</p>"));
+
+        let role_only = convert("* one\n[.special]\n* two");
+        assert!(role_only.contains("<li class=\"special\">\n<p>two</p>"));
+
+        let id_and_role = convert("* one\n[#second.special]\n* two");
+        assert!(id_and_role.contains("<li id=\"second\" class=\"special\">\n<p>two</p>"));
     }
 
     // Comments render to nothing, matching Asciidoctor. The parser preserves
@@ -1412,9 +2511,13 @@ mod tests {
     }
 
     #[test]
-    fn delimited_passthrough_is_unsupported_for_now() {
-        let html = convert("++++\nraw\n++++");
-        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'pass' -->"));
+    fn delimited_passthrough_emits_raw_content() {
+        // A `++++` block emits its content unescaped, with no wrapping element,
+        // matching Asciidoctor's `convert_pass`.
+        let html = crate::convert("++++\n<b>raw</b>\n++++");
+        assert!(html.contains("<b>raw</b>"));
+        assert!(!html.contains("&lt;b&gt;"));
+        assert!(!html.contains("unsupported"));
     }
 
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
@@ -1437,6 +2540,100 @@ mod tests {
             "<pre class=\"highlight\"><code class=\"language-perl\" data-lang=\"perl\">\
              die 'zomg perl is tough';</code></pre>"
         ));
+    }
+
+    #[test]
+    fn source_block_honors_nowrap() {
+        // A source block adds `nowrap` after `highlight` when wrapping is off
+        // (here via `:prewrap!:`), matching Asciidoctor's `highlight nowrap`.
+        let html = convert(":prewrap!:\n\n[source,ruby]\n    def x");
+        assert!(
+            html.contains("<pre class=\"highlight nowrap\"><code class=\"language-ruby\""),
+            "{html}"
+        );
+    }
+
+    // Tab expansion (`tabsize`) beyond the leading-tab fast path: an embedded
+    // tab advances to the next tab stop measured against the output column.
+
+    #[test]
+    fn verbatim_expands_an_embedded_tab() {
+        // A tab after two characters advances to column 4 (two spaces).
+        let html = convert(":tabsize: 4\n\n----\nab\tcd\n----");
+        assert!(html.contains("<pre>ab  cd</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_tab_landing_on_a_stop_expands_a_full_width() {
+        // A tab exactly on a stop expands to a whole `tabsize` run.
+        let html = convert(":tabsize: 4\n\n----\nabcd\te\n----");
+        assert!(html.contains("<pre>abcd    e</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_tab_one_short_of_a_stop_expands_to_a_single_space() {
+        // A tab one column short of a stop expands to exactly one space.
+        let html = convert(":tabsize: 4\n\n----\nabc\td\n----");
+        assert!(html.contains("<pre>abc d</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_honors_a_block_level_tabsize() {
+        // A block-level `tabsize` attribute overrides the document one.
+        let html = convert("[tabsize=4]\n----\n\tx\n----");
+        assert!(html.contains("<pre>    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn verbatim_expands_tabs_without_an_indent_attribute() {
+        // A positive `tabsize` expands tabs even with no `indent` set; the
+        // indentation is otherwise preserved (`indent_size` of -1).
+        let html = convert(":tabsize: 4\n\n----\n\tx\n----");
+        assert!(html.contains("<pre>    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn indent_with_a_flush_line_adds_only_the_margin() {
+        // When a non-empty line is already flush against the margin there is no
+        // common indent to strip, so `indent=N` just prepends the margin.
+        let html = convert("[indent=\"2\"]\n----\nflush\n  x\n----");
+        assert!(html.contains("<pre>  flush\n    x</pre>"), "{html}");
+    }
+
+    #[test]
+    fn adjust_indentation_tolerates_empty_input() {
+        // A defensive no-op guard matching Asciidoctor; the render path splits
+        // rendered content and so never passes an empty line set.
+        let mut lines: Vec<String> = Vec::new();
+        super::adjust_indentation(&mut lines, 0, 4);
+        assert!(lines.is_empty());
+    }
+
+    /// Counts the leading spaces of the sole `<pre>`'s content.
+    fn pre_leading_spaces(html: &str) -> usize {
+        let start = html.find("<pre>").expect("a <pre>") + "<pre>".len();
+        let end = html[start..].find("</pre>").expect("a closing </pre>") + start;
+        html[start..end].chars().take_while(|c| *c == ' ').count()
+    }
+
+    #[test]
+    fn verbatim_clamps_a_pathological_indent() {
+        // A document-supplied `indent` far beyond any real use is clamped so it
+        // cannot drive an unbounded space allocation; rendering still completes
+        // rather than aborting the process. (Would OOM before the clamp.)
+        let html = convert("[indent=\"999999999999\"]\n----\n  x\n----");
+        assert_eq!(
+            pre_leading_spaces(&html),
+            super::MAX_VERBATIM_INDENT as usize
+        );
+    }
+
+    #[test]
+    fn verbatim_clamps_a_pathological_tabsize() {
+        // Likewise for a huge `tabsize`: a single leading tab expands to at most
+        // the tab-size clamp, not gigabytes of spaces.
+        let html = convert(":tabsize: 999999999999\n\n----\n\tx\n----");
+        assert_eq!(pre_leading_spaces(&html), super::MAX_TAB_SIZE as usize);
     }
 
     #[test]
@@ -2110,5 +3307,85 @@ mod tests {
 
         // Nothing spliced: head still flows stylesheet → `</head>`.
         assert!(!html.contains("<meta name=\"x\""));
+    }
+
+    // Table rendering is verified end-to-end by the `tables_test.rb` port
+    // (`tests::asciidoctor_rb::tables_test`); these unit tests cover the handful
+    // of attribute-value branches that suite does not exercise, each checked
+    // against Asciidoctor 2.0.26's `html5` output.
+
+    #[test]
+    fn table_frame_and_grid_values_map_to_classes() {
+        // Every non-default `frame`/`grid` value produces its own class.
+        for (spec, class) in [
+            ("frame=sides", "frame-sides grid-all"),
+            ("frame=none", "frame-none grid-all"),
+            ("grid=rows", "frame-all grid-rows"),
+            ("grid=cols", "frame-all grid-cols"),
+            ("grid=none", "frame-all grid-none"),
+        ] {
+            let html = crate::convert(&format!("[{spec}]\n|===\n|a |b\n|===\n"));
+            assert!(
+                html.contains(&format!("<table class=\"tableblock {class} stretch\">")),
+                "{spec}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn table_stripes_value_adds_a_class() {
+        // A `stripes` value — including an explicit `none` — adds `stripes-<v>`.
+        for value in ["even", "all", "hover", "none"] {
+            let html = crate::convert(&format!("[stripes={value}]\n|===\n|a |b\n|===\n"));
+            assert!(
+                html.contains(&format!(
+                    "<table class=\"tableblock frame-all grid-all stripes-{value} stretch\">"
+                )),
+                "{value}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn table_role_becomes_a_trailing_class() {
+        let html = crate::convert("[.myrole]\n|===\n|a |b\n|===\n");
+        assert!(
+            html.contains("<table class=\"tableblock frame-all grid-all stretch myrole\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn zero_width_column_specifier_keeps_the_default_width() {
+        // `asciidoc-parser` clamps a `0` width specifier to the default width of
+        // 1, so `cols="0,0"` behaves like `cols="1,1"` — an even 50/50 split.
+        let html = crate::convert("[cols=\"0,0\"]\n|===\n|a |b\n|===\n");
+        assert_eq!(html.matches("<col style=\"width: 50%;\">").count(), 2);
+    }
+
+    #[test]
+    fn split_blank_lines_matches_ruby_split_semantics() {
+        // Interior blank lines split into paragraphs; a trailing blank line is
+        // dropped, mirroring Ruby's `String#split(/\n{2,}/)`.
+        use super::split_blank_lines;
+        assert_eq!(split_blank_lines("a\n\nb").collect::<Vec<_>>(), ["a", "b"]);
+        assert_eq!(
+            split_blank_lines("a\n\n\nb\n\n").collect::<Vec<_>>(),
+            ["a", "b"]
+        );
+        assert_eq!(split_blank_lines("solo").collect::<Vec<_>>(), ["solo"]);
+    }
+
+    #[test]
+    fn empty_asciidoc_cell_renders_an_empty_content_div() {
+        // An AsciiDoc (`a`) cell with no content still gets its `content`
+        // wrapper — and the nested render returns the empty string.
+        let html = crate::convert("|===\na|\n|===\n");
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\"><div class=\"content\"></div></td>"
+            ),
+            "{html}"
+        );
     }
 }

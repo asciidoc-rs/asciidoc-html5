@@ -12,10 +12,15 @@
 //!   (`foo/child::text()`, equivalent to the default child step)
 //! - `foo/preceding::tag`, `foo/following::tag` — the general document-order
 //!   axes (excluding ancestors / descendants respectively)
+//! - `foo/self::tag` — the self axis: the context node itself, kept only when
+//!   it matches the node test (used to name the type of a positionally-selected
+//!   node, e.g. `((…)[N])/self::div[@class="…"]`)
 //! - predicates `[@id="x"]`, `[@class="x"]`, `[@attr="x"]`, `[@attr]`,
 //!   `[text()="x"]`, `[contains(text(), "x")]`, `[normalize-space(text()) =
 //!   "x"]`, `[starts-with(., "x")]`, and the positional `[N]` (1-indexed, per
-//!   context node)
+//!   context node). Predicates are applied in source order, so a positional
+//!   `[N]` selects the Nth node that the predicates to its left left behind
+//!   (`tag[text()="x"][2]` ≠ `tag[2][text()="x"]`)
 //! - a leading grouped path `(subpath)[N]…/rest` — the parenthesized subpath is
 //!   evaluated first, then a positional predicate on the *group* selects the
 //!   Nth match in document order across the whole set (not per context, the way
@@ -87,17 +92,21 @@ fn query_grouped<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNode> 
 /// in place: a bare integer selects the Nth match globally (1-indexed), any
 /// other predicate filters the set.
 fn apply_group_predicate(body: &str, nodes: &mut Vec<&VirtualNode>) {
-    if let Ok(n) = body.parse::<usize>() {
-        let picked = n.checked_sub(1).and_then(|i| nodes.get(i)).copied();
-        nodes.clear();
-        nodes.extend(picked);
-        return;
+    // A group predicate is one `[…]`, so it parses to a single term: a
+    // positional `[N]` that picks the Nth match across the whole group, or a
+    // value filter that retains the matches.
+    let mut terms = Vec::new();
+    parse_predicate(body, &mut terms);
+    for term in &terms {
+        match term {
+            PredTerm::Index(n) => {
+                let picked = n.checked_sub(1).and_then(|i| nodes.get(i)).copied();
+                nodes.clear();
+                nodes.extend(picked);
+            }
+            PredTerm::Filter(pred) => nodes.retain(|node| pred.matches(node)),
+        }
     }
-
-    let mut preds = Vec::new();
-    let mut index = None;
-    parse_predicate(body, &mut preds, &mut index);
-    nodes.retain(|node| preds.iter().all(|p| p.matches(node)));
 }
 
 /// Finds the index of the `)` that closes the `(` at the start of `s`, ignoring
@@ -146,8 +155,26 @@ fn run_steps<'a>(
     for step in steps {
         let mut next: Vec<&VirtualNode> = Vec::new();
         for &node in &context {
-            let mut matched: Vec<&VirtualNode> = match step.axis {
-                Axis::Child => node.children.iter().filter(|c| step.matches(c)).collect(),
+            // Collect the nodes on the axis that satisfy only the *node test*
+            // (the name/`text()` test) — not the value predicates yet.
+            let candidates: Vec<&VirtualNode> = match step.axis {
+                // The `self::` axis is the context node itself, kept only when it
+                // satisfies the node test; the predicate loop below applies any
+                // value or positional predicates. The suite uses it to name the
+                // type of a positionally-selected node, e.g.
+                // `((//ol/li)[1]/*)[2]/self::div[@class="ulist"]`.
+                Axis::Itself => {
+                    if step.name_matches(node) {
+                        vec![node]
+                    } else {
+                        vec![]
+                    }
+                }
+                Axis::Child => node
+                    .children
+                    .iter()
+                    .filter(|c| step.name_matches(c))
+                    .collect(),
                 Axis::Descendant => {
                     let mut acc = Vec::new();
                     collect_descendants(node, step, &mut acc);
@@ -155,30 +182,37 @@ fn run_steps<'a>(
                 }
                 Axis::FollowingSibling => following_siblings(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::PrecedingSibling => preceding_siblings(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::Following => following(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
                 Axis::Preceding => preceding(root, node)
                     .into_iter()
-                    .filter(|c| step.matches(c))
+                    .filter(|c| step.name_matches(c))
                     .collect(),
             };
 
-            // A positional predicate selects the Nth match within this context
-            // node (1-indexed), matching XPath's per-context semantics.
-            if let Some(n) = step.index {
-                matched = matched
-                    .into_iter()
-                    .nth(n.wrapping_sub(1))
-                    .into_iter()
-                    .collect();
+            // XPath applies the predicates left to right, within this context
+            // node's node-test matches: a value filter keeps the nodes it
+            // matches, and a positional `[N]` keeps the Nth (1-indexed) of
+            // whatever survives so far. Applying them in source order is what
+            // makes `th[text()="B"][2]` differ from `th[2][text()="B"]`.
+            let mut matched = candidates;
+            for term in &step.preds {
+                match term {
+                    PredTerm::Filter(pred) => matched.retain(|m| pred.matches(m)),
+                    PredTerm::Index(n) => {
+                        let picked = n.checked_sub(1).and_then(|i| matched.get(i)).copied();
+                        matched.clear();
+                        matched.extend(picked);
+                    }
+                }
             }
 
             for m in matched {
@@ -191,11 +225,12 @@ fn run_steps<'a>(
     context
 }
 
-/// Collects every descendant of `node` (excluding `node` itself) that matches
-/// `step`, in document order.
+/// Collects every descendant of `node` (excluding `node` itself) that satisfies
+/// `step`'s node test, in document order. Value predicates and the positional
+/// index are applied by the caller, after this name-only gather.
 fn collect_descendants<'a>(node: &'a VirtualNode, step: &Step, acc: &mut Vec<&'a VirtualNode>) {
     for child in &node.children {
-        if step.matches(child) {
+        if step.name_matches(child) {
             acc.push(child);
         }
         collect_descendants(child, step, acc);
@@ -328,6 +363,7 @@ fn push_unique<'a>(set: &mut Vec<&'a VirtualNode>, node: &'a VirtualNode) {
 /// The axis a single location step walks.
 #[derive(Clone, Copy)]
 enum Axis {
+    Itself,
     Child,
     Descendant,
     FollowingSibling,
@@ -390,34 +426,49 @@ impl Pred {
     }
 }
 
+/// One bracketed predicate, in the order it was written: either a value
+/// [`Filter`](PredTerm::Filter) or a positional [`Index`](PredTerm::Index)
+/// (1-indexed).
+///
+/// XPath evaluates a step's predicates left to right, and a positional
+/// predicate selects the Nth of whatever the predicates to its *left* left
+/// behind. Keeping the terms in source order (rather than a set of filters plus
+/// one detached index) is what makes `th[text()="B"][2]` — "the second `th`
+/// whose text is B" — differ from `th[2][text()="B"]` — "the second `th`, if
+/// its text is B".
+enum PredTerm {
+    Filter(Pred),
+    Index(usize),
+}
+
 /// Collapses each run of whitespace in `s` to a single space and trims the
 /// ends, mirroring XPath's `normalize-space()`.
 fn normalize_space(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-/// One location step: an axis, a node test, its (non-positional) predicates,
-/// and an optional positional `[N]`.
+/// One location step: an axis, a node test, and its predicates in source order
+/// (value filters and positional `[N]`s interleaved as written).
 struct Step {
     axis: Axis,
     name: NameTest,
-    preds: Vec<Pred>,
-    index: Option<usize>,
+    preds: Vec<PredTerm>,
 }
 
 impl Step {
-    fn matches(&self, node: &VirtualNode) -> bool {
+    /// Whether `node` satisfies this step's *node test* (name / `text()`)
+    /// alone, ignoring its predicates. Predicates (including positional
+    /// selection) apply to the node-test matches, so the two are kept separate.
+    fn name_matches(&self, node: &VirtualNode) -> bool {
         // A `#text` node is character data, not an element: only an explicit
         // `text()` node test addresses it, and `text()` addresses nothing else.
         // (`#root` is the synthetic top and, like `#text`, never satisfies an
         // element node test.)
-        let name_ok = match &self.name {
+        match &self.name {
             NameTest::Any => !node.tag.starts_with('#'),
             NameTest::Named(tag) => &node.tag == tag,
             NameTest::Text => node.tag == "#text",
-        };
-
-        name_ok && self.preds.iter().all(|p| p.matches(node))
+        }
     }
 }
 
@@ -480,7 +531,12 @@ fn split_steps(s: &str) -> Vec<(Combinator, &str)> {
 /// Parses one step token, honoring an explicit sibling axis prefix; otherwise
 /// the axis comes from the preceding combinator.
 fn parse_step(comb: Combinator, token: &str) -> Step {
-    let (axis, node_test) = if let Some(rest) = token.strip_prefix("child::") {
+    let (axis, node_test) = if let Some(rest) = token.strip_prefix("self::") {
+        // The `self::` axis keeps the context node itself when it matches; the
+        // suite writes it to name the type of a positionally-selected node
+        // (`((…)[N])/self::div[@class="…"]`).
+        (Axis::Itself, rest)
+    } else if let Some(rest) = token.strip_prefix("child::") {
         // The explicit `child::` axis is the same as the default child step; the
         // suite writes it only to reach the `text()` node test
         // (`a/child::text()`).
@@ -513,13 +569,8 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
         (axis, token)
     };
 
-    let (name, preds, index) = parse_node_test(node_test);
-    Step {
-        axis,
-        name,
-        preds,
-        index,
-    }
+    let (name, preds) = parse_node_test(node_test);
+    Step { axis, name, preds }
 }
 
 /// Parses a node test of the form `tag`, `*`, or `tag[pred][pred]…`.
@@ -530,7 +581,7 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
 /// (e.g. a stray `]` as in `p]`), an unterminated `[`, or any leftover text
 /// after the predicates. Silently accepting these would evaluate a different
 /// selector than written (a false pass); see [`parse_predicate`].
-fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
+fn parse_node_test(s: &str) -> (NameTest, Vec<PredTerm>) {
     let (base, mut rest) = match s.find('[') {
         Some(i) => (&s[..i], &s[i..]),
         None => (s, ""),
@@ -553,7 +604,6 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
     };
 
     let mut preds = Vec::new();
-    let mut index = None;
     while !rest.is_empty() {
         // Every remaining chunk must be a `[…]` predicate. Anything else —
         // trailing junk after the last predicate, or a stray `]` — is a
@@ -572,11 +622,11 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
                  Fix the expression — see html5/src/tests/asciidoctor_rb/README.md."
             );
         };
-        parse_predicate(after_open[..rel_close].trim(), &mut preds, &mut index);
+        parse_predicate(after_open[..rel_close].trim(), &mut preds);
         rest = after_open[rel_close + 1..].trim_start();
     }
 
-    (name, preds, index)
+    (name, preds)
 }
 
 /// Parses a single predicate body (the text between `[` and `]`).
@@ -588,30 +638,32 @@ fn parse_node_test(s: &str) -> (NameTest, Vec<Pred>, Option<usize>) {
 /// false pass — so an unsupported construct must fail loudly. Per the harness
 /// rule (`asciidoctor_rb/README.md`), the fix is to extend this parser (with
 /// unit tests), never to work around the panic.
-fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>) {
+fn parse_predicate(inner: &str, terms: &mut Vec<PredTerm>) {
     if let Ok(n) = inner.parse::<usize>() {
-        *index = Some(n);
+        terms.push(PredTerm::Index(n));
         return;
     }
+
+    let mut filter = |pred| terms.push(PredTerm::Filter(pred));
 
     if let Some(attr) = inner.strip_prefix('@') {
         if let Some((name, value)) = attr.split_once('=') {
             let name = name.trim();
             let value = unquote(value.trim());
             match name {
-                "id" => preds.push(Pred::Id(value)),
-                "class" => preds.push(Pred::Class(value)),
-                _ => preds.push(Pred::Attr(name.to_string(), value)),
+                "id" => filter(Pred::Id(value)),
+                "class" => filter(Pred::Class(value)),
+                _ => filter(Pred::Attr(name.to_string(), value)),
             }
         } else {
-            preds.push(Pred::AttrExists(attr.trim().to_string()));
+            filter(Pred::AttrExists(attr.trim().to_string()));
         }
         return;
     }
 
     if let Some(after) = inner.strip_prefix("text()") {
         if let Some(value) = after.trim_start().strip_prefix('=') {
-            preds.push(Pred::Text(unquote(value.trim())));
+            filter(Pred::Text(unquote(value.trim())));
             return;
         }
     }
@@ -627,13 +679,13 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
             target.trim() == "text()",
             "assert_html `contains()` supports only `text()` as its first argument (got `[{inner}]`)"
         );
-        preds.push(Pred::ContainsText(unquote(value.trim())));
+        filter(Pred::ContainsText(unquote(value.trim())));
         return;
     }
 
     if let Some(after) = inner.strip_prefix("normalize-space(text())") {
         if let Some(value) = after.trim_start().strip_prefix('=') {
-            preds.push(Pred::NormalizeSpaceText(unquote(value.trim())));
+            filter(Pred::NormalizeSpaceText(unquote(value.trim())));
             return;
         }
     }
@@ -652,7 +704,7 @@ fn parse_predicate(inner: &str, preds: &mut Vec<Pred>, index: &mut Option<usize>
             "assert_html `starts-with()` supports only `.` or `text()` as its first \
              argument (got `[{inner}]`)"
         );
-        preds.push(Pred::StartsWithText(unquote(value.trim())));
+        filter(Pred::StartsWithText(unquote(value.trim())));
         return;
     }
 
