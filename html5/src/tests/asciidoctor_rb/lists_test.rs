@@ -121,18 +121,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n- Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dash_elements_using_spaces() {
@@ -148,18 +143,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" - Foo\n - Boo\n - Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dash_elements_using_tabs() {
@@ -175,18 +165,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t-\tFoo\n\t-\tBoo\n\t-\tBlech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_blank_lines_should_merge_lists() {
@@ -208,18 +193,13 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n- Boo\n\n\n- Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list() {
@@ -243,6 +223,7 @@ context "Bulleted lists (:ulist)" do
       assert_xpath '//ul/li', output, 3
       assert_xpath %((//ul/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n// line comment\n// another line comment\n- Boo\n// line comment\nmore text\n// another line comment\n- Blech\n");
@@ -255,12 +236,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_a_line_comment_offset_by_blank_lines_should_not_merge_lists()
@@ -284,6 +259,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n\n//\n\n- Blech\n");
@@ -291,12 +267,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists()
@@ -320,6 +290,7 @@ more text"]"#,
       assert_xpath '(//ul)[2]/li', output, 1
       assert_xpath '(//ul)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n- Boo\n\n.Also\n- Blech\n");
@@ -332,12 +303,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -359,6 +324,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n- Boo\n\n:foo: bar\n- Blech\n");
@@ -366,12 +332,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_is_folded_into_text_of_list_item() {
@@ -392,6 +352,7 @@ more text"]"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\nwrapped content']", output, 1
     end
+
 "#
             );
             let output =
@@ -405,12 +366,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_that_resembles_a_block_title_is_folded_into_text_of_list_item(
@@ -431,6 +386,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\n.wrapped content']", output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n.wrapped content\n- Boo\n- Blech\n");
@@ -443,12 +399,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_non_indented_wrapped_line_that_resembles_an_attribute_entry_is_folded_into_text_of_list_item(
@@ -469,6 +419,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\n:foo: bar']", output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n- Foo\n:foo: bar\n- Boo\n- Blech\n");
@@ -481,12 +432,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_list_item_with_a_nested_marker_terminates_non_indented_paragraph_for_text_of_list_item(
@@ -504,18 +449,13 @@ wrapped content']"#,
       assert_css 'ul ul', output, 1
       refute_includes output, '* Foo'
     end
+
 "#
             );
             let output = convert("- Foo\nBar\n* Foo\n");
             assert_css(&output, r#"ul ul"#, 1);
             assert!(!output.contains("* Foo"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: this test also asserts `ul dl` for the nested `term:: def`
         // list, which needs description-list rendering (#154); the `ul ol` half
@@ -543,11 +483,6 @@ wrapped content']"#,
       assert_css 'ul dl', output, 1
       refute_includes output, 'term:: def'
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -571,6 +506,7 @@ wrapped content']"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath "//ul/li[1]/p[text() = 'Foo\nwrapped content']", output, 1
     end
+
 "#
             );
             let output =
@@ -584,12 +520,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts — via a node-text line comparison the harness
         // cannot express (#157) — that the wrapped line keeps its leading indent,
@@ -616,11 +546,6 @@ wrapped content']"#,
       assert_equal '  // not line comment', lines[1].chomp
       assert_equal 'second wrapped line', lines[2].chomp
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -641,18 +566,13 @@ wrapped content']"#,
       assert_css 'ul ul', output, 1
       refute_includes output, '* Foo'
     end
+
 "#
             );
             let output = convert("- Foo\n  Bar\n* Foo\n");
             assert_css(&output, r#"ul ul"#, 1);
             assert!(!output.contains("* Foo"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_list_item_that_starts_with_a_sequence_of_list_markers_characters_should_not_match_a_nested_list(
@@ -670,6 +590,7 @@ wrapped content']"#,
       assert_css 'ul li', output, 1
       assert_xpath "//ul/li/p[text()='first item\n*. normal text']", output, 1
     end
+
 "#
             );
             let output = convert(" * first item\n *. normal text\n");
@@ -682,12 +603,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: like its non-indented sibling above, asserts `ul dl` for
         // the nested `term:: def` list — description-list rendering is not built
@@ -716,11 +631,6 @@ wrapped content']"#,
       assert_css 'ul dl', output, 1
       refute_includes output, 'term:: def'
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -751,6 +661,7 @@ wrapped content']"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text() = "literal"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n  literal\n\n- Boo\n- Blech\n");
@@ -769,12 +680,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
@@ -800,6 +705,7 @@ wrapped content']"#,
       assert_xpath '((//li)[1]//pre)[1][text()="<code>text</code>"]', output, 1
       assert_xpath '((//li)[1]//pre)[2][text()="more <code>text</code>"]', output, 1
     end
+
 "#
             );
             let output = convert("* first item\n\n  <code>text</code>\n\n  more <code>text</code>\n\n* second item\n");
@@ -818,12 +724,6 @@ wrapped content']"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn a_literal_paragraph_offset_by_a_blank_line_in_list_content_followed_by_line_with_continuation_is_appended_as_two_blocks(
@@ -855,6 +755,7 @@ wrapped content']"#,
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
             );
             let output =
@@ -885,12 +786,6 @@ wrapped content']"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn an_admonition_paragraph_attached_by_a_line_continuation_to_a_list_item_with_wrapped_text_should_produce_admonition(
         ) {
@@ -913,6 +808,7 @@ wrapped content']"#,
       assert_css 'ul > li > p + .admonitionblock.note', output, 1
       assert_xpath '//ul/li/*[@class="admonitionblock note"]//td[@class="content"][normalize-space(text())="This is a note."]', output, 1
     end
+
 "#
             );
             let output = convert("- first-line text\n  wrapped text\n+\nNOTE: This is a note.\n");
@@ -932,12 +828,6 @@ wrapped text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn paragraph_like_blocks_attached_to_an_ancestor_list_item_by_a_list_continuation_should_produce_blocks(
@@ -966,6 +856,7 @@ wrapped text"]"#,
       assert_css 'ul ul hr', output, 0
       assert_xpath '(//ul)[1]/li/hr', output, 1
     end
+
 "#
             );
             let output = convert("* parent\n ** child\n\n+\nNOTE: This is a note.\n\n* another parent\n ** another child\n\n+\n'''\n");
@@ -978,12 +869,6 @@ wrapped text"]"#,
             assert_css(&output, r#"ul ul hr"#, 0);
             assert_xpath(&output, r#"(//ul)[1]/li/hr"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts `ul > li > .colist`, which needs callout-list
         // rendering (#155); it also drives parser-model APIs
@@ -1012,11 +897,6 @@ wrapped text"]"#,
       assert_css 'ul > li > .listingblock', output, 1
       assert_css 'ul > li > .colist', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1045,6 +925,7 @@ wrapped text"]"#,
       assert_css 'ul > li > .paragraph', output, 1
       assert_css 'ul > li > .exampleblock', output, 1
     end
+
 "#
             );
             let output = convert(
@@ -1053,12 +934,6 @@ wrapped text"]"#,
             assert_css(&output, r#"ul > li > .paragraph"#, 1);
             assert_css(&output, r#"ul > li > .exampleblock"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn appends_line_as_paragraph_if_attached_by_continuation_following_line_comment() {
@@ -1081,6 +956,7 @@ wrapped text"]"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="paragraph"]/p[text()="paragraph in list item 1"]', output, 1
       assert_xpath '(//ul/li)[2]/p[text()="list item 2"]', output, 1
     end
+
 "#
             );
             let output = convert(
@@ -1101,12 +977,6 @@ wrapped text"]"#,
             );
             assert_xpath(&output, r#"(//ul/li)[2]/p[text()="list item 2"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: asserts the attached literal keeps its ` literal`
         // first-line indent, which the parser strips before the renderer sees it
@@ -1135,11 +1005,6 @@ wrapped text"]"#,
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1174,6 +1039,7 @@ wrapped text"]"#,
       assert_xpath '((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text()="literal"]', output, 1
       assert_xpath "((//ul/li)[1]/*[@class='literalblock'])[2]//pre[text()='more\nliteral']", output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1201,12 +1067,6 @@ literal']"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         // Non-normative: asserts the attached literal keeps its ` literal`
         // first-line indent, which the parser strips before the renderer sees it
         // (#168).
@@ -1232,11 +1092,6 @@ literal']"#,
       assert_xpath '(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath "((//ul/li)[1]/*[@class='literalblock'])[1]//pre[text() = '  literal\n- Boo\n- Blech']", output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -1258,18 +1113,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n* Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_asterisk_elements_using_spaces() {
@@ -1285,18 +1135,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" * Foo\n * Boo\n * Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_unicode_bullet_elements_using_spaces() {
@@ -1312,18 +1157,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" \u{2022} Foo\n \u{2022} Boo\n \u{2022} Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_asterisk_elements_using_tabs() {
@@ -1339,18 +1179,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t*\tFoo\n\t*\tBoo\n\t*\tBlech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_block_style_as_style_class() {
@@ -1369,6 +1204,7 @@ literal']"#,
         assert_css ".ulist.#{style} ul.#{style}", output, 1
       end
     end
+
 "#
             );
             for style in ["disc", "square", "circle"] {
@@ -1378,12 +1214,6 @@ literal']"#,
                 assert_css(&output, &format!(".ulist.{style} ul.{style}"), 1);
             }
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_blank_lines_should_merge_lists() {
@@ -1405,18 +1235,13 @@ literal']"#,
       assert_xpath '//ul', output, 1
       assert_xpath '//ul/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n\n* Boo\n\n\n* Blech\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list()
@@ -1441,6 +1266,7 @@ literal']"#,
       assert_xpath '//ul/li', output, 3
       assert_xpath %((//ul/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n* Foo\n// line comment\n// another line comment\n* Boo\n// line comment\nmore text\n// another line comment\n* Blech\n");
@@ -1453,12 +1279,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_a_line_comment_offset_by_blank_lines_should_not_merge_lists(
@@ -1482,6 +1302,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n\n//\n\n* Blech\n");
@@ -1489,12 +1310,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists(
@@ -1518,6 +1333,7 @@ more text"]"#,
       assert_xpath '(//ul)[2]/li', output, 1
       assert_xpath '(//ul)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n* Boo\n\n.Also\n* Blech\n");
@@ -1530,12 +1346,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn asterisk_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -1557,6 +1367,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n* Foo\n* Boo\n\n:foo: bar\n* Blech\n");
@@ -1564,12 +1375,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_should_terminate_before_next_lower_section_heading() {
@@ -1592,6 +1397,7 @@ more text"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//h2[text() = "Section"]', output, 1
     end
+
 "#
             );
             let output =
@@ -1600,12 +1406,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//h2[text() = "Section"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_should_terminate_before_next_lower_section_heading_with_implicit_id() {
@@ -1629,6 +1429,7 @@ more text"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//h2[@id = "sec"][text() = "Section"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1638,12 +1439,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//h2[@id = "sec"][text() = "Section"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_not_find_section_title_immediately_below_last_list_item() {
@@ -1663,6 +1458,7 @@ more text"]"#,
       assert_includes output, '== Not a section'
       assert_xpath %((//li)[2]/p[text() = "second\n== Not a section"]), output, 1
     end
+
 "#
             );
             let output = convert("* first\n* second\n== Not a section\n");
@@ -1677,12 +1473,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_trailing_line_separator_in_text_of_list_item() {
@@ -1699,18 +1489,13 @@ more text"]"#,
       assert_css 'li', output, 3
       assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}"]), output, 1
     end
+
 "#
             );
             let output = convert_standalone("* a\n* b\u{2028}\n* c");
             assert_css(&output, r#"li"#, 3);
             assert_xpath(&output, r#"(//li)[2]/p[text()="b "]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_line_separator_in_text_of_list_item() {
@@ -1737,15 +1522,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod lists_with_inline_markup {
         use super::*;
@@ -1776,6 +1556,7 @@ more text"]"#,
       assert_xpath '(//ul/li)[2]//em', output, 1
       assert_xpath '(//ul/li)[3]//code', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1787,12 +1568,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul/li)[2]//em"#, 1);
             assert_xpath(&output, r#"(//ul/li)[3]//code"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn attribute_substitutions() {
@@ -1813,6 +1588,7 @@ more text"]"#,
       assert_xpath '(//ul/li)[1]//p[text() = "side a | side b"]', output, 1
       assert_xpath '(//ul/li)[2]//p[text() = "Take me to a bar."]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1827,12 +1603,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn leading_dot_is_treated_as_text_not_block_title() {
@@ -1851,6 +1621,7 @@ more text"]"#,
         assert_xpath "(//ul/li)[#{index + 1}]//p[text() = '#{text}']", output, 1
       end
     end
+
 "#
             );
             let output = convert_standalone("* .first\n* .second\n* .third\n");
@@ -1860,12 +1631,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul/li)[2]//p[text() = '.second']"#, 1);
             assert_xpath(&output, r#"(//ul/li)[3]//p[text() = '.third']"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn word_ending_sentence_on_continuing_line_not_treated_as_a_list_item() {
@@ -1882,6 +1647,7 @@ more text"]"#,
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 2
     end
+
 "#
             );
             let output = convert_standalone(
@@ -1890,12 +1656,6 @@ more text"]"#,
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 2);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_unordered_list_item_text_and_register_it_as_a_reference(
@@ -1921,6 +1681,7 @@ more text"]"#,
       assert_xpath '(//p)[1]/a[@href="#grays-peak"][text()="Grays Peak"]', output, 1
       assert_xpath '(//p)[1]/a[@href="#mount-evans"][text()="Mount Evans"]', output, 1
     end
+
 "##
             );
             let input = "The highest peak in the Front Range is <<grays-peak>>, which tops <<mount-evans>> by just a few feet.\n\n* [[mount-evans,Mount Evans]]At 14,271 feet, Mount Evans is the highest summit of the Chicago Peaks in the Front Range of the Rocky Mountains.\n* [[grays-peak,Grays Peak]]\nGrays Peak rises to 14,278 feet, making it the highest summit in the Front Range of the Rocky Mountains.\n* Longs Peak is a 14,259-foot high, prominent mountain summit in the northern Front Range of the Rocky Mountains.\n* Pikes Peak is the highest summit of the southern Front Range of the Rocky Mountains at 14,115 feet.\n";
@@ -1939,12 +1700,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_ordered_list_item_text_and_register_it_as_a_reference(
@@ -1970,6 +1725,7 @@ more text"]"#,
       assert_xpath '(//p)[1]/a[@href="#step-2"][text()="Step 2"]', output, 1
       assert_xpath '(//p)[1]/a[@href="#step-4"][text()="Step 4"]', output, 1
     end
+
 "##
             );
             let input = "This is a cross-reference to <<step-2>>.\nThis is a cross-reference to <<step-4>>.\n\n. Ordered list, item 1, without anchor\n. [[step-2,Step 2]]Ordered list, item 2, with anchor\n. Ordered list, item 3, without anchor\n. [[step-4,Step 4]]Ordered list, item 4, with anchor\n";
@@ -1988,12 +1744,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_discover_anchor_at_start_of_callout_list_item_text_and_register_it_as_a_reference(
@@ -2039,15 +1789,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod nested_lists {
         use super::*;
@@ -2077,6 +1822,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n* Boo\n- Blech\n");
@@ -2085,12 +1831,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dash_element_mixed_with_asterisks_elements_should_be_nested() {
@@ -2111,6 +1851,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n- Boo\n* Blech\n");
@@ -2119,12 +1860,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn lines_prefixed_with_alternating_list_markers_separated_by_blank_lines_should_be_nested()
@@ -2149,6 +1884,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- Foo\n\n* Boo\n\n\n- Blech\n");
@@ -2157,12 +1893,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_2_with_asterisks() {
@@ -2183,6 +1913,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '(//ul)[1]/li//ul/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n** Boo\n* Blech\n");
@@ -2191,12 +1922,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ul)[1]/li//ul/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_3_with_asterisks() {
@@ -2218,6 +1943,7 @@ more text"]"#,
       assert_xpath '((//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '(((//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n** Boo\n*** Snoo\n* Blech\n");
@@ -2226,12 +1952,6 @@ more text"]"#,
             assert_xpath(&output, r#"((//ul)[1]/li//ul)[1]/li"#, 1);
             assert_xpath(&output, r#"(((//ul)[1]/li//ul)[1]/li//ul)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_4_with_asterisks() {
@@ -2255,6 +1975,7 @@ more text"]"#,
       assert_xpath '(((//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output =
@@ -2269,12 +1990,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_elements_5_with_asterisks() {
@@ -2300,6 +2015,7 @@ more text"]"#,
       assert_xpath '((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
       assert_xpath '(((((//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -2321,12 +2037,6 @@ more text"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn nested_arbitrary_depth_with_asterisks() {
             verifies!(
@@ -2340,6 +2050,7 @@ more text"]"#,
       refute_includes output, '*'
       assert_css 'li', output, 26
     end
+
 "#
             );
             let mut parts: Vec<String> = Vec::new();
@@ -2350,12 +2061,6 @@ more text"]"#,
             assert!(!output.contains('*'));
             assert_css(&output, r#"li"#, 26);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: parser-model only — asserts `find_by(context:
         // :ulist)[i].level`, which has no rendered-output counterpart (list level
@@ -2385,11 +2090,6 @@ more text"]"#,
       assert_equal 1, lists[2].level
       assert_equal 2, lists[3].level
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -2404,18 +2104,13 @@ more text"]"#,
       assert_xpath '//ul', output, 0
       assert_includes output, '•'
     end
+
 "#
             );
             let output = convert_standalone("\u{2022}\u{2022} Boo");
             assert_xpath(&output, r#"//ul"#, 0);
             assert!(output.contains("•"));
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_elements_2() {
@@ -2436,6 +2131,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[1]/li//ol/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n.. Boo\n. Blech\n");
@@ -2444,12 +2140,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[1]/li//ol/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_elements_3() {
@@ -2471,6 +2161,7 @@ more text"]"#,
       assert_xpath '((//ol)[1]/li//ol)[1]/li', output, 1
       assert_xpath '(((//ol)[1]/li//ol)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n.. Boo\n... Snoo\n. Blech\n");
@@ -2479,12 +2170,6 @@ more text"]"#,
             assert_xpath(&output, r#"((//ol)[1]/li//ol)[1]/li"#, 1);
             assert_xpath(&output, r#"(((//ol)[1]/li//ol)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_arbitrary_depth_with_dot_marker() {
@@ -2499,6 +2184,7 @@ more text"]"#,
       refute_includes output, '.'
       assert_css 'li', output, 26
     end
+
 "#
             );
             let mut parts: Vec<String> = Vec::new();
@@ -2509,12 +2195,6 @@ more text"]"#,
             assert!(!output.contains('.'));
             assert_css(&output, r#"li"#, 26);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: parser-model only — asserts `find_by(context:
         // :olist)[i].level`, which has no rendered-output counterpart (list level
@@ -2544,11 +2224,6 @@ more text"]"#,
       assert_equal 1, lists[2].level
       assert_equal 2, lists[3].level
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -2572,6 +2247,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '((//ol)[1]/li//ul)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n* Boo\n. Blech\n");
@@ -2580,12 +2256,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ol)[1]/li//ul)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_inside_unordered_elements() {
@@ -2606,6 +2276,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '((//ul)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n. Boo\n* Blech\n");
@@ -2614,12 +2285,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ul)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn three_levels_of_alternating_unordered_and_ordered_elements() {
@@ -2645,6 +2310,7 @@ more text"]"#,
       assert_css '.ulist > ul > li > p + .olist > ol > li > p + .ulist > ul > li > p', output, 1
       assert_css '.ulist > ul > li + li > p', output, 1
     end
+
 "#
             );
             let output =
@@ -2666,12 +2332,6 @@ more text"]"#,
             );
             assert_css(&output, r#".ulist > ul > li + li > p"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn lines_with_alternating_markers_of_unordered_and_ordered_list_types_separated_by_blank_lines_should_be_nested(
@@ -2696,6 +2356,7 @@ more text"]"#,
       assert_xpath '(//ul)[1]/li', output, 2
       assert_xpath '((//ul)[1]/li//ol)[1]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n\n. Boo\n\n\n* Blech\n");
@@ -2704,12 +2365,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li"#, 2);
             assert_xpath(&output, r#"((//ul)[1]/li//ol)[1]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_with_literal_content_should_not_consume_nested_list_of_different_type() {
@@ -2740,6 +2395,7 @@ more text"]"#,
       assert_xpath '//*[@class="literalblock"]/following-sibling::*[@class="olist arabic"]', output, 1
       assert_xpath '//*[@class="literalblock"]/following-sibling::*[@class="olist arabic"]//p[text()="numbered"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone(
@@ -2774,12 +2430,6 @@ hungry"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn nested_list_item_does_not_eat_the_title_of_the_following_detached_block() {
             verifies!(
@@ -2805,6 +2455,7 @@ hungry"]"#,
       assert_xpath '(//*[@class="ulist"])[1]/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '(//*[@class="ulist"])[1]/following-sibling::*[@class="literalblock"]/*[@class="title"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n- bullet\n  * nested bullet 1\n  * nested bullet 2\n\n.Title\n....\nliteral\n....\n");
@@ -2820,12 +2471,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn alternating_bulleted_and_description_markers_should_be_nested() {
@@ -2849,6 +2494,7 @@ hungry"]"#,
       assert_xpath '//ul[1]/li//dl[1]/dt', output, 1
       assert_xpath '//ul[1]/li//dl[1]/dd', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n* Foo\n\nterm1:: def1\n\n* Blech\n");
@@ -2858,12 +2504,6 @@ hungry"]"#,
             assert_xpath(&output, r#"//ul[1]/li//dl[1]/dt"#, 1);
             assert_xpath(&output, r#"//ul[1]/li//dl[1]/dd"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn nested_ordered_with_attribute_inside_unordered_elements() {
@@ -2897,15 +2537,10 @@ hungry"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     mod list_continuations {
         use super::*;
@@ -2939,6 +2574,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/p[text() = "Item one, paragraph one"]', output, 1
       assert_xpath '//ul/li[1]/*[@class = "paragraph"]/p[text() = "Item one, paragraph two"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\nItem one, paragraph two\n+\n* Item two\n");
@@ -2957,12 +2593,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn adjacent_list_continuation_line_attaches_following_block() {
@@ -2987,6 +2617,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/p', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@class = "literalblock"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n....\nItem one, literal block\n....\n+\n* Item two\n");
@@ -2999,12 +2630,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn adjacent_list_continuation_line_attaches_following_block_with_block_attributes() {
@@ -3035,6 +2660,7 @@ hungry"]"#,
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@id="beck"]/div[@class="title"][starts-with(text(),"Read")]', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@id="beck"]//code[@data-lang="ruby"][starts-with(text(),"5.times")]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n:foo: bar\n[[beck]]\n.Read the following aloud to yourself\n[source, ruby]\n----\n5.times { print \"Odelay!\" }\n----\n\n* Item two\n");
@@ -3058,12 +2684,6 @@ hungry"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_block_attribute_line_attached_by_continuation_should_not_create_block() {
             verifies!(
@@ -3085,6 +2705,7 @@ hungry"]"#,
       assert_xpath '//ul/li[1]/*', output, 1
       assert_xpath '//ul/li//*[@class="listingblock"]', output, 0
     end
+
 "#
             );
             let output = convert_standalone(
@@ -3095,12 +2716,6 @@ hungry"]"#,
             assert_xpath(&output, r#"//ul/li[1]/*"#, 1);
             assert_xpath(&output, r#"//ul/li//*[@class="listingblock"]"#, 0);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn trailing_block_title_line_attached_by_continuation_should_not_create_block() {
@@ -3122,6 +2737,7 @@ hungry"]"#,
       assert_xpath '//ul/li', output, 2
       assert_xpath '//ul/li[1]/*', output, 1
     end
+
 "#
             );
             let output = convert_standalone("Lists\n=====\n\n* Item one, paragraph one\n+\n.Disappears into the ether\n\n* Item two\n");
@@ -3129,12 +2745,6 @@ hungry"]"#,
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//ul/li[1]/*"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn consecutive_blocks_in_list_continuation_attach_to_list_item() {
@@ -3164,6 +2774,7 @@ hungry"]"#,
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[1][@class = "literalblock"]', output, 1
       assert_xpath '(//ul/li[1]/p/following-sibling::*)[2][@class = "quoteblock"]', output, 1
     end
+
 "#
             );
             let output = convert("Lists\n=====\n\n* Item one, paragraph one\n+\n....\nItem one, literal block\n....\n+\n____\nItem one, quote block\n____\n+\n* Item two\n");
@@ -3181,12 +2792,6 @@ hungry"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_with_hanging_indent_followed_by_block_attached_by_list_continuation() {
@@ -3214,6 +2819,7 @@ hungry"]"#,
       assert_xpath '(//ol/li)[1]/p/following-sibling::*[@class="openblock"]//p[text()="open block in list item 1"]', output, 1
       assert_xpath %((//ol/li)[2]/p[text()="list item 2"]), output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n  continued\n+\n--\nopen block in list item 1\n--\n\n. list item 2\n");
@@ -3237,12 +2843,6 @@ continued"]"#,
             );
             assert_xpath(&output, r#"(//ol/li)[2]/p[text()="list item 2"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn list_item_paragraph_in_list_item_and_nested_list_item() {
@@ -3276,6 +2876,7 @@ continued"]"#,
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="ulist"]/ul/li/p[text()="nested list item"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="ulist"]/ul/li/p/following-sibling::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\nlist item 1 paragraph\n\n* nested list item\n+\nnested list item paragraph\n\n. list item 2\n");
@@ -3317,12 +2918,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_attach_to_list_items_at_respective_levels() {
             verifies!(
@@ -3359,6 +2954,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3406,12 +3002,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_attach_to_list_items_of_different_types_at_respective_levels(
         ) {
@@ -3452,6 +3042,7 @@ continued"]"#,
       assert_xpath '((//ul)[1]/li)[1]/div/ol/li/div[@class="ulist"]/ul/li/*', output, 1
       assert_xpath '((//ul)[1]/li)[1]/div/ol/li/div[@class="ulist"]/ul/li/p[text()="bullet 1.1.1"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n* bullet 1\n. numbered 1.1\n** bullet 1.1.1\n\n+\nnumbered 1.1 paragraph\n\n+\nbullet 1 paragraph\n\n* bullet 2\n");
@@ -3502,12 +3093,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_should_attach_to_list_items_at_respective_levels() {
             verifies!(
@@ -3552,6 +3137,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3614,12 +3200,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_attached_directly_to_list_item_should_attach_to_list_items_at_respective_levels(
         ) {
@@ -3665,6 +3245,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3727,12 +3308,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn repeated_list_continuations_should_attach_to_list_items_at_respective_levels_ignoring_blank_lines(
         ) {
@@ -3779,6 +3354,7 @@ continued"]"#,
       assert_xpath '(((//ol/li)[1]/*)[2]/self::div[@class="ulist"]/ul/li)[2]/div[@class="paragraph"]', output, 1
       assert_xpath '((//ol/li)[1]/*)[3]/self::div[@class="paragraph"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n. list item 1\n+\n* nested list item 1\n+\n--\nopen block for nested list item 1\n--\n+\n* nested list item 2\n+\nparagraph for nested list item 2\n\n\n+\nparagraph for list item 1\n\n. list item 2\n");
@@ -3841,12 +3417,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn trailing_list_continuations_should_ignore_preceding_blank_lines() {
             verifies!(
@@ -3891,6 +3461,7 @@ continued"]"#,
       assert_xpath '(((//ul)[1]/li)[1]/div[@class="ulist"]/ul/li/div[@class="ulist"]/ul/li/*)[1]/self::p', output, 1
       assert_xpath '(((//ul)[1]/li)[1]/div[@class="ulist"]/ul/li/div[@class="ulist"]/ul/li/*)[2]/self::div[@class="openblock"]', output, 1
     end
+
 "#
             );
             let output = convert("== Lists\n\n* bullet 1\n** bullet 1.1\n*** bullet 1.1.1\n+\n--\nopen block\n--\n\n\n+\nbullet 1.1 paragraph\n\n\n+\nbullet 1 paragraph\n\n* bullet 2\n");
@@ -3953,12 +3524,6 @@ continued"]"#,
             );
         }
 
-        non_normative!(
-            r#"
-
-"#
-        );
-
         #[test]
         fn indented_outline_list_item_with_different_marker_offset_by_a_blank_line_should_be_recognized_as_a_nested_list(
         ) {
@@ -3996,6 +3561,7 @@ continued"]"#,
         assert_xpath "((((//ul/li)[1]/*)[2]/self::div/ol/li)[#{idx}]/*)[2]/self::div[@class=\"paragraph\"]", output, 1
       end
     end
+
 "#
             );
             let output = convert("* item 1\n\n  . item 1.1\n+\nattached paragraph\n\n  . item 1.2\n+\nattached paragraph\n\n* item 2\n");
@@ -4027,12 +3593,6 @@ continued"]"#,
                 );
             }
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_description_list_item_inside_outline_list_item_offset_by_blank_line() {
@@ -4142,6 +3702,7 @@ continued"]"#,
       # NOTE this is a negative assertion
       assert_xpath %(//ul/li[1]//p[text() = "+\nItem one, paragraph two"]), output, 1
     end
+
 "#
             );
             let output = convert("Lists\n=====\n\n* Item one, paragraph one\n+\n+\nItem one, paragraph two\n+\n+\n* Item two\n+\n+\n");
@@ -4161,12 +3722,6 @@ Item one, paragraph two"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_warn_if_unterminated_block_is_detected_in_list_item() {
@@ -4216,15 +3771,10 @@ Item one, paragraph two"]"#,
     non_normative!(
         r#"
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 mod ordered_lists {
     use super::*;
@@ -4261,18 +3811,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n. Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dot_elements_using_spaces() {
@@ -4288,18 +3833,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone(" . Foo\n . Boo\n . Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn indented_dot_elements_using_tabs() {
@@ -4315,18 +3855,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("\t.\tFoo\n\t.\tBoo\n\t.\tBlech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_explicit_role_attribute_as_style_class() {
@@ -4344,18 +3879,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.arabic.dry', output, 1
       assert_css '.olist ol.arabic', output, 1
     end
+
 "#
             );
             let output = convert("[role=\"dry\"]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.arabic.dry"#, 1);
             assert_css(&output, r#".olist ol.arabic"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_base_list_style_on_marker_length_rather_than_list_depth() {
@@ -4373,6 +3903,7 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.lowerroman .olist.loweralpha', output, 1
       assert_css '.olist.lowerroman .olist.loweralpha .olist.arabic', output, 1
     end
+
 "#
             );
             let output = convert("... parent\n.. child\n. grandchild\n");
@@ -4384,12 +3915,6 @@ context "Ordered lists (:olist)" do
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_allow_list_style_to_be_specified_explicitly_when_using_markers_with_implicit_style(
@@ -4408,18 +3933,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha', output, 1
       assert_css '.olist.lowerroman', output, 0
     end
+
 "#
             );
             let output = convert("[loweralpha]\ni) 1\nii) 2\niii) 3\n");
             assert_css(&output, r#".olist.loweralpha"#, 1);
             assert_css(&output, r#".olist.lowerroman"#, 0);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_custom_numbering_and_explicit_role_attribute_as_style_classes() {
@@ -4437,18 +3957,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha.dry', output, 1
       assert_css '.olist ol.loweralpha', output, 1
     end
+
 "#
             );
             let output = convert("[loweralpha, role=\"dry\"]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.loweralpha.dry"#, 1);
             assert_css(&output, r#".olist ol.loweralpha"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_set_reversed_attribute_on_list_if_reversed_option_is_set() {
@@ -4466,17 +3981,12 @@ context "Ordered lists (:olist)" do
       output = convert_string_to_embedded input
       assert_css 'ol[reversed][start="3"]', output, 1
     end
+
 "#
             );
             let output = convert("[%reversed, start=3]\n. three\n. two\n. one\n. blast off!\n");
             assert_css(&output, r#"ol[reversed][start="3"]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_implicit_role_attribute_as_style_class() {
@@ -4494,18 +4004,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.arabic.dry', output, 1
       assert_css '.olist ol.arabic', output, 1
     end
+
 "#
             );
             let output = convert("[.dry]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.arabic.dry"#, 1);
             assert_css(&output, r#".olist ol.arabic"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_represent_custom_numbering_and_implicit_role_attribute_as_style_classes() {
@@ -4523,18 +4028,13 @@ context "Ordered lists (:olist)" do
       assert_css '.olist.loweralpha.dry', output, 1
       assert_css '.olist ol.loweralpha', output, 1
     end
+
 "#
             );
             let output = convert("[loweralpha.dry]\n. Once\n. Again\n. Refactor!\n");
             assert_css(&output, r#".olist.loweralpha.dry"#, 1);
             assert_css(&output, r#".olist ol.loweralpha"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_blank_lines_should_merge_lists() {
@@ -4556,18 +4056,13 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol', output, 1
       assert_xpath '//ol/li', output, 3
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n\n. Boo\n\n\n. Blech\n");
             assert_xpath(&output, r#"//ol"#, 1);
             assert_xpath(&output, r#"//ol/li"#, 3);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
@@ -4593,6 +4088,7 @@ context "Ordered lists (:olist)" do
       assert_xpath '((//li)[1]//pre)[1][text()="<code>text</code>"]', output, 1
       assert_xpath '((//li)[1]//pre)[2][text()="more <code>text</code>"]', output, 1
     end
+
 "#
             );
             let output = convert(". first item\n\n  <code>text</code>\n\n  more <code>text</code>\n\n. second item\n");
@@ -4611,12 +4107,6 @@ context "Ordered lists (:olist)" do
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_with_interspersed_line_comments_should_be_skipped_and_not_break_list() {
@@ -4640,6 +4130,7 @@ context "Ordered lists (:olist)" do
       assert_xpath '//ol/li', output, 3
       assert_xpath %((//ol/li)[2]/p[text()="Boo\nmore text"]), output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n. Foo\n// line comment\n// another line comment\n. Boo\n// line comment\nmore text\n// another line comment\n. Blech\n");
@@ -4652,12 +4143,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_line_comment_offset_by_blank_lines_should_not_merge_lists() {
@@ -4680,6 +4165,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n\n//\n\n. Blech\n");
@@ -4687,12 +4173,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_a_block_title_offset_by_a_blank_line_should_not_merge_lists() {
@@ -4715,6 +4195,7 @@ more text"]"#,
       assert_xpath '(//ol)[2]/li', output, 1
       assert_xpath '(//ol)[2]/preceding-sibling::*[@class = "title"][text() = "Also"]', output, 1
     end
+
 "#
             );
             let output = convert_standalone("List\n====\n\n. Foo\n. Boo\n\n.Also\n. Blech\n");
@@ -4727,12 +4208,6 @@ more text"]"#,
                 1,
             );
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn dot_elements_separated_by_an_attribute_entry_offset_by_a_blank_line_should_not_merge_lists(
@@ -4754,6 +4229,7 @@ more text"]"#,
       assert_xpath '(//ol)[1]/li', output, 2
       assert_xpath '(//ol)[2]/li', output, 1
     end
+
 "#
             );
             let output = convert("== List\n\n. Foo\n. Boo\n\n:foo: bar\n. Blech\n");
@@ -4761,12 +4237,6 @@ more text"]"#,
             assert_xpath(&output, r#"(//ol)[1]/li"#, 2);
             assert_xpath(&output, r#"(//ol)[2]/li"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         // Non-normative: exercises the DocBook backend (`backend: 'docbook5'`);
         // this crate targets only the `html5` backend.
@@ -4786,11 +4256,6 @@ more text"]"#,
       assert_xpath '(//orderedlist)/listitem', output, 2
       assert_xpath '(//orderedlist)[@startingnumber = "7"]', output, 1
     end
-"#
-        );
-
-        non_normative!(
-            r#"
 
 "#
         );
@@ -4810,18 +4275,13 @@ more text"]"#,
       assert_css 'li', output, 3
       assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}"]), output, 1
     end
+
 "#
             );
             let output = convert_standalone(". a\n. b\u{2028}\n. c");
             assert_css(&output, r#"li"#, 3);
             assert_xpath(&output, r#"(//li)[2]/p[text()="b "]"#, 1);
         }
-
-        non_normative!(
-            r#"
-
-"#
-        );
 
         #[test]
         fn should_match_line_separator_in_text_of_list_item() {
@@ -4848,15 +4308,10 @@ more text"]"#,
         non_normative!(
             r#"
   end
+
 "#
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_warn_if_explicit_uppercase_roman_numerals_in_list_are_out_of_sequence() {
@@ -4873,18 +4328,13 @@ more text"]"#,
       assert_message logger, :WARN, '<stdin>: line 2: list item index: expected II, got III', Hash
     end
   end
+
 "#
         );
         let output = convert("I) one\nIII) three\n");
         assert_xpath(&output, r#"//ol/li"#, 2);
         assert_out_of_sequence_warning("I) one\nIII) three\n", 2, "II", "III");
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_warn_if_explicit_lowercase_roman_numerals_in_list_are_out_of_sequence() {
@@ -4911,15 +4361,10 @@ more text"]"#,
     non_normative!(
         r#"
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 mod description_lists {
     use super::*;
@@ -4941,18 +4386,13 @@ context "Description lists (:dlist)" do
       assert_css 'dl', output, 0
       assert_xpath '//p[text()="::"]', output, 1
     end
+
 "#
         );
         let output = convert("::");
         assert_css(&output, r#"dl"#, 0);
         assert_xpath(&output, r#"//p[text()="::"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_parse_an_indented_bare_dlist_delimiter_as_a_dlist() {
@@ -4964,18 +4404,13 @@ context "Description lists (:dlist)" do
       assert_css 'dl', output, 0
       assert_xpath '//pre[text()="::"]', output, 1
     end
+
 "#
         );
         let output = convert(" ::");
         assert_css(&output, r#"dl"#, 0);
         assert_xpath(&output, r#"//pre[text()="::"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_parse_a_dlist_delimiter_preceded_by_a_blank_attribute_as_a_dlist() {
@@ -4988,6 +4423,7 @@ context "Description lists (:dlist)" do
       assert_css 'dl > dt', output, 1
       assert_css 'dl > dt:empty', output, 1
     end
+
 "#
         );
         let output = convert("{blank}::");
@@ -4995,12 +4431,6 @@ context "Description lists (:dlist)" do
         assert_css(&output, r#"dl > dt"#, 1);
         assert_css(&output, r#"dl > dt:empty"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_parse_a_dlist_if_term_is_include_and_principal_text_is() {
@@ -5013,6 +4443,7 @@ context "Description lists (:dlist)" do
       assert_css 'dl > dt', output, 1
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "[]"]', output, 1
     end
+
 "#
         );
         let output = convert("include:: []");
@@ -5025,12 +4456,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn should_parse_a_dlist_if_term_is_include_and_principal_text_matches_macro_form() {
         verifies!(
@@ -5042,6 +4467,7 @@ context "Description lists (:dlist)" do
       assert_css 'dl > dt', output, 1
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "${placeholder}"]', output, 1
     end
+
 "#
         );
         let output = convert("include:: pass:[${placeholder}]");
@@ -5053,12 +4479,6 @@ context "Description lists (:dlist)" do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn single_line_adjacent_elements() {
@@ -5078,6 +4498,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\nterm2:: def2\n");
@@ -5106,12 +4527,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn should_parse_sibling_items_using_same_rules() {
         verifies!(
@@ -5130,6 +4545,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = ";; def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1;; ;; def1\nterm2;; ;; def2\n");
@@ -5158,12 +4574,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn should_allow_term_to_end_with_a_semicolon_when_using_double_semicolon_delimiter() {
         verifies!(
@@ -5178,6 +4588,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[1][text() = "term;"]', output, 1
       assert_xpath '(//dl/dt)[1]/following-sibling::dd/p[text() = "def"]', output, 1
     end
+
 "#
         );
         let output = convert("term;;; def\n");
@@ -5190,12 +4601,6 @@ context "Description lists (:dlist)" do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn single_line_indented_adjacent_elements() {
@@ -5216,6 +4621,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n term2:: def2\n");
@@ -5244,12 +4650,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn single_line_indented_adjacent_elements_with_tabs() {
         verifies!(
@@ -5268,6 +4668,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\tdef1\n\tterm2::\tdef2\n");
@@ -5296,12 +4697,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn single_line_elements_separated_by_blank_line_should_create_a_single_list() {
         verifies!(
@@ -5317,6 +4712,7 @@ context "Description lists (:dlist)" do
       assert_xpath '//dl/dt', output, 2
       assert_xpath '//dl/dt/following-sibling::dd', output, 2
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n\nterm2:: def2\n");
@@ -5324,12 +4720,6 @@ context "Description lists (:dlist)" do
         assert_xpath(&output, r#"//dl/dt"#, 2);
         assert_xpath(&output, r#"//dl/dt/following-sibling::dd"#, 2);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn a_line_comment_between_elements_should_divide_them_into_separate_lists() {
@@ -5349,6 +4739,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt', output, 1
       assert_xpath '(//dl)[2]/dt', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n\n//\n\nterm2:: def2\n");
@@ -5357,12 +4748,6 @@ context "Description lists (:dlist)" do
         assert_xpath(&output, r#"(//dl)[1]/dt"#, 1);
         assert_xpath(&output, r#"(//dl)[2]/dt"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn a_ruler_between_elements_should_divide_them_into_separate_lists() {
@@ -5383,6 +4768,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[1]/dt', output, 1
       assert_xpath '(//dl)[2]/dt', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n\n'''\n\nterm2:: def2\n");
@@ -5392,12 +4778,6 @@ context "Description lists (:dlist)" do
         assert_xpath(&output, r#"(//dl)[1]/dt"#, 1);
         assert_xpath(&output, r#"(//dl)[2]/dt"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn a_block_title_between_elements_should_divide_them_into_separate_lists() {
@@ -5417,6 +4797,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl)[2]/dt', output, 1
       assert_xpath '(//dl)[2]/preceding-sibling::*[@class="title"][text() = "Some more"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n\n.Some more\nterm2:: def2\n");
@@ -5430,12 +4811,6 @@ context "Description lists (:dlist)" do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn multi_line_elements_with_paragraph_content() {
@@ -5457,6 +4832,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\ndef1\nterm2::\ndef2\n");
@@ -5485,12 +4861,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_elements_with_indented_paragraph_content() {
         verifies!(
@@ -5512,6 +4882,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\n def1\nterm2::\n  def2\n");
@@ -5540,12 +4911,6 @@ context "Description lists (:dlist)" do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_elements_with_indented_paragraph_content_that_includes_comment_lines() {
         verifies!(
@@ -5570,6 +4935,7 @@ context "Description lists (:dlist)" do
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath %((//dl/dt)[2]/following-sibling::dd/p[text() = "def2\ndef2 continued"]), output, 1
     end
+
 "#
         );
         let output =
@@ -5600,12 +4966,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn should_not_strip_comment_line_in_literal_paragraph_block_attached_to_list_item() {
         verifies!(
@@ -5623,6 +4983,7 @@ def2 continued"]"#,
       assert_xpath '//*[@class="literalblock"]', output, 1
       assert_xpath %(//*[@class="literalblock"]//pre[text()=" line 1\n// not a comment\n line 3"]), output, 1
     end
+
 "#
         );
         let output = convert("term1::\n+\n line 1\n// not a comment\n line 3\n");
@@ -5635,12 +4996,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_escape_special_characters_in_all_literal_paragraphs_attached_to_list_item() {
@@ -5669,6 +5024,7 @@ def2 continued"]"#,
       assert_xpath '((//dd)[1]//pre)[2][text()="more <code>text</code>"]', output, 1
       assert_xpath '((//dd)[2]//p)[1][text()="<code>text</code> in a paragraph"]', output, 1
     end
+
 "#
         );
         let output = convert("term:: desc\n\n  <code>text</code>\n\n  more <code>text</code>\n\nanother term::\n\n  <code>text</code> in a paragraph\n");
@@ -5692,12 +5048,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -5743,6 +5093,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dt)[2]/following-sibling::dd', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\nterm2::\ndef2\n");
@@ -5762,12 +5113,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -5812,6 +5157,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\n\ndef1\nterm2::\n\ndef2\n");
@@ -5840,12 +5186,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_elements_with_paragraph_and_literal_content() {
         verifies!(
@@ -5872,6 +5212,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\ndef1\n\n  literal\n\nterm2::\n  def2\n");
@@ -5901,12 +5242,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn mixed_single_and_multi_line_adjacent_elements() {
         verifies!(
@@ -5926,6 +5261,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\nterm2::\ndef2\n");
@@ -5953,12 +5289,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r##"
@@ -5997,17 +5327,12 @@ def2 continued"]"#,
       output = convert_string input
       assert_xpath '//dl', output, 0
     end
+
 "#
         );
         let output = convert_standalone("term1::def1\nterm2::def2\n");
         assert_xpath(&output, r#"//dl"#, 0);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn literal_block_inside_description_list() {
@@ -6031,6 +5356,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dd)[1]/*[@class="literalblock"]//pre', output, 1
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6042,12 +5368,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="literalblock"]//pre"#, 1);
         assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn literal_block_inside_description_list_with_trailing_line_continuation() {
@@ -6072,6 +5392,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dd)[1]/*[@class="literalblock"]//pre', output, 1
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6083,12 +5404,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="literalblock"]//pre"#, 1);
         assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn multiple_listing_blocks_inside_description_list() {
@@ -6118,6 +5433,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dd)[1]/*[@class="listingblock"]//pre', output, 2
       assert_xpath '(//dl/dd)[2]/p[text() = "def"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term::\n+\n----\nlisting, line 1\n\nlisting, line 2\n----\n+\n----\nlisting, line 1\n\nlisting, line 2\n----\nanotherterm:: def\n");
@@ -6127,12 +5443,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dd)[1]/*[@class="listingblock"]//pre"#, 2);
         assert_xpath(&output, r#"(//dl/dd)[2]/p[text() = "def"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn open_block_inside_description_list() {
@@ -6153,18 +5463,13 @@ def2 continued"]"#,
       assert_xpath '//dl/dd//p', output, 3
       assert_xpath '(//dl/dd)[1]//*[@class="openblock"]//p', output, 2
     end
+
 "#
         );
         let output = convert_standalone("term::\n+\n--\nOpen block as description of term.\n\nAnd some more detail...\n--\nanotherterm:: def\n");
         assert_xpath(&output, r#"//dl/dd//p"#, 3);
         assert_xpath(&output, r#"(//dl/dd)[1]//*[@class="openblock"]//p"#, 2);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn paragraph_attached_by_a_list_continuation_on_either_side_in_a_description_list() {
@@ -6185,6 +5490,7 @@ def2 continued"]"#,
       assert_xpath '((//dl/dd)[1]//p)[1][text()="def1"]', output, 1
       assert_xpath '(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n+\nmore detail\n+\nterm2:: def2\n");
@@ -6207,12 +5513,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn paragraph_attached_by_a_list_continuation_on_either_side_to_a_multi_line_element_in_a_description_list(
     ) {
@@ -6234,6 +5534,7 @@ def2 continued"]"#,
       assert_xpath '((//dl/dd)[1]//p)[1][text()="def1"]', output, 1
       assert_xpath '(//dl/dd)[1]/p/following-sibling::*[@class="paragraph"]/p[text() = "more detail"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\ndef1\n+\nmore detail\n+\nterm2:: def2\n");
@@ -6255,12 +5556,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_continue_to_parse_subsequent_blocks_attached_to_list_item_after_first_block_is_dropped(
@@ -6285,6 +5580,7 @@ def2 continued"]"#,
       assert_css 'dl > dt + dd > .imageblock', output, 0
       assert_css 'dl > dt + dd > .paragraph', output, 1
     end
+
 "#
         );
         let output = convert(
@@ -6296,12 +5592,6 @@ def2 continued"]"#,
         assert_css(&output, r#"dl > dt + dd > .imageblock"#, 0);
         assert_css(&output, r#"dl > dt + dd > .paragraph"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn verse_paragraph_inside_a_description_list() {
@@ -6320,6 +5610,7 @@ def2 continued"]"#,
       assert_xpath '//dl/dd//p', output, 2
       assert_xpath '(//dl/dd)[1]/*[@class="verseblock"]/pre[text() = "la la la"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def\n+\n[verse]\nla la la\n\nterm2:: def\n");
@@ -6330,12 +5621,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn list_inside_a_description_list() {
@@ -6355,6 +5640,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dd)[1]//ul', output, 2
       assert_xpath '((//dl/dd)[1]//ul)[1]//ul', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\n* level 1\n** level 2\n* level 1\nterm2:: def\n");
@@ -6363,12 +5649,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dd)[1]//ul"#, 2);
         assert_xpath(&output, r#"((//dl/dd)[1]//ul)[1]//ul"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn list_inside_a_description_list_offset_by_blank_lines() {
@@ -6390,6 +5670,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dd)[1]//ul', output, 2
       assert_xpath '((//dl/dd)[1]//ul)[1]//ul', output, 1
     end
+
 "#
         );
         let output =
@@ -6399,12 +5680,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dd)[1]//ul"#, 2);
         assert_xpath(&output, r#"((//dl/dd)[1]//ul)[1]//ul"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_only_grab_one_line_following_last_item_if_item_has_no_inline_description() {
@@ -6433,6 +5708,7 @@ def2 continued"]"#,
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph"]', output, 1
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6458,12 +5734,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_only_grab_one_literal_line_following_last_item_if_item_has_no_inline_description() {
@@ -6493,6 +5763,7 @@ def2 continued"]"#,
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph"]', output, 1
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[2]/p[text() = "Another new paragraph"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6518,12 +5789,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_append_subsequent_paragraph_literals_to_list_item_as_block_content() {
@@ -6554,6 +5819,7 @@ def2 continued"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '(//*[@class="dlist"]/following-sibling::*[@class="paragraph"])[1]/p[text() = "A new paragraph."]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6585,12 +5851,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn should_not_match_comment_line_that_looks_like_description_list_term() {
         verifies!(
@@ -6607,17 +5867,12 @@ def2 continued"]"#,
       output = convert_string_to_embedded input
       assert_css 'dl', output, 0
     end
+
 "#
         );
         let output = convert("before\n\n//key:: val\n\nafter\n");
         assert_css(&output, r#"dl"#, 0);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_match_comment_line_following_list_that_looks_like_description_list_term() {
@@ -6639,6 +5894,7 @@ def2 continued"]"#,
       assert_xpath '/*[@class="sect1"]/h2[text()="Section"]', output, 1
       assert_xpath '/*[@class="ulist"]/following-sibling::*[@class="sect1"]', output, 1
     end
+
 "#
         );
         let output = convert("* item\n\n//term:: desc\n== Section\n\nsection text\n");
@@ -6651,12 +5907,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -6697,6 +5947,7 @@ def2 continued"]"#,
       assert_xpath '//dt[text()="///b"]', output, 1
       assert_xpath '//dd/p[text()="c"]', output, 1
     end
+
 "#
         );
         let output = convert("* a\n///b::\nc\n");
@@ -6706,12 +5957,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"//dt[text()="///b"]"#, 1);
         assert_xpath(&output, r#"//dd/p[text()="c"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_hang_on_sibling_description_list_item_that_begins_with() {
@@ -6730,6 +5975,7 @@ def2 continued"]"#,
       assert_xpath '(//dl/dt)[2][text()="///b"]', output, 1
       assert_xpath '//dl/dd/p[text()="c"]', output, 1
     end
+
 "#
         );
         let output = convert("a::\n///b::\nc\n");
@@ -6738,12 +5984,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//dl/dt)[2][text()="///b"]"#, 1);
         assert_xpath(&output, r#"//dl/dd/p[text()="c"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -6779,6 +6019,7 @@ def2 continued"]"#,
       assert_xpath '//dl/dt[text()="A term:"]', output, 1
       assert_xpath '//dl/dd/p[text()="a description"]', output, 1
     end
+
 "#
         );
         let output = convert("A term::::: a description\n");
@@ -6787,12 +6028,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"//dl/dt[text()="A term:"]"#, 1);
         assert_xpath(&output, r#"//dl/dd/p[text()="a description"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -6860,18 +6095,13 @@ def2 continued"]"#,
       assert_xpath '//dl', output, 1
       assert_xpath '//dl/dd/p[text()=";;"]', output, 1
     end
+
 "#
         );
         let output = convert("t::\n;;\n");
         assert_xpath(&output, r#"//dl"#, 1);
         assert_xpath(&output, r#"//dl/dd/p[text()=";;"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_parse_a_nested_indented_dlist_delimiter_without_a_term_as_a_dlist() {
@@ -6888,6 +6118,7 @@ def2 continued"]"#,
       assert_xpath '//dl', output, 1
       assert_xpath %(//dl/dd/p[text()="desc\n  ;;"]), output, 1
     end
+
 "#
         );
         let output = convert("t::\ndesc\n  ;;\n");
@@ -6899,12 +6130,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn single_line_adjacent_nested_elements() {
@@ -6926,6 +6151,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\nlabel1::: detail1\nterm2:: def2\n");
@@ -6963,12 +6189,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn single_line_adjacent_maximum_nested_elements() {
         verifies!(
@@ -6985,6 +6205,7 @@ def2 continued"]"#,
       assert_xpath '//dl', output, 4
       assert_xpath '//dl//dl//dl//dl', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -6993,12 +6214,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"//dl"#, 4);
         assert_xpath(&output, r#"//dl//dl//dl//dl"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn single_line_nested_elements_separated_by_blank_line_at_top_level() {
@@ -7022,6 +6237,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n\nlabel1::: detail1\n\nterm2:: def2\n");
@@ -7059,12 +6275,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn single_line_nested_elements_separated_by_blank_line_at_nested_level() {
         verifies!(
@@ -7087,6 +6297,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -7126,12 +6337,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn single_line_adjacent_nested_elements_with_alternate_delimiters() {
         verifies!(
@@ -7152,6 +6357,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\nlabel1;; detail1\nterm2:: def2\n");
@@ -7189,12 +6395,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_adjacent_nested_elements() {
         verifies!(
@@ -7218,6 +6418,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1::\ndef1\nlabel1:::\ndetail1\nterm2::\ndef2\n");
@@ -7255,12 +6456,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_nested_elements_separated_by_blank_line_at_nested_level_repeated() {
         verifies!(
@@ -7287,6 +6482,7 @@ def2 continued"]"#,
       assert_xpath '(//dl//dl/dt)[2][normalize-space(text()) = "label2"]', output, 1
       assert_xpath '(//dl//dl/dt)[2]/following-sibling::dd/p[text() = "detail2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone(
@@ -7326,12 +6522,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_element_with_indented_nested_element() {
         verifies!(
@@ -7359,6 +6549,7 @@ def2 continued"]"#,
       assert_xpath '((//dl)[1]/dt)[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '((//dl)[1]/dt)[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output =
@@ -7400,12 +6591,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn mixed_single_and_multi_line_elements_with_indented_nested_elements() {
         verifies!(
@@ -7428,6 +6613,7 @@ def2 continued"]"#,
       assert_xpath '(//dl)[1]/dt[2][normalize-space(text()) = "term2"]', output, 1
       assert_xpath '(//dl)[1]/dt[2]/following-sibling::dd/p[text() = "def2"]', output, 1
     end
+
 "#
         );
         let output = convert_standalone("term1:: def1\n  label1:::\n   detail1\nterm2:: def2\n");
@@ -7465,12 +6651,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn multi_line_elements_with_first_paragraph_folded_to_text_with_adjacent_nested_element() {
         verifies!(
@@ -7491,6 +6671,7 @@ def2 continued"]"#,
       assert_xpath '//dl//dl/dt[normalize-space(text()) = "label1"]', output, 1
       assert_xpath '//dl//dl/dt/following-sibling::dd/p[text() = "detail1"]', output, 1
     end
+
 "#
         );
         let output = convert("term1:: def1\ncontinued\nlabel1:::\ndetail1\n");
@@ -7523,12 +6704,6 @@ def2 continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn nested_dlist_attached_by_list_continuation_should_not_consume_detached_paragraph() {
         verifies!(
@@ -7547,6 +6722,7 @@ def2 continued"]"#,
       assert_css '.dlist .paragraph', output, 0
       assert_css '.dlist + .paragraph', output, 1
     end
+
 "#
         );
         let output = convert("term:: text\n+\nnested term::: text\n\nparagraph\n");
@@ -7555,12 +6731,6 @@ def2 continued"]"#,
         assert_css(&output, r#".dlist .paragraph"#, 0);
         assert_css(&output, r#".dlist + .paragraph"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn nested_dlist_with_attached_block_offset_by_empty_line() {
@@ -7627,18 +6797,13 @@ def2 continued"]"#,
       assert_css '.dlist.glossary', output, 1
       assert_css '.dlist dt:not([class])', output, 2
     end
+
 "#
         );
         let output = convert("[glossary]\nterm 1:: def 1\nterm 2:: def 2\n");
         assert_css(&output, r#".dlist.glossary"#, 1);
         assert_css(&output, r#".dlist dt:not([class])"#, 2);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -7715,6 +6880,7 @@ def2 continued"]"#,
       assert_xpath '(//table/colgroup/col)[1][@style="width: 25%;"]', output, 1
       assert_xpath '(//table/colgroup/col)[2][@style="width: 75%;"]', output, 1
     end
+
 "#
         );
         let output = convert("[horizontal]\n[labelwidth=\"25\", itemwidth=\"75\"]\nterm:: def\n");
@@ -7732,12 +6898,6 @@ def2 continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -7773,18 +6933,13 @@ def2 continued"]"#,
       assert_css '.hdlist', output, 1
       assert_css '.hdlist td.hdlist1.strong', output, 1
     end
+
 "#
         );
         let output = convert("[horizontal, options=\"strong\"]\nterm:: def\n");
         assert_css(&output, r#".hdlist"#, 1);
         assert_css(&output, r#".hdlist td.hdlist1.strong"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn consecutive_terms_in_horizontal_list_should_share_same_cell() {
@@ -7807,6 +6962,7 @@ def2 continued"]"#,
       assert_xpath '(//tr)[1]/td[@class="hdlist1"]/br', output, 1
       assert_xpath '(//tr)[2]/td[@class="hdlist2"]', output, 1
     end
+
 "#
         );
         let output = convert("[horizontal]\nterm::\nalt term::\ndescription\n\nlast::\n");
@@ -7815,12 +6971,6 @@ def2 continued"]"#,
         assert_xpath(&output, r#"(//tr)[1]/td[@class="hdlist1"]/br"#, 1);
         assert_xpath(&output, r#"(//tr)[2]/td[@class="hdlist2"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -8158,15 +7308,10 @@ def2 continued"]"#,
     end
   end
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 mod description_lists_redux {
     use super::*;
@@ -8197,6 +7342,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\ndef1\n");
@@ -8204,12 +7350,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_first_line_after_blank_lines() {
@@ -8230,6 +7370,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n\ndef1\n");
@@ -8237,12 +7378,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_first_line_after_blank_line_and_immediately_preceding_next_item() {
@@ -8263,6 +7398,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 2
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\ndef1\nterm2:: def2\n");
@@ -8274,12 +7410,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn paragraph_offset_by_blank_lines_does_not_break_list_if_label_does_not_have_inline_text() {
@@ -8302,6 +7432,7 @@ context 'Description lists redux' do
       assert_css 'dl > dd', output, 2
       assert_xpath '(//dl/dd)[1]/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\ndef1\n\nterm2:: def2\n");
@@ -8310,12 +7441,6 @@ context 'Description lists redux' do
         assert_css(&output, r#"dl > dd"#, 2);
         assert_xpath(&output, r#"(//dl/dd)[1]/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_first_line_after_comment_line() {
@@ -8335,6 +7460,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n// comment\ndef1\n");
@@ -8342,12 +7468,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_line_following_comment_line_offset_by_blank_line() {
@@ -8368,6 +7488,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n// comment\ndef1\n");
@@ -8375,12 +7496,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_subsequent_indented_line() {
@@ -8400,6 +7515,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n  def1\n");
@@ -8407,12 +7523,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_indented_line_after_blank_line() {
@@ -8433,6 +7543,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n  def1\n");
@@ -8440,12 +7551,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_ruler_offset_by_blank_line() {
@@ -8465,6 +7570,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="'''"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n'''\n");
@@ -8472,12 +7578,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="'''"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_ruler_offset_by_blank_line_and_line_comment() {
@@ -8498,6 +7598,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="'''"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n// comment\n'''\n");
@@ -8505,12 +7606,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()="'''"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_ruler_and_the_line_following_it_offset_by_blank_line() {
@@ -8531,6 +7626,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[normalize-space(text())="''' continued"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n'''\ncontinued\n");
@@ -8542,12 +7638,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_title_offset_by_blank_line() {
@@ -8567,6 +7657,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()=".def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n.def1\n");
@@ -8574,12 +7665,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()=".def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_title_offset_by_blank_line_and_line_comment() {
@@ -8600,6 +7685,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()=".def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n// comment\n.def1\n");
@@ -8607,12 +7693,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd"#, 1);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p[text()=".def1"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_admonition_offset_by_blank_line() {
@@ -8632,6 +7712,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p[text()="NOTE: def1"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\nNOTE: def1\n");
@@ -8643,12 +7724,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_that_looks_like_section_title_offset_by_blank_line() {
@@ -8669,6 +7744,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p[text()="== Another Section"]', output, 1
       assert_xpath '//h2', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n== Another Section\n");
@@ -8681,12 +7757,6 @@ context 'Description lists redux' do
         );
         assert_xpath(&output, r#"//h2"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_of_first_literal_line_offset_by_blank_line_appends_subsequent_literals_offset_by_blank_line_as_blocks(
@@ -8715,6 +7785,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]', output, 2
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 2
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n  def1\n\n  literal\n\n\n  literal\n");
@@ -8732,12 +7803,6 @@ context 'Description lists redux' do
             2,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_of_subsequent_line_and_appends_following_literal_line_offset_by_blank_line_as_block_if_term_has_no_inline_description(
@@ -8764,6 +7829,7 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\ndef1\n\n  literal\n\nterm2:: def2\n");
@@ -8786,12 +7852,6 @@ context 'Description lists redux' do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description() {
         verifies!(
@@ -8813,6 +7873,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\n  literal\n");
@@ -8830,12 +7891,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_literal_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
@@ -8862,6 +7917,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="literal"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\n  literal\n\n'''\n");
@@ -8880,12 +7936,6 @@ context 'Description lists redux' do
         );
         assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_ruler(
@@ -8911,6 +7961,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\npara\n\n'''\n");
@@ -8929,12 +7980,6 @@ context 'Description lists redux' do
         );
         assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_line_attached_by_continuation_as_block_if_item_has_no_inline_description_followed_by_block(
@@ -8963,6 +8008,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\npara\n\n....\nliteral\n....\n");
@@ -8990,12 +8036,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_block_attached_by_continuation_but_not_subsequent_block_not_attached_by_continuation(
@@ -9025,6 +8065,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="literalblock"]//pre[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\n....\nliteral\n....\n....\ndetached\n....\n");
@@ -9053,12 +8094,6 @@ context 'Description lists redux' do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_list_if_item_has_no_inline_description() {
         verifies!(
@@ -9080,6 +8115,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/p', output, 0
       assert_xpath '//*[@class="dlist"]//dd//ul/li', output, 3
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\n");
@@ -9088,12 +8124,6 @@ context 'Description lists redux' do
         assert_xpath(&output, r#"//*[@class="dlist"]//dd/p"#, 0);
         assert_xpath(&output, r#"//*[@class="dlist"]//dd//ul/li"#, 3);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_list_to_first_term_when_followed_immediately_by_second_term() {
@@ -9118,6 +8148,7 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]//ul/li', output, 3
       assert_xpath '(//*[@class="dlist"]//dd)[2]/p[text()="def2"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\nterm2:: def2\n");
@@ -9131,12 +8162,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_indented_list_to_first_term_that_is_adjacent_to_second_term() {
@@ -9170,6 +8195,7 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]//li', output, 3
       assert_css '.dlist + .paragraph', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nlabel 1::\n  description 1\n\n  * one\n  * two\n  * three\nlabel 2::\n  description 2\n\nparagraph\n");
@@ -9209,12 +8235,6 @@ context 'Description lists redux' do
         assert_css(&output, r#".dlist + .paragraph"#, 1);
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_indented_list_to_first_term_that_is_attached_by_a_continuation_and_adjacent_to_second_term(
     ) {
@@ -9248,6 +8268,7 @@ context 'Description lists redux' do
       assert_xpath '(//*[@class="dlist"]//dd)[1]/p/following-sibling::*[@class="ulist"]//li', output, 3
       assert_css '.dlist + .paragraph', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nlabel 1::\n  description 1\n+\n  * one\n  * two\n  * three\nlabel 2::\n  description 2\n\nparagraph\n");
@@ -9287,12 +8308,6 @@ context 'Description lists redux' do
         assert_css(&output, r#".dlist + .paragraph"#, 1);
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_list_and_paragraph_block_when_line_following_list_attached_by_continuation() {
         verifies!(
@@ -9320,6 +8335,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n* one\n* two\n* three\n\n+\npara\n");
@@ -9343,12 +8359,6 @@ context 'Description lists redux' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn first_continued_line_associated_with_nested_list_item_and_second_continued_line_associated_with_term(
@@ -9378,6 +8388,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="ulist"]/following-sibling::*[@class="paragraph"]/p[text()="term1 para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n* one\n+\nnested list para\n\n+\nterm1 para\n");
@@ -9407,12 +8418,6 @@ context 'Description lists redux' do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn literal_line_attached_by_continuation_swallows_adjacent_line_that_looks_like_term() {
         verifies!(
@@ -9438,6 +8443,7 @@ context 'Description lists redux' do
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]', output, 2
       assert_xpath %(//*[@class="dlist"]//dd/*[@class="literalblock"]//pre[text()="  literal\nnotnestedterm:::"]), output, 2
     end
+
 "#
         );
         let output = convert(
@@ -9459,12 +8465,6 @@ notnestedterm:::"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_no_inline_description() {
         verifies!(
@@ -9485,6 +8485,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n+\npara\n");
@@ -9502,12 +8503,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -9594,6 +8589,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n// comment\n+\npara\n");
@@ -9611,12 +8607,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_no_inline_description(
@@ -9640,6 +8630,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n\n+\npara\n");
@@ -9657,12 +8648,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn delimited_block_breaks_list_even_when_term_has_no_inline_description() {
@@ -9684,6 +8669,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="exampleblock"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="exampleblock"]//p[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n====\ndetached\n====\n");
@@ -9700,12 +8686,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_attribute_line_above_delimited_block_that_breaks_a_dlist_is_not_duplicated() {
@@ -9726,6 +8706,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]/dl', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="listingblock rolename"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm:: desc\n[.rolename]\n----\ndetached\n----\n");
@@ -9736,12 +8717,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_attribute_line_above_paragraph_breaks_list_even_when_term_has_no_inline_description() {
@@ -9762,6 +8737,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="verseblock"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="verseblock"]/pre[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n[verse]\ndetached\n");
@@ -9778,12 +8754,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_attribute_line_above_paragraph_that_breaks_a_dlist_is_not_duplicated() {
@@ -9802,6 +8772,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]/dl', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph rolename"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm:: desc\n[.rolename]\ndetached\n");
@@ -9812,12 +8783,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_anchor_line_breaks_list_even_when_term_has_no_inline_description() {
@@ -9838,6 +8803,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1::\n[[id]]\ndetached\n");
@@ -9854,12 +8820,6 @@ notnestedterm:::"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_attribute_lines_above_nested_horizontal_list_does_not_break_list() {
@@ -9884,6 +8844,7 @@ notnestedterm:::"]"#,
       assert_xpath '((//dl)[1]/dd)[1]//table', output, 1
       assert_xpath '((//dl)[1]/dd)[2]//table', output, 0
     end
+
 "#
         );
         let output = convert("Operating Systems::\n[horizontal]\n  Linux::: Fedora\n  BSD::: OpenBSD\n\nCloud Providers::\n  PaaS::: OpenShift\n  IaaS::: AWS\n");
@@ -9893,12 +8854,6 @@ notnestedterm:::"]"#,
         assert_xpath(&output, r#"((//dl)[1]/dd)[1]//table"#, 1);
         assert_xpath(&output, r#"((//dl)[1]/dd)[2]//table"#, 0);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_attribute_lines_above_nested_list_with_style_does_not_break_list() {
@@ -9920,6 +8875,7 @@ notnestedterm:::"]"#,
       assert_xpath '(//dl)[1]/dd', output, 2
       assert_xpath '((//dl)[1]/dd)[2]//ul[@class="square"]', output, 1
     end
+
 "#
         );
         let output = convert(
@@ -9929,12 +8885,6 @@ notnestedterm:::"]"#,
         assert_xpath(&output, r#"(//dl)[1]/dd"#, 2);
         assert_xpath(&output, r#"((//dl)[1]/dd)[2]//ul[@class="square"]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn multiple_block_attribute_lines_above_nested_list_does_not_break_list() {
@@ -9961,6 +8911,7 @@ notnestedterm:::"]"#,
       assert_xpath '((//dl)[1]/dd)[1]//table', output, 1
       assert_xpath '((//dl)[1]/dd)[2]//table', output, 0
     end
+
 "#
         );
         let output = convert("Operating Systems::\n[[variants]]\n[horizontal]\n  Linux::: Fedora\n  BSD::: OpenBSD\n\nCloud Providers::\n  PaaS::: OpenShift\n  IaaS::: AWS\n");
@@ -9971,12 +8922,6 @@ notnestedterm:::"]"#,
         assert_xpath(&output, r#"((//dl)[1]/dd)[1]//table"#, 1);
         assert_xpath(&output, r#"((//dl)[1]/dd)[2]//table"#, 0);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn multiple_block_attribute_lines_separated_by_empty_line_above_nested_list_does_not_break_list(
@@ -10043,6 +8988,7 @@ notnestedterm:::"]"#,
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\ncontinued\n");
@@ -10055,12 +9001,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_inline_description_and_subsequent_lines() {
@@ -10080,6 +9020,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued\ncontinued"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\ncontinued\ncontinued\n");
@@ -10093,12 +9034,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_inline_description_and_line_following_comment_line() {
@@ -10118,6 +9053,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n// comment\ncontinued\n");
@@ -10130,12 +9066,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn folds_text_from_inline_description_and_subsequent_indented_line() {
@@ -10155,6 +9085,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd', output, 1
       assert_xpath %(//*[@class="dlist"]//dd/p[text()="def1\ncontinued"]), output, 1
     end
+
 "#
         );
         let output = convert("== List\n\nterm1:: def1\n  continued\n");
@@ -10167,12 +9098,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description() {
@@ -10195,6 +9120,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n  literal\n");
@@ -10212,12 +9138,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_literal_line_offset_by_blank_line_as_block_and_appends_line_after_continuation_as_block_if_item_has_inline_description(
@@ -10245,6 +9165,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n  literal\n+\npara\n");
@@ -10273,12 +9194,6 @@ continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_line_after_continuation_as_block_and_literal_line_offset_by_blank_line_as_block_if_item_has_inline_description(
     ) {
@@ -10305,6 +9220,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/following-sibling::*[@class="literalblock"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/*[@class="paragraph"]/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\n  literal\n");
@@ -10333,12 +9249,6 @@ continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn appends_list_if_item_has_inline_description() {
         verifies!(
@@ -10360,6 +9270,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="ulist"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="ulist"]/ul/li', output, 3
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n* one\n* two\n* three\n");
@@ -10376,12 +9287,6 @@ continued"]"#,
             3,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn appends_literal_line_attached_by_continuation_as_block_if_item_has_inline_description_followed_by_ruler(
@@ -10408,6 +9313,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="literalblock"]//pre[text()="literal"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::hr', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n+\n  literal\n\n'''\n");
@@ -10426,12 +9332,6 @@ continued"]"#,
         );
         assert_xpath(&output, r#"//*[@class="dlist"]/following-sibling::hr"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn line_offset_by_blank_line_breaks_list_if_term_has_inline_description() {
@@ -10453,6 +9353,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\ndetached\n");
@@ -10470,12 +9371,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     non_normative!(
         r#"
@@ -10533,6 +9428,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="paragraph"]/p[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\ndetached\n");
@@ -10561,12 +9457,6 @@ continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn line_attached_by_continuation_is_appended_as_paragraph_if_term_has_inline_description_followed_by_detached_block(
     ) {
@@ -10594,6 +9484,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="sidebarblock"]', output, 1
       assert_xpath '//*[@class="dlist"]/following-sibling::*[@class="sidebarblock"]//p[text()="detached"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n+\npara\n\n****\ndetached\n****\n");
@@ -10622,12 +9513,6 @@ continued"]"#,
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn line_attached_by_continuation_offset_by_line_comment_is_appended_as_paragraph_if_term_has_inline_description(
     ) {
@@ -10650,6 +9535,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n// comment\n+\npara\n");
@@ -10667,12 +9553,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn line_attached_by_continuation_offset_by_blank_line_is_appended_as_paragraph_if_term_has_inline_description(
@@ -10696,6 +9576,7 @@ continued"]"#,
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]', output, 1
       assert_xpath '//*[@class="dlist"]//dd/p/following-sibling::*[@class="paragraph"]/p[text()="para"]', output, 1
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n+\npara\n");
@@ -10713,12 +9594,6 @@ continued"]"#,
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn line_comment_offset_by_blank_line_divides_lists_because_item_has_text() {
@@ -10738,17 +9613,12 @@ continued"]"#,
       output = convert_string_to_embedded input
       assert_xpath '//*[@class="dlist"]/dl', output, 2
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n//\n\nterm2:: def2\n");
         assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 2);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn ruler_offset_by_blank_line_divides_lists_because_item_has_text() {
@@ -10768,17 +9638,12 @@ continued"]"#,
       output = convert_string_to_embedded input
       assert_xpath '//*[@class="dlist"]/dl', output, 2
     end
+
 "#
         );
         let output = convert("== Lists\n\nterm1:: def1\n\n'''\n\nterm2:: def2\n");
         assert_xpath(&output, r#"//*[@class="dlist"]/dl"#, 2);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn block_title_offset_by_blank_line_divides_lists_and_becomes_title_of_second_list_because_item_has_text(
@@ -10815,15 +9680,10 @@ continued"]"#,
         r#"
   end
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 // The entire Callout lists (`:colist`) context is non-normative: this crate
 // does not render callout lists yet (#155).
@@ -11470,13 +10330,8 @@ context 'Callout lists' do
     assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}b"]), output, 1
   end
 end
+
 "##
-);
-
-non_normative!(
-    r#"
-
-"#
 );
 
 mod checklists {
@@ -11518,6 +10373,7 @@ context 'Checklists' do
     assert_xpath %((/*[@class="ulist checklist"]/ul/li)[4]/p[text()="#{decode_char 10003} another done"]), output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[5]/p[text()="plain"]', output, 1
   end
+
 "##
         );
         let output =
@@ -11550,12 +10406,6 @@ context 'Checklists' do
         );
     }
 
-    non_normative!(
-        r#"
-
-"#
-    );
-
     #[test]
     fn entry_is_not_a_checklist_item_if_the_closing_bracket_is_not_immediately_followed_by_the_space_character(
     ) {
@@ -11578,6 +10428,7 @@ context 'Checklists' do
     refute checklist.items[2].attr?('checkbox')
     refute checklist.items[3].attr?('checkbox')
   end
+
 "#
         );
         let output =
@@ -11588,12 +10439,6 @@ context 'Checklists' do
         assert_xpath(&output, r#"(//ul/li)[3]/p[contains(text(), "[ ]")]"#, 1);
         assert_xpath(&output, r#"(//ul/li)[4]/p[contains(text(), "[x]")]"#, 1);
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_create_checklist_with_font_icons_if_at_least_one_item_has_checkbox_syntax_and_icons_attribute_is_font(
@@ -11613,6 +10458,7 @@ context 'Checklists' do
     assert_css '.ulist.checklist li i.fa-square-o', output, 1
     assert_xpath '(/*[@class="ulist checklist"]/ul/li)[3]/p[text()="plain"]', output, 1
   end
+
 "#
         );
         let output = convert_with(
@@ -11628,12 +10474,6 @@ context 'Checklists' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_create_interactive_checklist_if_interactive_option_is_set_even_with_icons_attribute_is_font(
@@ -11660,6 +10500,7 @@ context 'Checklists' do
     assert_css '.ulist.checklist li input[type="checkbox"][disabled]', output, 0
     assert_css '.ulist.checklist li input[type="checkbox"][checked]', output, 1
   end
+
 "#
         );
         let output = convert(":icons: font\n\n[%interactive]\n- [ ] todo\n- [x] done\n");
@@ -11676,12 +10517,6 @@ context 'Checklists' do
             1,
         );
     }
-
-    non_normative!(
-        r#"
-
-"#
-    );
 
     #[test]
     fn should_not_create_checklist_if_checkbox_on_item_is_followed_by_a_tab() {
@@ -11716,15 +10551,10 @@ context 'Checklists' do
     non_normative!(
         r#"
 end
+
 "#
     );
 }
-
-non_normative!(
-    r#"
-
-"#
-);
 
 // The entire Lists model context is non-normative: it asserts parser-model
 // state (block structure and attributes), which the parser crate's own
