@@ -103,6 +103,36 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     }
 }
 
+/// The byte length of the leading run of supplemental inline anchors
+/// (`<a id="…"></a>`) at the start of a rendered heading title, or `0` when it
+/// does not begin with one. Mirrors Asciidoctor's `LeadingAnchorsRx`
+/// (`^(?:<a id="[^"]+"></a>)+`): the id must be non-empty, and anchors are
+/// consumed greedily.
+fn leading_anchors_len(title: &str) -> usize {
+    let mut rest = title;
+    let mut consumed = 0;
+
+    while let Some(after_open) = rest.strip_prefix("<a id=\"") {
+        // The id runs up to the next `"`; `[^"]+` requires at least one char.
+        let Some(quote) = after_open.find('"') else {
+            break;
+        };
+
+        if quote == 0 {
+            break;
+        }
+
+        let Some(after_anchor) = after_open[quote + 1..].strip_prefix("></a>") else {
+            break;
+        };
+
+        consumed = title.len() - after_anchor.len();
+        rest = after_anchor;
+    }
+
+    consumed
+}
+
 /// Whether the default stylesheet should be *linked* (to `./asciidoctor.css`)
 /// rather than *embedded* inline.
 ///
@@ -621,9 +651,43 @@ pub(crate) fn render_document(
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
+        section_anchors: if !document.is_attribute_set("sectanchors") {
+            SectionAnchors::None
+        } else if attribute_str(document, "sectanchors").as_deref() == Some("after") {
+            SectionAnchors::After
+        } else {
+            SectionAnchors::Before
+        },
+        sectlinks: document.is_attribute_set("sectlinks"),
     };
     renderer.document(document);
     renderer.out
+}
+
+/// How the `sectanchors` document attribute decorates a non-discrete section
+/// heading with its `<a class="anchor">` self-link.
+#[derive(Clone, Copy, PartialEq)]
+enum SectionAnchors {
+    /// `sectanchors` is unset: no anchor is injected.
+    None,
+
+    /// `:sectanchors:` — the anchor is prepended before the title text.
+    Before,
+
+    /// `:sectanchors: after` — the anchor is appended after the title text.
+    After,
+}
+
+/// The document-level render settings a nested AsciiDoc table cell inherits
+/// from its parent document, carried into the cell's sub-renderer.
+#[derive(Clone, Copy)]
+struct CellRenderConfig {
+    icons_font: bool,
+    doc_tabsize: i64,
+    source_indent: Option<i64>,
+    prewrap: bool,
+    section_anchors: SectionAnchors,
+    sectlinks: bool,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -656,6 +720,14 @@ struct Renderer<'a> {
     /// default; when it is unset (`:prewrap!:`) every verbatim `<pre>` gains
     /// the `nowrap` class.
     prewrap: bool,
+
+    /// How the `sectanchors` document attribute decorates non-discrete section
+    /// headings with a self-anchor.
+    section_anchors: SectionAnchors,
+
+    /// Whether the `sectlinks` document attribute is set, wrapping each
+    /// non-discrete section heading's title text in `<a class="link">`.
+    sectlinks: bool,
 }
 
 impl Renderer<'_> {
@@ -1946,10 +2018,14 @@ impl Renderer<'_> {
                     ad.blocks(),
                     ad.title(),
                     ad.is_inline(),
-                    self.icons_font,
-                    self.doc_tabsize,
-                    self.source_indent,
-                    self.prewrap,
+                    CellRenderConfig {
+                        icons_font: self.icons_font,
+                        doc_tabsize: self.doc_tabsize,
+                        source_indent: self.source_indent,
+                        prewrap: self.prewrap,
+                        section_anchors: self.section_anchors,
+                        sectlinks: self.sectlinks,
+                    },
                 )
             ),
             TableCellContent::Simple(simple) => {
@@ -2040,6 +2116,10 @@ impl Renderer<'_> {
             return;
         }
 
+        // `sectlinks` / `sectanchors` inject `<a>` elements into a non-discrete
+        // heading, keyed off the section's own id.
+        let title = self.decorate_section_heading(&title, id);
+
         self.line(&format!(
             "<div{}>",
             class_attribute(&format!("sect{level}"), &block.roles())
@@ -2082,6 +2162,46 @@ impl Renderer<'_> {
         } else {
             title.to_string()
         }
+    }
+
+    /// Applies the `sectlinks` and `sectanchors` decorations to a section
+    /// heading's title, matching Asciidoctor's `convert_section`. Both toggles
+    /// key off the section's own `id`; a section without an id is left
+    /// untouched. `sectlinks` wraps the title text in `<a class="link">`, and
+    /// `sectanchors` then adds an `<a class="anchor">` self-link before (or,
+    /// with `:sectanchors: after`, after) the whole thing.
+    fn decorate_section_heading(&self, title: &str, id: Option<&str>) -> String {
+        let Some(id) = id else {
+            return title.to_string();
+        };
+
+        let href = escape_attribute(id);
+
+        // `sectlinks` wraps the title text in a self-link. A leading run of
+        // supplemental inline anchors (`[[fu]]` → `<a id="fu"></a>`) must stay
+        // a *sibling before* the link rather than nesting inside it — an `<a>`
+        // cannot contain another `<a>` under html5 tree construction — so the
+        // link opens only after those anchors.
+        let mut title = if self.sectlinks {
+            let split = leading_anchors_len(title);
+            let (leading, text) = title.split_at(split);
+
+            format!("{leading}<a class=\"link\" href=\"#{href}\">{text}</a>")
+        } else {
+            title.to_string()
+        };
+
+        match self.section_anchors {
+            SectionAnchors::Before => {
+                title = format!("<a class=\"anchor\" href=\"#{href}\"></a>{title}");
+            }
+            SectionAnchors::After => {
+                title.push_str(&format!("<a class=\"anchor\" href=\"#{href}\"></a>"));
+            }
+            SectionAnchors::None => {}
+        }
+
+        title
     }
 
     /// The preamble: content between the doctitle and the first section,
@@ -2358,10 +2478,7 @@ fn render_cell_document<'s>(
     blocks: &'s [Block<'s>],
     title: Option<&str>,
     inline: bool,
-    icons_font: bool,
-    doc_tabsize: i64,
-    source_indent: Option<i64>,
-    prewrap: bool,
+    config: CellRenderConfig,
 ) -> String {
     if inline {
         // The inline doctype renders the first block's inline content; skip any
@@ -2375,16 +2492,19 @@ fn render_cell_document<'s>(
     }
 
     // The cell is a nested document that inherits the parent's verbatim-layout
-    // attributes (`tabsize`, `source-indent`, `prewrap`), so the sub-renderer
-    // carries them forward.
+    // attributes (`tabsize`, `source-indent`, `prewrap`) and section-heading
+    // toggles (`sectanchors`, `sectlinks`), so the sub-renderer carries them
+    // forward.
     let mut renderer = Renderer {
         out: String::new(),
         custom_stylesheet: None,
         standalone: false,
-        icons_font,
-        doc_tabsize,
-        source_indent,
-        prewrap,
+        icons_font: config.icons_font,
+        doc_tabsize: config.doc_tabsize,
+        source_indent: config.source_indent,
+        prewrap: config.prewrap,
+        section_anchors: config.section_anchors,
+        sectlinks: config.sectlinks,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -2499,6 +2619,34 @@ mod tests {
             "<div class=\"sect1\">\n<h2 id=\"_one\">One</h2>\n<div class=\"sectionbody\">"
         ));
         assert!(body.contains("<div class=\"sect2\">\n<h3 id=\"_two\">Two</h3>"));
+    }
+
+    #[test]
+    fn leading_anchors_len_matches_leading_anchors_rx() {
+        use super::leading_anchors_len;
+
+        // No leading anchor: bare text, or a title opening with some other
+        // element, consumes nothing.
+        assert_eq!(leading_anchors_len("Foo"), 0);
+        assert_eq!(leading_anchors_len("<em>Foo</em>"), 0);
+
+        // A single bare anchor is consumed up to and including its `</a>`; the
+        // trailing title text is left behind.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"></a>Foo"#), 15);
+
+        // Anchors are consumed greedily: a run of them all counts.
+        assert_eq!(
+            leading_anchors_len(r#"<a id="fu"></a><a id="bar"></a>Foo"#),
+            31
+        );
+
+        // The three non-match branches mirror the regex `<a id="[^"]+"></a>`:
+        // an unterminated id (no closing quote), an empty id (`[^"]+` needs one
+        // char), and an anchor not closed by `></a>` (e.g. a real link that
+        // carries an `id`) each stop the scan with nothing consumed.
+        assert_eq!(leading_anchors_len(r#"<a id="fu"#), 0);
+        assert_eq!(leading_anchors_len(r#"<a id=""></a>Foo"#), 0);
+        assert_eq!(leading_anchors_len(r##"<a id="fu" href="#x">Foo</a>"##), 0);
     }
 
     #[test]
