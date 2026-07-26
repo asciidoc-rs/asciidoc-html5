@@ -14,8 +14,8 @@
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - tests whose assertions depend on constructs this renderer does not yet
 //!   emit — description lists inside AsciiDoc cells (#154), table of contents
-//!   (#86), footnotes (#162), `cellbgcolor` (#163), and font-based admonition
-//!   icons (#50);
+//!   (#86), footnotes inside AsciiDoc cells (asciidoc-parser#975),
+//!   `cellbgcolor` (#163), and font-based admonition icons (#50);
 //! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
@@ -3606,8 +3606,11 @@ fn should_catalog_anchor_at_start_of_cell_in_first_row() {
     assert!(doc.catalog().contains_id("foo"));
 }
 
-// Asserts on the footnotes block (`#_footnotedef_1`); footnote rendering is
-// not implemented yet (#162).
+// Asserts on a footnotes block (`#_footnotedef_1`) rendered inside the AsciiDoc
+// cell. Document-level footnote rendering is implemented (#162), but this
+// cell-local case is blocked upstream: `asciidoc-parser` discards an AsciiDoc
+// cell's own footnotes and exposes no accessor for them
+// (asciidoc-parser#975).
 non_normative!(
     r#"
     test 'footnotes should not be shared between an AsciiDoc table cell and the main document' do

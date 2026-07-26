@@ -3358,6 +3358,25 @@ mod tests {
     }
 
     #[test]
+    fn delimited_source_block_wraps_code_in_a_highlight_pre() {
+        // A `[source,<lang>]` *delimited* (`----`) listing must render the same
+        // `<pre class="highlight"><code …>` wrapper as the paragraph form, not a
+        // bare `<pre>` listing block (see #159). The delimited form resolves to
+        // the `listing` context with `declared_style() == Some("source")`, so it
+        // is routed to `source()` rather than the plain verbatim path.
+        let html = convert("[source,ruby]\n----\ndef x\nend\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
+                 def x\nend</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
     fn source_block_honors_nowrap() {
         // A source block adds `nowrap` after `highlight` when wrapping is off
         // (here via `:prewrap!:`), matching Asciidoctor's `highlight nowrap`.
