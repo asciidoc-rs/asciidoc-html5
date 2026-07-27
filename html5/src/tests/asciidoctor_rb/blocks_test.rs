@@ -1937,9 +1937,12 @@ mod example_blocks {
             r#"(/*[@class="exampleblock"])[2]/*[@class="title"][text()="second example"]"#,
             1,
         );
+        // Pinned to the exact numeral (stronger than the reference's
+        // `starts-with(…, "Exhibit ")`): the empty `:caption:` above must consume
+        // no counter, so the third example is "Exhibit 2", not "Exhibit 3".
         assert_xpath(
             &output,
-            r#"(/*[@class="exampleblock"])[3]/*[@class="title"][starts-with(text(), "Exhibit ")]"#,
+            r#"(/*[@class="exampleblock"])[3]/*[@class="title"][text()="Exhibit 2. third example"]"#,
             1,
         );
     }
