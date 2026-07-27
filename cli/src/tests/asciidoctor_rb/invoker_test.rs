@@ -781,6 +781,22 @@ fn should_report_usage_if_no_input_file_given() {
     assert!(String::from_utf8(usage)
         .expect("usage is UTF-8")
         .contains("Usage:"));
+
+    // An invalid option is still reported specifically, not masked by usage: a
+    // no-input terminal run with an unsupported `-b` fails with the backend
+    // error, since the option checks run before the usage divert.
+    let cli = Cli::parse_from(["adoc", "-b", "docbook5"]);
+    let mut stdin = std::io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let err = run_with_streams(&cli, true, &mut stdin, &mut stdout, &mut stderr)
+        .expect_err("an unsupported backend fails even on the terminal path");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(err.to_string().contains("docbook5"), "{err}");
+    assert!(
+        stderr.is_empty(),
+        "no usage is printed when an option is invalid"
+    );
 }
 
 #[test]

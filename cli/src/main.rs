@@ -413,7 +413,9 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
 /// nothing piped in, so [`should_report_usage`] diverts to printing usage on
 /// `stderr` (returning `true`) rather than blocking on the read; the tests
 /// inject this flag to drive both the usage path and the ordinary conversion
-/// path.
+/// path. That divert happens only *after* the option checks (backend, doctype,
+/// safe mode, attributes, failure level), so an invalid option still surfaces
+/// its own error rather than being masked by generic usage.
 fn run_with_streams(
     cli: &Cli,
     stdin_is_terminal: bool,
@@ -421,17 +423,6 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
-    // A bare invocation (no input argument) at an interactive terminal would
-    // otherwise block reading standard input, which reads as a freeze. Print the
-    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
-    // when no input file is given. Piped or redirected input (standard input is
-    // not a terminal), and an explicit `-`, fall through and read standard input,
-    // so the piping design keeps working.
-    if should_report_usage(&cli.inputs, stdin_is_terminal) {
-        print_usage(stderr)?;
-        return Ok(true);
-    }
-
     // Reject an unsupported backend or doctype before reading or converting
     // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
     // touching the input.
@@ -448,6 +439,22 @@ fn run_with_streams(
         .standalone(!cli.embedded);
 
     let reporter = WarningReporter::from_cli(cli)?;
+
+    // A bare invocation (no input argument) at an interactive terminal would
+    // otherwise block reading standard input, which reads as a freeze. Print the
+    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
+    // when no input file is given. Piped or redirected input (standard input is
+    // not a terminal), and an explicit `-`, fall through and read standard input,
+    // so the piping design keeps working.
+    //
+    // This runs *after* the option checks above so that an invalid `-b`/`-d`/`-S`/
+    // `-a`/`--failure-level` still reports its own specific error rather than
+    // being masked by generic usage — none of those checks read or block on
+    // standard input, so surfacing them first is safe.
+    if should_report_usage(&cli.inputs, stdin_is_terminal) {
+        print_usage(stderr)?;
+        return Ok(true);
+    }
 
     let sources = resolve_inputs(&cli.inputs)?;
 
