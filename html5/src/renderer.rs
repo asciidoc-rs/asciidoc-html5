@@ -32,9 +32,9 @@ use asciidoc_parser::{
         ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
         ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
         SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
-        VerticalAlignment,
+        TocBlock, VerticalAlignment,
     },
-    document::{DocinfoLocation, Header, InterpretedValue},
+    document::{DocinfoLocation, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
 };
 
@@ -667,6 +667,32 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
     }
 }
 
+/// Renders the table-of-contents block Asciidoctor's `html5` backend emits —
+/// `<div id="toc" class="…"><div id="toctitle">…</div>{outline}</div>` — for a
+/// document whose `toc` attribute enables one, or an empty string when the
+/// document has no sections (the outline would be empty, and Asciidoctor emits
+/// no TOC). The nested section list comes from
+/// [`render_outline`](crate::outline::render_outline); the `class` is the
+/// resolved `toc-class` and the title the resolved `toc-title`.
+///
+/// The caller decides *where* to insert this block from the document's
+/// [`TocMode`]; this function only builds it.
+fn render_toc(document: &Document<'_>) -> String {
+    let outline = crate::outline::render_outline(document, &crate::OutlineOptions::default());
+    if outline.is_empty() {
+        return String::new();
+    }
+
+    // The `toc-class` is escaped defensively (a no-op for the `toc`/`toc2`
+    // defaults); the `toc-title` is emitted verbatim, matching Asciidoctor's
+    // `#{doc.attr 'toc-title'}`.
+    format!(
+        "<div id=\"toc\" class=\"{}\">\n<div id=\"toctitle\">{}</div>\n{outline}\n</div>",
+        escape_attribute(document.toc_class()),
+        document.toc_title(),
+    )
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -680,15 +706,30 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
 /// `None` for callers that cannot supply it, such as the string-only
 /// [`convert`](crate::convert) entry point. It is ignored in embedded output,
 /// which emits no stylesheet.
-pub(crate) fn render_document(
-    document: &Document<'_>,
-    custom_stylesheet: Option<&str>,
+pub(crate) fn render_document<'a>(
+    document: &'a Document<'a>,
+    custom_stylesheet: Option<&'a str>,
     standalone: bool,
 ) -> String {
+    // Build the header/preamble TOC block once, up front — it is emitted at the
+    // single site the placement selects. Only the placements that render a TOC
+    // in the document flow relative to fixed structure (`auto`/`left`/`right`
+    // near the top, `preamble` below the preamble) produce one here; the
+    // `macro` placement renders at its `toc::[]` block instead (see
+    // [`toc_macro`](Renderer::toc_macro)), and `disabled` produces none.
+    let toc_mode = document.toc_mode();
+    let toc_html = match toc_mode {
+        TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Preamble => render_toc(document),
+        TocMode::Disabled | TocMode::Macro => String::new(),
+    };
+
     let mut renderer = Renderer {
         out: String::new(),
+        document: Some(document),
         custom_stylesheet,
         standalone,
+        toc_mode,
+        toc_html,
         icons_set: document.is_attribute_set("icons"),
         icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
         iconsdir: attribute_str(document, "iconsdir")
@@ -743,6 +784,12 @@ struct CellRenderConfig {
 struct Renderer<'a> {
     out: String,
 
+    /// The document being rendered, or `None` for a nested table-cell
+    /// sub-renderer (which is handed a block slice rather than a `Document`).
+    /// The `toc::[]` block macro reads it to build its outline and resolve the
+    /// TOC defaults; every other construct is self-contained in its block.
+    document: Option<&'a Document<'a>>,
+
     /// The CSS to embed for a custom, embedded stylesheet, if the caller
     /// supplied any.
     custom_stylesheet: Option<&'a str>,
@@ -750,6 +797,17 @@ struct Renderer<'a> {
     /// Whether to emit the standalone document shell (`true`) or embedded,
     /// body-only output (`false`).
     standalone: bool,
+
+    /// Where the document's table of contents is placed, or
+    /// [`TocMode::Disabled`] when none is generated. Selects which placement
+    /// site emits [`toc_html`](Self::toc_html).
+    toc_mode: TocMode,
+
+    /// The pre-rendered `<div id="toc">…</div>` block, or empty when the
+    /// document generates no TOC (disabled or `macro` placement) or has no
+    /// sections. Emitted at the single site selected by
+    /// [`toc_mode`](Self::toc_mode).
+    toc_html: String,
 
     /// Whether the document sets `icons` to any value (Asciidoctor's `attr?
     /// 'icons'`). It selects the icon-based rendering of callout lists (a
@@ -868,6 +926,27 @@ impl Renderer<'_> {
             .unwrap_or_default();
 
         let mut classes = doctype;
+
+        // An automatically placed TOC (`auto`/`left`/`right`) whose `toc-class`
+        // is set adds `<toc-class> toc-<toc-position>` to the `<body>` class —
+        // the side-column placements set `toc-class` to `toc2`, driving the
+        // fixed-column styling. This mirrors Asciidoctor's `<body>` classes; a
+        // plain `:toc:` (auto, no `toc-class`) leaves the class list untouched.
+        if !self.toc_html.is_empty()
+            && matches!(
+                self.toc_mode,
+                TocMode::Auto | TocMode::Left | TocMode::Right
+            )
+            && document.has_attribute("toc-class")
+        {
+            let position =
+                attribute_str(document, "toc-position").unwrap_or_else(|| "header".into());
+            classes.push(' ');
+            classes.push_str(document.toc_class());
+            classes.push_str(" toc-");
+            classes.push_str(&position);
+        }
+
         for role in header.roles() {
             classes.push(' ');
             classes.push_str(role);
@@ -936,6 +1015,18 @@ impl Renderer<'_> {
             }
         }
 
+        // An `auto`/`left`/`right` TOC leads the embedded body, ahead of the
+        // content, matching Asciidoctor's embeddable output. A `preamble` TOC is
+        // instead emitted within the preamble itself (see [`preamble`]), so it
+        // is excluded here.
+        if matches!(
+            self.toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right
+        ) && !self.toc_html.is_empty()
+        {
+            self.line(&self.toc_html.clone());
+        }
+
         self.blocks(document.child_blocks());
 
         // Embedded output still carries the footnotes block, matching
@@ -1000,7 +1091,8 @@ impl Renderer<'_> {
     }
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
-    /// the author and revision details block.
+    /// the author and revision details block and an automatically placed table
+    /// of contents.
     fn header(&mut self, document: &Document<'_>) {
         let header: &Header<'_> = document.header();
 
@@ -1013,7 +1105,14 @@ impl Renderer<'_> {
         let author_line = header.author_line();
         let revision_line = header.revision_line();
 
-        if title.is_none() && author_line.is_none() && revision_line.is_none() {
+        // An `auto`/`left`/`right` TOC is emitted inside the header, after the
+        // details, matching Asciidoctor's `html5` backend.
+        let header_toc = matches!(
+            self.toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right
+        ) && !self.toc_html.is_empty();
+
+        if title.is_none() && author_line.is_none() && revision_line.is_none() && !header_toc {
             return;
         }
 
@@ -1077,6 +1176,10 @@ impl Renderer<'_> {
             }
 
             self.line("</div>");
+        }
+
+        if header_toc {
+            self.line(&self.toc_html.clone());
         }
 
         self.line("</div>");
@@ -1277,6 +1380,7 @@ impl Renderer<'_> {
                 ListType::Callout => self.colist(block, list),
             },
             Block::Table(table) => self.table(block, table),
+            Block::Toc(toc) => self.toc_macro(block, toc),
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -2412,6 +2516,98 @@ impl Renderer<'_> {
         self.line("<div class=\"sectionbody\">");
         self.blocks(block.child_blocks());
         self.line("</div>");
+
+        // A `preamble`-placed TOC follows the preamble's `sectionbody`, still
+        // inside the `<div id="preamble">`, matching Asciidoctor's
+        // `convert_preamble`.
+        if self.toc_mode == TocMode::Preamble && !self.toc_html.is_empty() {
+            self.line(&self.toc_html.clone());
+        }
+
+        self.line("</div>");
+    }
+
+    /// Emits the `toc::[]` block macro's table of contents (Asciidoctor's
+    /// `convert_toc`), the `macro` placement's counterpart to the header /
+    /// preamble TOC built by [`render_toc`]. The macro carries its own
+    /// per-TOC overrides: `id` (which also renames the title block's id to
+    /// `<id>title`), a block `title` (over `toc-title`), `levels` (over
+    /// `toclevels`), and a `role` (over `toc-class`).
+    ///
+    /// When the document does not defer its TOC to a macro — `toc` is off,
+    /// `toc-placement` is not `macro`, or there are no sections to list — the
+    /// macro emits Asciidoctor's `<!-- toc disabled -->` placeholder instead.
+    fn toc_macro<'src>(&mut self, block: &'src Block<'src>, toc: &'src TocBlock<'src>) {
+        // The macro renders a TOC only when this document defers to it. A cell
+        // sub-renderer (which holds no `Document` and never enables a TOC) also
+        // lands here and falls through to the placeholder.
+        let outline = match self.document {
+            Some(document) if self.toc_mode == TocMode::Macro => {
+                let mut options = crate::OutlineOptions::new();
+
+                // The macro's `levels` attribute overrides `toclevels` for this
+                // TOC only.
+                if let Some(levels) = toc
+                    .macro_attrlist()
+                    .named_attribute("levels")
+                    .and_then(|attr| attr.value().trim().parse::<usize>().ok())
+                {
+                    options = options.toclevels(levels);
+                }
+
+                crate::outline::render_outline(document, &options)
+            }
+
+            _ => String::new(),
+        };
+
+        // No sections yields an empty outline, which is Asciidoctor's
+        // `doc.sections?` guard — emit the placeholder comment.
+        let Some(document) = self.document.filter(|_| !outline.is_empty()) else {
+            self.line("<!-- toc disabled -->");
+            return;
+        };
+
+        // An explicit `id` renames both the container and — suffixed with
+        // `title` — the title block; absent, they fall back to `toc` /
+        // `toctitle`.
+        let (id_attr, title_id_attr) = match block.id() {
+            Some(id) => (
+                format!(" id=\"{}\"", escape_attribute(id)),
+                format!(" id=\"{}title\"", escape_attribute(id)),
+            ),
+            None => (" id=\"toc\"".to_string(), " id=\"toctitle\"".to_string()),
+        };
+
+        // A block title overrides `toc-title`; the block's role(s) override
+        // `toc-class`.
+        let title = block
+            .title()
+            .map(str::to_string)
+            .unwrap_or_else(|| document.toc_title().to_string());
+
+        // The role can arrive two ways: as a `role=` attribute inside the macro
+        // (`toc::[role=…]`) or as the block's role shorthand on the line above
+        // (`[.role]`). Asciidoctor folds both into `node.role`, with the macro's
+        // own `role=` winning; an absent role falls back to `toc-class`.
+        let class = toc
+            .macro_attrlist()
+            .named_attribute("role")
+            .map(|attr| attr.value().to_string())
+            .or_else(|| {
+                let roles = block.roles();
+                (!roles.is_empty()).then(|| roles.join(" "))
+            })
+            .unwrap_or_else(|| document.toc_class().to_string());
+
+        self.line(&format!(
+            "<div{id_attr} class=\"{}\">",
+            escape_attribute(&class)
+        ));
+        self.line(&format!(
+            "<div{title_id_attr} class=\"title\">{title}</div>"
+        ));
+        self.line(&outline);
         self.line("</div>");
     }
 
@@ -2697,8 +2893,15 @@ fn render_cell_document<'s>(
     // forward.
     let mut renderer = Renderer {
         out: String::new(),
+        // The cell sub-renderer is handed a block slice, not a `Document`; with
+        // the TOC disabled below, the `toc::[]` macro path never reads it.
+        document: None,
         custom_stylesheet: None,
         standalone: false,
+        // A nested cell document never renders its own TOC (Asciidoctor's cell
+        // conversion emits no table of contents), so leave it disabled.
+        toc_mode: TocMode::Disabled,
+        toc_html: String::new(),
         icons_set: config.icons_set,
         icons_font: config.icons_font,
         iconsdir: config.iconsdir.clone(),
@@ -2883,6 +3086,136 @@ mod tests {
         let html = convert("= Doc\n\nIntro.\n\n== Section\n\nBody.");
         let body = content(&html);
         assert!(body.starts_with("<div id=\"preamble\">\n<div class=\"sectionbody\">"));
+    }
+
+    // The TOC block Asciidoctor's `html5` backend emits, shared by every
+    // placement — a `<div id="toc" class="toc">` with a `<div id="toctitle">`
+    // and the nested section list.
+    const SAMPLE_TOC: &str = "\
+<div id=\"toc\" class=\"toc\">
+<div id=\"toctitle\">Table of Contents</div>
+<ul class=\"sectlevel1\">
+<li><a href=\"#_section_one\">Section One</a></li>
+<li><a href=\"#_section_two\">Section Two</a></li>
+</ul>
+</div>";
+
+    #[test]
+    fn auto_toc_renders_in_the_header() {
+        // A plain `:toc:` (auto placement) puts the TOC inside `<div
+        // id="header">`, after the `<h1>`, and leaves the `<body>` class alone.
+        let html = convert("= Doc\n:toc:\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny");
+        assert!(html.contains("<body class=\"article\">"));
+        assert!(html.contains(&format!(
+            "<div id=\"header\">\n<h1>Doc</h1>\n{SAMPLE_TOC}\n</div>"
+        )));
+    }
+
+    #[test]
+    fn preamble_toc_renders_below_the_preamble() {
+        // `:toc: preamble` places the TOC after the preamble's `sectionbody`,
+        // still inside `<div id="preamble">`, and not in the header.
+        let html = convert(
+            "= Doc\n:toc: preamble\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+        );
+
+        // The header shows only the title — no TOC.
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n</div>"));
+
+        // The TOC sits between the preamble's `sectionbody` close and the
+        // preamble's own close.
+        assert!(html.contains(&format!(
+            "<p>Intro.</p>\n</div>\n</div>\n{SAMPLE_TOC}\n</div>\n<div class=\"sect1\">"
+        )));
+    }
+
+    #[test]
+    fn side_column_toc_adds_body_classes() {
+        // `left`/`right` place the TOC in the header like `auto`, but also add
+        // `toc2 toc-<side>` to the `<body>` class (the side-column styling).
+        let left = convert("= Doc\n:toc: left\n\nIntro.\n\n== Section One\n\nx");
+        assert!(left.contains("<body class=\"article toc2 toc-left\">"));
+        assert!(left.contains("<div id=\"toc\" class=\"toc2\">"));
+
+        let right = convert("= Doc\n:toc: right\n\nIntro.\n\n== Section One\n\nx");
+        assert!(right.contains("<body class=\"article toc2 toc-right\">"));
+    }
+
+    #[test]
+    fn embedded_auto_toc_leads_the_body() {
+        // In embedded output an `auto` TOC leads the body, ahead of the content.
+        let html = crate::convert_with(
+            "= Doc\n:toc:\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+            &Options::new(),
+        );
+        assert!(html.starts_with(SAMPLE_TOC));
+    }
+
+    #[test]
+    fn macro_placement_renders_at_the_toc_block() {
+        // `macro` placement renders the TOC where the `toc::[]` block appears —
+        // never in the header — with the `convert_toc` shape (the title block
+        // carries `class="title"`). The `<body>` class is untouched.
+        let html = convert(
+            "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+        );
+        assert!(html.contains("<body class=\"article\">"));
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n</div>"));
+        assert!(html.contains(
+            "<div id=\"toc\" class=\"toc\">\n\
+             <div id=\"toctitle\" class=\"title\">Table of Contents</div>\n\
+             <ul class=\"sectlevel1\">\n\
+             <li><a href=\"#_section_one\">Section One</a></li>\n\
+             <li><a href=\"#_section_two\">Section Two</a></li>\n\
+             </ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn macro_placement_honors_per_macro_overrides() {
+        // `id`/title/`levels`/`role` on the macro override the document
+        // defaults; the `id` also renames the title block's id to `<id>title`.
+        let html = convert(
+            "= Doc\n:toc: macro\n\n[#mytoc.fancy]\n.My Contents\ntoc::[levels=1]\n\n== Section One\n\n=== Nested\n\nx",
+        );
+        assert!(html.contains(
+            "<div id=\"mytoc\" class=\"fancy\">\n<div id=\"mytoctitle\" class=\"title\">My Contents</div>"
+        ));
+        // `levels=1` drops the nested subsection.
+        assert!(!html.contains("Nested</a>"));
+    }
+
+    #[test]
+    fn toc_macro_without_macro_placement_is_disabled() {
+        // A `toc::[]` block whose document does not defer to it (here the
+        // placement is `auto`) renders Asciidoctor's placeholder comment, while
+        // the automatic TOC still appears in the header.
+        let html = convert("= Doc\n:toc:\n\ntoc::[]\n\n== Section One\n\nx");
+        assert!(html.contains("<!-- toc disabled -->"));
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n<div id=\"toc\" class=\"toc\">"));
+    }
+
+    #[test]
+    fn toc_needs_sections() {
+        // With no sections the outline is empty, so Asciidoctor (and this crate)
+        // emit no TOC even when `:toc:` is set.
+        let html = convert("= Doc\n:toc:\n\nJust a paragraph, no sections.");
+        assert!(!html.contains("<div id=\"toc\""));
+    }
+
+    #[test]
+    fn toclevels_limits_the_toc_depth() {
+        // `:toclevels: 1` drops the nested subsection from the TOC while the
+        // top-level entries remain.
+        let html = convert("= Doc\n:toc:\n:toclevels: 1\n\n== Section One\n\n=== Nested\n\nx");
+        assert!(html.contains("<li><a href=\"#_section_one\">Section One</a></li>"));
+        assert!(!html.contains("Nested</a>"));
+    }
+
+    #[test]
+    fn toc_title_is_configurable() {
+        let html = convert("= Doc\n:toc:\n:toc-title: On this page\n\n== Section One\n\nx");
+        assert!(html.contains("<div id=\"toctitle\">On this page</div>"));
     }
 
     #[test]

@@ -71,18 +71,30 @@ fn parse(html: &str) -> (Html, bool) {
 /// children and `:root` matches nothing. Anchor the selector under the wrapper
 /// (`html > …`) and drop `:root` to recover Nokogiri's meaning.
 ///
-/// Only a `:root` on the leading compound is supported — the sole form the
-/// suite uses; anything else fails loudly rather than silently matching the
-/// wrong set.
+/// The `:root` must begin on the leading compound; it may then also appear on
+/// later compounds joined by sibling combinators (`h1:root + #toc:root`), which
+/// pin a whole run of top-level siblings. A `:root` reached through a
+/// descendant/child step, or combined with a selector group (`,`), fails loudly
+/// rather than silently matching the wrong set.
 fn rewrite_root_for_fragment(selector: &str) -> String {
     let idx = selector
         .find(":root")
         .expect("selector must contain `:root`");
     assert!(
         !selector[..idx].contains([' ', '>', '+', '~', ',']),
-        "assert_css supports `:root` only on the leading compound selector (got `{selector}`)"
+        "assert_css supports `:root` only starting on the leading compound selector (got `{selector}`)"
     );
-    let stripped = selector.replacen(":root", "", 1);
+    assert!(
+        !selector.contains(','),
+        "assert_css does not support `:root` combined with a selector group (got `{selector}`)"
+    );
+
+    // Every `:root` marks its compound as a fragment top-level node, which under
+    // `scraper`'s synthetic `<html>` wrapper means a direct child of that
+    // wrapper. Dropping all `:root` and anchoring the leading compound with
+    // `html >` places it — and, through any sibling combinators, its `:root`
+    // siblings — at that level, recovering Nokogiri's meaning.
+    let stripped = selector.replace(":root", "");
 
     format!("html > {stripped}")
 }
@@ -333,10 +345,26 @@ Famous quote.
     }
 
     #[test]
+    fn css_root_on_a_sibling_chain_matches_top_level_siblings() {
+        // A run of top-level siblings can each be pinned with `:root`, mirroring
+        // Nokogiri — the shape the embedded-TOC assertions use
+        // (`h1:root + #toc:root + #preamble:root`).
+        const CHAIN: &str = r#"<h1>Article</h1>
+<div id="toc" class="toc"><div id="toctitle">Contents</div></div>
+<div id="preamble"><div class="sectionbody"></div></div>"#;
+        assert_css(CHAIN, "h1:root", 1);
+        assert_css(CHAIN, "h1:root + #toc:root", 1);
+        assert_css(CHAIN, "h1:root + #toc:root + #preamble:root", 1);
+        // The sibling order is enforced: the reverse chain matches nothing.
+        assert_css(CHAIN, "#preamble:root + #toc:root", 0);
+    }
+
+    #[test]
     #[should_panic(expected = "leading compound")]
     fn css_root_on_inner_compound_panics() {
-        // `:root` on anything but the leading compound is unsupported; it must
-        // fail loudly rather than anchor the wrong element.
+        // `:root` reached through a descendant/child step (not a sibling
+        // combinator) is unsupported; it must fail loudly rather than anchor the
+        // wrong element.
         assert_css(FRAGMENT, "#content .paragraph:root", 0);
     }
 

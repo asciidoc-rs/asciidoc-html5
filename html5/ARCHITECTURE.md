@@ -82,6 +82,7 @@ render_document(&Document) -> String
               ├── CompoundDelimited → open_block()/sidebar()/example() (by context_kind) → recurses
               ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
               ├── Admonition → admonition() → recurses (compound admonitions)
+              ├── Toc     → toc_macro()  (the toc::[] macro placement)
               └── _       → unsupported()  (visible HTML comment)
 ```
 
@@ -136,6 +137,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
+| `Block::Toc` (`toc::[]`) | `toc` | `<div id="toc" class="toc"><div id="toctitle" class="title">…</div>…</div>` | ✅ |
 | `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |
 | `Block::DocumentAttribute` | `attribute` | *(no output; updates attribute state)* | ⬜ |
 
@@ -243,9 +245,10 @@ self-contained. The baseline reads `lang` and `doctype` from those accessors
 `<h1>`, and the footer on `noheader` / `notitle` / `nofooter` in standalone
 output. In embedded output the doctitle `<h1>` is instead gated on `showtitle`
 (see [Standalone vs. embedded output](#standalone-vs-embedded-output)). Two
-skeleton details remain deliberately deferred: the footer's "Last updated" text
-needs a caller-supplied `docdatetime`, and `<body class>` currently carries just
-the bare doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
+skeleton detail remains deliberately deferred: the footer's "Last updated" text
+needs a caller-supplied `docdatetime`. The `<body class>` now carries the TOC
+classes Asciidoctor appends for a side-column TOC (`toc2 toc-left` /
+`toc2 toc-right`).
 
 The `doctype` attribute is normally pinned to `article` — the only structural
 doctype this renderer models — and locked against the document. The one value a
@@ -303,9 +306,15 @@ returned HTML is byte-identical to the writer-less path.
   pipelines use `parse_deferred` + `Document::resolve_references`.
 - **Footnotes** accumulate in the [`Catalog`]; the renderer will emit the
   `<div id="footnotes">` section from `catalog().footnotes()` after the body.
-- **TOC** metadata is already resolved on `Document` (`toc_mode`, `toc_levels`,
-  `toc_title`, `toc_class`); rendering the `<div id="toc">` tree is a later
-  phase that walks section blocks to build the list.
+- **TOC** rendering is wired up for every placement, keyed off
+  `Document::toc_mode`/`toc_levels`/`toc_title`/`toc_class` and the `outline`
+  walk. The `auto`/`left`/`right` placements emit the `<div id="toc">` block in
+  the header (before the content in embedded output) and `preamble` emits it
+  below the preamble — both built by `renderer::render_toc`. The `macro`
+  placement (`toc::[]`) renders at the block itself via `Renderer::toc_macro`
+  (Asciidoctor's `convert_toc`), honoring the macro's per-TOC `id`/title/
+  `levels`/`role` overrides and emitting `<!-- toc disabled -->` when the
+  document does not actually defer to the macro.
 
 ## Testing and parity strategy
 
@@ -329,8 +338,10 @@ returned HTML is byte-identical to the writer-less path.
    quotes/verses, and lists (un/ordered/description/callout) are done; images
    are still to come.
 3. **Tables** (their own content model).
-4. **Document chrome:** footer "Last updated" (`docdatetime`), the full
-   `<body class>` (TOC classes), TOC, footnotes, the default stylesheet.
+4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;
+   the `<body class>` TOC classes, the TOC (every placement —
+   auto/left/right/preamble/macro), footnotes, and the default stylesheet are
+   done.
 5. **Parity hardening:** fixture-based diff tests against Asciidoctor output.
 
 ## Parser API history (resolved in 0.19)
