@@ -3889,12 +3889,15 @@ mod section_numbering {
         );
     }
 
-    // Not verified: the parser now aliases an API-set `numbered` to a locked
-    // `sectnums`, so the mid-document `:numbered!:` toggle is ignored and every
-    // section renders numbered rather than Asciidoctor's toggled result. The
-    // body-toggling behavior itself is verified above (without the API lock).
-    non_normative!(
-        r#"
+    // Ignored: the parser aliases an API-set `numbered` to a locked `sectnums`,
+    // so the mid-document `:numbered!:` toggle is ignored and every section
+    // renders numbered rather than Asciidoctor's toggled result. Tracked by
+    // asciidoc-parser#989; unignore once the API-enabled case is body-toggleable.
+    #[test]
+    #[ignore = "blocked on asciidoc-parser#989: API-set numbered locks sectnums"]
+    fn section_numbers_can_be_toggled_even_if_numbered_attribute_is_enable_via_the_api() {
+        verifies!(
+            r#"
     test 'section numbers can be toggled even if numbered attribute is enable via the API' do
       input = <<~'EOS'
       = Document Title
@@ -3930,7 +3933,62 @@ mod section_numbering {
     end
 
 "#
-    );
+        );
+
+        let input = concat!(
+            "= Document Title\n\n",
+            ":numbered!:\n\n",
+            "== Colophon Section\n\n",
+            "== Another Colophon Section\n\n",
+            "== Final Colophon Section\n\n",
+            ":numbered:\n\n",
+            "== Section One\n\n",
+            "=== Section One Subsection\n\n",
+            "== Section Two\n\n",
+            "== Section Three\n"
+        );
+        let output = convert_with(
+            input,
+            &Options::new().standalone(true).attribute("numbered", ""),
+        );
+
+        assert_xpath(&output, r#"//h1[text()="Document Title"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_colophon_section"][text()="Colophon Section"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_another_colophon_section"][text()="Another Colophon Section"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_final_colophon_section"][text()="Final Colophon Section"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_section_one"][text()="1. Section One"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h3[@id="_section_one_subsection"][text()="1.1. Section One Subsection"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_section_two"][text()="2. Section Two"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//h2[@id="_section_three"][text()="3. Section Three"]"#,
+            1,
+        );
+    }
 
     // Not verified: an API-level `numbered!` lock is not honored here, so numbering
     // is not forced off.
