@@ -82,6 +82,7 @@ render_document(&Document) -> String
               ├── CompoundDelimited → open_block()/sidebar()/example() (by context_kind) → recurses
               ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
               ├── Admonition → admonition() → recurses (compound admonitions)
+              ├── Toc     → toc_macro()  (the toc::[] macro placement)
               └── _       → unsupported()  (visible HTML comment)
 ```
 
@@ -136,6 +137,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
+| `Block::Toc` (`toc::[]`) | `toc` | `<div id="toc" class="toc"><div id="toctitle" class="title">…</div>…</div>` | ✅ |
 | `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |
 | `Block::DocumentAttribute` | `attribute` | *(no output; updates attribute state)* | ⬜ |
 
@@ -304,13 +306,15 @@ returned HTML is byte-identical to the writer-less path.
   pipelines use `parse_deferred` + `Document::resolve_references`.
 - **Footnotes** accumulate in the [`Catalog`]; the renderer will emit the
   `<div id="footnotes">` section from `catalog().footnotes()` after the body.
-- **TOC** rendering is wired up (`renderer::render_toc`): the `auto`/`left`/
-  `right` placements emit the `<div id="toc">` block in the header (before the
-  content in embedded output) and `preamble` emits it below the preamble, all
-  keyed off `Document::toc_mode`/`toc_levels`/`toc_title`/`toc_class` and the
-  `outline` walk. The `macro` placement (`toc::[]`) is not yet rendered because
-  `asciidoc-parser` does not yet surface the block macro (it stays a paragraph);
-  tracked by asciidoc-parser#980.
+- **TOC** rendering is wired up for every placement, keyed off
+  `Document::toc_mode`/`toc_levels`/`toc_title`/`toc_class` and the `outline`
+  walk. The `auto`/`left`/`right` placements emit the `<div id="toc">` block in
+  the header (before the content in embedded output) and `preamble` emits it
+  below the preamble — both built by `renderer::render_toc`. The `macro`
+  placement (`toc::[]`) renders at the block itself via `Renderer::toc_macro`
+  (Asciidoctor's `convert_toc`), honoring the macro's per-TOC `id`/title/
+  `levels`/`role` overrides and emitting `<!-- toc disabled -->` when the
+  document does not actually defer to the macro.
 
 ## Testing and parity strategy
 
@@ -335,9 +339,9 @@ returned HTML is byte-identical to the writer-less path.
    are still to come.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;
-   the `<body class>` TOC classes, TOC (auto/left/right/preamble), footnotes,
-   and the default stylesheet are done. The `macro` TOC placement awaits parser
-   support for the `toc::[]` block macro.
+   the `<body class>` TOC classes, the TOC (every placement —
+   auto/left/right/preamble/macro), footnotes, and the default stylesheet are
+   done.
 5. **Parity hardening:** fixture-based diff tests against Asciidoctor output.
 
 ## Parser API history (resolved in 0.19)
