@@ -26,6 +26,12 @@ the command above the same as naming standard output explicitly with `-o -`:
 
  $ echo 'content' | adoc -o - -
 
+Reading standard input from no input file applies only when something is actually
+piped or redirected in. Run `adoc` with no input file at an interactive terminal,
+where nothing is piped in, and it prints its usage summary and exits instead of
+waiting on standard input, so a bare `adoc` does not appear to hang. An explicit
+`-` always reads standard input.
+
 == Write to a file
 
 To capture the full standalone HTML document in a file instead of standard

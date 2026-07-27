@@ -21,20 +21,19 @@
 //!   that `-d`/`--doctype` rejects, and custom template engines (`-T`/`-E`
 //!   haml/slim).
 //! - Tracked for later work: the coderay source-highlighter stylesheet (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>),
-//!   `-t` timings (<https://github.com/asciidoc-rs/asciidoc-html5/issues/151>),
 //!   the document date/time attributes and `SOURCE_DATE_EPOCH` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/152>),
 //!   image-based admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
 //!   and the table of contents that `toc-title` renders into (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
-//! - Deliberate divergence (under re-evaluation): given no input file, `adoc`
-//!   reads standard input (its piping design) rather than printing a usage
-//!   message (<https://github.com/asciidoc-rs/asciidoc-html5/issues/160>).
 
 use std::path::PathBuf;
 
 use asciidoc_html5::SafeMode;
 use clap::Parser as _;
 
-use crate::{resolve_safe_mode, run, run_with_input, run_with_streams, tests::sdd::*, Cli};
+use crate::{
+    print_usage, resolve_safe_mode, run, run_with_input, run_with_streams, should_report_usage,
+    tests::sdd::*, Cli, TEST_STDIN_NOT_A_TERMINAL,
+};
 
 track_file!("ref/asciidoctor/test/invoker_test.rb");
 
@@ -99,8 +98,14 @@ impl Project {
         let mut stdin = std::io::empty();
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        let failed =
-            run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+        let failed = run_with_streams(
+            &cli,
+            TEST_STDIN_NOT_A_TERMINAL,
+            &mut stdin,
+            &mut stdout,
+            &mut stderr,
+        )
+        .expect("adoc converts");
         (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
     }
 }
@@ -131,8 +136,14 @@ fn run_stdin_streams(args: &[&str], source: &str) -> (bool, String) {
     let mut stdin = source.as_bytes();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let failed =
-        run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    let failed = run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
 }
 
@@ -726,13 +737,10 @@ fn should_return_non_zero_exit_code_if_failure_level_is_reached() {
     assert!(stderr.is_empty(), "expected no messages, got: {stderr}");
 }
 
-// Deliberate divergence (under re-evaluation): with no input file Asciidoctor
-// prints a usage message, whereas `adoc` reads the document from standard
-// input (its piping design), so there is no usage error to assert. Whether to
-// print usage when stdin is a terminal is tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/160>.
-non_normative!(
-    r#"
+#[test]
+fn should_report_usage_if_no_input_file_given() {
+    verifies!(
+        r#"
   test 'should report usage if no input file given' do
     redirect_streams do |out, err|
       invoke_cli [], nil
@@ -741,7 +749,55 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // With no input argument at an interactive terminal, `adoc` prints usage
+    // rather than blocking on standard input, matching Asciidoctor, which prints
+    // its option summary when no input file is given. Drive the whole pipeline:
+    // `run_with_streams` diverts to writing the `Usage:` summary to stderr and
+    // reports a non-zero exit, reading no standard input and producing no output.
+    let cli = Cli::parse_from(["adoc"]);
+    let mut stdin = std::io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let failed = run_with_streams(&cli, true, &mut stdin, &mut stdout, &mut stderr)
+        .expect("the usage path does not error");
+    let stderr = String::from_utf8(stderr).expect("stderr is UTF-8");
+    assert!(failed, "a bare invocation at a terminal exits non-zero");
+    assert!(stderr.contains("Usage:"), "{stderr}");
+    assert!(stdout.is_empty(), "the usage path converts nothing");
+
+    // Piped input (standard input is not a terminal) and an explicit `-` still
+    // read standard input, preserving the piping design.
+    assert!(!should_report_usage(&cli.inputs, false));
+    assert!(!should_report_usage(
+        &Cli::parse_from(["adoc", "-"]).inputs,
+        true
+    ));
+
+    // The usage text alone matches the Ruby test's `/Usage:/`.
+    let mut usage = Vec::new();
+    print_usage(&mut usage).expect("write usage");
+    assert!(String::from_utf8(usage)
+        .expect("usage is UTF-8")
+        .contains("Usage:"));
+
+    // An invalid option is still reported specifically, not masked by usage: a
+    // no-input terminal run with an unsupported `-b` fails with the backend
+    // error, since the option checks run before the usage divert.
+    let cli = Cli::parse_from(["adoc", "-b", "docbook5"]);
+    let mut stdin = std::io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let err = run_with_streams(&cli, true, &mut stdin, &mut stdout, &mut stderr)
+        .expect_err("an unsupported backend fails even on the terminal path");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(err.to_string().contains("docbook5"), "{err}");
+    assert!(
+        stderr.is_empty(),
+        "no usage is printed when an option is invalid"
+    );
+}
 
 #[test]
 fn should_report_error_if_input_file_does_not_exist() {
@@ -1924,11 +1980,10 @@ non_normative!(
 "#
 );
 
-// Not implemented: `-t`/`--timings` prints conversion timings to stderr.
-// `adoc` has no such flag. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/151>.
-non_normative!(
-    r#"
+#[test]
+fn should_print_timings_when_t_flag_is_specified() {
+    verifies!(
+        r#"
   test 'should print timings when -t flag is specified' do
     input = 'Sample *AsciiDoc*'
     invoker = nil
@@ -1943,7 +1998,19 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `-t`/`--timings` prints a timing report to standard error after the
+    // conversion. The Ruby test discards the HTML with `-o /dev/null`; `adoc`
+    // writes it to `-o -`/stdout, which this helper discards, and asserts on the
+    // report that lands on stderr — its `Total time` line matching the Ruby
+    // regex.
+    let (_failed, stderr) = run_stdin_streams(&["-t", "-o", "-"], "Sample *AsciiDoc*");
+    assert!(
+        stderr.contains("Total time"),
+        "expected a timing report on stderr, got: {stderr}",
+    );
+}
 
 // Not implemented: reads the `doctime`/`localtime` attributes (rendered via
 // `-d inline`) to check UTC timezone formatting. `adoc` has neither `-d inline`

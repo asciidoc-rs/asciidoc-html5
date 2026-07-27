@@ -123,10 +123,10 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::RawDelimited` | `listing`/`literal` | as listing/literal above | ✅ |
 | `Block::RawDelimited` | `pass` | raw passthrough (no wrapper) | ✅ |
 | `Block::RawDelimited`/`Simple` (`[comment]`, `////`) | `comment` | *(no output; dropped)* | ✅ |
-| `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ⬜ |
-| `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ⬜ |
-| `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ⬜ |
-| `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` | ⬜ |
+| `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ✅ |
+| `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ✅ |
+| `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ✅ |
+| `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` (icons: `<table>`) | ✅ |
 | `Block::CompoundDelimited` | `example` | `<div class="exampleblock">[<div class="title">Example N. …</div>]<div class="content">…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">[<div class="title">…</div>]…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
@@ -331,7 +331,7 @@ returned HTML is byte-identical to the writer-less path.
    and the attribute-driven skeleton (`lang`, `doctype`,
    `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** the delimited example/sidebar/open blocks, admonitions,
-   and quotes/verses are done; lists (un/ordered/description/callout) and images
+   quotes/verses, and lists (un/ordered/description/callout) are done; images
    are still to come.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;

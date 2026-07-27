@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use asciidoc_html5::{convert_with, Options, SafeMode};
 use clap::Parser as _;
 
-use crate::{input_file, output_target, run, run_with_input, tests::sdd::*, Cli, OutputTarget};
+use crate::{
+    input_file, output_target, print_usage, run, run_with_input, should_report_usage,
+    tests::sdd::*, Cli, OutputTarget,
+};
 
 track_file!("docs/modules/cli/pages/io-piping.adoc");
 
@@ -132,6 +135,42 @@ the command above the same as naming standard output explicitly with `-o -`:
         run_piped(&["adoc", "-"], "= Doc\n\nBody."),
         run_piped(&["adoc", "-o", "-", "-"], "= Doc\n\nBody.")
     );
+}
+
+// The no-input-file spelling only reads standard input when something is piped
+// in: at an interactive terminal `adoc` prints usage instead of blocking, while
+// an explicit `-` always reads standard input.
+#[test]
+fn bare_invocation_at_a_terminal_prints_usage() {
+    verifies!(
+        r#"
+Reading standard input from no input file applies only when something is actually
+piped or redirected in. Run `adoc` with no input file at an interactive terminal,
+where nothing is piped in, and it prints its usage summary and exits instead of
+waiting on standard input, so a bare `adoc` does not appear to hang. An explicit
+`-` always reads standard input.
+
+"#
+    );
+
+    // No input argument + a terminal reports usage; piped input (not a terminal)
+    // and an explicit `-` still read standard input.
+    assert!(should_report_usage(&Cli::parse_from(["adoc"]).inputs, true));
+    assert!(!should_report_usage(
+        &Cli::parse_from(["adoc"]).inputs,
+        false
+    ));
+    assert!(!should_report_usage(
+        &Cli::parse_from(["adoc", "-"]).inputs,
+        true
+    ));
+
+    // The summary `adoc` prints begins with the `Usage:` line.
+    let mut usage = Vec::new();
+    print_usage(&mut usage).expect("write usage");
+    assert!(String::from_utf8(usage)
+        .expect("usage is UTF-8")
+        .contains("Usage:"));
 }
 
 // `-o` names an output file, capturing the full standalone document there
