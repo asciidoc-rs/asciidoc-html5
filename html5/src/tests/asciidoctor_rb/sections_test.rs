@@ -3889,7 +3889,12 @@ mod section_numbering {
         );
     }
 
+    // Ignored: the parser aliases an API-set `numbered` to a locked `sectnums`,
+    // so the mid-document `:numbered!:` toggle is ignored and every section
+    // renders numbered rather than Asciidoctor's toggled result. Tracked by
+    // asciidoc-parser#989; unignore once the API-enabled case is body-toggleable.
     #[test]
+    #[ignore = "blocked on asciidoc-parser#989: API-set numbered locks sectnums"]
     fn section_numbers_can_be_toggled_even_if_numbered_attribute_is_enable_via_the_api() {
         verifies!(
             r#"
