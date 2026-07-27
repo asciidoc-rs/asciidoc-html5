@@ -1,6 +1,6 @@
 use clap::Parser as _;
 
-use crate::{run_with_streams, tests::sdd::*, Cli};
+use crate::{run_with_streams, tests::sdd::*, Cli, TEST_STDIN_NOT_A_TERMINAL};
 
 track_file!("docs/modules/cli/pages/report-timings.adoc");
 
@@ -19,7 +19,14 @@ fn run_piped(args: &[&str], source: &str) -> (String, String) {
     let mut stdin = source.as_bytes();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     (
         String::from_utf8(stdout).expect("stdout is UTF-8"),
         String::from_utf8(stderr).expect("stderr is UTF-8"),
@@ -34,7 +41,14 @@ fn run_files(args: &[&str]) -> String {
     let mut stdin = std::io::empty();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     String::from_utf8(stderr).expect("stderr is UTF-8")
 }
 
