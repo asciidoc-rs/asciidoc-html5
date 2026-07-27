@@ -17,8 +17,7 @@
 //! - `asciidoc-parser` parser-model assertions (`document_from_string` +
 //!   `blocks[..].numeral`/`content`/`subs`, `find_by`, `block_from_string`) —
 //!   only the rendered HTML of such tests is re-expressed here;
-//! - the `markdown_syntax` compliance-toggle test (no compliance API here);
-//! - the deferred example captions/counters feature, tracked by <https://github.com/asciidoc-rs/asciidoc-html5/issues/113>.
+//! - the `markdown_syntax` compliance-toggle test (no compliance API here).
 //!
 //! Logger assertions (`assert_message @logger, :WARN, …`) are verified against
 //! the document's warnings inventory via [`assert_warning`].
@@ -1738,12 +1737,10 @@ mod example_blocks {
         );
     }
 
-    // Example captions and counters beyond the default `Example N. ` form —
-    // alphabetic/API-seeded numbering, explicit `[caption=…]`, and the
-    // `example-caption` toggle — are not implemented yet; tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/113>.
-    non_normative!(
-        r#"
+    #[test]
+    fn assigns_sequential_character_caption_to_example_block_with_title() {
+        verifies!(
+            r#"
     test 'assigns sequential character caption to example block with title' do
       input = <<~'EOS'
       :example-number: @
@@ -1774,6 +1771,32 @@ mod example_blocks {
       assert_equal 'B', doc.attributes['example-number']
     end
 
+"#
+        );
+
+        // The `numeral`/`number`/`example-number` checks are `asciidoc-parser`
+        // model assertions; only the rendered captions are re-expressed here. An
+        // alphabetic counter seed (`:example-number: @`, one before `A`) advances
+        // the caption numeral through the letters.
+        let output = convert(
+            ":example-number: @\n\n.Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n\n.Writing Docs with DocBook\n====\nHere's how you write DocBook.\n\nYou futz with XML.\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[1]/*[@class="title"][text()="Example A. Writing Docs with AsciiDoc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[2]/*[@class="title"][text()="Example B. Writing Docs with DocBook"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_increment_counter_for_example_even_when_example_number_is_locked_by_the_api() {
+        verifies!(
+            r#"
     test 'should increment counter for example even when example-number is locked by the API' do
       input = <<~'EOS'
       .Writing Docs with AsciiDoc
@@ -1798,6 +1821,33 @@ mod example_blocks {
       assert_equal 'b', doc.attributes['example-number']
     end
 
+"#
+        );
+
+        // An API-supplied attribute is locked (override precedence), yet a caption
+        // counter still advances it: seeded one before `a` (`` ` ``), the two
+        // examples number `a` and `b`. The `example-number` model assertion is an
+        // `asciidoc-parser` check; only the rendered captions are re-expressed.
+        let output = convert_with(
+            ".Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n\n.Writing Docs with DocBook\n====\nHere's how you write DocBook.\n\nYou futz with XML.\n====\n",
+            &Options::new().attribute("example-number", "`"),
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[1]/*[@class="title"][text()="Example a. Writing Docs with AsciiDoc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[2]/*[@class="title"][text()="Example b. Writing Docs with DocBook"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_use_explicit_caption_if_specified() {
+        verifies!(
+            r#"
     test 'should use explicit caption if specified' do
       input = <<~'EOS'
       [caption="Look! "]
@@ -1816,6 +1866,26 @@ mod example_blocks {
       refute doc.attributes.key? 'example-number'
     end
 
+"#
+        );
+
+        // An explicit `[caption=]` override is used verbatim and consumes no
+        // counter. The `numeral`/`example-number` checks are `asciidoc-parser`
+        // model assertions; only the rendered caption is re-expressed here.
+        let output = convert(
+            "[caption=\"Look! \"]\n.Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[1]/*[@class="title"][text()="Look! Writing Docs with AsciiDoc"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn automatic_caption_can_be_turned_off_and_on_and_modified() {
+        verifies!(
+            r#"
     test 'automatic caption can be turned off and on and modified' do
       input = <<~'EOS'
       .first example
@@ -1846,6 +1916,42 @@ mod example_blocks {
       assert_xpath '(/*[@class="exampleblock"])[3]/*[@class="title"][starts-with(text(), "Exhibit ")]', output, 1
     end
 
+"#
+        );
+
+        // A set-but-empty document `caption` (`:caption:`) suppresses the caption
+        // and consumes no counter, so the second example shows only its title and
+        // the third — after `:caption!:` restores auto-numbering and
+        // `:example-caption: Exhibit` relabels it — is "Exhibit 2".
+        let output = convert(
+            ".first example\n====\nan example\n====\n\n:caption:\n\n.second example\n====\nanother example\n====\n\n:caption!:\n:example-caption: Exhibit\n\n.third example\n====\nyet another example\n====\n",
+        );
+        assert_xpath(&output, r#"/*[@class="exampleblock"]"#, 3);
+        assert_xpath(
+            &output,
+            r#"(/*[@class="exampleblock"])[1]/*[@class="title"][starts-with(text(), "Example ")]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(/*[@class="exampleblock"])[2]/*[@class="title"][text()="second example"]"#,
+            1,
+        );
+        // Pinned to the exact numeral (stronger than the reference's
+        // `starts-with(…, "Exhibit ")`): the empty `:caption:` above must consume
+        // no counter, so the third example is "Exhibit 2", not "Exhibit 3".
+        assert_xpath(
+            &output,
+            r#"(/*[@class="exampleblock"])[3]/*[@class="title"][text()="Exhibit 2. third example"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_use_explicit_caption_if_specified_even_if_block_specific_global_caption_is_disabled()
+    {
+        verifies!(
+            r#"
     test 'should use explicit caption if specified even if block-specific global caption is disabled' do
       input = <<~'EOS'
       :!example-caption:
@@ -1866,6 +1972,27 @@ mod example_blocks {
       refute doc.attributes.key? 'example-number'
     end
 
+"#
+        );
+
+        // An explicit `[caption=]` override still applies even when the
+        // block-specific global caption is disabled (`:!example-caption:`). The
+        // `numeral`/`example-number` checks are `asciidoc-parser` model
+        // assertions; only the rendered caption is re-expressed here.
+        let output = convert(
+            ":!example-caption:\n\n[caption=\"Look! \"]\n.Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[1]/*[@class="title"][text()="Look! Writing Docs with AsciiDoc"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_use_global_caption_if_specified_even_if_block_specific_global_caption_is_disabled() {
+        verifies!(
+            r#"
     test 'should use global caption if specified even if block-specific global caption is disabled' do
       input = <<~'EOS'
       :!example-caption:
@@ -1887,7 +2014,22 @@ mod example_blocks {
     end
 
 "#
-    );
+        );
+
+        // A document-wide `caption` attribute supplies a verbatim, unnumbered
+        // label even when the block-specific global caption is disabled
+        // (`:!example-caption:`); `{sp}` expands to the trailing space. The
+        // `numeral`/`example-number` checks are `asciidoc-parser` model
+        // assertions; only the rendered caption is re-expressed here.
+        let output = convert(
+            ":!example-caption:\n:caption: Look!{sp}\n\n.Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n",
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@class="exampleblock"])[1]/*[@class="title"][text()="Look! Writing Docs with AsciiDoc"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn should_not_process_caption_attribute_on_block_that_does_not_support_a_caption() {
