@@ -1,6 +1,6 @@
 use clap::Parser as _;
 
-use crate::{run_with_streams, tests::sdd::*, Cli};
+use crate::{run_with_streams, tests::sdd::*, Cli, TEST_STDIN_NOT_A_TERMINAL};
 
 track_file!("docs/modules/cli/pages/control-warnings.adoc");
 
@@ -20,8 +20,14 @@ fn run_piped(args: &[&str], source: &str) -> (bool, String, String) {
     let mut stdin = source.as_bytes();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let failed =
-        run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr).expect("adoc converts");
+    let failed = run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     (
         failed,
         String::from_utf8(stdout).expect("stdout is UTF-8"),
