@@ -1741,14 +1741,18 @@ impl Renderer<'_> {
     /// branch.
     fn colist_row<'src>(&mut self, list_item: &'src ListItem<'src>, num: usize) {
         // The Font Awesome pair carries the number in `<b>`; the image form
-        // points at `{iconsdir}/callouts/{num}.{icontype}`.
+        // points at `{iconsdir}/callouts/{num}.{icontype}`. The path is
+        // attribute-escaped so a hostile `iconsdir`/`icontype` cannot break out
+        // of the quoted `src` (Asciidoctor leaves it raw; we harden it, which
+        // only diverges when those attributes contain `& < > "`).
         let num_label = if self.icons_font {
             format!("<i class=\"conum\" data-value=\"{num}\"></i><b>{num}</b>")
         } else {
-            format!(
-                "<img src=\"{}/callouts/{num}.{}\" alt=\"{num}\">",
+            let src = escape_attribute(&format!(
+                "{}/callouts/{num}.{}",
                 self.iconsdir, self.icontype
-            )
+            ));
+            format!("<img src=\"{src}\" alt=\"{num}\">")
         };
 
         self.line("<tr>");
@@ -2957,6 +2961,23 @@ mod tests {
              <td><img src=\"./images/icons/callouts/1.png\" alt=\"1\"></td>\n\
              <td>first</td>\n</tr>\n</table>\n</div>"
         ));
+    }
+
+    #[test]
+    fn callout_icon_src_escapes_hostile_iconsdir() {
+        // A double quote in `iconsdir` must not break out of the callout list's
+        // `src` attribute: the path is attribute-escaped (`"` -> `&quot;`), so no
+        // raw event-handler markup reaches the `<td>` image. (The image the
+        // parser substitutes into the preceding `<pre>` is rendered by
+        // `asciidoc-parser`, not here.)
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new()
+                .attribute("icons", "")
+                .attribute("iconsdir", "x\"onerror=alert(1)"),
+        );
+        assert!(html
+            .contains("<td><img src=\"x&quot;onerror=alert(1)/callouts/1.png\" alt=\"1\"></td>"));
     }
 
     #[test]
