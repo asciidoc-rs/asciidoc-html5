@@ -21,7 +21,6 @@
 //!   that `-d`/`--doctype` rejects, and custom template engines (`-T`/`-E`
 //!   haml/slim).
 //! - Tracked for later work: the coderay source-highlighter stylesheet (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>),
-//!   `-t` timings (<https://github.com/asciidoc-rs/asciidoc-html5/issues/151>),
 //!   the document date/time attributes and `SOURCE_DATE_EPOCH` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/152>),
 //!   image-based admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
 //!   and the table of contents that `toc-title` renders into (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
@@ -1965,11 +1964,10 @@ non_normative!(
 "#
 );
 
-// Not implemented: `-t`/`--timings` prints conversion timings to stderr.
-// `adoc` has no such flag. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/151>.
-non_normative!(
-    r#"
+#[test]
+fn should_print_timings_when_t_flag_is_specified() {
+    verifies!(
+        r#"
   test 'should print timings when -t flag is specified' do
     input = 'Sample *AsciiDoc*'
     invoker = nil
@@ -1984,7 +1982,19 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `-t`/`--timings` prints a timing report to standard error after the
+    // conversion. The Ruby test discards the HTML with `-o /dev/null`; `adoc`
+    // writes it to `-o -`/stdout, which this helper discards, and asserts on the
+    // report that lands on stderr — its `Total time` line matching the Ruby
+    // regex.
+    let (_failed, stderr) = run_stdin_streams(&["-t", "-o", "-"], "Sample *AsciiDoc*");
+    assert!(
+        stderr.contains("Total time"),
+        "expected a timing report on stderr, got: {stderr}",
+    );
+}
 
 // Not implemented: reads the `doctime`/`localtime` attributes (rendered via
 // `-d inline`) to check UTC timezone formatting. `adoc` has neither `-d inline`
