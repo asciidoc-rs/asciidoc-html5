@@ -1,0 +1,46 @@
+= Report Timings
+:navtitle: Report Timings
+:description: How the adoc command reports the time a conversion took, with the -t option.
+
+By default `adoc` converts a document and says nothing about how long the work
+took. Pass `-t` (`--timings`) to print a short timing report to standard error
+after each input is converted, matching Asciidoctor.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The `adoc` invocations it
+shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Report a conversion's timings
+
+Pass `-t` (`--timings`) to report the time `adoc` spent on a conversion. The
+report goes to standard error, so it never mixes into the converted HTML on
+standard output:
+
+ $ printf 'Sample *AsciiDoc*' | adoc -t -o -
+
+The report names the input (`-` for piped input, or the input file's path) and
+breaks the time down into reading and parsing the source, converting it to
+HTML5, and the total of the two:
+
+ Input file: -
+   Time to read and parse source: 0.00042
+   Time to convert document: 0.00013
+   Total time (read, parse and convert): 0.00055
+
+The individual figures vary from run to run, so only the report's shape is fixed:
+the input name, then three labeled lines, each a count of seconds.
+
+== Timings are independent of -q
+
+The timing report is not a warning, so `-q` (`--quiet`) does not silence it. A
+quiet run still prints the report, having suppressed only the parser's warnings:
+
+ $ printf 'Sample *AsciiDoc*' | adoc -t -q -o -
+
+== A report per input
+
+Converting several files in one invocation prints a separate report for each,
+labeled with that file's path, so you can see where the time went file by file.

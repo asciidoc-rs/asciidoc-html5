@@ -10,4 +10,5 @@ mod io_piping;
 mod options;
 mod output_file;
 mod process_multiple_files;
+mod report_timings;
 mod set_safe_mode;

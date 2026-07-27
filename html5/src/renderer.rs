@@ -69,9 +69,16 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 ///   the parser resolves to the `comment` context;
 /// - a `[comment]`-styled paragraph, whose declared block style is `comment`
 ///   (its resolved context is still `paragraph`, so it is matched by style);
-/// - a paragraph the parser reduced to empty content by stripping an isolated
-///   `//` line comment — Asciidoctor emits no block for it, so the empty
-///   paragraph is dropped rather than rendered as an empty `<p></p>`.
+/// - a paragraph made up entirely of `//` line comments — the parser retains it
+///   with its comment lines stripped to empty content, so it is matched by
+///   [`is_line_comment_paragraph`] on the source and dropped, matching
+///   Asciidoctor, which emits no block for it.
+///
+/// The line-comment case keys on the *source* rather than on the rendered
+/// content being empty: a paragraph whose content merely *substituted* to
+/// nothing — an empty inline passthrough such as `pass:[]` or `$$$$` — is not a
+/// comment, so it is kept and rendered as an empty `<p></p>`, matching
+/// Asciidoctor.
 fn renders_nothing(block: &Block<'_>) -> bool {
     if block.resolved_context().as_ref() == "comment" || block.declared_style() == Some("comment") {
         return true;
@@ -84,14 +91,49 @@ fn renders_nothing(block: &Block<'_>) -> bool {
         return true;
     }
 
-    // An isolated `//` line comment survives parsing as a paragraph with no
-    // content; an empty paragraph is never valid Asciidoctor output either way.
+    // A paragraph that is nothing but `//` line comments survives parsing with
+    // empty content; Asciidoctor emits no block for it, so drop it. The
+    // empty-content guard keeps this from ever dropping a paragraph that
+    // actually renders something, while the source check keeps a paragraph whose
+    // content merely substituted to nothing (an empty passthrough) — which is
+    // not a comment — so it renders as `<p></p>`.
     matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
         && block
             .rendered_content()
             .unwrap_or_default()
             .trim()
             .is_empty()
+        && is_line_comment_paragraph(block.span().data())
+}
+
+/// Whether every non-blank line of a paragraph's `source` is an AsciiDoc line
+/// comment — a line beginning (at column 0) with `//` not immediately followed
+/// by another `/` (which would start a `////` comment-block delimiter),
+/// mirroring Asciidoctor's `LineCommentRx` (`^\/\/(?=[^\/]|$)`). A paragraph of
+/// only such lines carries no renderable content (the parser strips them), so
+/// the renderer drops it; a paragraph with any other line — including one whose
+/// content merely substitutes to nothing, like `pass:[]` — is kept. A source
+/// with no non-blank line is not treated as a comment paragraph.
+fn is_line_comment_paragraph(source: &str) -> bool {
+    let mut saw_line = false;
+    for line in source.lines() {
+        // A comment marker must sit at column 0; only trailing whitespace (a
+        // stray `\r` or spaces) is ignored.
+        let line = line.trim_end();
+        if line.is_empty() {
+            continue;
+        }
+
+        saw_line = true;
+        let is_comment = line
+            .strip_prefix("//")
+            .is_some_and(|rest| !rest.starts_with('/'));
+        if !is_comment {
+            return false;
+        }
+    }
+
+    saw_line
 }
 
 /// Reads a document attribute as an explicit string value, if it has one.
@@ -3136,6 +3178,21 @@ mod tests {
     }
 
     #[test]
+    fn empty_inline_passthrough_paragraph_renders_an_empty_p() {
+        // A paragraph whose entire content is an empty inline passthrough
+        // substitutes to nothing, but — unlike a line comment — it is real
+        // content, so Asciidoctor keeps it as `<p></p>`. The two spellings
+        // (`pass:[]` and `$$$$`) both render the empty paragraph.
+        for input in ["pass:[]", "$$$$"] {
+            let html = crate::convert(input);
+            assert_eq!(
+                html.trim_end(),
+                "<div class=\"paragraph\">\n<p></p>\n</div>"
+            );
+        }
+    }
+
+    #[test]
     fn adjacent_line_comment_is_stripped_within_a_paragraph() {
         // A `//` line between two content lines is stripped, joining them into a
         // single paragraph rather than dropping the whole block.
@@ -3164,6 +3221,38 @@ mod tests {
         // Only a `//` prefix begins a line comment; `///` is ordinary text.
         let html = crate::convert("/// not a line comment");
         assert!(html.contains("/// not a line comment"));
+    }
+
+    #[test]
+    fn is_line_comment_paragraph_classifies_sources() {
+        use super::is_line_comment_paragraph;
+
+        // A single line comment, and several stacked comment lines, are comment
+        // paragraphs; the multi-line case exercises the per-line scan.
+        assert!(is_line_comment_paragraph("// a comment"));
+        assert!(is_line_comment_paragraph("//c1\n//c2\n//c3"));
+
+        // A bare `//` (empty comment) still counts.
+        assert!(is_line_comment_paragraph("//"));
+
+        // A whitespace-only line among the comments is skipped, not treated as
+        // non-comment content — the branch a paragraph's own source never
+        // reaches (a blank line ends the paragraph), so it is pinned here.
+        assert!(is_line_comment_paragraph("//c1\n   \n//c2"));
+        assert!(is_line_comment_paragraph("//c1\n\t\n//c2"));
+
+        // Any non-comment line disqualifies the whole paragraph: real text, an
+        // empty inline passthrough (the #200 case), or a `///` that is ordinary
+        // text rather than a comment marker.
+        assert!(!is_line_comment_paragraph("pass:[]"));
+        assert!(!is_line_comment_paragraph("$$$$"));
+        assert!(!is_line_comment_paragraph("/// not a comment"));
+        assert!(!is_line_comment_paragraph("//c1\ntext"));
+        assert!(!is_line_comment_paragraph("text\n//c1"));
+
+        // A source with no non-blank line is not a comment paragraph.
+        assert!(!is_line_comment_paragraph(""));
+        assert!(!is_line_comment_paragraph("   \n\t"));
     }
 
     #[test]
@@ -3443,6 +3532,25 @@ mod tests {
             "<pre class=\"highlight\"><code class=\"language-perl\" data-lang=\"perl\">\
              die 'zomg perl is tough';</code></pre>"
         ));
+    }
+
+    #[test]
+    fn delimited_source_block_wraps_code_in_a_highlight_pre() {
+        // A `[source,<lang>]` *delimited* (`----`) listing must render the same
+        // `<pre class="highlight"><code …>` wrapper as the paragraph form, not a
+        // bare `<pre>` listing block (see #159). The delimited form resolves to
+        // the `listing` context with `declared_style() == Some("source")`, so it
+        // is routed to `source()` rather than the plain verbatim path.
+        let html = convert("[source,ruby]\n----\ndef x\nend\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
+                 def x\nend</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
     }
 
     #[test]
