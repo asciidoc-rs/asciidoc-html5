@@ -1678,7 +1678,7 @@ impl Renderer<'_> {
 
         if self.icons_set {
             self.line("<table>");
-            for (index, item) in list.child_blocks().enumerate() {
+            for (index, item) in list.child_blocks().filter_map(as_list_item).enumerate() {
                 self.colist_row(item, index + 1);
             }
             self.line("</table>");
@@ -1697,11 +1697,7 @@ impl Renderer<'_> {
     /// icon in the first cell, then the item's principal text (and any attached
     /// blocks) in the second, matching Asciidoctor's `convert_colist` table
     /// branch.
-    fn colist_row<'src>(&mut self, item: &'src Block<'src>, num: usize) {
-        let Block::ListItem(list_item) = item else {
-            return;
-        };
-
+    fn colist_row<'src>(&mut self, list_item: &'src ListItem<'src>, num: usize) {
         // The Font Awesome pair carries the number in `<b>`; the image form
         // points at `{iconsdir}/callouts/{num}.{icontype}`.
         let num_label = if self.icons_font {
@@ -2933,6 +2929,22 @@ mod tests {
             "<div class=\"colist arabic\">\n<table>\n<tr>\n\
              <td><i class=\"conum\" data-value=\"1\"></i><b>1</b></td>\n\
              <td>first</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_list_with_icons_appends_attached_blocks_in_the_cell() {
+        // An icon-based callout item that carries attached blocks (a
+        // continuation paragraph here) renders them inside the second `<td>`,
+        // after the principal text and with no trailing newline before
+        // `</td>`, matching Asciidoctor's `#{item.text}#{LF + item.content}`.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first line\n+\nsecond paragraph\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains(
+            "<td><i class=\"conum\" data-value=\"1\"></i><b>1</b></td>\n\
+             <td>first line\n<div class=\"paragraph\">\n<p>second paragraph</p>\n</div></td>"
         ));
     }
 
