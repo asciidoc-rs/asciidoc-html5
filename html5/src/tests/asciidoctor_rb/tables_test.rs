@@ -3607,11 +3607,9 @@ fn should_catalog_anchor_at_start_of_cell_in_first_row() {
 }
 
 // Asserts on a footnotes block (`#_footnotedef_1`) rendered inside the AsciiDoc
-// cell. Document-level footnote rendering is implemented (#162), and
-// asciidoc-parser 0.28.0 now exposes the cell's own footnotes via
-// `AsciiDocCell::footnotes()` (asciidoc-parser#975, closed), but this crate's
-// renderer does not yet emit the cell-local `#footnotes` block from them
-// (asciidoc-html5#231).
+// cell. The parser exposes the cell's own footnotes via
+// `AsciiDocCell::footnotes()`, but this crate's renderer does not yet emit the
+// cell-local `#footnotes` block from them (asciidoc-html5#231).
 non_normative!(
     r#"
     test 'footnotes should not be shared between an AsciiDoc table cell and the main document' do
