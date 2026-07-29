@@ -404,14 +404,16 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 ///
 /// # Baseline coverage
 ///
-/// This is an early baseline. It renders the document skeleton, the header, and
-/// paragraphs, sections, the preamble, verbatim (listing/literal) blocks, and
-/// thematic and page breaks. Constructs that are not yet wired up (lists,
-/// tables, admonitions, quotes, block audio/video, and the delimited
-/// example/sidebar/open blocks) emit a visible `<!-- asciidoc-html5:
-/// unsupported … -->` comment so
-/// the output stays well-formed and the gaps are easy to see. The aim, as
-/// coverage grows, is parity with Asciidoctor's `html5` backend.
+/// This crate now renders the document skeleton and header, paragraphs,
+/// sections, the preamble, verbatim (listing/literal/source) blocks, the
+/// delimited example/sidebar/open blocks, admonitions, quotes/verses, lists
+/// (unordered/ordered/description/callout), tables, STEM blocks, the media
+/// blocks (block images plus video/audio), the `toc::[]` macro, and thematic
+/// and page breaks. A construct the renderer does not handle emits a visible
+/// `<!-- asciidoc-html5: unsupported … -->` comment so the output stays
+/// well-formed and the gap is easy to see. The aim, as coverage grows, is
+/// parity with Asciidoctor's `html5` backend; the advanced image modes
+/// (`data-uri`, interactive/inline SVG, icons) are the main remaining gap.
 ///
 /// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
