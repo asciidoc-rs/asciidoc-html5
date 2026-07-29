@@ -12,9 +12,10 @@
 use std::{
     ffi::OsString,
     fs,
-    io::{self, Read, Write},
+    io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
+    time::{Duration, Instant},
 };
 
 use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, SafeMode};
@@ -22,7 +23,7 @@ use asciidoc_parser::{
     parser::SourceLine,
     warnings::{Warning, WarningType},
 };
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 
 /// Convert an AsciiDoc document to HTML5.
 #[derive(Debug, Parser)]
@@ -282,6 +283,20 @@ them with -q); this flag does not govern them."
     )]
     warnings: bool,
 
+    /// Print a timing report (read, parse, convert) to stderr after converting
+    #[arg(
+        short = 't',
+        long = "timings",
+        long_help = "Print a timing report to standard error, the way Asciidoctor's -t option \
+does.\n\n\
+After converting each input, adoc reports how long the work took — the time to read and \
+parse the source, the time to convert it to HTML5, and the total of the two — on standard \
+error, labeled with the input file (or `-` when the document was read from standard \
+input). The report is independent of -q/--quiet, which silences only parser warnings.\n\n\
+With several inputs, a separate report is printed for each."
+    )]
+    timings: bool,
+
     /// Minimum level that yields a non-zero exit: INFO, WARN, ERROR, or FATAL
     #[arg(
         long = "failure-level",
@@ -330,12 +345,25 @@ fn main() -> ExitCode {
 
     let cli = Cli::parse();
 
+    // Whether standard input is an interactive terminal decides the bare-
+    // invocation case inside [`run_with_streams`]: with no input argument and a
+    // terminal there is nothing piped in, so it prints usage instead of blocking
+    // on the read. Sampled before locking, though the lock does not change it.
+    let stdin_is_terminal = io::stdin().is_terminal();
+
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
-    match run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr) {
-        // A run that reached the configured `--failure-level` finishes the
-        // conversion but exits non-zero, matching Asciidoctor.
+    match run_with_streams(
+        &cli,
+        stdin_is_terminal,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    ) {
+        // A run that reached the configured `--failure-level` — or that printed
+        // usage for a bare invocation at a terminal — finishes but exits
+        // non-zero, matching Asciidoctor.
         Ok(false) => ExitCode::SUCCESS,
         Ok(true) => ExitCode::FAILURE,
         Err(err) => {
@@ -396,6 +424,14 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
     run_with_input(cli, &mut stdin, stdout)
 }
 
+/// The `stdin_is_terminal` value the test helpers [`run`] and
+/// [`run_with_input`] pass into [`run_with_streams`]: `false`, so an injected
+/// reader is always read rather than being intercepted by the
+/// interactive-terminal usage path (which is exercised on its own by driving
+/// [`run_with_streams`] with `true`).
+#[cfg(test)]
+const TEST_STDIN_NOT_A_TERMINAL: bool = false;
+
 /// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
 /// files, converts each, and writes the HTML5 out — the injectable-reader
 /// counterpart of [`run`], routing warnings to the process's standard error.
@@ -405,7 +441,7 @@ fn run(cli: &Cli, stdout: &mut dyn Write) -> io::Result<()> {
 #[cfg(test)]
 fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io::Result<()> {
     let mut stderr = io::stderr().lock();
-    run_with_streams(cli, stdin, stdout, &mut stderr).map(|_| ())
+    run_with_streams(cli, TEST_STDIN_NOT_A_TERMINAL, stdin, stdout, &mut stderr).map(|_| ())
 }
 
 /// Reads the AsciiDoc input from `stdin` (when `-`/no input file) or the named
@@ -423,11 +459,22 @@ fn run_with_input(cli: &Cli, stdin: &mut dyn Read, stdout: &mut dyn Write) -> io
 /// Parsing surfaces warnings (see [`Document::warnings`]); how they reach
 /// `stderr`, and whether they raise the exit code, is governed by the
 /// `-q`/`-v`/`--failure-level` options, gathered once into a
-/// [`WarningReporter`]. Returns `true` when any source emits a diagnostic at or
-/// above the configured failure level (regardless of whether it was printed),
-/// so the caller exits non-zero; `false` otherwise.
+/// [`WarningReporter`]. Returns `true` when the run should exit non-zero — a
+/// source emitted a diagnostic at or above the configured failure level
+/// (regardless of whether it was printed), or usage was printed for a bare
+/// invocation at an interactive terminal (see below) — and `false` otherwise.
+///
+/// `stdin_is_terminal` reports whether the process's standard input is an
+/// interactive terminal. With no input argument and a terminal, there is
+/// nothing piped in, so [`should_report_usage`] diverts to printing usage on
+/// `stderr` (returning `true`) rather than blocking on the read; the tests
+/// inject this flag to drive both the usage path and the ordinary conversion
+/// path. That divert happens only *after* the option checks (backend, doctype,
+/// safe mode, attributes, failure level), so an invalid option still surfaces
+/// its own error rather than being masked by generic usage.
 fn run_with_streams(
     cli: &Cli,
+    stdin_is_terminal: bool,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
@@ -448,6 +495,22 @@ fn run_with_streams(
         .standalone(!cli.embedded);
 
     let reporter = WarningReporter::from_cli(cli)?;
+
+    // A bare invocation (no input argument) at an interactive terminal would
+    // otherwise block reading standard input, which reads as a freeze. Print the
+    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
+    // when no input file is given. Piped or redirected input (standard input is
+    // not a terminal), and an explicit `-`, fall through and read standard input,
+    // so the piping design keeps working.
+    //
+    // This runs *after* the option checks above so that an invalid `-b`/`-d`/`-S`/
+    // `-a`/`--failure-level` still reports its own specific error rather than
+    // being masked by generic usage — none of those checks read or block on
+    // standard input, so surfacing them first is safe.
+    if should_report_usage(&cli.inputs, stdin_is_terminal) {
+        print_usage(stderr)?;
+        return Ok(true);
+    }
 
     let sources = resolve_inputs(&cli.inputs)?;
 
@@ -531,6 +594,11 @@ fn convert_source(
         }
     }
 
+    // Measure the read and the parse together, matching Asciidoctor's timings
+    // report, which combines them into one "read and parse" figure. The clocks
+    // are always read (the cost is negligible); the report is only printed under
+    // `-t`/`--timings`.
+    let read_parse_start = Instant::now();
     let source_text = read_input(input, stdin)?;
 
     // Load the document once so its warnings can be surfaced to `stderr`, then
@@ -538,9 +606,13 @@ fn convert_source(
     // the output file. The reporter both prints the warnings (subject to
     // `-q`/`-v`) and reports whether any reached the failure level.
     let document = asciidoc_html5::load_with(&source_text, &options);
+    let read_parse = read_parse_start.elapsed();
+
     let failure_reached = reporter.report(&document, warning_document_name(input), stderr)?;
 
-    match target {
+    // The convert time excludes writing the output, matching Asciidoctor, whose
+    // report times the conversion apart from the file write.
+    let convert = match target {
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
@@ -558,18 +630,33 @@ fn convert_source(
                 inner: DirAssetWriter::new(dir),
                 output: path.clone(),
             };
+
+            let convert_start = Instant::now();
             let html =
                 asciidoc_html5::convert_document_with_writer(&document, &options, &mut writer)?;
+            let convert = convert_start.elapsed();
+
             fs::write(path, html)?;
+            convert
         }
 
         // Writing to standard output has no directory to copy alongside, so
         // `copycss` is inert here — again matching Asciidoctor, which skips the
         // copy unless there is an output file.
         OutputTarget::Stdout => {
+            let convert_start = Instant::now();
             let html = asciidoc_html5::convert_document_with(&document, &options);
+            let convert = convert_start.elapsed();
+
             stdout.write_all(html.as_bytes())?;
+            convert
         }
+    };
+
+    // Print the timing report after the write, matching Asciidoctor, which
+    // reports once each converted input has been written out.
+    if cli.timings {
+        print_timings_report(stderr, timings_subject(input), read_parse, convert)?;
     }
 
     Ok(failure_reached)
@@ -583,6 +670,43 @@ fn warning_document_name(input: Option<&Path>) -> String {
         Some(path) => path.display().to_string(),
         None => "<stdin>".to_string(),
     }
+}
+
+/// The subject label a timing report attributes its figures to: the input
+/// file's path, or the conventional `-` when the document was read from
+/// standard input — matching how Asciidoctor's `Timings#print_report` labels
+/// its `Input file:` line.
+fn timings_subject(input: Option<&Path>) -> String {
+    match input {
+        Some(path) => path.display().to_string(),
+        None => "-".to_string(),
+    }
+}
+
+/// Prints a `-t`/`--timings` report to `stderr`, mirroring
+/// `Asciidoctor::Timings#print_report`: the input `subject`, the combined time
+/// to read and parse the source, the time to convert it, and the total of the
+/// two. Each duration is rendered as fractional seconds with five decimal
+/// places, matching Asciidoctor's `%05.5f` formatting.
+fn print_timings_report(
+    stderr: &mut dyn Write,
+    subject: String,
+    read_parse: Duration,
+    convert: Duration,
+) -> io::Result<()> {
+    let read_parse = read_parse.as_secs_f64();
+    let convert = convert.as_secs_f64();
+    let total = read_parse + convert;
+
+    // Emit the whole report in one write, returning its result directly, so the
+    // four lines are not each a separate error-propagation branch.
+    write!(
+        stderr,
+        "Input file: {subject}\n  \
+         Time to read and parse source: {read_parse:05.5}\n  \
+         Time to convert document: {convert:05.5}\n  \
+         Total time (read, parse and convert): {total:05.5}\n"
+    )
 }
 
 /// A single resolved source for `adoc` to convert: an on-disk file, or standard
@@ -606,11 +730,35 @@ impl InputSource {
     }
 }
 
+/// Whether a bare invocation (no input argument) running at an interactive
+/// terminal should print usage instead of blocking on standard input.
+///
+/// With no input file, `adoc` normally reads standard input (its piping design,
+/// so `cat doc.adoc | adoc` works). But when standard input is a terminal there
+/// is nothing piped in, so reading it would hang until the user sends EOF,
+/// which reads as a freeze. In that case `adoc` prints usage and exits non-zero
+/// instead, matching Asciidoctor, which prints its option summary when no input
+/// file is given. An explicit `-` (which makes `inputs` non-empty) still
+/// selects standard input, even at a terminal, and piped or redirected input
+/// (standard input is not a terminal) is still read.
+fn should_report_usage(inputs: &[PathBuf], stdin_is_terminal: bool) -> bool {
+    inputs.is_empty() && stdin_is_terminal
+}
+
+/// Writes the command's help, which begins with the `Usage:` line, to `stderr`,
+/// the way Asciidoctor prints its option summary when no input file is given.
+fn print_usage(stderr: &mut dyn Write) -> io::Result<()> {
+    write!(stderr, "{}", Cli::command().render_help())
+}
+
 /// Resolves the command's positional arguments into the ordered list of sources
 /// to convert, mirroring how the Asciidoctor CLI treats its input arguments.
 ///
-/// With no arguments, or a lone `-`, `adoc` reads standard input. Otherwise
-/// each argument names a file to convert, except that an argument matching no
+/// With no arguments, or a lone `-`, `adoc` reads standard input. (The bare
+/// no-argument case at an interactive terminal is intercepted earlier by
+/// [`should_report_usage`], which prints usage rather than reaching this
+/// standard-input read.) Otherwise each argument names a file to convert,
+/// except that an argument matching no
 /// existing file is expanded as a glob pattern — the same portable, Ruby-style
 /// matching Asciidoctor performs, so `'*.adoc'` and `'**/*.adoc'` work the same
 /// on every platform regardless of what the shell would expand. A pattern that

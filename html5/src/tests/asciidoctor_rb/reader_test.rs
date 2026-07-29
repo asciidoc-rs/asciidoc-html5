@@ -21,11 +21,14 @@
 //!
 //! Local `include::` targets resolve against a `base_dir` pointed at
 //! `ref/asciidoctor/test`, so a `fixtures/<name>` target matches the Ruby
-//! suite's `DIRNAME`-relative include paths; see [`fixtures_base_dir`]. Remote
-//! (URI) includes are out of scope for this crate (crate memory
-//! `remote-fetch-not-planned`) and stay `non_normative!`, as do the
-//! jruby/classloader, non-UTF-8-encoding, and chmod-unreadable cases and every
-//! test that asserts only on `Reader` internals.
+//! suite's `DIRNAME`-relative include paths; see [`fixtures_base_dir`].
+//! *Fetching* a remote (URI) include is out of scope for this crate (crate
+//! memory `remote-fetch-not-planned`), so the `allow-uri-read` cases stay
+//! `non_normative!`; the no-fetch link fallback for a remote target under a
+//! non-secure safe mode *is* verified, as it only links the target rather than
+//! reading it. The jruby/classloader, non-UTF-8-encoding, and chmod-unreadable
+//! cases and every test that asserts only on `Reader` internals stay
+//! `non_normative!`.
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
 //! this crate diverges from the Asciidoctor oracle. One divergence is
@@ -37,8 +40,6 @@
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
 //! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
-//! - a remote `include::` target under a non-secure safe mode is reported
-//!   unresolved (and warns) instead of falling back to a link macro — [#136]
 //! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
 //!   [#138]
 //! - an unreadable include file is not distinguished from a missing one, so it
@@ -47,7 +48,6 @@
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
-//! [#136]: https://github.com/asciidoc-rs/asciidoc-html5/issues/136
 //! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
 //! [#146]: https://github.com/asciidoc-rs/asciidoc-html5/issues/146
 
@@ -992,10 +992,11 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="foo bar baz.adoc"]"#, 1);
         }
 
-        // Non-normative: a remote target under a non-secure safe mode is reported
-        // unresolved instead of falling back to a link (#136).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_replace_include_directive_with_link_macro_if_safe_mode_allows_it_but_allow_uri_read_is_not_set(
+        ) {
+            verifies!(
+                r#"
       test 'should replace include directive with link macro if safe mode allows it, but allow-uri-read is not set' do
         using_memory_logger do |logger|
           input = 'include::https://example.org/dist/info.adoc[]'
@@ -1007,11 +1008,26 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
 
-        // Non-normative on two counts: compat-mode role suppression is
-        // permanently out of scope, and the remote link fallback (#136) is still
-        // unimplemented.
+            // Under a non-secure safe mode a remote target whose `allow-uri-read`
+            // is unset falls back to a link macro carrying the `include` role –
+            // the same rewrite the secure safe mode applies – and raises no
+            // warning.
+            let src = "include::https://example.org/dist/info.adoc[]";
+            let html = convert_safe_with_fixtures(src);
+            assert_css(&html, "a.include", 1);
+            assert_xpath(
+                &html,
+                r#"//a[@href="https://example.org/dist/info.adoc"]"#,
+                1,
+            );
+            assert!(fixture_warnings(src).is_empty());
+        }
+
+        // Non-normative: compat-mode role suppression is permanently out of scope
+        // – this crate does not implement compat mode, so it does not drop the
+        // `include` role from the replacement link.
         non_normative!(
             r#"
       test 'should not add role to link macro that replaces include directive with remote target in compat mode' do
@@ -1024,9 +1040,10 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: the remote link fallback under a non-secure safe mode (#136).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_escape_spaces_in_target_when_generating_link_from_remote_include_directive() {
+            verifies!(
+                r#"
       test 'should escape spaces in target when generating link from remote include directive' do
         input = 'include::https://example.org/no such file.adoc[]'
         doc = Asciidoctor::Document.new input, safe: :safe
@@ -1035,7 +1052,19 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            // A space in the remote target is wrapped in `pass:c[…]` so it cannot
+            // break the generated link macro; the space survives into the href.
+            let html =
+                convert_safe_with_fixtures("include::https://example.org/no such file.adoc[]");
+            assert_css(&html, "a.include", 1);
+            assert_xpath(
+                &html,
+                r#"//a[@href="https://example.org/no such file.adoc"]"#,
+                1,
+            );
+        }
 
         #[test]
         fn include_directive_is_enabled_when_safe_mode_is_less_than_secure() {

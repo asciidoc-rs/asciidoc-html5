@@ -116,7 +116,7 @@ fn outline_level<'src>(
     for (block, section) in sections {
         let level = section.level();
         let id = block.id().unwrap_or_default();
-        let title = outline_title(section, sectnumlevels);
+        let title = outline_title(block, section, sectnumlevels);
 
         // A section below the configured depth contributes its own child list;
         // the recursion returns `None` when it has no subsections, which drops
@@ -141,20 +141,32 @@ fn outline_level<'src>(
     Some(lines.join("\n"))
 }
 
-/// The link text for a section in the TOC: the section title, prefixed with its
-/// section number when the section is numbered and within `sectnumlevels`, with
-/// any inline anchor tags stripped (Asciidoctor's `DropAnchorRx`) so a link in
-/// a heading does not nest an `<a>` inside the TOC's own link.
-fn outline_title(section: &SectionBlock<'_>, sectnumlevels: usize) -> String {
+/// The link text for a section in the TOC, following Asciidoctor's
+/// `convert_outline` precedence: a captioned section (an appendix's
+/// `"Appendix A: "` prefix) shows its caption; otherwise a numbered section
+/// within `sectnumlevels` shows its `"1.1. "` number prefix; otherwise the bare
+/// title. Any inline anchor tags are then stripped (Asciidoctor's
+/// `DropAnchorRx`) so a link in a heading does not nest an `<a>` inside the
+/// TOC's own link.
+fn outline_title(block: &Block<'_>, section: &SectionBlock<'_>, sectnumlevels: usize) -> String {
     let title = section.section_title();
 
-    // Asciidoctor's `sectnum` appends the `.` delimiter after the number, so a
-    // level-1 section reads `1.` and a level-2 section `1.1.`. The parser's
-    // `SectionNumber` renders the dotted components without that trailing `.`,
-    // so we add it.
-    let title = match section.section_number() {
-        Some(number) if section.level() <= sectnumlevels => format!("{number}. {title}"),
-        _ => title.to_string(),
+    // A caption (assigned by the parser, e.g. `"Appendix A: "`, already
+    // including its separator) wins outright, matching the heading's own
+    // `captioned_title` precedence. Otherwise Asciidoctor's `sectnum` appends the
+    // `.` delimiter after the number, so a level-1 section reads `1.` and a
+    // level-2 section `1.1.`; the parser's `SectionNumber` renders the dotted
+    // components without that trailing `.`, so we add it.
+    let title = if let Some(caption) = block.caption() {
+        format!("{caption}{title}")
+    } else if let Some(number) = section.section_number() {
+        if section.level() <= sectnumlevels {
+            format!("{number}. {title}")
+        } else {
+            title.to_string()
+        }
+    } else {
+        title.to_string()
     };
 
     if title.contains("<a") {
@@ -301,6 +313,17 @@ mod tests {
         // is reduced to its text.
         assert!(outline.contains("the site</a></li>"));
         assert!(!outline.contains("https://example.org"));
+    }
+
+    #[test]
+    fn an_appendix_shows_its_caption() {
+        // A captioned section (an appendix) shows its `"Appendix A: "` prefix in
+        // the TOC, taking precedence over any section number — matching
+        // Asciidoctor's `convert_outline`.
+        let doc = load("= Title\n:sectnums:\n\n== First\n\n[appendix]\n== Options\n");
+        let outline = convert_outline(&doc);
+        assert!(outline.contains(r##"<a href="#_first">1. First</a>"##));
+        assert!(outline.contains(r##"<a href="#_options">Appendix A: Options</a>"##));
     }
 
     #[test]

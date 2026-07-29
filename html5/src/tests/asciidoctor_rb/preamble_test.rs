@@ -7,9 +7,9 @@
 //! the counterpart to the Ruby suite's standalone `convert_string`.
 //!
 //! Not ported (kept `non_normative!`): the DocBook-backend tests (this crate
-//! targets only the `html5` backend), the `book` doctype / `partintro` cases
-//! (not yet rendered here), and the `toc` case (TOC rendering is not wired up
-//! yet — see <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
+//! targets only the `html5` backend) and the `book` doctype / `partintro`
+//! cases (not yet rendered here). The `toc-placement: preamble` case is now
+//! ported and verified.
 
 use crate::{
     convert_with,
@@ -269,11 +269,10 @@ non_normative!(
 "#
 );
 
-// The `toc-placement: preamble` test below stays `non_normative!` until this
-// crate renders the table of contents (`<div id="preamble">/<div id="toc">`);
-// tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/86>.
-non_normative!(
-    r#"
+#[test]
+fn should_output_table_of_contents_in_preamble_if_toc_placement_attribute_value_is_preamble() {
+    verifies!(
+        r#"
   test 'should output table of contents in preamble if toc-placement attribute value is preamble' do
     input = <<~'EOS'
     = Article
@@ -296,7 +295,12 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    let input = "= Article\n:toc:\n:toc-placement: preamble\n\nOnce upon a time...\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n";
+    let html = convert_with(input, &Options::new().standalone(true));
+    assert_xpath(&html, r#"//*[@id="preamble"]/*[@id="toc"]"#, 1);
+}
 
 non_normative!(
     r#"

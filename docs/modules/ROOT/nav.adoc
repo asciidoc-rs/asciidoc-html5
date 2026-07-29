@@ -14,3 +14,4 @@
 ** xref:cli:io-piping.adoc[Pipe Content]
 ** xref:cli:process-multiple-files.adoc[Process Multiple Files]
 ** xref:cli:control-warnings.adoc[Control Warnings]
+** xref:cli:report-timings.adoc[Report Timings]

@@ -1,15 +1,16 @@
 //! Coverage for the warning-reporting internals of `main.rs`: the severity
 //! labels, the `--failure-level` parser's error path, the `writeln!` error edge
-//! when the warning stream fails, and the include-origin branch that attributes
-//! a warning to the file a nested directive actually lives in. The happy paths
-//! are exercised by the `invoker_test.rb` and docs "Control Warnings" suites;
-//! these drive the edges those never reach.
+//! when the warning stream fails (and the matching edge when the
+//! bare-invocation usage summary cannot be written), and the include-origin
+//! branch that attributes a warning to the file a nested directive actually
+//! lives in. The happy paths are exercised by the `invoker_test.rb` and docs
+//! "Control Warnings" suites; these drive the edges those never reach.
 
 use std::io::{self, Read, Write};
 
 use clap::Parser as _;
 
-use crate::{parse_failure_level, run_with_streams, Cli, LogLevel};
+use crate::{parse_failure_level, run_with_streams, Cli, LogLevel, TEST_STDIN_NOT_A_TERMINAL};
 
 // Each severity renders the label Asciidoctor's basic formatter prints for it —
 // `WARN` as `WARNING` and `FATAL` as `FAILED`. Only `Info` and `Warn` are ever
@@ -69,8 +70,31 @@ fn a_failing_warning_stream_propagates_the_error() {
     let mut stdout = Vec::new();
     let mut stderr = FailingWriter;
 
-    let err = run_with_streams(&cli, &mut stdin, &mut stdout, &mut stderr)
-        .expect_err("a failing warning stream fails the run");
+    let err = run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect_err("a failing warning stream fails the run");
+    assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+}
+
+// The usage summary printed for a bare invocation at a terminal goes to the
+// same stream; when that write fails, the error propagates rather than being
+// dropped.
+#[test]
+fn a_failing_usage_stream_propagates_the_error() {
+    // No input argument with `stdin_is_terminal` set diverts to printing usage on
+    // stderr, which here refuses every write.
+    let cli = Cli::parse_from(["adoc"]);
+    let mut stdin = io::empty();
+    let mut stdout = Vec::new();
+    let mut stderr = FailingWriter;
+
+    let err = run_with_streams(&cli, true, &mut stdin, &mut stdout, &mut stderr)
+        .expect_err("a failing usage stream fails the run");
     assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
 }
 
@@ -81,8 +105,14 @@ fn run_file(args: &[&str]) -> (bool, String) {
     let mut stdin = io::empty();
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let failed = run_with_streams(&cli, &mut stdin as &mut dyn Read, &mut stdout, &mut stderr)
-        .expect("adoc converts");
+    let failed = run_with_streams(
+        &cli,
+        TEST_STDIN_NOT_A_TERMINAL,
+        &mut stdin as &mut dyn Read,
+        &mut stdout,
+        &mut stderr,
+    )
+    .expect("adoc converts");
     (failed, String::from_utf8(stderr).expect("stderr is UTF-8"))
 }
 

@@ -19,11 +19,15 @@
 //! context is verified too (checklist rendering — the default ballot-box,
 //! `%interactive`, and `icons=font` markers — is implemented).
 //!
+//! Callout lists (`:colist`) render too – the default `<div class="colist
+//! arabic"><ol>…` and the icon-based `<table>` variants (`icons`/`icons=font`),
+//! with the callout numbers substituted into the preceding verbatim block by
+//! `asciidoc-parser` – so that context ports directly as well, including the
+//! `NoCalloutFound`/`CalloutListItemOutOfSequence` parse-model warnings.
+//!
 //! What stays `non_normative!` here:
-//! - callout lists (`:colist`) and the list model (source lines 4686+): these
-//!   exercise a list type this renderer does not build yet and are tracked for
-//!   follow-up (colist: <https://github.com/asciidoc-rs/asciidoc-html5/issues/155>);
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
+//! - `coderay` source-highlighter tests (this crate implements no highlighter; <https://github.com/asciidoc-rs/asciidoc-html5/issues/215>);
 //! - `asciidoc-parser` parser-model assertions that have no rendered-output
 //!   counterpart (`document_from_string` + `find_by(...).level`, the colist
 //!   `.style` check), reproduced but not re-expressed;
@@ -75,6 +79,47 @@ fn assert_out_of_sequence_warning(input: &str, line: usize, expected: &str, actu
     assert_eq!(
         count, 1,
         "expected one out-of-sequence warning at line {line}"
+    );
+}
+
+/// Asserts that loading `input` surfaces a `NoCalloutFound(number)` warning on
+/// document line `line` -- the parse-model counterpart to Asciidoctor's `no
+/// callout found for <N>` warning, which fires for a callout list item with no
+/// matching callout in the verbatim block it annotates.
+fn assert_no_callout_warning(input: &str, line: usize, number: usize) {
+    let doc = load(input);
+    let count = doc
+        .warnings()
+        .filter(|w| {
+            w.source.line() == line
+                && matches!(&w.warning, WarningType::NoCalloutFound(n) if *n == number)
+        })
+        .count();
+    assert_eq!(
+        count, 1,
+        "expected one no-callout warning for <{number}> at line {line}"
+    );
+}
+
+/// Asserts that loading `input` surfaces a
+/// `CalloutListItemOutOfSequence(expected, got)` warning on document line
+/// `line` -- the parse-model counterpart to Asciidoctor's `callout list item
+/// index: expected N, got M` warning.
+fn assert_callout_out_of_sequence_warning(input: &str, line: usize, expected: usize, got: usize) {
+    let doc = load(input);
+    let count = doc
+        .warnings()
+        .filter(|w| {
+            w.source.line() == line
+                && matches!(
+                    &w.warning,
+                    WarningType::CalloutListItemOutOfSequence(e, g) if *e == expected && *g == got
+                )
+        })
+        .count();
+    assert_eq!(
+        count, 1,
+        "expected one callout out-of-sequence warning (expected {expected}, got {got}) at line {line}"
     );
 }
 
@@ -870,11 +915,11 @@ wrapped text"]"#,
             assert_xpath(&output, r#"(//ul)[1]/li/hr"#, 1);
         }
 
-        // Non-normative: asserts `ul > li > .colist`, which needs callout-list
-        // rendering (#155); it also drives parser-model APIs
-        // (`document_from_string`, `blocks[..].context`/`.style`).
-        non_normative!(
-            r#"
+        #[test]
+        fn should_not_inherit_block_attributes_from_previous_block_when_block_is_attached_using_a_list_continuation(
+        ) {
+            verifies!(
+                r#"
     test 'should not inherit block attributes from previous block when block is attached using a list continuation' do
       input = <<~'EOS'
       * complex list item
@@ -899,7 +944,21 @@ wrapped text"]"#,
     end
 
 "#
-        );
+            );
+            // The parser-model lines (`document_from_string`, `.context`,
+            // `.style`) belong to `asciidoc-parser`; here we drive the rendered
+            // structure: the callout list follows the source block inside the
+            // list item, and neither inherits the `source` style.
+            let output = convert(
+                "* complex list item\n+\n[source,xml]\n----\n\
+                 <name>value</name> <!--1-->\n----\n<1> a configuration value\n",
+            );
+            assert_css(&output, "ul", 1);
+            assert_css(&output, "ul > li", 1);
+            assert_css(&output, "ul > li > p", 1);
+            assert_css(&output, "ul > li > .listingblock", 1);
+            assert_css(&output, "ul > li > .colist", 1);
+        }
 
         #[test]
         fn should_continue_to_parse_blocks_attached_by_a_list_continuation_after_block_is_dropped()
@@ -9685,11 +9744,19 @@ end
     );
 }
 
-// The entire Callout lists (`:colist`) context is non-normative: this crate
-// does not render callout lists yet (#155).
-non_normative!(
-    r##"
+mod callout_lists {
+    use super::*;
+
+    non_normative!(
+        r##"
 context 'Callout lists' do
+"##
+    );
+
+    #[test]
+    fn does_not_recognize_callout_list_denoted_by_markers_that_only_have_a_trailing_bracket() {
+        verifies!(
+            r##"
   test 'does not recognize callout list denoted by markers that only have a trailing bracket' do
     input = <<~'EOS'
     ----
@@ -9702,6 +9769,17 @@ context 'Callout lists' do
     assert_css '.colist', output, 0
   end
 
+"##
+        );
+        let output =
+            convert("----\nrequire 'asciidoctor' # <1>\n----\n1> Not a callout list item\n");
+        assert_css(&output, ".colist", 0);
+    }
+
+    #[test]
+    fn should_not_hang_if_obsolete_callout_list_is_found_inside_list_item() {
+        verifies!(
+            r##"
   test 'should not hang if obsolete callout list is found inside list item' do
     input = <<~'EOS'
     * foo
@@ -9712,6 +9790,16 @@ context 'Callout lists' do
     assert_css '.colist', output, 0
   end
 
+"##
+        );
+        let output = convert("* foo\n1> bar\n");
+        assert_css(&output, ".colist", 0);
+    }
+
+    #[test]
+    fn should_not_hang_if_obsolete_callout_list_is_found_inside_dlist_item() {
+        verifies!(
+            r##"
   test 'should not hang if obsolete callout list is found inside dlist item' do
     input = <<~'EOS'
     foo::
@@ -9722,6 +9810,16 @@ context 'Callout lists' do
     assert_css '.colist', output, 0
   end
 
+"##
+        );
+        let output = convert("foo::\n1> bar\n");
+        assert_css(&output, ".colist", 0);
+    }
+
+    #[test]
+    fn should_recognize_auto_numberd_callout_list_inside_list() {
+        verifies!(
+            r##"
   test 'should recognize auto-numberd callout list inside list' do
     input = <<~'EOS'
     ----
@@ -9735,6 +9833,17 @@ context 'Callout lists' do
     assert_css '.colist', output, 1
   end
 
+"##
+        );
+        let output = convert("----\nrequire 'asciidoctor' # <1>\n----\n* foo\n<.> bar\n");
+        assert_css(&output, ".colist", 1);
+    }
+
+    // Non-normative: these six tests convert with the `docbook` backend
+    // (`//programlisting`, `//calloutlist/callout`), which this crate does not
+    // target -- it renders only the `html5` backend.
+    non_normative!(
+        r##"
   test 'listing block with sequential callouts followed by adjacent callout list' do
     input = <<~'EOS'
     [source, ruby]
@@ -9897,6 +10006,13 @@ context 'Callout lists' do
     assert_xpath '((//calloutlist)[2]/callout)[2][@arearefs = "CO2-2"]', output, 1
   end
 
+"##
+    );
+
+    #[test]
+    fn callout_list_retains_block_content() {
+        verifies!(
+            r##"
   test 'callout list retains block content' do
     input = <<~'EOS'
     [source, ruby]
@@ -9922,6 +10038,31 @@ context 'Callout lists' do
     assert_xpath %((//ol/li)[3]//p), output, 2
   end
 
+"##
+        );
+        let output = convert(
+            "[source, ruby]\n----\nrequire 'asciidoctor' # <1>\n\
+             doc = Asciidoctor::Document.new('Hello, World!') # <2>\n\
+             puts doc.convert # <3>\n----\n<1> Imports the library\nas a RubyGem\n\
+             <2> Creates a new document\n* Scans the lines for known blocks\n\
+             * Converts the lines into blocks\n<3> Renders the document\n+\n\
+             You can write this to file rather than printing to stdout.\n",
+        );
+        assert_xpath(&output, "//ol/li", 3);
+        assert_xpath(
+            &output,
+            "(//ol/li)[1]/p[text()=\"Imports the library\nas a RubyGem\"]",
+            1,
+        );
+        assert_xpath(&output, "(//ol/li)[2]//ul", 1);
+        assert_xpath(&output, "(//ol/li)[2]//ul/li", 2);
+        assert_xpath(&output, "(//ol/li)[3]//p", 2);
+    }
+
+    // Non-normative: converts with the `docbook` backend (`//calloutlist`),
+    // which this crate does not target.
+    non_normative!(
+        r##"
   test 'callout list retains block content when converted to DocBook' do
     input = <<~'EOS'
     [source, ruby]
@@ -9949,6 +10090,13 @@ context 'Callout lists' do
     assert_xpath '(//calloutlist/callout)[3]/simpara', output, 1
   end
 
+"##
+    );
+
+    #[test]
+    fn escaped_callout_should_not_be_interpreted_as_a_callout() {
+        verifies!(
+            r##"
   test 'escaped callout should not be interpreted as a callout' do
     input = <<~'EOS'
     [source,text]
@@ -9965,6 +10113,23 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        // Driven with no source highlighter (this crate implements none, so the
+        // Ruby test's `coderay` iteration renders identically).
+        let output = convert(
+            "[source,text]\n----\nrequire 'asciidoctor' # \\<1>\n\
+             Asciidoctor.convert 'convert me!' \\<2>\n----\n",
+        );
+        assert_css(&output, "pre b", 0);
+        assert!(output.contains(" # &lt;1&gt;"));
+        assert!(output.contains(" &lt;2&gt;"));
+    }
+
+    #[test]
+    fn should_autonumber_callouts() {
+        verifies!(
+            r##"
   test 'should autonumber <.> callouts' do
     input = <<~'EOS'
     [source, ruby]
@@ -9986,6 +10151,25 @@ context 'Callout lists' do
     assert_css '.colist ol li', output, 3
   end
 
+"##
+        );
+        let output = convert(
+            "[source, ruby]\n----\nrequire 'asciidoctor' # <.>\n\
+             doc = Asciidoctor::Document.new('Hello, World!') # <.>\n\
+             puts doc.convert # <.>\n----\n<.> Describe the first line\n\
+             <.> Describe the second line\n<.> Describe the third line\n",
+        );
+        assert!(output.contains("<b class=\"conum\">(1)</b>"));
+        assert!(output.contains("<b class=\"conum\">(2)</b>"));
+        assert!(output.contains("<b class=\"conum\">(3)</b>"));
+        assert_css(&output, ".colist ol", 1);
+        assert_css(&output, ".colist ol li", 3);
+    }
+
+    #[test]
+    fn should_not_recognize_callouts_in_middle_of_line() {
+        verifies!(
+            r##"
   test 'should not recognize callouts in middle of line' do
     input = <<~'EOS'
     [source, ruby]
@@ -9997,6 +10181,19 @@ context 'Callout lists' do
     assert_xpath '//b', output, 0
   end
 
+"##
+        );
+        let output = convert(
+            "[source, ruby]\n----\n\
+             puts \"The syntax <1> at the end of the line makes a code callout\"\n----\n",
+        );
+        assert_xpath(&output, "//b", 0);
+    }
+
+    #[test]
+    fn should_allow_multiple_callouts_on_the_same_line() {
+        verifies!(
+            r##"
   test 'should allow multiple callouts on the same line' do
     input = <<~'EOS'
     [source, ruby]
@@ -10020,6 +10217,28 @@ context 'Callout lists' do
     assert_match(/ <b class="conum">\(5\)<\/b><b class="conum">\(6\)<\/b>$/, output)
   end
 
+"##
+        );
+        let output = convert(
+            "[source, ruby]\n----\nrequire 'asciidoctor' <1>\n\
+             doc = Asciidoctor.load('Hello, World!') # <2> <3> <4>\n\
+             puts doc.convert <5><6>\nexit 0\n----\n<1> Require library\n\
+             <2> Load document from String\n<3> Uses default backend and doctype\n\
+             <4> One more for good luck\n<5> Renders document to String\n\
+             <6> Prints output to stdout\n",
+        );
+        assert_xpath(&output, "//code/b", 6);
+        assert!(output.contains(" <b class=\"conum\">(1)</b>"));
+        assert!(output.contains(
+            " <b class=\"conum\">(2)</b> <b class=\"conum\">(3)</b> <b class=\"conum\">(4)</b>"
+        ));
+        assert!(output.contains(" <b class=\"conum\">(5)</b><b class=\"conum\">(6)</b>"));
+    }
+
+    #[test]
+    fn should_allow_xml_comment_style_callouts() {
+        verifies!(
+            r##"
   test 'should allow XML comment-style callouts' do
     input = <<~'EOS'
     [source, xml]
@@ -10038,6 +10257,22 @@ context 'Callout lists' do
     assert_xpath '//b[text()="(2)"]', output, 1
   end
 
+"##
+        );
+        let output = convert(
+            "[source, xml]\n----\n<section>\n  <title>Section Title</title> <!--1-->\n\
+             \x20 <simpara>Just a paragraph</simpara> <!--2-->\n</section>\n----\n\
+             <1> The title is required\n<2> The content isn't\n",
+        );
+        assert_xpath(&output, "//b", 2);
+        assert_xpath(&output, "//b[text()=\"(1)\"]", 1);
+        assert_xpath(&output, "//b[text()=\"(2)\"]", 1);
+    }
+
+    #[test]
+    fn should_not_allow_callouts_with_half_an_xml_comment() {
+        verifies!(
+            r##"
   test 'should not allow callouts with half an XML comment' do
     input = <<~'EOS'
     ----
@@ -10049,6 +10284,16 @@ context 'Callout lists' do
     assert_xpath '//b', output, 0
   end
 
+"##
+        );
+        let output = convert("----\nFirst line <1-->\nSecond line <2-->\n----\n");
+        assert_xpath(&output, "//b", 0);
+    }
+
+    #[test]
+    fn should_not_recognize_callouts_in_an_indented_description_list_paragraph() {
+        verifies!(
+            r##"
   test 'should not recognize callouts in an indented description list paragraph' do
     # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
     input = <<~EOS
@@ -10066,6 +10311,24 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let input = "foo::\n  bar <1>\n\n<1> Not pointing to a callout\n";
+        let output = convert(input);
+        assert_xpath(&output, "//dl//b", 0);
+        assert_xpath(&output, "//dl/dd/p[text()=\"bar <1>\"]", 1);
+        assert_xpath(
+            &output,
+            "//ol/li/p[text()=\"Not pointing to a callout\"]",
+            1,
+        );
+        assert_no_callout_warning(input, 4, 1);
+    }
+
+    #[test]
+    fn should_not_recognize_callouts_in_an_indented_outline_list_paragraph() {
+        verifies!(
+            r##"
   test 'should not recognize callouts in an indented outline list paragraph' do
     # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
     input = <<~EOS
@@ -10083,6 +10346,24 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let input = "* foo\n  bar <1>\n\n<1> Not pointing to a callout\n";
+        let output = convert(input);
+        assert_xpath(&output, "//ul//b", 0);
+        assert_xpath(&output, "//ul/li/p[text()=\"foo\nbar <1>\"]", 1);
+        assert_xpath(
+            &output,
+            "//ol/li/p[text()=\"Not pointing to a callout\"]",
+            1,
+        );
+        assert_no_callout_warning(input, 4, 1);
+    }
+
+    #[test]
+    fn should_warn_if_numbers_in_callout_list_are_out_of_sequence() {
+        verifies!(
+            r##"
   test 'should warn if numbers in callout list are out of sequence' do
     input = <<~'EOS'
     ----
@@ -10104,6 +10385,20 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let input = "----\n<beans> <1>\n  <bean class=\"com.example.HelloWorld\"/>\n\
+                     </beans>\n----\n<1> Container of beans.\nBeans are fun.\n<3> An actual bean.\n";
+        let output = convert(input);
+        assert_xpath(&output, "//ol/li", 2);
+        assert_callout_out_of_sequence_warning(input, 8, 2, 3);
+        assert_no_callout_warning(input, 8, 2);
+    }
+
+    #[test]
+    fn should_preserve_line_comment_chars_that_precede_callout_number_if_icons_is_not_set() {
+        verifies!(
+            r##"
   test 'should preserve line comment chars that precede callout number if icons is not set' do
     input = <<~'EOS'
     [source,ruby]
@@ -10142,6 +10437,30 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        // Driven with no source highlighter; the Ruby test's `coderay` iteration
+        // renders identically here.
+        let output = convert(
+            "[source,ruby]\n----\nputs 'Hello, world!' # <1>\n----\n<1> Ruby\n\n\
+             [source,groovy]\n----\nprintln 'Hello, world!' // <1>\n----\n<1> Groovy\n\n\
+             [source,clojure]\n----\n(def hello (fn [] \"Hello, world!\")) ;; <1>\n(hello)\n----\n\
+             <1> Clojure\n\n[source,haskell]\n----\nmain = putStrLn \"Hello, World!\" -- <1>\n----\n\
+             <1> Haskell\n",
+        );
+        assert_xpath(&output, "//b", 4);
+        assert!(output.contains("puts 'Hello, world!' # <b class=\"conum\">(1)</b>"));
+        assert!(output.contains("println 'Hello, world!' // <b class=\"conum\">(1)</b>"));
+        assert!(
+            output.contains("(def hello (fn [] \"Hello, world!\")) ;; <b class=\"conum\">(1)</b>")
+        );
+        assert!(output.contains("main = putStrLn \"Hello, World!\" -- <b class=\"conum\">(1)</b>"));
+    }
+
+    #[test]
+    fn should_remove_line_comment_chars_that_precede_callout_number_if_icons_is_font() {
+        verifies!(
+            r##"
   test 'should remove line comment chars that precede callout number if icons is font' do
     input = <<~'EOS'
     [source,ruby]
@@ -10181,6 +10500,35 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let output = convert_with(
+            "[source,ruby]\n----\nputs 'Hello, world!' # <1>\n----\n<1> Ruby\n\n\
+             [source,groovy]\n----\nprintln 'Hello, world!' // <1>\n----\n<1> Groovy\n\n\
+             [source,clojure]\n----\n(def hello (fn [] \"Hello, world!\")) ;; <1>\n(hello)\n----\n\
+             <1> Clojure\n\n[source,haskell]\n----\nmain = putStrLn \"Hello, World!\" -- <1>\n----\n\
+             <1> Haskell\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert_css(&output, "pre b", 4);
+        assert_css(&output, "pre i.conum", 4);
+        assert!(output
+            .contains("puts 'Hello, world!' <i class=\"conum\" data-value=\"1\"></i><b>(1)</b>"));
+        assert!(output.contains(
+            "println 'Hello, world!' <i class=\"conum\" data-value=\"1\"></i><b>(1)</b>"
+        ));
+        assert!(output.contains(
+            "(def hello (fn [] \"Hello, world!\")) <i class=\"conum\" data-value=\"1\"></i><b>(1)</b>"
+        ));
+        assert!(output.contains(
+            "main = putStrLn \"Hello, World!\" <i class=\"conum\" data-value=\"1\"></i><b>(1)</b>"
+        ));
+    }
+
+    #[test]
+    fn should_allow_line_comment_chars_that_precede_callout_number_to_be_specified() {
+        verifies!(
+            r##"
   test 'should allow line comment chars that precede callout number to be specified' do
     # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
     input = <<~EOS
@@ -10198,6 +10546,23 @@ context 'Callout lists' do
     assert_equal %(hello_world() -> % (1)\n  io:fwrite("hello, world~n"). %(2)), nodes[0].text
   end
 
+"##
+        );
+        let output = convert(
+            "[source,erlang,line-comment=%]\n----\nhello_world() -> % <1>\n\
+             \x20 io:fwrite(\"hello, world~n\"). %<2>\n----\n\
+             <1> Erlang function clause head.\n<2> ~n adds a new line to the output.\n",
+        );
+        assert_xpath(&output, "//b", 2);
+        assert!(output.contains("hello_world() -&gt; % <b class=\"conum\">(1)</b>"));
+        assert!(output.contains("io:fwrite(\"hello, world~n\"). %<b class=\"conum\">(2)</b>"));
+    }
+
+    // Non-normative: requires the `coderay` source highlighter, which this crate
+    // does not implement (syntax highlighting is tracked in
+    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/215>).
+    non_normative!(
+        r##"
   test 'should allow line comment chars preceding callout number to be configurable when source-highlighter is coderay' do
     input = <<~'EOS'
     [source,html,line-comment=-#]
@@ -10213,6 +10578,13 @@ context 'Callout lists' do
     assert_equal %(-# (1)\n%p Hello), nodes[0].text
   end
 
+"##
+    );
+
+    #[test]
+    fn should_not_eat_whitespace_before_callout_number_if_line_comment_attribute_is_empty() {
+        verifies!(
+            r##"
   test 'should not eat whitespace before callout number if line-comment attribute is empty' do
     input = <<~'EOS'
     [source,asciidoc,line-comment=]
@@ -10225,6 +10597,19 @@ context 'Callout lists' do
     assert_includes output, '-- <i class="conum"'
   end
 
+"##
+        );
+        let output = convert_with(
+            "[source,asciidoc,line-comment=]\n----\n-- <1>\n----\n<1> The start of an open block.\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(output.contains("-- <i class=\"conum\""));
+    }
+
+    // Non-normative: converts with the `docbook` backend (`//literallayout`,
+    // `//calloutlist`), which this crate does not target.
+    non_normative!(
+        r##"
   test 'literal block with callouts' do
     input = <<~'EOS'
     ....
@@ -10246,6 +10631,13 @@ context 'Callout lists' do
     assert_xpath '(//literallayout/following-sibling::*[1][self::calloutlist]/callout)[2][@arearefs = "CO1-2"]', output, 1
   end
 
+"##
+    );
+
+    #[test]
+    fn callout_list_with_icons_enabled() {
+        verifies!(
+            r##"
   test 'callout list with icons enabled' do
     input = <<~'EOS'
     [source, ruby]
@@ -10269,6 +10661,43 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let output = convert_with(
+            "[source, ruby]\n----\nrequire 'asciidoctor' # <1>\n\
+             doc = Asciidoctor::Document.new('Hello, World!') # <2>\n\
+             puts doc.convert # <3>\n----\n<1> Describe the first line\n\
+             <2> Describe the second line\n<3> Describe the third line\n",
+            &Options::new().attribute("icons", ""),
+        );
+        assert_css(&output, ".listingblock code > img", 3);
+        for i in 1..=3 {
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"listingblock\"]//code/img)[{i}]\
+                     [@src=\"./images/icons/callouts/{i}.png\"][@alt=\"{i}\"]"
+                ),
+                1,
+            );
+        }
+        assert_css(&output, ".colist table td img", 3);
+        for i in 1..=3 {
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"colist arabic\"]//td/img)[{i}]\
+                     [@src=\"./images/icons/callouts/{i}.png\"][@alt=\"{i}\"]"
+                ),
+                1,
+            );
+        }
+    }
+
+    #[test]
+    fn callout_list_with_font_based_icons_enabled() {
+        verifies!(
+            r##"
   test 'callout list with font-based icons enabled' do
     input = <<~'EOS'
     [source]
@@ -10296,6 +10725,65 @@ context 'Callout lists' do
     end
   end
 
+"##
+        );
+        let output = convert_with(
+            "[source]\n----\nrequire 'asciidoctor' # <1>\n\
+             doc = Asciidoctor::Document.new('Hello, World!') #<2>\n\
+             puts doc.convert #<3>\n----\n<1> Describe the first line\n\
+             <2> Describe the second line\n<3> Describe the third line\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert_css(&output, ".listingblock code > i", 3);
+        for i in 1..=3 {
+            assert_xpath(
+                &output,
+                &format!("(/div[@class=\"listingblock\"]//code/i)[{i}]"),
+                1,
+            );
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"listingblock\"]//code/i)[{i}][@class=\"conum\"][@data-value=\"{i}\"]"
+                ),
+                1,
+            );
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"listingblock\"]//code/i)[{i}]/following-sibling::b[text()=\"({i})\"]"
+                ),
+                1,
+            );
+        }
+        assert_css(&output, ".colist table td i", 3);
+        for i in 1..=3 {
+            assert_xpath(
+                &output,
+                &format!("(/div[@class=\"colist arabic\"]//td/i)[{i}]"),
+                1,
+            );
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"colist arabic\"]//td/i)[{i}][@class=\"conum\"][@data-value=\"{i}\"]"
+                ),
+                1,
+            );
+            assert_xpath(
+                &output,
+                &format!(
+                    "(/div[@class=\"colist arabic\"]//td/i)[{i}]/following-sibling::b[text()=\"{i}\"]"
+                ),
+                1,
+            );
+        }
+    }
+
+    #[test]
+    fn should_match_trailing_line_separator_in_text_of_list_item() {
+        verifies!(
+            r##"
   test 'should match trailing line separator in text of list item' do
     input = <<~EOS.chop
     ----
@@ -10313,6 +10801,20 @@ context 'Callout lists' do
     assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}"]), output, 1
   end
 
+"##
+        );
+        // `\u{2028}` is the Unicode line separator (Ruby's `decode_char 8232`);
+        // the input has no trailing newline (Ruby's `.chop`).
+        let output =
+            convert_standalone("----\nA <1>\nB <2>\nC <3>\n----\n<1> a\n<2> b\u{2028}\n<3> c");
+        assert_css(&output, "li", 3);
+        assert_xpath(&output, "(//li)[2]/p[text()=\"b\u{2028}\"]", 1);
+    }
+
+    #[test]
+    fn should_match_line_separator_in_text_of_list_item() {
+        verifies!(
+            r##"
   test 'should match line separator in text of list item' do
     input = <<~EOS.chop
     ----
@@ -10329,10 +10831,21 @@ context 'Callout lists' do
     assert_css 'li', output, 3
     assert_xpath %((//li)[2]/p[text()="b#{decode_char 8232}b"]), output, 1
   end
+"##
+        );
+        let output =
+            convert_standalone("----\nA <1>\nB <2>\nC <3>\n----\n<1> a\n<2> b\u{2028}b\n<3> c");
+        assert_css(&output, "li", 3);
+        assert_xpath(&output, "(//li)[2]/p[text()=\"b\u{2028}b\"]", 1);
+    }
+
+    non_normative!(
+        r##"
 end
 
 "##
-);
+    );
+}
 
 mod checklists {
     use super::*;

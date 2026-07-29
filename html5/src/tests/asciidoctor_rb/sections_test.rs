@@ -2,19 +2,19 @@
 //!
 //! This crate renders section headings (with synthetic/explicit ids), discrete
 //! and floating headings, section numbering (`sectnums`, incl. `sectnumlevels`
-//! and appendix lettering/captions), positive `leveloffset` shifts, and
-//! resolves cross-references and the document catalog — so the `Ids`, `Levels`,
-//! `Substitutions`, `Markdown-style headings`, `Discrete Heading`,
-//! `Level offset`, `Section Numbering`, the appendix slice of `Special
-//! sections`, `heading patterns in blocks`, `Links and anchors` (including the
-//! `sectanchors` / `sectlinks` heading self-links), and the warning/xref parts
-//! of `Nesting` port directly, driven through `convert` (embedded) /
-//! `convert_with(.. standalone(true) ..)`.
+//! and appendix lettering/captions), the table of contents (every placement),
+//! positive `leveloffset` shifts, and resolves cross-references and the
+//! document catalog — so the `Ids`, `Levels`, `Substitutions`, `Markdown-style
+//! headings`, `Discrete Heading`, `Level offset`, `Section Numbering`, the
+//! appendix slice of `Special sections`, the article-doctype `Table of
+//! Contents` cases, `heading patterns in blocks`, `Links and anchors`
+//! (including the `sectanchors` / `sectlinks` heading self-links), and the
+//! warning/xref parts of `Nesting` port directly, driven through `convert`
+//! (embedded) / `convert_with(.. standalone(true) ..)`.
 //!
 //! What stays `non_normative!` here:
-//! - the **Table of Contents** context and the toc assertions elsewhere — TOC
-//!   rendering is not wired up yet (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>);
-//! - the **book doctype** context and book-conditioned tests — non-article
+//! - the **book doctype** context and book-conditioned tests — including the
+//!   book-only TOC cases (parts, preface/appendix numbering) — as non-article
 //!   doctypes are out of scope for 1.0 (like the DocBook-backend tests below);
 //! - the document-title id/role on `<body>` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/187>);
 //! - **setext** (two-line/underlined) titles, which are intentionally out of
@@ -2791,9 +2791,10 @@ mod discrete_heading {
         assert_xpath(&convert(input), r#"//h3[@id="unchained"]"#, 1);
     }
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_include_discrete_heading_in_toc() {
+        verifies!(
+            r#"
     test 'should not include discrete heading in toc' do
       input = <<~'EOS'
       :toc:
@@ -2813,7 +2814,23 @@ mod discrete_heading {
     end
 
 "#
-    );
+        );
+
+        let output = convert_standalone(
+            ":toc:\n\n== Section One\n\n[float]\n=== Miss Independent\n\n== Section Two\n",
+        );
+        assert_xpath(&output, r#"//*[@id="toc"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]//a[contains(text(), "Section ")]"#,
+            2,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]//a[text()="Miss Independent"]"#,
+            0,
+        );
+    }
 
     #[test]
     fn should_not_set_id_on_discrete_heading_if_sectids_attribute_is_unset() {
@@ -5100,9 +5117,10 @@ mod special_sections {
         assert_xpath(&output, r#"(//h2)[4][text()="Glossary"]"#, 1);
     }
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_number_sections_or_subsections_in_toc_in_regions_where_numbered_is_off() {
+        verifies!(
+            r#"
     test 'should not number sections or subsections in toc in regions where numbered is off' do
       input = <<~'EOS'
       :numbered:
@@ -5141,11 +5159,34 @@ mod special_sections {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            ":numbered:\n:toc:\n\n== Section One\n\n:numbered!:\n\n[appendix]\n== Attribute Options\n\nDetails\n\n[appendix]\n== Migration\n\nDetails\n\n=== Gotchas\n\nDetails\n\n[glossary]\n== Glossary\n\nTerms\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]/ul//li/a[text()="1. Section One"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]/ul//li/a[text()="Appendix A: Attribute Options"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]/ul//li/a[text()="Appendix B: Migration"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="toc"]/ul//li/a[text()="Gotchas"]"#, 1);
+        assert_xpath(&output, r#"//*[@id="toc"]/ul//li/a[text()="Glossary"]"#, 1);
+    }
+
+    #[test]
+    fn should_only_number_sections_in_toc_up_to_value_defined_by_sectnumlevels_attribute() {
+        verifies!(
+            r##"
     test 'should only number sections in toc up to value defined by sectnumlevels attribute' do
       input = <<~'EOS'
       :numbered:
@@ -5167,7 +5208,27 @@ mod special_sections {
     end
 
 "##
-    );
+        );
+
+        let output = convert_standalone(
+            ":numbered:\n:toc:\n:sectnumlevels: 2\n:toclevels: 3\n\n== Level 1\n\n=== Level 2\n\n==== Level 3\n",
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="toc"]//a[@href="#_level_1"][text()="1. Level 1"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="toc"]//a[@href="#_level_2"][text()="1.1. Level 2"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="toc"]//a[@href="#_level_3"][text()="Level 3"]"##,
+            1,
+        );
+    }
 
     // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
@@ -5221,7 +5282,8 @@ mod special_sections {
 "#
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
+    // Not verified: book doctype (preface/appendix/glossary special sections),
+    // and non-article doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not number special sections or their subsections in toc by default except for appendices' do
@@ -5326,7 +5388,8 @@ mod special_sections {
 "#
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
+    // Not verified: book doctype (`:sectnums: all` over special sections), and
+    // non-article doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should number special sections and their subsections in toc when sectnums is all' do
@@ -5791,9 +5854,10 @@ mod table_of_contents {
 "#
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+    #[test]
+    fn should_output_unnumbered_table_of_contents_in_header_if_toc_attribute_is_set() {
+        verifies!(
+            r##"
     test 'should output unnumbered table of contents in header if toc attribute is set' do
       input = <<~'EOS'
       = Article
@@ -5831,11 +5895,57 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n\n=== Interlude\n\nWhile they were waiting...\n\n== Section Three\n\nThat's all she wrote!\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/*[@id="toctitle"][text()="Table of Contents"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/ul[@class="sectlevel1"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//ul"#, 2);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//li"#, 4);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="Section One"]"##,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul/li/ul"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/ul/li/ul[@class="sectlevel2"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li"#, 1);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li/a[@href="#_interlude"][text()="Interlude"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"((//*[@id="header"]//*[@id="toc"]/ul)[1]/li)[3]/a[@href="#_section_three"][text()="Section Three"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_output_numbered_table_of_contents_in_header_if_toc_and_numbered_attributes_are_set() {
+        verifies!(
+            r##"
     test 'should output numbered table of contents in header if toc and numbered attributes are set' do
       input = <<~'EOS'
       = Article
@@ -5871,11 +5981,47 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n\n=== Interlude\n\nWhile they were waiting...\n\n== Section Three\n\nThat's all she wrote!\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/*[@id="toctitle"][text()="Table of Contents"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul"#, 1);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//ul"#, 2);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//li"#, 4);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li"#, 1);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li/a[@href="#_interlude"][text()="2.1. Interlude"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"((//*[@id="header"]//*[@id="toc"]/ul)[1]/li)[3]/a[@href="#_section_three"][text()="3. Section Three"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_output_a_table_of_contents_that_honors_numbered_setting_at_position_of_section_in_document(
+    ) {
+        verifies!(
+            r##"
     test 'should output a table of contents that honors numbered setting at position of section in document' do
       input = <<~'EOS'
       = Article
@@ -5911,9 +6057,38 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
+        let output = convert_standalone(
+            "= Article\n:toc:\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n\n=== Interlude\n\nWhile they were waiting...\n\n:numbered!:\n\n== Section Three\n\nThat's all she wrote!\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/*[@id="toctitle"][text()="Table of Contents"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul"#, 1);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//ul"#, 2);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//li"#, 4);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"((//*[@id="header"]//*[@id="toc"]/ul)[1]/li)[3]/a[@href="#_section_three"][text()="Section Three"]"##,
+            1,
+        );
+    }
+
+    // Not verified: book doctype (parts in the TOC), and non-article doctypes
+    // are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not number parts in table of contents for book doctype when numbered attribute is set' do
@@ -5956,9 +6131,10 @@ mod table_of_contents {
 "#
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+    #[test]
+    fn should_output_table_of_contents_in_header_if_toc2_attribute_is_set() {
+        verifies!(
+            r##"
     test 'should output table of contents in header if toc2 attribute is set' do
       input = <<~'EOS'
       = Article
@@ -5981,11 +6157,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc2:\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-left"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc_attribute_is_set_to_position() {
+        verifies!(
+            r##"
     test 'should set toc position if toc attribute is set to position' do
       input = <<~'EOS'
       = Article
@@ -6008,11 +6201,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc: >\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc_and_toc_position_attributes_are_set() {
+        verifies!(
+            r##"
     test 'should set toc position if toc and toc-position attributes are set' do
       input = <<~'EOS'
       = Article
@@ -6036,11 +6246,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-position: right\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc2_and_toc_position_attribute_are_set() {
+        verifies!(
+            r##"
     test 'should set toc position if toc2 and toc-position attribute are set' do
       input = <<~'EOS'
       = Article
@@ -6064,11 +6291,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc2:\n:toc-position: right\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc_attribute_is_set_to_direction() {
+        verifies!(
+            r##"
     test 'should set toc position if toc attribute is set to direction' do
       input = <<~'EOS'
       = Article
@@ -6091,11 +6335,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc: right\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_placement_to_preamble_if_toc_attribute_is_set_to_preamble() {
+        verifies!(
+            r#"
     test 'should set toc placement to preamble if toc attribute is set to preamble' do
       input = <<~'EOS'
       = Article
@@ -6118,11 +6379,19 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc: preamble\n\nYada yada\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "#preamble #toc", 1);
+        assert_css(&output, "#preamble .sectionbody + #toc", 1);
+    }
+
+    #[test]
+    fn should_use_document_attributes_toc_class_toc_title_and_toclevels_to_create_toc() {
+        verifies!(
+            r#"
     test 'should use document attributes toc-class, toc-title and toclevels to create toc' do
       input = <<~'EOS'
       = Article
@@ -6154,9 +6423,24 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-title: Contents\n:toc-class: toc2\n:toclevels: 1\n\n== Section 1\n\n=== Section 1.1\n\n==== Section 1.1.1\n\n==== Section 1.1.2\n\n=== Section 1.2\n\n== Section 2\n\nFin.\n",
+        );
+        assert_css(&output, "#header #toc", 1);
+        assert_css(&output, "#header #toc.toc2", 1);
+        assert_css(&output, "#header #toc li", 2);
+        assert_css(&output, "#header #toc #toctitle", 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/*[@id="toctitle"][text()="Contents"]"#,
+            1,
+        );
+    }
+
+    // Not verified: this exercises book-doctype parts (`sectlevel0` in the TOC),
+    // and non-article doctypes are out of scope for 1.0.
     non_normative!(
         r##"
     test 'should only show parts in toc if toclevels is 0' do
@@ -6185,7 +6469,8 @@ mod table_of_contents {
 "##
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
+    // Not verified: this exercises the book doctype's part/chapter toclevels
+    // coercion, and non-article doctypes are out of scope for 1.0.
     non_normative!(
         r##"
     test 'should coerce minimum toclevels to 1 if first section of document is not a part' do
@@ -6208,9 +6493,10 @@ mod table_of_contents {
 "##
     );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_output_table_of_contents_if_toc_placement_attribute_is_unset() {
+        verifies!(
+            r#"
     test 'should not output table of contents if toc-placement attribute is unset' do
       input = <<~'EOS'
       = Article
@@ -6231,11 +6517,20 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        // An unset `toc-placement!` with `toc` set defers the TOC to a `toc::[]`
+        // macro; with no macro present, nothing is emitted.
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-placement!:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//*[@id="toc"]"#, 0);
+    }
+
+    #[test]
+    fn should_output_table_of_contents_at_location_of_toc_macro() {
+        verifies!(
+            r#"
     test 'should output table of contents at location of toc macro' do
       input = <<~'EOS'
       = Article
@@ -6261,11 +6556,19 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-placement: macro\n\nOnce upon a time...\n\ntoc::[]\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "#preamble #toc", 1);
+        assert_css(&output, "#preamble .paragraph + #toc", 1);
+    }
+
+    #[test]
+    fn should_output_table_of_contents_at_location_of_toc_macro_in_embedded_document() {
+        verifies!(
+            r#"
     test 'should output table of contents at location of toc macro in embedded document' do
       input = <<~'EOS'
       = Article
@@ -6291,11 +6594,20 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert(
+            "= Article\n:toc:\n:toc-placement: macro\n\nOnce upon a time...\n\ntoc::[]\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "#preamble:root #toc", 1);
+        assert_css(&output, "#preamble:root .paragraph + #toc", 1);
+    }
+
+    #[test]
+    fn should_output_table_of_contents_at_default_location_in_embedded_document_if_toc_attribute_is_set(
+    ) {
+        verifies!(
+            r#"
     test 'should output table of contents at default location in embedded document if toc attribute is set' do
       input = <<~'EOS'
       = Article
@@ -6320,11 +6632,20 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert(
+            "= Article\n:showtitle:\n:toc:\n\nOnce upon a time...\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "h1:root", 1);
+        assert_css(&output, "h1:root + #toc:root", 1);
+        assert_css(&output, "h1:root + #toc:root + #preamble:root", 1);
+    }
+
+    #[test]
+    fn should_not_activate_toc_macro_if_toc_placement_is_not_set() {
+        verifies!(
+            r#"
     test 'should not activate toc macro if toc-placement is not set' do
       input = <<~'EOS'
       = Article
@@ -6352,11 +6673,21 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc:\n\nOnce upon a time...\n\ntoc::[]\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "#toc", 1);
+        assert_css(&output, "#toctitle", 1);
+        assert_css(&output, ".toc", 1);
+        assert_css(&output, "#content .toc", 0);
+    }
+
+    #[test]
+    fn should_only_output_toc_at_toc_macro_if_toc_is_macro() {
+        verifies!(
+            r#"
     test 'should only output toc at toc macro if toc is macro' do
       input = <<~'EOS'
       = Article
@@ -6384,11 +6715,21 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc: macro\n\nOnce upon a time...\n\ntoc::[]\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_css(&output, "#toc", 1);
+        assert_css(&output, "#toctitle", 1);
+        assert_css(&output, ".toc", 1);
+        assert_css(&output, "#content .toc", 1);
+    }
+
+    #[test]
+    fn should_use_global_attributes_for_toc_title_toc_class_and_toclevels_for_toc_macro() {
+        verifies!(
+            r#"
     test 'should use global attributes for toc-title, toc-class and toclevels for toc macro' do
       input = <<~'EOS'
       = Article
@@ -6429,11 +6770,37 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-placement: macro\n:toc-title: Contents\n:toc-class: contents\n:toclevels: 1\n\nPreamble.\n\ntoc::[]\n\n== Section 1\n\n=== Section 1.1\n\n==== Section 1.1.1\n\n==== Section 1.1.2\n\n=== Section 1.2\n\n== Section 2\n\nFin.\n",
+        );
+        assert_css(&output, "#toc", 1);
+        assert_css(&output, "#toctitle", 1);
+        assert_css(&output, "#preamble #toc", 1);
+        assert_css(&output, "#preamble #toc.contents", 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="toc"]/*[@class="title"][text() = "Contents"]"#,
+            1,
+        );
+        assert_css(&output, "#toc li", 2);
+        assert_xpath(
+            &output,
+            r#"(//*[@id="toc"]//li)[1]/a[text() = "Section 1"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"(//*[@id="toc"]//li)[2]/a[text() = "Section 2"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_honor_id_title_role_and_level_attributes_on_toc_macro() {
+        verifies!(
+            r##"
     test 'should honor id, title, role and level attributes on toc macro' do
       input = <<~'EOS'
       = Article
@@ -6478,11 +6845,30 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-placement: macro\n:toc-title: Ignored\n:toc-class: ignored\n:tocmacrolevels: 3\n\nPreamble.\n\n[[contents]]\n[role=\"contents\"]\n.Contents\ntoc::[levels={tocmacrolevels}]\n\n== Section 1\n\n=== Section 1.1\n\n==== Section 1.1.1\n\n==== Section 1.1.2\n\n=== Section 1.2\n\n== Section 2\n\nFin.\n",
+        );
+        assert_css(&output, "#toc", 0);
+        assert_css(&output, "#toctitle", 0);
+        assert_css(&output, "#preamble #contents", 1);
+        assert_css(&output, "#preamble #contents.contents", 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="contents"]/*[@class="title"][text() = "Contents"]"#,
+            1,
+        );
+        assert_css(&output, "#contents li", 6);
+        assert_css(&output, r##"#contents a[href="#_section_1"]"##, 1);
+        assert_css(&output, r##"#contents a[href="#_section_1_1"]"##, 1);
+        assert_css(&output, r##"#contents a[href="#_section_1_1_1"]"##, 1);
+    }
+
+    #[test]
+    fn child_toc_levels_should_not_have_additional_bullet_at_parent_level_in_html() {
+        verifies!(
+            r##"
     test 'child toc levels should not have additional bullet at parent level in html' do
       input = <<~'EOS'
       = Article
@@ -6518,11 +6904,51 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r#"
+        let output = convert_standalone(
+            "= Article\n:toc:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n\n=== Interlude\n\nWhile they were waiting...\n\n== Section Three\n\nThat's all she wrote!\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/*[@id="toctitle"][text()="Table of Contents"]"#,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul"#, 1);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//ul"#, 2);
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]//li"#, 4);
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[2]/a[@href="#_section_two"][text()="Section Two"]"##,
+            1,
+        );
+        assert_xpath(&output, r#"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"]/ul/li[2]/ul/li"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li/ul/li/a[@href="#_interlude"][text()="Interlude"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"((//*[@id="header"]//*[@id="toc"]/ul)[1]/li)[3]/a[@href="#_section_three"][text()="Section Three"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_not_display_a_table_of_contents_if_document_has_no_sections() {
+        verifies!(
+            r#"
     test 'should not display a table of contents if document has no sections' do
       input_src = <<~'EOS'
       = Document Title
@@ -6543,11 +6969,21 @@ mod table_of_contents {
     end
 
 "#
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        for placement in ["", " left", " preamble", " macro"] {
+            let input = format!(
+                "= Document Title\n:toc:{placement}\n\ntoc::[]\n\nThis document has no sections.\n\nIt only has content.\n",
+            );
+            let output = convert_standalone(&input);
+            assert_css(&output, "#toctitle", 0);
+        }
+    }
+
+    #[test]
+    fn should_drop_anchors_from_contents_of_entries_in_table_of_contents() {
+        verifies!(
+            r##"
     test 'should drop anchors from contents of entries in table of contents' do
       input = <<~'EOS'
       = Document Title
@@ -6576,11 +7012,40 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the table of contents is not rendered yet (#86).
-    non_normative!(
-        r##"
+        let output = convert(
+            "= Document Title\n:toc:\n\n== [[un]]Section One\n\ncontent\n\n== [[two]][[deux]]Section Two\n\ncontent\n\n== Plant Trees by https://ecosia.org[Searching]\n\ncontent\n",
+        );
+        assert_xpath(&output, r#"/*[@id="toc"]"#, 1);
+        assert_xpath(&output, r#"/*[@id="toc"]//li"#, 3);
+
+        // Each entry is exactly its own `<a>` with the section title as plain
+        // text — the supplemental `[[un]]`/`[[two]]` anchors and the inline link
+        // in the third heading are dropped, leaving no `<a>` with an id nested in
+        // the TOC.
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_section_one"][text()="Section One"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_section_two"][text()="Section Two"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_plant_trees_by_searching"][text()="Plant Trees by Searching"]"##,
+            1,
+        );
+        assert_xpath(&output, r#"/*[@id="toc"]//a[@id]"#, 0);
+    }
+
+    #[test]
+    fn should_not_remove_non_anchor_tags_from_contents_of_entries_in_table_of_contents() {
+        verifies!(
+            r##"
     test 'should not remove non-anchor tags from contents of entries in table of contents' do
       input = <<~'EOS'
       = Document Title
@@ -6609,7 +7074,34 @@ mod table_of_contents {
       assert_equal '<a href="#_sustainable_searches"><em>Sustainable</em> Searches</a>', toc_links[2].inner_html
     end
 "##
-    );
+        );
+
+        let output = convert_with(
+            "= Document Title\n:toc:\n:icons: font\n\n== `run` command\n\ncontent\n\n== icon:bug[] Issues\n\ncontent\n\n== https://ecosia.org[_Sustainable_ Searches]\n\ncontent\n",
+            &Options::new().safe_mode(crate::SafeMode::Safe),
+        );
+        assert_xpath(&output, r#"/*[@id="toc"]"#, 1);
+        assert_xpath(&output, r#"/*[@id="toc"]//li"#, 3);
+
+        // Non-anchor inline markup in a heading — the monospaced `<code>`, the
+        // Font Awesome icon `<span>`/`<i>`, and the `<em>` — survives in the TOC
+        // entry (only `<a>` tags are dropped).
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_run_command"]/code[text()="run"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_issues"]/span[@class="icon"]/i[@class="fa fa-bug"]"##,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"/*[@id="toc"]//li/a[@href="#_sustainable_searches"]/em[text()="Sustainable"]"##,
+            1,
+        );
+    }
 
     non_normative!(
         r#"

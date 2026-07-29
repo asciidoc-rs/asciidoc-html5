@@ -82,6 +82,7 @@ render_document(&Document) -> String
               ├── CompoundDelimited → open_block()/sidebar()/example() (by context_kind) → recurses
               ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
               ├── Admonition → admonition() → recurses (compound admonitions)
+              ├── Toc     → toc_macro()  (the toc::[] macro placement)
               └── _       → unsupported()  (visible HTML comment)
 ```
 
@@ -123,19 +124,20 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::RawDelimited` | `listing`/`literal` | as listing/literal above | ✅ |
 | `Block::RawDelimited` | `pass` | raw passthrough (no wrapper) | ✅ |
 | `Block::RawDelimited`/`Simple` (`[comment]`, `////`) | `comment` | *(no output; dropped)* | ✅ |
-| `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ⬜ |
-| `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ⬜ |
-| `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ⬜ |
-| `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` | ⬜ |
+| `Block::List` (Unordered) | `list` | `<div class="ulist"><ul><li><p>…</p></li></ul></div>` | ✅ |
+| `Block::List` (Ordered) | `list` | `<div class="olist arabic"><ol class="arabic">…</ol></div>` | ✅ |
+| `Block::List` (Description) | `list` | `<div class="dlist"><dl><dt class="hdlist1">…</dt><dd>…</dd></dl></div>` | ✅ |
+| `Block::List` (Callout) | `list` | `<div class="colist arabic"><ol>…</ol></div>` (icons: `<table>`) | ✅ |
 | `Block::CompoundDelimited` | `example` | `<div class="exampleblock">[<div class="title">Example N. …</div>]<div class="content">…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">[<div class="title">…</div>]…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
 | `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ✅ |
 | `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
 | `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
-| `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
-| `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
+| `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ✅ |
+| `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock"><div class="content"><video …>…</video></div></div>` (self-hosted, plus `youtube`/`vimeo` `<iframe>` embeds); `<div class="audioblock">…<audio …>…</audio>…</div>` | ✅ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
+| `Block::Toc` (`toc::[]`) | `toc` | `<div id="toc" class="toc"><div id="toctitle" class="title">…</div>…</div>` | ✅ |
 | `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |
 | `Block::DocumentAttribute` | `attribute` | *(no output; updates attribute state)* | ⬜ |
 
@@ -224,8 +226,9 @@ standalone even when piping. Embedded output emits no stylesheet, so the
 
 - Block **content** (`rendered_content()`) and **titles** (`title()`) are already
   HTML with substitutions applied — emitted verbatim.
-- Values **this crate** injects into attributes — ids, roles, and (later) image
-  `src`/`alt`, link `href` — are escaped with `html::escape_attribute`.
+- Values **this crate** injects into attributes — ids, roles, and a block image's
+  `src`/`alt`/dimensions and link `href` — are escaped with
+  `html::escape_attribute`.
 - Verbatim block bodies are emitted inside `<pre>` with their literal line breaks
   preserved and no added surrounding whitespace, so the rendered text is
   byte-faithful.
@@ -243,9 +246,36 @@ self-contained. The baseline reads `lang` and `doctype` from those accessors
 `<h1>`, and the footer on `noheader` / `notitle` / `nofooter` in standalone
 output. In embedded output the doctitle `<h1>` is instead gated on `showtitle`
 (see [Standalone vs. embedded output](#standalone-vs-embedded-output)). Two
-skeleton details remain deliberately deferred: the footer's "Last updated" text
-needs a caller-supplied `docdatetime`, and `<body class>` currently carries just
-the bare doctype (Asciidoctor also appends TOC classes such as `toc2 toc-left`).
+skeleton detail remains deliberately deferred: the footer's "Last updated" text
+needs a caller-supplied `docdatetime`. The `<body class>` now carries the TOC
+classes Asciidoctor appends for a side-column TOC (`toc2 toc-left` /
+`toc2 toc-right`).
+
+### Syntax highlighting (`source-highlighter`)
+
+The two *client-side* highlighters — `highlightjs` (aka `highlight.js`) and
+`prettify` — are rendered. They do no server-side tokenizing, so honoring them is
+purely a matter of CSS classes on each source block's `<pre>`/`<code>` (e.g.
+`highlightjs highlight` / `prettyprint highlight`, and the `hljs` /
+`linenums` classes) plus the CDN `<link>` in `<head>` and `<script>` before
+`</body>` that load the highlighter — matching Asciidoctor's `HighlightJsAdapter`
+/ `PrettifyAdapter`, and adding no new dependency. The `Highlighter` enum in
+`renderer.rs` resolves the active highlighter once from `source-highlighter`, and
+`Highlighter::from_document` / `highlighter_head` / `highlighter_footer` carry the
+`highlightjsdir`/`highlightjs-theme`/`highlightjs-languages` and
+`prettifydir`/`prettify-theme` attributes. The *server-side* highlighters
+(`coderay`, `pygments`, `rouge`), which emit tokenized `<span>` markup, are not
+rendered — they leave the source block in its default unhighlighted shape and are
+tracked in [#223](https://github.com/asciidoc-rs/asciidoc-html5/issues/223).
+
+Because a highlighter emits `<link>`/`<script>` tags whose origin a document
+`highlightjsdir`/`prettifydir` can steer, enabling one is safe-mode gated: at
+`Server` and above a *document-set* `:source-highlighter:` is locked to unset in
+[`Options::apply`](Options) (mirroring Asciidoctor's `attr_overrides['source-
+highlighter'] ||= nil`), so only a trusted API/CLI `-a source-highlighter=…`
+opt-in can turn one on – which is still honored under `Secure`, matching
+Asciidoctor 2.0.26. This is the document-lock half of
+[#45](https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 
 The `doctype` attribute is normally pinned to `article` — the only structural
 doctype this renderer models — and locked against the document. The one value a
@@ -303,9 +333,15 @@ returned HTML is byte-identical to the writer-less path.
   pipelines use `parse_deferred` + `Document::resolve_references`.
 - **Footnotes** accumulate in the [`Catalog`]; the renderer will emit the
   `<div id="footnotes">` section from `catalog().footnotes()` after the body.
-- **TOC** metadata is already resolved on `Document` (`toc_mode`, `toc_levels`,
-  `toc_title`, `toc_class`); rendering the `<div id="toc">` tree is a later
-  phase that walks section blocks to build the list.
+- **TOC** rendering is wired up for every placement, keyed off
+  `Document::toc_mode`/`toc_levels`/`toc_title`/`toc_class` and the `outline`
+  walk. The `auto`/`left`/`right` placements emit the `<div id="toc">` block in
+  the header (before the content in embedded output) and `preamble` emits it
+  below the preamble — both built by `renderer::render_toc`. The `macro`
+  placement (`toc::[]`) renders at the block itself via `Renderer::toc_macro`
+  (Asciidoctor's `convert_toc`), honoring the macro's per-TOC `id`/title/
+  `levels`/`role` overrides and emitting `<!-- toc disabled -->` when the
+  document does not actually defer to the macro.
 
 ## Testing and parity strategy
 
@@ -326,11 +362,14 @@ returned HTML is byte-identical to the writer-less path.
    and the attribute-driven skeleton (`lang`, `doctype`,
    `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** the delimited example/sidebar/open blocks, admonitions,
-   and quotes/verses are done; lists (un/ordered/description/callout) and images
-   are still to come.
+   quotes/verses, lists (un/ordered/description/callout), and the media blocks
+   (block images plus video/audio) are done; the advanced image modes
+   (`data-uri` #51, interactive/inline SVG #52, icons #50) are still to come.
 3. **Tables** (their own content model).
-4. **Document chrome:** footer "Last updated" (`docdatetime`), the full
-   `<body class>` (TOC classes), TOC, footnotes, the default stylesheet.
+4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;
+   the `<body class>` TOC classes, the TOC (every placement —
+   auto/left/right/preamble/macro), footnotes, and the default stylesheet are
+   done.
 5. **Parity hardening:** fixture-based diff tests against Asciidoctor output.
 
 ## Parser API history (resolved in 0.19)

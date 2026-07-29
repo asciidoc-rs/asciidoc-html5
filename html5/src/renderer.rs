@@ -27,14 +27,15 @@
 //! `render_*` method.
 
 use asciidoc_parser::{
+    attributes::Attrlist,
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
         ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
-        ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
-        SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
-        VerticalAlignment,
+        ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock, QuoteType, SectionBlock,
+        SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
+        TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
-    document::{DocinfoLocation, Header, InterpretedValue},
+    document::{DocinfoLocation, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
 };
 
@@ -58,6 +59,51 @@ pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
 /// headings, Noto Serif for body text, Droid Sans Mono for monospaced text.
 const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
 
+/// The `highlight.js` release Asciidoctor v2.0.26 links from the CDN
+/// (`Asciidoctor::HIGHLIGHT_JS_VERSION`).
+const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
+
+/// The active *client-side* syntax highlighter, resolved from the
+/// `source-highlighter` document attribute.
+///
+/// Only the two client-side highlighters are modelled. They perform no
+/// server-side tokenizing, so honoring them is purely a matter of the CSS
+/// classes on the source block's `<pre>`/`<code>` plus a CDN `<link>` in the
+/// `<head>` and a `<script>` before `</body>` — no new dependency, matching the
+/// library's "depend only on `asciidoc-parser`" constraint. The server-side
+/// highlighters (`coderay`, `pygments`, `rouge`), which emit tokenized `<span>`
+/// markup, are tracked separately in
+/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/223> and leave the
+/// source block in its default unhighlighted shape here.
+#[derive(Clone, Copy, PartialEq)]
+enum Highlighter {
+    /// `:source-highlighter: highlightjs` (also `highlight.js`).
+    HighlightJs,
+
+    /// `:source-highlighter: prettify`.
+    Prettify,
+}
+
+impl Highlighter {
+    /// Resolves the active client-side highlighter from the document's
+    /// `source-highlighter` attribute, or `None` when unset or set to a
+    /// highlighter this crate does not render client-side (a server-side one,
+    /// or an unknown name).
+    ///
+    /// Asciidoctor's safe-mode gating of a *document-set* `source-highlighter`
+    /// (locked to unset at `Server` and above, so an untrusted document cannot
+    /// enable a highlighter and steer its asset origin) is applied upstream in
+    /// [`Options::apply`](crate::Options), so by the time this reads the
+    /// resolved attribute a disallowed value has already been dropped.
+    fn from_document(document: &Document<'_>) -> Option<Self> {
+        match attribute_str(document, "source-highlighter").as_deref() {
+            Some("highlightjs" | "highlight.js") => Some(Self::HighlightJs),
+            Some("prettify") => Some(Self::Prettify),
+            _ => None,
+        }
+    }
+}
+
 /// Whether `block` is one Asciidoctor renders to nothing, so the renderer emits
 /// no output for it at all.
 ///
@@ -69,9 +115,16 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 ///   the parser resolves to the `comment` context;
 /// - a `[comment]`-styled paragraph, whose declared block style is `comment`
 ///   (its resolved context is still `paragraph`, so it is matched by style);
-/// - a paragraph the parser reduced to empty content by stripping an isolated
-///   `//` line comment — Asciidoctor emits no block for it, so the empty
-///   paragraph is dropped rather than rendered as an empty `<p></p>`.
+/// - a paragraph made up entirely of `//` line comments — the parser retains it
+///   with its comment lines stripped to empty content, so it is matched by
+///   [`is_line_comment_paragraph`] on the source and dropped, matching
+///   Asciidoctor, which emits no block for it.
+///
+/// The line-comment case keys on the *source* rather than on the rendered
+/// content being empty: a paragraph whose content merely *substituted* to
+/// nothing — an empty inline passthrough such as `pass:[]` or `$$$$` — is not a
+/// comment, so it is kept and rendered as an empty `<p></p>`, matching
+/// Asciidoctor.
 fn renders_nothing(block: &Block<'_>) -> bool {
     if block.resolved_context().as_ref() == "comment" || block.declared_style() == Some("comment") {
         return true;
@@ -84,14 +137,75 @@ fn renders_nothing(block: &Block<'_>) -> bool {
         return true;
     }
 
-    // An isolated `//` line comment survives parsing as a paragraph with no
-    // content; an empty paragraph is never valid Asciidoctor output either way.
+    // A paragraph that is nothing but `//` line comments survives parsing with
+    // empty content; Asciidoctor emits no block for it, so drop it. The
+    // empty-content guard keeps this from ever dropping a paragraph that
+    // actually renders something, while the source check keeps a paragraph whose
+    // content merely substituted to nothing (an empty passthrough) — which is
+    // not a comment — so it renders as `<p></p>`.
     matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
         && block
             .rendered_content()
             .unwrap_or_default()
             .trim()
             .is_empty()
+        && is_line_comment_paragraph(block.span().data())
+}
+
+/// Whether a `----` listing block is source-styled — so it renders through
+/// [`source`](Renderer::source) as `<pre class="highlight"><code …>` rather
+/// than a plain listing.
+///
+/// This mirrors Asciidoctor's listing/source dispatch (`parser.rb`, the
+/// `when :listing, :source` arm): a listing becomes a source block when it
+/// either declares the `source` style explicitly (`[source,ruby]`) or uses the
+/// comma shorthand (`[,ruby]`) — an empty block style with a language in the
+/// second positional attribute. Asciidoctor promotes a bare listing to
+/// `source` only when its first positional (the block style) is absent and its
+/// second positional (the language) is present, so `[ruby]` (style `ruby`) or a
+/// plain `----` stays a listing.
+fn is_source_listing(block: &Block<'_>) -> bool {
+    if block.declared_style() == Some("source") {
+        return true;
+    }
+
+    // The `[,ruby]` shorthand: no declared block style, but a language sits in
+    // the second positional attribute (Asciidoctor's `attributes[2]`).
+    block.declared_style().is_none()
+        && block
+            .attrlist()
+            .and_then(|attrlist| attrlist.nth_attribute(2))
+            .is_some()
+}
+
+/// Whether every non-blank line of a paragraph's `source` is an AsciiDoc line
+/// comment — a line beginning (at column 0) with `//` not immediately followed
+/// by another `/` (which would start a `////` comment-block delimiter),
+/// mirroring Asciidoctor's `LineCommentRx` (`^\/\/(?=[^\/]|$)`). A paragraph of
+/// only such lines carries no renderable content (the parser strips them), so
+/// the renderer drops it; a paragraph with any other line — including one whose
+/// content merely substitutes to nothing, like `pass:[]` — is kept. A source
+/// with no non-blank line is not treated as a comment paragraph.
+fn is_line_comment_paragraph(source: &str) -> bool {
+    let mut saw_line = false;
+    for line in source.lines() {
+        // A comment marker must sit at column 0; only trailing whitespace (a
+        // stray `\r` or spaces) is ignored.
+        let line = line.trim_end();
+        if line.is_empty() {
+            continue;
+        }
+
+        saw_line = true;
+        let is_comment = line
+            .strip_prefix("//")
+            .is_some_and(|rest| !rest.starts_with('/'));
+        if !is_comment {
+            return false;
+        }
+    }
+
+    saw_line
 }
 
 /// Reads a document attribute as an explicit string value, if it has one.
@@ -101,6 +215,93 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
     }
+}
+
+/// Asciidoctor's default `alt` for an image whose macro carries none: the
+/// target's basename (its final path segment, without extension) with each `_`
+/// and `-` turned into a space. Mirrors the `basename(target.tr('_-', ' '))`
+/// derivation the parser uses for inline images.
+fn default_alt(target: &str) -> String {
+    let spaced = target.replace(['_', '-'], " ");
+
+    let last_segment = spaced.rsplit(['/', '\\']).next().unwrap_or(&spaced);
+
+    // Drop the extension (the text after the final `.`), matching Rust's
+    // `Path::file_stem`: a leading-dot-only name keeps its text.
+    match last_segment.rfind('.') {
+        Some(dot) if dot > 0 => last_segment[..dot].to_string(),
+        _ => last_segment.to_string(),
+    }
+}
+
+/// The ` target="…"`/` rel="…"` fragment Asciidoctor's
+/// `append_link_constraint_attrs` adds to an image link: a `window` sets
+/// `target` (and, for `_blank` or an explicit `noopener` option, `rel`), while
+/// a `nofollow` option folds into `rel`.
+fn link_constraint_attrs(window: Option<&str>, nofollow: bool, noopener: bool) -> String {
+    let rel = if nofollow { Some("nofollow") } else { None };
+
+    match window {
+        Some(window) => {
+            let rel_noopener = if window == "_blank" || noopener {
+                match rel {
+                    Some(rel) => format!(" rel=\"{rel} noopener\""),
+                    None => " rel=\"noopener\"".to_string(),
+                }
+            } else {
+                String::new()
+            };
+
+            format!(" target=\"{}\"{rel_noopener}", escape_attribute(window))
+        }
+
+        None => match rel {
+            Some(rel) => format!(" rel=\"{rel}\""),
+            None => String::new(),
+        },
+    }
+}
+
+/// The CDN base URL Asciidoctor builds its asset links from —
+/// `{scheme}//cdnjs.cloudflare.com/ajax/libs`. The scheme comes from
+/// `asset-uri-scheme` (Asciidoctor's `attr 'asset-uri-scheme', 'https'`):
+/// absent or explicitly unset falls back to `https`, while a bare
+/// `:asset-uri-scheme:` (or an explicit empty value) yields a protocol-relative
+/// `//…` URL.
+fn cdn_base_url(document: &Document<'_>) -> String {
+    let scheme = match document.attribute_value("asset-uri-scheme") {
+        InterpretedValue::Value(scheme) if !scheme.is_empty() => format!("{scheme}:"),
+        InterpretedValue::Unset => "https:".to_string(),
+
+        // A bare `:asset-uri-scheme:` (`Set`) or an explicit empty value: the
+        // scheme is empty, so the URL is protocol-relative.
+        _ => String::new(),
+    };
+
+    format!("{scheme}//cdnjs.cloudflare.com/ajax/libs")
+}
+
+/// The base directory `highlightjs` assets load from: the `highlightjsdir`
+/// attribute, or `{cdn}/highlight.js/{version}` by default.
+fn highlightjs_dir(document: &Document<'_>) -> String {
+    attribute_str(document, "highlightjsdir").map_or_else(
+        || {
+            format!(
+                "{}/highlight.js/{HIGHLIGHT_JS_VERSION}",
+                cdn_base_url(document)
+            )
+        },
+        |dir| escape_attribute(&dir),
+    )
+}
+
+/// The base directory `prettify` assets load from: the `prettifydir`
+/// attribute, or `{cdn}/prettify/r298` by default.
+fn prettify_dir(document: &Document<'_>) -> String {
+    attribute_str(document, "prettifydir").map_or_else(
+        || format!("{}/prettify/r298", cdn_base_url(document)),
+        |dir| escape_attribute(&dir),
+    )
 }
 
 /// The byte length of the leading run of supplemental inline anchors
@@ -312,27 +513,150 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
-/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
-/// for an olist: an explicit numbering keyword from the block's declared style
-/// (`[loweralpha]`, `[upperroman]`, …) wins, otherwise the style implied by the
-/// first item's marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to
-/// `arabic`, which a bare `.` marker also yields.
-fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
-    const ORDERED_LIST_STYLES: [&str; 5] = [
-        "arabic",
-        "loweralpha",
-        "lowerroman",
-        "upperalpha",
-        "upperroman",
-    ];
+/// Builds the URI reference a media block's `target` resolves to, mirroring
+/// Asciidoctor's `AbstractNode#media_uri` (whose asset directory key is
+/// `imagesdir`).
+///
+/// A URI target is preserved verbatim, with only its spaces percent-encoded
+/// (Asciidoctor's `encode_spaces_in_uri`). Otherwise the target is resolved as
+/// a web path relative to `imagesdir` — a direct port of
+/// `PathResolver#web_path`: the target is joined onto a non-empty `imagesdir`
+/// (unless it is web-absolute, `/…`), its `.`/`..` segments are collapsed, and
+/// any spaces are percent-encoded. Unlike [`normalize_web_path`], a bare
+/// relative result is *not* prefixed with `./`, matching `web_path`.
+///
+/// As with this crate's other web-path helpers, backslashes are posixified
+/// unconditionally (Asciidoctor's `posixify` only does so on Windows), keeping
+/// the result deterministic across platforms — a divergence invisible to any
+/// realistic media target.
+fn media_uri(target: &str, imagesdir: &str) -> String {
+    // `media_uri` preserves a URI target (Asciidoctor's default
+    // `preserve_uri_target`), encoding only its spaces.
+    if looks_like_uri(target) {
+        return target.replace(' ', "%20");
+    }
 
-    if let Some(style) = block.declared_style() {
-        if ORDERED_LIST_STYLES.contains(&style) {
-            return style;
+    // Posixify both (Asciidoctor works in forward-slash web paths), then join
+    // the target onto `imagesdir` unless the target is itself web-absolute
+    // (`/…`), which ignores the asset directory.
+    let target = target.replace('\\', "/");
+    let dir = imagesdir.replace('\\', "/");
+    let joined = if dir.is_empty() || target.starts_with('/') {
+        target
+    } else {
+        format!("{}/{}", dir.trim_end_matches('/'), target)
+    };
+
+    // Partition off the root the way `web_path` does: `/…` (web root) and `./…`
+    // keep their prefix, and every other relative path has *no* root prefix.
+    let (root, rest) = if let Some(rest) = joined.strip_prefix('/') {
+        ("/", rest)
+    } else if let Some(rest) = joined.strip_prefix("./") {
+        ("./", rest)
+    } else {
+        ("", joined.as_str())
+    };
+
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in rest.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => match segments.last() {
+                // Pop the previous real segment.
+                Some(&last) if last != ".." => {
+                    segments.pop();
+                }
+
+                // A leading `..` at the web root has nowhere to go; drop it.
+                // Below the root, it is kept as a relative step.
+                _ if root == "/" => {}
+                _ => segments.push(".."),
+            },
+            other => segments.push(other),
         }
     }
 
-    list.marker_style().unwrap_or("arabic")
+    // Spaces in the resolved path are percent-encoded, matching `web_path`.
+    format!("{root}{}", segments.join("/")).replace(' ', "%20")
+}
+
+/// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
+/// with each author-supplied role escaped — the inner text of `class="…"`.
+fn class_list(base: &str, roles: &[&str]) -> String {
+    let mut classes = base.to_string();
+    for role in roles {
+        classes.push(' ');
+        classes.push_str(&escape_attribute(role));
+    }
+    classes
+}
+
+/// The boolean-attribute fragment ` <name>` when the block carries `<option>`,
+/// else empty — Asciidoctor's `append_boolean_attribute` for the default
+/// (non-XML) HTML5 backend, gated on a block option.
+fn boolean_option(attrs: &Attrlist<'_>, option: &str, name: &str) -> String {
+    if attrs.has_option(option) {
+        format!(" {name}")
+    } else {
+        String::new()
+    }
+}
+
+/// The ` controls` boolean attribute a `<video>`/`<audio>` carries unless the
+/// `nocontrols` option suppresses it.
+fn controls_option(attrs: &Attrlist<'_>) -> String {
+    if attrs.has_option("nocontrols") {
+        String::new()
+    } else {
+        " controls".to_string()
+    }
+}
+
+/// A hosted-embed query fragment (`param`, an already-formed `&amp;key=value`)
+/// when the block carries `<option>`, else empty.
+fn flag_param(attrs: &Attrlist<'_>, option: &str, param: &str) -> String {
+    if attrs.has_option(option) {
+        param.to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// Joins hosted-embed query `params` into a query string, introducing the
+/// first with `?` and the rest with `&amp;` (Asciidoctor's delimiter stack).
+fn join_query(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&amp;"))
+    }
+}
+
+/// The ` allowfullscreen` boolean attribute a hosted embed carries unless the
+/// `nofullscreen` option suppresses it.
+fn allowfullscreen_attr(attrs: &Attrlist<'_>) -> String {
+    if attrs.has_option("nofullscreen") {
+        String::new()
+    } else {
+        " allowfullscreen".to_string()
+    }
+}
+
+/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
+/// for an olist: an explicit declared style from the block (`[loweralpha]`,
+/// `[upperroman]`, …) wins, otherwise the style implied by the first item's
+/// marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to `arabic`, which a
+/// bare `.` marker also yields.
+///
+/// Like Asciidoctor, a declared style is passed through verbatim even when it
+/// is not one of the numbering keywords (`[foo]` ⇒ `class="olist foo"`); the
+/// `<ol>` then carries no HTML `type`, since only the numbering keywords map to
+/// one.
+fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
+    block
+        .declared_style()
+        .or_else(|| list.marker_style())
+        .unwrap_or("arabic")
 }
 
 /// One description-list entry: the terms sharing a single description (their
@@ -625,6 +949,32 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
     }
 }
 
+/// Renders the table-of-contents block Asciidoctor's `html5` backend emits —
+/// `<div id="toc" class="…"><div id="toctitle">…</div>{outline}</div>` — for a
+/// document whose `toc` attribute enables one, or an empty string when the
+/// document has no sections (the outline would be empty, and Asciidoctor emits
+/// no TOC). The nested section list comes from
+/// [`render_outline`](crate::outline::render_outline); the `class` is the
+/// resolved `toc-class` and the title the resolved `toc-title`.
+///
+/// The caller decides *where* to insert this block from the document's
+/// [`TocMode`]; this function only builds it.
+fn render_toc(document: &Document<'_>) -> String {
+    let outline = crate::outline::render_outline(document, &crate::OutlineOptions::default());
+    if outline.is_empty() {
+        return String::new();
+    }
+
+    // The `toc-class` is escaped defensively (a no-op for the `toc`/`toc2`
+    // defaults); the `toc-title` is emitted verbatim, matching Asciidoctor's
+    // `#{doc.attr 'toc-title'}`.
+    format!(
+        "<div id=\"toc\" class=\"{}\">\n<div id=\"toctitle\">{}</div>\n{outline}\n</div>",
+        escape_attribute(document.toc_class()),
+        document.toc_title(),
+    )
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -638,19 +988,49 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
 /// `None` for callers that cannot supply it, such as the string-only
 /// [`convert`](crate::convert) entry point. It is ignored in embedded output,
 /// which emits no stylesheet.
-pub(crate) fn render_document(
-    document: &Document<'_>,
-    custom_stylesheet: Option<&str>,
+pub(crate) fn render_document<'a>(
+    document: &'a Document<'a>,
+    custom_stylesheet: Option<&'a str>,
     standalone: bool,
 ) -> String {
+    // Build the header/preamble TOC block once, up front — it is emitted at the
+    // single site the placement selects. Only the placements that render a TOC
+    // in the document flow relative to fixed structure
+    // (`auto`/`left`/`right`/`top`/`bottom` near the top, `preamble` below the
+    // preamble) produce one here; the `macro` placement renders at its `toc::[]`
+    // block instead (see [`toc_macro`](Renderer::toc_macro)), and `disabled`
+    // produces none.
+    let toc_mode = document.toc_mode();
+    let toc_html = match toc_mode {
+        TocMode::Auto
+        | TocMode::Left
+        | TocMode::Right
+        | TocMode::Top
+        | TocMode::Bottom
+        | TocMode::Preamble => render_toc(document),
+
+        TocMode::Disabled | TocMode::Macro => String::new(),
+    };
+
     let mut renderer = Renderer {
         out: String::new(),
+        document: Some(document),
         custom_stylesheet,
         standalone,
+        toc_mode,
+        toc_html,
+        icons_set: document.is_attribute_set("icons"),
         icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
+        iconsdir: attribute_str(document, "iconsdir")
+            .unwrap_or_else(|| "./images/icons".to_string()),
+        icontype: attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string()),
+        imagesdir: attribute_str(document, "imagesdir").unwrap_or_default(),
+        asset_uri_scheme: attribute_str(document, "asset-uri-scheme")
+            .unwrap_or_else(|| "https".to_string()),
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
+        source_highlighter: Highlighter::from_document(document),
         section_anchors: if !document.is_attribute_set("sectanchors") {
             SectionAnchors::None
         } else if attribute_str(document, "sectanchors").as_deref() == Some("after") {
@@ -659,6 +1039,7 @@ pub(crate) fn render_document(
             SectionAnchors::Before
         },
         sectlinks: document.is_attribute_set("sectlinks"),
+        stem_type: resolve_stem_type(document),
     };
     renderer.document(document);
     renderer.out
@@ -678,21 +1059,150 @@ enum SectionAnchors {
     After,
 }
 
+/// The STEM notation a stem block renders in, selecting its block math
+/// delimiter pair (Asciidoctor's `BLOCK_MATH_DELIMITERS`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StemType {
+    /// AsciiMath, delimited by `\$ … \$`.
+    AsciiMath,
+
+    /// LaTeX math, delimited by `\[ … \]`.
+    LatexMath,
+}
+
+impl StemType {
+    /// Maps a `stem`-attribute or block-style value to a STEM type, mirroring
+    /// Asciidoctor's `STEM_TYPE_ALIASES` (`latexmath`/`latex`/`tex` select
+    /// LaTeX; every other value, including an absent one, selects AsciiMath).
+    fn from_value(value: &str) -> Self {
+        match value {
+            "latexmath" | "latex" | "tex" => Self::LatexMath,
+            _ => Self::AsciiMath,
+        }
+    }
+
+    /// The block math delimiter pair (`open`, `close`) this notation wraps its
+    /// equation in.
+    fn block_delimiters(self) -> (&'static str, &'static str) {
+        match self {
+            Self::AsciiMath => (r"\$", r"\$"),
+            Self::LatexMath => (r"\[", r"\]"),
+        }
+    }
+}
+
+/// Resolves the document's default STEM type from its `stem` attribute, the
+/// notation a bare `[stem]` block renders in.
+fn resolve_stem_type(document: &Document<'_>) -> StemType {
+    StemType::from_value(&attribute_str(document, "stem").unwrap_or_default())
+}
+
+/// Rewrites the internal breaks of a multi-line AsciiMath equation, closing and
+/// reopening the delimiter pair around each `<br>` so each expression stands
+/// alone. Mirrors Asciidoctor's `StemBreakRx` pass (`/
+/// *\\\n(?:\\?\n)*|\n\n+/`): a blank-line run or trailing-backslash line
+/// continuation becomes `close`, one `<br>` per extra line break, then `open`
+/// again.
+fn rewrite_asciimath_breaks(equation: &str, open: &str, close: &str) -> String {
+    let bytes = equation.as_bytes();
+    let mut out = String::with_capacity(equation.len());
+    let mut i = 0;
+    let mut copied = 0;
+
+    while i < bytes.len() {
+        if let Some(end) = match_stem_break(bytes, i) {
+            out.push_str(&equation[copied..i]);
+
+            let breaks = bytes[i..end].iter().filter(|&&b| b == b'\n').count();
+            out.push_str(close);
+            for _ in 1..breaks {
+                out.push_str("\n<br>");
+            }
+            out.push('\n');
+            out.push_str(open);
+
+            i = end;
+            copied = end;
+        } else {
+            i += 1;
+        }
+    }
+
+    out.push_str(&equation[copied..]);
+    out
+}
+
+/// Matches one `StemBreakRx` occurrence starting at `start`, returning the byte
+/// index just past it, or `None` when neither alternative matches there. The
+/// first alternative is a line continuation (` *\\\n(?:\\?\n)*`); the second is
+/// a run of two or more newlines (`\n\n+`).
+fn match_stem_break(bytes: &[u8], start: usize) -> Option<usize> {
+    // Alternative 1: optional spaces, a backslash + newline, then any run of
+    // (optional backslash) + newline.
+    let mut j = start;
+    while bytes.get(j) == Some(&b' ') {
+        j += 1;
+    }
+
+    if bytes.get(j) == Some(&b'\\') && bytes.get(j + 1) == Some(&b'\n') {
+        j += 2;
+        loop {
+            let mut k = j;
+            if bytes.get(k) == Some(&b'\\') {
+                k += 1;
+            }
+
+            if bytes.get(k) == Some(&b'\n') {
+                j = k + 1;
+            } else {
+                break;
+            }
+        }
+
+        return Some(j);
+    }
+
+    // Alternative 2: two or more consecutive newlines.
+    if bytes.get(start) == Some(&b'\n') && bytes.get(start + 1) == Some(&b'\n') {
+        let mut j = start + 2;
+        while bytes.get(j) == Some(&b'\n') {
+            j += 1;
+        }
+
+        return Some(j);
+    }
+
+    None
+}
+
 /// The document-level render settings a nested AsciiDoc table cell inherits
 /// from its parent document, carried into the cell's sub-renderer.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct CellRenderConfig {
+    icons_set: bool,
     icons_font: bool,
+    iconsdir: String,
+    icontype: String,
+    imagesdir: String,
+    asset_uri_scheme: String,
     doc_tabsize: i64,
     source_indent: Option<i64>,
     prewrap: bool,
+    source_highlighter: Option<Highlighter>,
     section_anchors: SectionAnchors,
     sectlinks: bool,
+    stem_type: StemType,
 }
 
 /// Accumulates HTML as the document tree is walked.
 struct Renderer<'a> {
     out: String,
+
+    /// The document being rendered, or `None` for a nested table-cell
+    /// sub-renderer (which is handed a block slice rather than a `Document`).
+    /// The `toc::[]` block macro reads it to build its outline and resolve the
+    /// TOC defaults; every other construct is self-contained in its block.
+    document: Option<&'a Document<'a>>,
 
     /// The CSS to embed for a custom, embedded stylesheet, if the caller
     /// supplied any.
@@ -702,9 +1212,43 @@ struct Renderer<'a> {
     /// body-only output (`false`).
     standalone: bool,
 
+    /// Where the document's table of contents is placed, or
+    /// [`TocMode::Disabled`] when none is generated. Selects which placement
+    /// site emits [`toc_html`](Self::toc_html).
+    toc_mode: TocMode,
+
+    /// The pre-rendered `<div id="toc">…</div>` block, or empty when the
+    /// document generates no TOC (disabled or `macro` placement) or has no
+    /// sections. Emitted at the single site selected by
+    /// [`toc_mode`](Self::toc_mode).
+    toc_html: String,
+
+    /// Whether the document sets `icons` to any value (Asciidoctor's `attr?
+    /// 'icons'`). It selects the icon-based rendering of callout lists (a
+    /// two-column `<table>` rather than the default `<ol>`).
+    icons_set: bool,
+
     /// Whether the document sets `:icons: font`, which selects Font Awesome
     /// checkbox glyphs for interactive-less checklists (matching Asciidoctor).
     icons_font: bool,
+
+    /// The document `iconsdir` attribute (default `./images/icons`), used to
+    /// build the callout-number image URIs of an icon-based callout list.
+    iconsdir: String,
+
+    /// The document `icontype` attribute (default `png`), the file extension of
+    /// the callout-number images of an icon-based callout list.
+    icontype: String,
+
+    /// The document `imagesdir` attribute (empty when unset), prepended to a
+    /// media block's target to build its `src`/`poster` URI (Asciidoctor's
+    /// `media_uri`, whose asset directory key is `imagesdir`).
+    imagesdir: String,
+
+    /// The document `asset-uri-scheme` attribute (default `https`), the URI
+    /// scheme prefixed to a hosted video embed (`youtube`/`vimeo`). An empty
+    /// value yields a scheme-relative `//…` URL, matching Asciidoctor.
+    asset_uri_scheme: String,
 
     /// The document `tabsize` attribute as an integer (Asciidoctor's
     /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
@@ -721,6 +1265,12 @@ struct Renderer<'a> {
     /// the `nowrap` class.
     prewrap: bool,
 
+    /// The active client-side syntax highlighter (`highlightjs`/`prettify`),
+    /// resolved once from the document's `source-highlighter` attribute. It
+    /// selects the CSS classes on each source block's `<pre>`/`<code>` and
+    /// drives the CDN `<link>`/`<script>` injected into the document shell.
+    source_highlighter: Option<Highlighter>,
+
     /// How the `sectanchors` document attribute decorates non-discrete section
     /// headings with a self-anchor.
     section_anchors: SectionAnchors,
@@ -728,6 +1278,10 @@ struct Renderer<'a> {
     /// Whether the `sectlinks` document attribute is set, wrapping each
     /// non-discrete section heading's title text in `<a class="link">`.
     sectlinks: bool,
+
+    /// The document's default STEM notation (its `stem` attribute), the
+    /// delimiter pair a bare `[stem]` block renders in.
+    stem_type: StemType,
 }
 
 impl Renderer<'_> {
@@ -788,6 +1342,11 @@ impl Renderer<'_> {
         // does the same unless the document opts out.
         self.stylesheet(document);
 
+        // The active syntax highlighter's `<head>` docinfo (its stylesheet
+        // `<link>`) sits after the stylesheet and before the head docinfo,
+        // matching Asciidoctor's placement.
+        self.highlighter_head(document);
+
         // Head docinfo is appended to the bottom of the `<head>`, below the
         // default stylesheet, matching Asciidoctor.
         self.docinfo(document, DocinfoLocation::Head);
@@ -806,6 +1365,28 @@ impl Renderer<'_> {
             .unwrap_or_default();
 
         let mut classes = doctype;
+
+        // An automatically placed TOC (`auto`/`left`/`right`/`top`/`bottom`)
+        // whose `toc-class` is set adds `<toc-class> toc-<toc-position>` to the
+        // `<body>` class — the positional placements set `toc-class` to `toc2`,
+        // driving the fixed-column styling. This mirrors Asciidoctor's `<body>`
+        // classes; a plain `:toc:` (auto, no `toc-class`) leaves the class list
+        // untouched.
+        if !self.toc_html.is_empty()
+            && matches!(
+                self.toc_mode,
+                TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+            )
+            && document.has_attribute("toc-class")
+        {
+            let position =
+                attribute_str(document, "toc-position").unwrap_or_else(|| "header".into());
+            classes.push(' ');
+            classes.push_str(document.toc_class());
+            classes.push_str(" toc-");
+            classes.push_str(&position);
+        }
+
         for role in header.roles() {
             classes.push(' ');
             classes.push_str(role);
@@ -844,6 +1425,11 @@ impl Renderer<'_> {
             self.line("</div>");
         }
 
+        // The active syntax highlighter's `<footer>` docinfo (the scripts that
+        // load and run the highlighter) is emitted after the footer `<div>`,
+        // matching Asciidoctor — where JavaScript loads at the end of the body.
+        self.highlighter_footer(document);
+
         // Footer docinfo is inserted immediately after the footer `<div>`, again
         // whether or not the footer itself is suppressed by `nofooter`.
         self.docinfo(document, DocinfoLocation::Footer);
@@ -872,6 +1458,18 @@ impl Renderer<'_> {
             if let Some(title) = document.doctitle() {
                 self.line(&format!("<h1>{title}</h1>"));
             }
+        }
+
+        // An `auto`/`left`/`right`/`top`/`bottom` TOC leads the embedded body,
+        // ahead of the content, matching Asciidoctor's embeddable output. A
+        // `preamble` TOC is instead emitted within the preamble itself (see
+        // [`preamble`]), so it is excluded here.
+        if matches!(
+            self.toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+        ) && !self.toc_html.is_empty()
+        {
+            self.line(&self.toc_html.clone());
         }
 
         self.blocks(document.child_blocks());
@@ -938,7 +1536,8 @@ impl Renderer<'_> {
     }
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
-    /// the author and revision details block.
+    /// the author and revision details block and an automatically placed table
+    /// of contents.
     fn header(&mut self, document: &Document<'_>) {
         let header: &Header<'_> = document.header();
 
@@ -951,7 +1550,14 @@ impl Renderer<'_> {
         let author_line = header.author_line();
         let revision_line = header.revision_line();
 
-        if title.is_none() && author_line.is_none() && revision_line.is_none() {
+        // An `auto`/`left`/`right`/`top`/`bottom` TOC is emitted inside the
+        // header, after the details, matching Asciidoctor's `html5` backend.
+        let header_toc = matches!(
+            self.toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+        ) && !self.toc_html.is_empty();
+
+        if title.is_none() && author_line.is_none() && revision_line.is_none() && !header_toc {
             return;
         }
 
@@ -1017,6 +1623,10 @@ impl Renderer<'_> {
             self.line("</div>");
         }
 
+        if header_toc {
+            self.line(&self.toc_html.clone());
+        }
+
         self.line("</div>");
     }
 
@@ -1038,6 +1648,102 @@ impl Renderer<'_> {
         let content = document.docinfo(location);
         if !content.is_empty() {
             self.line(content);
+        }
+    }
+
+    /// Emits the active client-side highlighter's `<head>` docinfo — the
+    /// stylesheet `<link>` — matching Asciidoctor's `docinfo :head`.
+    ///
+    /// `highlightjs` links its theme stylesheet
+    /// (`{highlightjsdir}/styles/{highlightjs-theme}.min.css`, default theme
+    /// `github`); `prettify` links its theme stylesheet
+    /// (`{prettifydir}/{prettify-theme}.min.css`, default theme `prettify`),
+    /// or, when `prettify-theme` is itself an `http(s)` URL, that URL
+    /// directly.
+    fn highlighter_head(&mut self, document: &Document<'_>) {
+        let href = match self.source_highlighter {
+            None => return,
+
+            Some(Highlighter::HighlightJs) => {
+                let theme = attribute_str(document, "highlightjs-theme")
+                    .unwrap_or_else(|| "github".to_string());
+
+                format!(
+                    "{}/styles/{}.min.css",
+                    highlightjs_dir(document),
+                    escape_attribute(&theme)
+                )
+            }
+
+            Some(Highlighter::Prettify) => {
+                let theme = attribute_str(document, "prettify-theme")
+                    .unwrap_or_else(|| "prettify".to_string());
+
+                if theme.starts_with("http://") || theme.starts_with("https://") {
+                    escape_attribute(&theme)
+                } else {
+                    format!(
+                        "{}/{}.min.css",
+                        prettify_dir(document),
+                        escape_attribute(&theme)
+                    )
+                }
+            }
+        };
+
+        self.line(&format!("<link rel=\"stylesheet\" href=\"{href}\">"));
+    }
+
+    /// Emits the active client-side highlighter's `<footer>` docinfo — the
+    /// scripts that load and run the highlighter — matching Asciidoctor's
+    /// `docinfo :footer`.
+    ///
+    /// `highlightjs` loads the core script, then one script per
+    /// `highlightjs-languages` entry, then an inline initializer;
+    /// `prettify` loads its single `run_prettify.min.js`.
+    fn highlighter_footer(&mut self, document: &Document<'_>) {
+        match self.source_highlighter {
+            None => {}
+
+            Some(Highlighter::HighlightJs) => {
+                let base = highlightjs_dir(document);
+                let mut footer = format!("<script src=\"{base}/highlight.min.js\"></script>\n");
+
+                // Each comma-separated `highlightjs-languages` entry loads an
+                // extra language pack (Ruby `lstrip`s the leading whitespace).
+                if let Some(languages) = attribute_str(document, "highlightjs-languages") {
+                    for language in languages.split(',') {
+                        let language = language.trim_start();
+                        if language.is_empty() {
+                            continue;
+                        }
+
+                        footer.push_str(&format!(
+                            "<script src=\"{base}/languages/{}.min.js\"></script>\n",
+                            escape_attribute(language)
+                        ));
+                    }
+                }
+
+                footer.push_str(
+                    "<script>\n\
+                     if (!hljs.initHighlighting.called) {\n  \
+                     hljs.initHighlighting.called = true\n  \
+                     ;[].slice.call(document.querySelectorAll('pre.highlight > code[data-lang]'))\
+                     .forEach(function (el) { hljs.highlightBlock(el) })\n\
+                     }\n\
+                     </script>",
+                );
+
+                self.line(&footer);
+            }
+
+            Some(Highlighter::Prettify) => {
+                self.line(&format!(
+                    "<script src=\"{}/run_prettify.min.js\"></script>",
+                    prettify_dir(document)
+                ));
+            }
         }
     }
 
@@ -1192,13 +1898,15 @@ impl Renderer<'_> {
             Block::Preamble(_) => self.preamble(block),
             Block::Break(brk) => self.break_block(brk),
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
-                // A `[source]`-styled delimited listing renders like a source
-                // block (the `<pre class="highlight"><code …>` shape), matching
-                // Asciidoctor; a plain `----` listing is a verbatim block.
-                "listing" if block.declared_style() == Some("source") => self.source(block),
+                // A source-styled delimited listing renders like a source block
+                // (the `<pre class="highlight"><code …>` shape), matching
+                // Asciidoctor: `[source,ruby]` or the `[,ruby]` comma shorthand.
+                // A plain `----` listing is a verbatim block.
+                "listing" if is_source_listing(block) => self.source(block),
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
+                "stem" => self.stem(block),
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -1212,12 +1920,13 @@ impl Renderer<'_> {
                 ListType::Unordered => self.ulist(block, list),
                 ListType::Ordered => self.olist(block, list),
                 ListType::Description => self.dlist(block, list),
-
-                // Callout lists are not rendered yet; see ARCHITECTURE.md for
-                // the roadmap.
-                ListType::Callout => self.unsupported(&block.resolved_context()),
+                ListType::Callout => self.colist(block, list),
             },
             Block::Table(table) => self.table(block, table),
+            Block::Toc(toc) => self.toc_macro(block, toc),
+            Block::Media(media) if media.type_() == MediaType::Image => self.image(block, media),
+            Block::Media(media) if media.type_() == MediaType::Video => self.video(block, media),
+            Block::Media(media) if media.type_() == MediaType::Audio => self.audio(block, media),
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -1265,6 +1974,13 @@ impl Renderer<'_> {
     /// declared. This matches Asciidoctor's default output even when no
     /// syntax highlighter is active.
     ///
+    /// When a client-side highlighter is active
+    /// ([`source_highlighter`](Self::source_highlighter)), the `<pre>`/`<code>`
+    /// classes take the highlighter-specific shape instead — `highlightjs
+    /// highlight` / `prettyprint highlight` on the `<pre>`, and `hljs` (plus
+    /// the `linenums`/`start` line-number classes for prettify) — matching
+    /// Asciidoctor's `HighlightJsAdapter`/`PrettifyAdapter`.
+    ///
     /// A source block resolves to the `listing` context, so its title is
     /// captioned the same way a listing block's is (see
     /// [`verbatim`](Self::verbatim)).
@@ -1275,15 +1991,6 @@ impl Renderer<'_> {
 
         let content = self.verbatim_content(block, true);
 
-        // A `nowrap` block (or a document with `prewrap` disabled) adds the
-        // class after `highlight`, matching Asciidoctor's `pre class="highlight
-        // nowrap"`.
-        let highlight = if self.is_nowrap(block) {
-            "highlight nowrap"
-        } else {
-            "highlight"
-        };
-
         // The language is the second positional attribute of `[source, lang]`
         // (the first is the `source` style itself), or an explicit `language=`.
         let language = block
@@ -1291,21 +1998,84 @@ impl Renderer<'_> {
             .and_then(|attrlist| attrlist.named_or_positional_attribute("language", 2))
             .map(|attr| attr.value());
 
-        match language {
-            Some(language) => {
-                let language = escape_attribute(language);
-                self.line(&format!(
-                    "<pre class=\"{highlight}\"><code class=\"language-{language}\" \
-                     data-lang=\"{language}\">{content}</code></pre>"
-                ));
-            }
-            None => self.line(&format!(
-                "<pre class=\"{highlight}\"><code>{content}</code></pre>"
-            )),
-        }
+        let (pre_class, code_open) = self.source_pre_code(block, language);
+        self.line(&format!(
+            "<pre class=\"{pre_class}\">{code_open}{content}</code></pre>"
+        ));
 
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// Builds the `<pre>` class list and the opening `<code …>` tag for a
+    /// source block, keyed off the active client-side highlighter.
+    ///
+    /// With no highlighter the default shape is used (`highlight` plus an
+    /// optional `nowrap`, and `class="language-…" data-lang="…"` on the
+    /// `<code>` when a language is declared). `highlightjs` and `prettify`
+    /// prepend their `@pre_class` and reshape the `<code>` attributes to match
+    /// their Asciidoctor adapters.
+    fn source_pre_code(&self, block: &Block<'_>, language: Option<&str>) -> (String, String) {
+        // A `nowrap` block (or a document with `prewrap` disabled) adds the
+        // class after `highlight`, matching Asciidoctor's `pre class="highlight
+        // nowrap"`.
+        let nowrap = if self.is_nowrap(block) { " nowrap" } else { "" };
+        let language = language.map(escape_attribute);
+
+        match self.source_highlighter {
+            None => {
+                let code_open = match &language {
+                    Some(language) => {
+                        format!("<code class=\"language-{language}\" data-lang=\"{language}\">")
+                    }
+                    None => "<code>".to_string(),
+                };
+
+                (format!("highlight{nowrap}"), code_open)
+            }
+
+            Some(Highlighter::HighlightJs) => {
+                // `code['class'] = "language-#{lang || 'none'} hljs"`, and
+                // `data-lang` is only added when a language is declared.
+                let code_open = match &language {
+                    Some(language) => format!(
+                        "<code class=\"language-{language} hljs\" data-lang=\"{language}\">"
+                    ),
+                    None => "<code class=\"language-none hljs\">".to_string(),
+                };
+
+                (format!("highlightjs highlight{nowrap}"), code_open)
+            }
+
+            Some(Highlighter::Prettify) => {
+                // Prettify leaves the `<code>` in its default shape (a bare
+                // `data-lang`, no class) and, for a `linenums` block, appends
+                // ` linenums` (or ` linenums:<start>`) after the `highlight`
+                // classes.
+                let linenums = if block.has_option("linenums") {
+                    match block
+                        .attrlist()
+                        .and_then(|attrlist| attrlist.named_attribute("start"))
+                        .map(|attr| attr.value())
+                    {
+                        Some(start) => format!(" linenums:{}", escape_attribute(start)),
+                        None => " linenums".to_string(),
+                    }
+                } else {
+                    String::new()
+                };
+
+                let code_open = match &language {
+                    Some(language) => format!("<code data-lang=\"{language}\">"),
+                    None => "<code>".to_string(),
+                };
+
+                (
+                    format!("prettyprint highlight{nowrap}{linenums}"),
+                    code_open,
+                )
+            }
+        }
     }
 
     /// A passthrough block (`++++`): its content is emitted raw and unescaped,
@@ -1317,6 +2087,50 @@ impl Renderer<'_> {
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
         strip_surrounding_blank_lines(&mut lines);
         self.line(&lines.join("\n"));
+    }
+
+    /// A STEM block (`[stem]`, `[asciimath]`, or `[latexmath]` over a `++++`
+    /// delimited block): `<div class="stemblock">` wrapping a `<div
+    /// class="content">` whose equation is surrounded by the math delimiter
+    /// pair its notation selects. Mirrors Asciidoctor's `convert_stem`,
+    /// honoring the block title, `id`, and roles on the wrapper.
+    ///
+    /// A bare `[stem]` follows the document `stem` attribute default (see
+    /// [`stem_type`](Self::stem_type)); an explicit `[asciimath]` /
+    /// `[latexmath]` style overrides it. The equation's special characters
+    /// have already been escaped by the parser; the delimiters are added
+    /// here unless the author wrote them, and a multi-line AsciiMath
+    /// equation has its internal breaks rewritten to `<br>`-separated
+    /// expressions.
+    fn stem<'src>(&mut self, block: &'src Block<'src>) {
+        let stem_type = match block.declared_style() {
+            Some("asciimath") => StemType::AsciiMath,
+            Some("latexmath") => StemType::LatexMath,
+            _ => self.stem_type,
+        };
+
+        let (open, close) = stem_type.block_delimiters();
+
+        self.open_block_wrapper(block, "stemblock");
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        let mut equation = block.rendered_content().unwrap_or_default().to_string();
+
+        if stem_type == StemType::AsciiMath && equation.contains('\n') {
+            equation = rewrite_asciimath_breaks(&equation, open, close);
+        }
+
+        // Asciidoctor leaves an equation the author already delimited untouched;
+        // otherwise it wraps it in the notation's delimiter pair (an empty
+        // equation still becomes the bare `open`/`close` pair).
+        if !(equation.starts_with(open) && equation.ends_with(close)) {
+            equation = format!("{open}{equation}{close}");
+        }
+
+        self.line(&equation);
+        self.line("</div>");
+        self.line("</div>");
     }
 
     /// The reindented, blank-line-trimmed inner text of a verbatim block's
@@ -1635,6 +2449,104 @@ impl Renderer<'_> {
 
         self.line("</ol>");
         self.line("</div>");
+    }
+
+    /// A callout list: `<div class="colist arabic">…</div>`, matching
+    /// Asciidoctor's `convert_colist`. Each item annotates a numbered callout
+    /// (`<1>`, `<.>`, …) in a preceding verbatim block; the callout numbers
+    /// themselves are substituted into that block's content by the parser.
+    ///
+    /// Without icons the items render as a plain `<ol>` of `<li><p>…</p></li>`
+    /// (the same item shape as [`list_item`](Self::list_item)). When the
+    /// document sets `icons` the list becomes a two-column `<table>` whose
+    /// first cell holds the callout number – a Font Awesome `<i
+    /// class="conum">`/`<b>` pair under `:icons: font`, or an `<img>` of
+    /// the numbered callout icon otherwise – and whose second cell holds
+    /// the item's text and any attached blocks.
+    fn colist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
+        // Asciidoctor's classes are `['colist', node.style, node.role]`; a
+        // callout list's style is always `arabic`.
+        self.line(&format!(
+            "<div{}{}>",
+            id_attribute(block.id()),
+            class_attribute("colist arabic", &block.roles())
+        ));
+        self.block_title(block);
+
+        if self.icons_set {
+            self.line("<table>");
+            for (index, item) in list.child_blocks().filter_map(as_list_item).enumerate() {
+                self.colist_row(item, index + 1);
+            }
+            self.line("</table>");
+        } else {
+            self.line("<ol>");
+            for item in list.child_blocks() {
+                self.list_item(item, false, false);
+            }
+            self.line("</ol>");
+        }
+
+        self.line("</div>");
+    }
+
+    /// Emits one `<tr>` of an icon-based callout list: the `num`-th callout
+    /// icon in the first cell, then the item's principal text (and any attached
+    /// blocks) in the second, matching Asciidoctor's `convert_colist` table
+    /// branch.
+    fn colist_row<'src>(&mut self, list_item: &'src ListItem<'src>, num: usize) {
+        // The Font Awesome pair carries the number in `<b>`; the image form
+        // points at `{iconsdir}/callouts/{num}.{icontype}`. The path is
+        // attribute-escaped so a hostile `iconsdir`/`icontype` cannot break out
+        // of the quoted `src` (Asciidoctor leaves it raw; we harden it, which
+        // only diverges when those attributes contain `& < > "`).
+        let num_label = if self.icons_font {
+            format!("<i class=\"conum\" data-value=\"{num}\"></i><b>{num}</b>")
+        } else {
+            let src = escape_attribute(&format!(
+                "{}/callouts/{num}.{}",
+                self.iconsdir, self.icontype
+            ));
+            format!("<img src=\"{src}\" alt=\"{num}\">")
+        };
+
+        self.line("<tr>");
+        self.line(&format!("<td>{num_label}</td>"));
+
+        // The first attached block is the item's principal text; the remainder
+        // (continuation paragraphs, nested lists) render as ordinary blocks
+        // appended inside the same `<td>`, matching Asciidoctor's
+        // `#{item.text}#{item.blocks? ? LF + item.content : ''}`.
+        let mut blocks = list_item.child_blocks();
+        let text = blocks
+            .next()
+            .and_then(|block| block.rendered_content())
+            .unwrap_or_default();
+
+        let content = self.render_blocks_to_string(blocks);
+        if content.is_empty() {
+            self.line(&format!("<td>{text}</td>"));
+        } else {
+            self.line(&format!("<td>{text}\n{content}</td>"));
+        }
+
+        self.line("</tr>");
+    }
+
+    /// Renders `blocks` into a standalone string using the current renderer
+    /// state, with no trailing newline – the counterpart to Asciidoctor's
+    /// `item.content` (its child blocks' output joined by line feeds). Returns
+    /// an empty string when there are no blocks.
+    fn render_blocks_to_string<'src>(
+        &mut self,
+        blocks: impl Iterator<Item = &'src Block<'src>>,
+    ) -> String {
+        let saved = std::mem::take(&mut self.out);
+        for block in blocks {
+            self.block(block);
+        }
+        let rendered = std::mem::replace(&mut self.out, saved);
+        rendered.strip_suffix('\n').unwrap_or(&rendered).to_string()
     }
 
     /// A description list (`term:: definition`), matching Asciidoctor's
@@ -2059,12 +2971,19 @@ impl Renderer<'_> {
                     ad.title(),
                     ad.is_inline(),
                     CellRenderConfig {
+                        icons_set: self.icons_set,
                         icons_font: self.icons_font,
+                        iconsdir: self.iconsdir.clone(),
+                        icontype: self.icontype.clone(),
+                        imagesdir: self.imagesdir.clone(),
+                        asset_uri_scheme: self.asset_uri_scheme.clone(),
                         doc_tabsize: self.doc_tabsize,
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
+                        source_highlighter: self.source_highlighter,
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
+                        stem_type: self.stem_type,
                     },
                 )
             ),
@@ -2252,6 +3171,98 @@ impl Renderer<'_> {
         self.line("<div class=\"sectionbody\">");
         self.blocks(block.child_blocks());
         self.line("</div>");
+
+        // A `preamble`-placed TOC follows the preamble's `sectionbody`, still
+        // inside the `<div id="preamble">`, matching Asciidoctor's
+        // `convert_preamble`.
+        if self.toc_mode == TocMode::Preamble && !self.toc_html.is_empty() {
+            self.line(&self.toc_html.clone());
+        }
+
+        self.line("</div>");
+    }
+
+    /// Emits the `toc::[]` block macro's table of contents (Asciidoctor's
+    /// `convert_toc`), the `macro` placement's counterpart to the header /
+    /// preamble TOC built by [`render_toc`]. The macro carries its own
+    /// per-TOC overrides: `id` (which also renames the title block's id to
+    /// `<id>title`), a block `title` (over `toc-title`), `levels` (over
+    /// `toclevels`), and a `role` (over `toc-class`).
+    ///
+    /// When the document does not defer its TOC to a macro — `toc` is off,
+    /// `toc-placement` is not `macro`, or there are no sections to list — the
+    /// macro emits Asciidoctor's `<!-- toc disabled -->` placeholder instead.
+    fn toc_macro<'src>(&mut self, block: &'src Block<'src>, toc: &'src TocBlock<'src>) {
+        // The macro renders a TOC only when this document defers to it. A cell
+        // sub-renderer (which holds no `Document` and never enables a TOC) also
+        // lands here and falls through to the placeholder.
+        let outline = match self.document {
+            Some(document) if self.toc_mode == TocMode::Macro => {
+                let mut options = crate::OutlineOptions::new();
+
+                // The macro's `levels` attribute overrides `toclevels` for this
+                // TOC only.
+                if let Some(levels) = toc
+                    .macro_attrlist()
+                    .named_attribute("levels")
+                    .and_then(|attr| attr.value().trim().parse::<usize>().ok())
+                {
+                    options = options.toclevels(levels);
+                }
+
+                crate::outline::render_outline(document, &options)
+            }
+
+            _ => String::new(),
+        };
+
+        // No sections yields an empty outline, which is Asciidoctor's
+        // `doc.sections?` guard — emit the placeholder comment.
+        let Some(document) = self.document.filter(|_| !outline.is_empty()) else {
+            self.line("<!-- toc disabled -->");
+            return;
+        };
+
+        // An explicit `id` renames both the container and — suffixed with
+        // `title` — the title block; absent, they fall back to `toc` /
+        // `toctitle`.
+        let (id_attr, title_id_attr) = match block.id() {
+            Some(id) => (
+                format!(" id=\"{}\"", escape_attribute(id)),
+                format!(" id=\"{}title\"", escape_attribute(id)),
+            ),
+            None => (" id=\"toc\"".to_string(), " id=\"toctitle\"".to_string()),
+        };
+
+        // A block title overrides `toc-title`; the block's role(s) override
+        // `toc-class`.
+        let title = block
+            .title()
+            .map(str::to_string)
+            .unwrap_or_else(|| document.toc_title().to_string());
+
+        // The role can arrive two ways: as a `role=` attribute inside the macro
+        // (`toc::[role=…]`) or as the block's role shorthand on the line above
+        // (`[.role]`). Asciidoctor folds both into `node.role`, with the macro's
+        // own `role=` winning; an absent role falls back to `toc-class`.
+        let class = toc
+            .macro_attrlist()
+            .named_attribute("role")
+            .map(|attr| attr.value().to_string())
+            .or_else(|| {
+                let roles = block.roles();
+                (!roles.is_empty()).then(|| roles.join(" "))
+            })
+            .unwrap_or_else(|| document.toc_class().to_string());
+
+        self.line(&format!(
+            "<div{id_attr} class=\"{}\">",
+            escape_attribute(&class)
+        ));
+        self.line(&format!(
+            "<div{title_id_attr} class=\"title\">{title}</div>"
+        ));
+        self.line(&outline);
         self.line("</div>");
     }
 
@@ -2262,6 +3273,432 @@ impl Renderer<'_> {
             BreakType::Thematic => self.line("<hr>"),
             BreakType::Page => self.line("<div style=\"page-break-after: always;\"></div>"),
         }
+    }
+
+    /// `<div class="imageblock …"><div class="content"><img
+    /// …></div>[title]</div>`, matching Asciidoctor's `convert_image` for a
+    /// block image (`image::…[]`).
+    ///
+    /// The `<img>` carries the resolved `src` (the target joined with
+    /// `imagesdir` — see [`media_uri`]), the `alt` text (an explicit value,
+    /// else the target's basename with `_`/`-` turned into spaces), and any
+    /// `width`/`height`. A `link` wraps the image in `<a class="image">`. The
+    /// wrapper's classes are `imageblock`, then a `float` role, then a
+    /// `text-<align>` class, then the block's roles (see
+    /// [`media_roles`](Self::media_roles)); a titled image gains a captioned
+    /// `Figure N.` title *after* its content
+    /// (unlike most blocks, whose title precedes their content).
+    ///
+    /// The advanced image modes build on this baseline in their own issues: the
+    /// `data-uri` embed (#51), interactive/inline SVG (#52), and icons (#50).
+    /// An SVG target therefore renders as a plain `<img>` here. A `title=`
+    /// given *inside* the macro is not yet promoted to the figure caption
+    /// (the parser surfaces it only as a macro attribute); use the `.Title`
+    /// block line.
+    fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let macro_attrs = media.macro_attrlist();
+
+        // Asciidoctor merges the block attribute line and the macro's own
+        // attribute list into one set, with the macro list winning. Named
+        // lookups therefore try the macro list first and fall back to the block
+        // list; the positional `alt`/`width`/`height` live only in the macro
+        // list (the block line has no positional slots), so those fall back to a
+        // same-named attribute there.
+        let named = |name: &str| -> Option<&str> {
+            macro_attrs
+                .named_attribute(name)
+                .or_else(|| block.attrlist().and_then(|a| a.named_attribute(name)))
+                .map(|attr| attr.value())
+        };
+
+        let positional = |name: &str, n: usize| -> Option<&str> {
+            macro_attrs
+                .named_or_positional_attribute(name, n)
+                .or_else(|| block.attrlist().and_then(|a| a.named_attribute(name)))
+                .map(|attr| attr.value())
+        };
+
+        let target = media.resolved_target();
+        let src = media_uri(target, &self.imagesdir);
+
+        // An explicit `alt` wins; otherwise Asciidoctor derives it from the
+        // target's basename with `_`/`-` turned into spaces. The value is a raw
+        // source string (the block macro attribute list is parsed without the
+        // inline special-character pass), so it is attribute-escaped here to
+        // match Asciidoctor's `encode_attribute_value node.alt`.
+        let alt = positional("alt", 1)
+            .map(str::to_string)
+            .unwrap_or_else(|| default_alt(target));
+
+        let mut dimensions = String::new();
+
+        if let Some(width) = positional("width", 2) {
+            dimensions.push_str(&format!(" width=\"{}\"", escape_attribute(width)));
+        }
+
+        if let Some(height) = positional("height", 3) {
+            dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
+        }
+
+        let mut img = format!(
+            "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+            escape_attribute(&src),
+            escape_attribute(&alt),
+        );
+
+        // A `link` wraps the image in an anchor whose `href` is the link value
+        // verbatim (Asciidoctor 2.0.26 does not resolve `link=self` to the
+        // image's own `src`). Its `append_link_constraint_attrs` adds
+        // `target`/`rel` from `window` and the `nofollow`/`noopener` options.
+        if let Some(link) = named("link") {
+            let window = named("window");
+
+            let nofollow = macro_attrs.has_option("nofollow")
+                || block.attrlist().is_some_and(|a| a.has_option("nofollow"));
+
+            let noopener = macro_attrs.has_option("noopener")
+                || block.attrlist().is_some_and(|a| a.has_option("noopener"));
+
+            img = format!(
+                "<a class=\"image\" href=\"{}\"{}>{img}</a>",
+                escape_attribute(link),
+                link_constraint_attrs(window, nofollow, noopener),
+            );
+        }
+
+        // The wrapper classes follow Asciidoctor's order: `imageblock`, then the
+        // `float` role, then a `text-<align>` class, then the block's roles
+        // (a macro `role=` overrides the block line's roles — see `media_roles`).
+        let mut classes = String::from("imageblock");
+
+        if let Some(float) = named("float") {
+            classes.push(' ');
+            classes.push_str(&escape_attribute(float));
+        }
+
+        if let Some(align) = named("align") {
+            classes.push_str(&format!(" text-{}", escape_attribute(align)));
+        }
+
+        for role in self.media_roles(block, media) {
+            classes.push(' ');
+            classes.push_str(&escape_attribute(role));
+        }
+
+        self.line(&format!(
+            "<div{} class=\"{classes}\">",
+            id_attribute(block.id())
+        ));
+        self.line("<div class=\"content\">");
+        self.line(&img);
+        self.line("</div>");
+
+        // A block image places its captioned title *after* the content div.
+        if let Some(title) = block.title() {
+            let caption = block.caption().unwrap_or_default();
+            self.line(&format!("<div class=\"title\">{caption}{title}</div>"));
+        }
+
+        self.line("</div>");
+    }
+
+    /// The role(s) placed on a media block's wrapper, matching Asciidoctor's
+    /// `node.role`. A `role=` attribute *inside* the macro
+    /// (`video::x[role=…]`) wins outright over the block's shorthand role(s)
+    /// on the line above (`[.role]`), rather than merging with them.
+    fn media_roles<'src>(
+        &self,
+        block: &'src Block<'src>,
+        media: &'src MediaBlock<'src>,
+    ) -> Vec<&'src str> {
+        match media.macro_attrlist().named_attribute("role") {
+            Some(role) => role.value().split_whitespace().collect(),
+            None => block.roles(),
+        }
+    }
+
+    /// The URI-scheme prefix for a hosted video embed — `"https:"` for the
+    /// default `asset-uri-scheme`, or `""` when it is empty (yielding a
+    /// scheme-relative `//…` URL), mirroring Asciidoctor's `convert_video`.
+    fn asset_uri_scheme_prefix(&self) -> String {
+        if self.asset_uri_scheme.is_empty() {
+            String::new()
+        } else {
+            format!("{}:", self.asset_uri_scheme)
+        }
+    }
+
+    /// The `#t=<start>,<end>` media fragment appended to a self-hosted
+    /// `<video>`/`<audio>` `src`, or an empty string when neither bound is
+    /// given. Mirrors Asciidoctor's `#t=#{start || ''}#{end ? ",#{end}" : ''}`,
+    /// so a lone `end` yields `#t=,<end>`.
+    fn time_anchor(start: Option<&str>, end: Option<&str>) -> String {
+        if start.is_none() && end.is_none() {
+            return String::new();
+        }
+
+        format!(
+            "#t={}{}",
+            start.unwrap_or_default(),
+            end.map(|e| format!(",{e}")).unwrap_or_default()
+        )
+    }
+
+    /// `<div class="videoblock …">` wrapping either a self-hosted `<video>` or,
+    /// when the `poster` attribute names a hosted service, a `youtube`/`vimeo`
+    /// `<iframe>` embed — a port of Asciidoctor's `convert_video`.
+    fn video<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let attrs = media.macro_attrlist();
+
+        // The `float` and `text-<align>` classes sit between the base
+        // `videoblock` class and any role(s).
+        let mut classes = vec!["videoblock".to_string()];
+        if let Some(float) = attrs.named_attribute("float") {
+            classes.push(escape_attribute(float.value()));
+        }
+        if let Some(align) = attrs.named_attribute("align") {
+            classes.push(format!("text-{}", escape_attribute(align.value())));
+        }
+        for role in self.media_roles(block, media) {
+            classes.push(escape_attribute(role));
+        }
+
+        self.line(&format!(
+            "<div{} class=\"{}\">",
+            id_attribute(block.id()),
+            classes.join(" ")
+        ));
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        // The media target and the attribute values below (`width`/`height`/
+        // `poster`/`preload`, and the embed query parameters) are interpolated
+        // *verbatim*, not run through [`escape_attribute`] the way the wrapper's
+        // id/roles are. This matches Asciidoctor's `convert_video`/
+        // `convert_audio`, which emit these raw — so, as with Asciidoctor, a
+        // document built from untrusted input must be sanitized downstream. The
+        // choice keeps output byte-identical to the parity oracle (a real target
+        // or dimension never carries an HTML delimiter).
+
+        // `width`/`height` are shared by the self-hosted and embed forms
+        // (positional 2 and 3, or named).
+        let width = attrs.named_or_positional_attribute("width", 2);
+        let height = attrs.named_or_positional_attribute("height", 3);
+        let width_attr = width
+            .map(|w| format!(" width=\"{}\"", w.value()))
+            .unwrap_or_default();
+        let height_attr = height
+            .map(|h| format!(" height=\"{}\"", h.value()))
+            .unwrap_or_default();
+
+        // The `poster` attribute (positional 1, or named) selects the form: a
+        // `vimeo`/`youtube` value is a hosted embed, anything else is a
+        // self-hosted `<video>` whose poster image it supplies.
+        let poster = attrs
+            .named_or_positional_attribute("poster", 1)
+            .map(|p| p.value());
+
+        match poster {
+            Some("vimeo") => self.video_vimeo(media, attrs, &width_attr, &height_attr),
+            Some("youtube") => self.video_youtube(media, attrs, &width_attr, &height_attr),
+            _ => self.video_self_hosted(media, attrs, poster, &width_attr, &height_attr),
+        }
+
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// Emits the self-hosted `<video>` element (the `else` arm of
+    /// `convert_video`): the resolved target as `src` with an optional `#t=`
+    /// time fragment, the `poster`/`preload` attributes, and the
+    /// `autoplay`/`muted`/`controls`/`loop` boolean options.
+    fn video_self_hosted<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        poster: Option<&str>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        let poster_attr = match poster {
+            Some(p) if !p.is_empty() => {
+                format!(" poster=\"{}\"", media_uri(p, &self.imagesdir))
+            }
+
+            _ => String::new(),
+        };
+
+        let preload_attr = match attrs.named_attribute("preload").map(|p| p.value()) {
+            Some(p) if !p.is_empty() => format!(" preload=\"{p}\""),
+            _ => String::new(),
+        };
+
+        let start = attrs.named_attribute("start").map(|a| a.value());
+        let end = attrs.named_attribute("end").map(|a| a.value());
+        let time_anchor = Self::time_anchor(start, end);
+
+        self.line(&format!(
+            "<video src=\"{}{time_anchor}\"{width_attr}{height_attr}{poster_attr}{}{}{}{}{preload_attr}>",
+            media_uri(media.resolved_target(), &self.imagesdir),
+            boolean_option(attrs, "autoplay", "autoplay"),
+            boolean_option(attrs, "muted", "muted"),
+            controls_option(attrs),
+            boolean_option(attrs, "loop", "loop"),
+        ));
+        self.line("Your browser does not support the video tag.");
+        self.line("</video>");
+    }
+
+    /// Emits the Vimeo `<iframe>` embed (the `poster=vimeo` arm of
+    /// `convert_video`).
+    fn video_vimeo<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        // The target splits into `<video-id>/<hash>`; a `hash=` attribute
+        // supplies the hash when the target carries none.
+        let (target, hash) = match media.resolved_target().split_once('/') {
+            Some((t, h)) => (t, Some(h)),
+            None => (media.resolved_target(), None),
+        };
+        let hash = hash.or_else(|| attrs.named_attribute("hash").map(|a| a.value()));
+
+        // The query parameters, in Asciidoctor's order; the first present one
+        // is introduced by `?` and the rest by `&amp;`.
+        let mut params: Vec<String> = Vec::new();
+        if let Some(hash) = hash {
+            params.push(format!("h={hash}"));
+        }
+        if attrs.has_option("autoplay") {
+            params.push("autoplay=1".to_string());
+        }
+        if attrs.has_option("loop") {
+            params.push("loop=1".to_string());
+        }
+        if attrs.has_option("muted") {
+            params.push("muted=1".to_string());
+        }
+        let query = join_query(&params);
+
+        // The start time is a `#at=` fragment appended after the query.
+        let start_anchor = attrs
+            .named_attribute("start")
+            .map(|s| format!("#at={}", s.value()))
+            .unwrap_or_default();
+
+        self.line(&format!(
+            "<iframe{width_attr}{height_attr} src=\"{}//player.vimeo.com/video/{target}{query}{start_anchor}\" frameborder=\"0\"{}></iframe>",
+            self.asset_uri_scheme_prefix(),
+            allowfullscreen_attr(attrs),
+        ));
+    }
+
+    /// Emits the YouTube `<iframe>` embed (the `poster=youtube` arm of
+    /// `convert_video`).
+    fn video_youtube<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        let rel = if attrs.has_option("related") { 1 } else { 0 };
+
+        // Every parameter after the leading `?rel=` is introduced by `&amp;`.
+        let named_param = |name: &str, key: &str| {
+            attrs
+                .named_attribute(name)
+                .map(|a| format!("&amp;{key}={}", a.value()))
+                .unwrap_or_default()
+        };
+        let start_param = named_param("start", "start");
+        let end_param = named_param("end", "end");
+        let autoplay_param = flag_param(attrs, "autoplay", "&amp;autoplay=1");
+        let has_loop = attrs.has_option("loop");
+        let loop_param = flag_param(attrs, "loop", "&amp;loop=1");
+        let mute_param = flag_param(attrs, "muted", "&amp;mute=1");
+        let controls_param = flag_param(attrs, "nocontrols", "&amp;controls=0");
+
+        // Fullscreen can be controlled by a query parameter and an attribute.
+        let (fs_param, fs_attribute) = if attrs.has_option("nofullscreen") {
+            ("&amp;fs=0", "")
+        } else {
+            ("", " allowfullscreen")
+        };
+        let modest_param = flag_param(attrs, "modest", "&amp;modestbranding=1");
+        let theme_param = named_param("theme", "theme");
+        let hl_param = named_param("lang", "hl");
+
+        // Parse `<video-id>/<list-id>`; failing a list, parse a dynamic
+        // `<id1>,<id2>,…` playlist. Named `list=`/`playlist=` attributes fill
+        // in when the target carries neither.
+        let (mut target, list) = match media.resolved_target().split_once('/') {
+            Some((t, l)) => (t, Some(l)),
+            None => (media.resolved_target(), None),
+        };
+        let list = list.or_else(|| attrs.named_attribute("list").map(|a| a.value()));
+
+        let list_param = if let Some(list) = list {
+            format!("&amp;list={list}")
+        } else {
+            let (id, playlist) = match target.split_once(',') {
+                Some((id, playlist)) => (id, Some(playlist)),
+                None => (target, None),
+            };
+            target = id;
+            let playlist =
+                playlist.or_else(|| attrs.named_attribute("playlist").map(|a| a.value()));
+            if let Some(playlist) = playlist {
+                format!("&amp;playlist={target},{playlist}")
+            } else if has_loop {
+                // A loop needs an explicit playlist; fall back to the video id.
+                format!("&amp;playlist={target}")
+            } else {
+                String::new()
+            }
+        };
+
+        self.line(&format!(
+            "<iframe{width_attr}{height_attr} src=\"{}//www.youtube.com/embed/{target}?rel={rel}{start_param}{end_param}{autoplay_param}{loop_param}{mute_param}{controls_param}{list_param}{fs_param}{modest_param}{theme_param}{hl_param}\" frameborder=\"0\"{fs_attribute}></iframe>",
+            self.asset_uri_scheme_prefix(),
+        ));
+    }
+
+    /// `<div class="audioblock …">` wrapping a self-hosted `<audio>` element —
+    /// a port of Asciidoctor's `convert_audio`. Audio has no poster, width,
+    /// height, or hosted-service embeds.
+    fn audio<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let attrs = media.macro_attrlist();
+
+        self.line(&format!(
+            "<div{} class=\"{}\">",
+            id_attribute(block.id()),
+            class_list("audioblock", &self.media_roles(block, media)),
+        ));
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        let start = attrs.named_attribute("start").map(|a| a.value());
+        let end = attrs.named_attribute("end").map(|a| a.value());
+        let time_anchor = Self::time_anchor(start, end);
+
+        // The target is interpolated verbatim, matching Asciidoctor (see the
+        // note in [`video`](Self::video)).
+        self.line(&format!(
+            "<audio src=\"{}{time_anchor}\"{}{}{}>",
+            media_uri(media.resolved_target(), &self.imagesdir),
+            boolean_option(attrs, "autoplay", "autoplay"),
+            controls_option(attrs),
+            boolean_option(attrs, "loop", "loop"),
+        ));
+        self.line("Your browser does not support the audio tag.");
+        self.line("</audio>");
+
+        self.line("</div>");
+        self.line("</div>");
     }
 
     /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
@@ -2537,14 +3974,28 @@ fn render_cell_document<'s>(
     // forward.
     let mut renderer = Renderer {
         out: String::new(),
+        // The cell sub-renderer is handed a block slice, not a `Document`; with
+        // the TOC disabled below, the `toc::[]` macro path never reads it.
+        document: None,
         custom_stylesheet: None,
         standalone: false,
+        // A nested cell document never renders its own TOC (Asciidoctor's cell
+        // conversion emits no table of contents), so leave it disabled.
+        toc_mode: TocMode::Disabled,
+        toc_html: String::new(),
+        icons_set: config.icons_set,
         icons_font: config.icons_font,
+        iconsdir: config.iconsdir.clone(),
+        icontype: config.icontype.clone(),
+        imagesdir: config.imagesdir.clone(),
+        asset_uri_scheme: config.asset_uri_scheme.clone(),
         doc_tabsize: config.doc_tabsize,
         source_indent: config.source_indent,
         prewrap: config.prewrap,
+        source_highlighter: config.source_highlighter,
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
+        stem_type: config.stem_type,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -2722,6 +4173,136 @@ mod tests {
         assert!(body.starts_with("<div id=\"preamble\">\n<div class=\"sectionbody\">"));
     }
 
+    // The TOC block Asciidoctor's `html5` backend emits, shared by every
+    // placement — a `<div id="toc" class="toc">` with a `<div id="toctitle">`
+    // and the nested section list.
+    const SAMPLE_TOC: &str = "\
+<div id=\"toc\" class=\"toc\">
+<div id=\"toctitle\">Table of Contents</div>
+<ul class=\"sectlevel1\">
+<li><a href=\"#_section_one\">Section One</a></li>
+<li><a href=\"#_section_two\">Section Two</a></li>
+</ul>
+</div>";
+
+    #[test]
+    fn auto_toc_renders_in_the_header() {
+        // A plain `:toc:` (auto placement) puts the TOC inside `<div
+        // id="header">`, after the `<h1>`, and leaves the `<body>` class alone.
+        let html = convert("= Doc\n:toc:\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny");
+        assert!(html.contains("<body class=\"article\">"));
+        assert!(html.contains(&format!(
+            "<div id=\"header\">\n<h1>Doc</h1>\n{SAMPLE_TOC}\n</div>"
+        )));
+    }
+
+    #[test]
+    fn preamble_toc_renders_below_the_preamble() {
+        // `:toc: preamble` places the TOC after the preamble's `sectionbody`,
+        // still inside `<div id="preamble">`, and not in the header.
+        let html = convert(
+            "= Doc\n:toc: preamble\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+        );
+
+        // The header shows only the title — no TOC.
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n</div>"));
+
+        // The TOC sits between the preamble's `sectionbody` close and the
+        // preamble's own close.
+        assert!(html.contains(&format!(
+            "<p>Intro.</p>\n</div>\n</div>\n{SAMPLE_TOC}\n</div>\n<div class=\"sect1\">"
+        )));
+    }
+
+    #[test]
+    fn side_column_toc_adds_body_classes() {
+        // `left`/`right` place the TOC in the header like `auto`, but also add
+        // `toc2 toc-<side>` to the `<body>` class (the side-column styling).
+        let left = convert("= Doc\n:toc: left\n\nIntro.\n\n== Section One\n\nx");
+        assert!(left.contains("<body class=\"article toc2 toc-left\">"));
+        assert!(left.contains("<div id=\"toc\" class=\"toc2\">"));
+
+        let right = convert("= Doc\n:toc: right\n\nIntro.\n\n== Section One\n\nx");
+        assert!(right.contains("<body class=\"article toc2 toc-right\">"));
+    }
+
+    #[test]
+    fn embedded_auto_toc_leads_the_body() {
+        // In embedded output an `auto` TOC leads the body, ahead of the content.
+        let html = crate::convert_with(
+            "= Doc\n:toc:\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+            &Options::new(),
+        );
+        assert!(html.starts_with(SAMPLE_TOC));
+    }
+
+    #[test]
+    fn macro_placement_renders_at_the_toc_block() {
+        // `macro` placement renders the TOC where the `toc::[]` block appears —
+        // never in the header — with the `convert_toc` shape (the title block
+        // carries `class="title"`). The `<body>` class is untouched.
+        let html = convert(
+            "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx\n\n== Section Two\n\ny",
+        );
+        assert!(html.contains("<body class=\"article\">"));
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n</div>"));
+        assert!(html.contains(
+            "<div id=\"toc\" class=\"toc\">\n\
+             <div id=\"toctitle\" class=\"title\">Table of Contents</div>\n\
+             <ul class=\"sectlevel1\">\n\
+             <li><a href=\"#_section_one\">Section One</a></li>\n\
+             <li><a href=\"#_section_two\">Section Two</a></li>\n\
+             </ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn macro_placement_honors_per_macro_overrides() {
+        // `id`/title/`levels`/`role` on the macro override the document
+        // defaults; the `id` also renames the title block's id to `<id>title`.
+        let html = convert(
+            "= Doc\n:toc: macro\n\n[#mytoc.fancy]\n.My Contents\ntoc::[levels=1]\n\n== Section One\n\n=== Nested\n\nx",
+        );
+        assert!(html.contains(
+            "<div id=\"mytoc\" class=\"fancy\">\n<div id=\"mytoctitle\" class=\"title\">My Contents</div>"
+        ));
+        // `levels=1` drops the nested subsection.
+        assert!(!html.contains("Nested</a>"));
+    }
+
+    #[test]
+    fn toc_macro_without_macro_placement_is_disabled() {
+        // A `toc::[]` block whose document does not defer to it (here the
+        // placement is `auto`) renders Asciidoctor's placeholder comment, while
+        // the automatic TOC still appears in the header.
+        let html = convert("= Doc\n:toc:\n\ntoc::[]\n\n== Section One\n\nx");
+        assert!(html.contains("<!-- toc disabled -->"));
+        assert!(html.contains("<div id=\"header\">\n<h1>Doc</h1>\n<div id=\"toc\" class=\"toc\">"));
+    }
+
+    #[test]
+    fn toc_needs_sections() {
+        // With no sections the outline is empty, so Asciidoctor (and this crate)
+        // emit no TOC even when `:toc:` is set.
+        let html = convert("= Doc\n:toc:\n\nJust a paragraph, no sections.");
+        assert!(!html.contains("<div id=\"toc\""));
+    }
+
+    #[test]
+    fn toclevels_limits_the_toc_depth() {
+        // `:toclevels: 1` drops the nested subsection from the TOC while the
+        // top-level entries remain.
+        let html = convert("= Doc\n:toc:\n:toclevels: 1\n\n== Section One\n\n=== Nested\n\nx");
+        assert!(html.contains("<li><a href=\"#_section_one\">Section One</a></li>"));
+        assert!(!html.contains("Nested</a>"));
+    }
+
+    #[test]
+    fn toc_title_is_configurable() {
+        let html = convert("= Doc\n:toc:\n:toc-title: On this page\n\n== Section One\n\nx");
+        assert!(html.contains("<div id=\"toctitle\">On this page</div>"));
+    }
+
     #[test]
     fn verbatim_content_stays_escaped() {
         let html = convert("[listing]\n<html> & co");
@@ -2736,12 +4317,362 @@ mod tests {
         assert!(content(&html).contains("<hr>"));
     }
 
+    // Note: there is no longer a `unsupported_block_leaves_a_marker` test —
+    // every block construct the parser produces now renders (block images
+    // landed here; video/audio and STEM landed alongside), so no standard
+    // input reaches [`Renderer::unsupported`], which remains only as a
+    // defensive fallback for future parser additions.
+
     #[test]
-    fn unsupported_block_leaves_a_marker() {
-        // Callout lists are not rendered yet, so they still emit the
-        // placeholder marker (unordered/ordered/description lists now render).
-        let html = convert("----\ncode <1>\n----\n\n<1> explanation");
-        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'list' -->"));
+    fn image_block_renders_imageblock() {
+        // The basic block image: `src`, positional `alt`/`width`/`height`, and
+        // the `imageblock` wrapper, matching Asciidoctor's `convert_image`.
+        let html = convert("image::screenshot.png[block image,800,450]");
+        assert!(content(&html).contains(
+            "<div class=\"imageblock\">\n\
+             <div class=\"content\">\n\
+             <img src=\"screenshot.png\" alt=\"block image\" width=\"800\" height=\"450\">\n\
+             </div>\n\
+             </div>"
+        ));
+    }
+
+    #[test]
+    fn image_block_default_alt_from_target() {
+        // With no explicit alt, Asciidoctor derives it from the target basename
+        // with `_`/`-` turned into spaces.
+        let html = convert("image::my_cool-pic.png[]");
+        assert!(html.contains("<img src=\"my_cool-pic.png\" alt=\"my cool pic\">"));
+    }
+
+    #[test]
+    fn image_block_title_is_a_captioned_figure_after_content() {
+        // A titled image gains a `Figure N.` caption in a title div placed after
+        // the content div.
+        let html = convert(".A caption\nimage::b.png[Alt Text]");
+        assert!(content(&html).contains(
+            "<img src=\"b.png\" alt=\"Alt Text\">\n\
+             </div>\n\
+             <div class=\"title\">Figure 1. A caption</div>"
+        ));
+    }
+
+    #[test]
+    fn image_block_honors_id_float_align_and_roles() {
+        let html = convert("[#myid.role1.role2]\nimage::c.png[align=center,float=left]");
+        assert!(
+            html.contains("<div id=\"myid\" class=\"imageblock left text-center role1 role2\">")
+        );
+    }
+
+    #[test]
+    fn image_block_link_wraps_the_image() {
+        let html = convert("image::e.png[link=https://example.com]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://example.com\">\
+             <img src=\"e.png\" alt=\"e\"></a>"
+        ));
+    }
+
+    #[test]
+    fn image_block_prefixes_imagesdir() {
+        let html = convert(":imagesdir: assets/img\n\nimage::a.png[]");
+        assert!(html.contains("<img src=\"assets/img/a.png\" alt=\"a\">"));
+    }
+
+    #[test]
+    fn image_block_uri_target_passes_through() {
+        let html = convert("image::http://example.com/a b.png[Remote]");
+        assert!(html.contains("<img src=\"http://example.com/a%20b.png\" alt=\"Remote\">"));
+    }
+
+    #[test]
+    fn image_block_rooted_target_is_not_prefixed() {
+        // A web-root target (leading `/`) is never joined with `imagesdir`, and
+        // its `default_alt` is the basename with the extension dropped.
+        let html = convert(":imagesdir: assets\n\nimage::/rooted.png[]");
+        assert!(html.contains("<img src=\"/rooted.png\" alt=\"rooted\">"));
+    }
+
+    #[test]
+    fn image_block_default_alt_for_extensionless_target() {
+        // A target with no extension keeps its final path segment verbatim as
+        // the derived `alt`.
+        let html = convert("image::gallery/photo[]");
+        assert!(html.contains("<img src=\"gallery/photo\" alt=\"photo\">"));
+    }
+
+    #[test]
+    fn image_block_role_attribute_overrides_block_roles() {
+        // A macro `role=` supplies the wrapper roles (splitting on whitespace),
+        // overriding any `[.role]` on the block line — matching Asciidoctor's
+        // last-write-wins merge of the `role` attribute.
+        let html = convert("[.ignored]\nimage::r.png[role=\"r1 r2\"]");
+        assert!(html.contains("<div class=\"imageblock r1 r2\">"));
+    }
+
+    #[test]
+    fn image_block_link_to_blank_window_adds_target_and_noopener() {
+        let html = convert("image::a.png[link=https://x.com,window=_blank]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"_blank\" rel=\"noopener\">"
+        ));
+    }
+
+    #[test]
+    fn image_block_link_nofollow_option_adds_rel() {
+        let html = convert("image::b.png[link=https://x.com,opts=nofollow]");
+        assert!(html.contains("<a class=\"image\" href=\"https://x.com\" rel=\"nofollow\">"));
+    }
+
+    #[test]
+    fn image_block_link_named_window_adds_only_target() {
+        // A named window that is not `_blank` and carries no `noopener` option
+        // sets `target` alone — no `rel`.
+        let html = convert("image::x.png[link=https://x.com,window=help]");
+        assert!(html.contains("<a class=\"image\" href=\"https://x.com\" target=\"help\">"));
+    }
+
+    #[test]
+    fn image_block_link_named_window_with_noopener() {
+        let html = convert("image::c.png[link=https://x.com,window=name,opts=noopener]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"name\" rel=\"noopener\">"
+        ));
+    }
+
+    #[test]
+    fn image_block_link_blank_window_with_nofollow_folds_both_into_rel() {
+        let html = convert("image::d.png[link=https://x.com,window=_blank,opts=nofollow]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"_blank\" rel=\"nofollow noopener\">"
+        ));
+    }
+
+    #[test]
+    fn media_uri_matches_web_path() {
+        use super::media_uri;
+
+        // A bare relative target keeps no `./` prefix (unlike a stylesheet web
+        // path); an `imagesdir` is joined ahead of it.
+        assert_eq!(media_uri("movie.mp4", ""), "movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "media"), "media/movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "media/"), "media/movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "./media"), "./media/movie.mp4");
+
+        // A web-absolute target ignores `imagesdir`; `.`/`..` segments collapse,
+        // and a leading `..` at the web root is dropped — but a leading `..` on
+        // a bare relative path is kept as a relative step.
+        assert_eq!(media_uri("/abs.mp4", "media"), "/abs.mp4");
+        assert_eq!(media_uri("sub/../c.mp4", "media"), "media/c.mp4");
+        assert_eq!(media_uri("/x/../../y.mp4", ""), "/y.mp4");
+        assert_eq!(media_uri("../up.mp4", ""), "../up.mp4");
+
+        // Backslashes are posixified unconditionally, matching this crate's
+        // other web-path helpers (Asciidoctor only does so on Windows); a URI
+        // target is preserved with its spaces percent-encoded and ignores
+        // `imagesdir`.
+        assert_eq!(media_uri("a\\b.mp4", "media"), "media/a/b.mp4");
+        assert_eq!(
+            media_uri("https://ex.com/a b.mp4", "media"),
+            "https://ex.com/a%20b.mp4"
+        );
+    }
+
+    #[test]
+    fn video_self_hosted_renders_video_element() {
+        // The `width` positional maps to the `width` attribute; `controls` is
+        // present unless `nocontrols` is set. Matches Asciidoctor's
+        // `convert_video`.
+        let html = crate::convert("video::movie.mp4[width=640]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <video src=\"movie.mp4\" width=\"640\" controls>\n\
+             Your browser does not support the video tag.\n\
+             </video>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn audio_renders_audio_element() {
+        let html = crate::convert("audio::podcast.mp3[]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"audioblock\">\n\
+             <div class=\"content\">\n\
+             <audio src=\"podcast.mp3\" controls>\n\
+             Your browser does not support the audio tag.\n\
+             </audio>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn video_title_start_end_and_options() {
+        // A title becomes the `<div class="title">`; `start`/`end` form the
+        // `#t=` media fragment; `autoplay`/`loop` are boolean attributes and
+        // `nocontrols` suppresses `controls`.
+        let html = crate::convert(
+            ".My video\nvideo::vid.webm[start=10,end=20,opts=\"autoplay,loop,nocontrols\"]",
+        );
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"title\">My video</div>\n\
+             <div class=\"content\">\n\
+             <video src=\"vid.webm#t=10,20\" autoplay loop>\n\
+             Your browser does not support the video tag.\n\
+             </video>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn audio_start_only_and_autoplay() {
+        // A lone `start` yields `#t=<start>`; a lone `end` would yield
+        // `#t=,<end>`. Audio has no `muted` option.
+        let html = convert("audio::a.ogg[opts=autoplay,start=5]");
+        assert!(content(&html).contains("<audio src=\"a.ogg#t=5\" autoplay controls>"));
+    }
+
+    #[test]
+    fn video_youtube_embed() {
+        // A `youtube` poster value selects the YouTube `<iframe>` embed; the
+        // `?rel=0` parameter is always present and `allowfullscreen` is on by
+        // default.
+        let html = crate::convert("video::12345[youtube]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <iframe src=\"https://www.youtube.com/embed/12345?rel=0\" frameborder=\"0\" allowfullscreen></iframe>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn video_youtube_dynamic_playlist() {
+        // A comma-separated target is a dynamic playlist: the embed targets the
+        // first id and adds a `playlist=` of the whole list.
+        let html = convert("video::v1,v2,v3[youtube]");
+        assert!(content(&html).contains(
+            "src=\"https://www.youtube.com/embed/v1?rel=0&amp;playlist=v1,v2,v3\" frameborder=\"0\" allowfullscreen"
+        ));
+    }
+
+    #[test]
+    fn video_vimeo_embed() {
+        // A `vimeo` poster value selects the Vimeo `<iframe>` embed; `width`
+        // is honored on the iframe.
+        let html = crate::convert("video::67890[vimeo,width=300]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <iframe width=\"300\" src=\"https://player.vimeo.com/video/67890\" frameborder=\"0\" allowfullscreen></iframe>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn media_id_and_role_on_wrapper() {
+        // The `[#id.role]` shorthand above the macro puts the id on the wrapper
+        // and appends the role to the class list.
+        let html = convert("[#myid.myrole]\nvideo::x.mp4[]");
+        assert!(content(&html).starts_with("<div id=\"myid\" class=\"videoblock myrole\">"));
+    }
+
+    #[test]
+    fn video_macro_role_overrides_block_role() {
+        // A `role=` inside the macro wins outright over the block's shorthand
+        // role, matching Asciidoctor's `node.role`.
+        let html = convert("[#aa.bb]\naudio::s.mp3[role=cc]");
+        assert!(content(&html).starts_with("<div id=\"aa\" class=\"audioblock cc\">"));
+    }
+
+    #[test]
+    fn video_float_and_align_classes() {
+        // `float` and `text-<align>` classes sit between `videoblock` and the
+        // role(s).
+        let html = convert("video::z.mp4[float=left,align=center,role=baz]");
+        assert!(content(&html).starts_with("<div class=\"videoblock left text-center baz\">"));
+    }
+
+    #[test]
+    fn video_poster_and_preload_self_hosted() {
+        // A non-service `poster` value is a poster image resolved through
+        // `imagesdir`; `preload` is emitted verbatim. `muted` is a boolean
+        // attribute for video (but not audio).
+        let html = convert(
+            ":imagesdir: media\n\nvideo::v.mp4[height=200,poster=thumb.jpg,preload=auto,opts=\"muted,nocontrols\"]",
+        );
+        assert!(content(&html).contains(
+            "<video src=\"media/v.mp4\" height=\"200\" poster=\"media/thumb.jpg\" muted preload=\"auto\">"
+        ));
+    }
+
+    #[test]
+    fn media_uri_prefixes_imagesdir_and_preserves_uri_target() {
+        // A bare target is resolved against `imagesdir` with no `./` prefix; a
+        // URI target is preserved (spaces percent-encoded) and ignores
+        // `imagesdir`.
+        let html = convert(
+            ":imagesdir: assets\n\nvideo::sub/clip.webm[]\n\nvideo::https://ex.com/a b.mp4[]",
+        );
+        let body = content(&html);
+        assert!(body.contains("<video src=\"assets/sub/clip.webm\" controls>"));
+        assert!(body.contains("<video src=\"https://ex.com/a%20b.mp4\" controls>"));
+    }
+
+    #[test]
+    fn video_vimeo_hash_query_params_and_nofullscreen() {
+        // A `<video-id>/<hash>` target supplies the `h=` parameter; the query
+        // params are introduced by `?` then `&amp;`; `nofullscreen` drops the
+        // `allowfullscreen` attribute.
+        let html = convert("video::vid/myhash[vimeo,opts=\"autoplay,loop,muted,nofullscreen\"]");
+        assert!(content(&html).contains(
+            "<iframe src=\"https://player.vimeo.com/video/vid?h=myhash&amp;autoplay=1&amp;loop=1&amp;muted=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_list_options_and_nofullscreen() {
+        // A `<video-id>/<list-id>` target sets `list=`; the query flags and the
+        // `fs=0`/no-`allowfullscreen` pair for `nofullscreen` are all covered.
+        let html = convert(
+            "video::abc/PL123[youtube,start=30,end=90,opts=\"autoplay,loop,modest,nocontrols,nofullscreen\"]",
+        );
+        assert!(content(&html).contains(
+            "<iframe src=\"https://www.youtube.com/embed/abc?rel=0&amp;start=30&amp;end=90&amp;autoplay=1&amp;loop=1&amp;controls=0&amp;list=PL123&amp;fs=0&amp;modestbranding=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_loop_falls_back_to_video_id_playlist() {
+        // With `loop` but no explicit list/playlist, the playlist falls back to
+        // the video id so the loop works.
+        let html = convert("video::vid[youtube,opts=loop]");
+        assert!(content(&html).contains(
+            "src=\"https://www.youtube.com/embed/vid?rel=0&amp;loop=1&amp;playlist=vid\""
+        ));
+    }
+
+    #[test]
+    fn video_embed_empty_asset_uri_scheme_is_scheme_relative() {
+        // An empty `asset-uri-scheme` yields a scheme-relative `//…` embed URL.
+        let html = convert_with(
+            "video::v[youtube]",
+            &Options::new().attribute("asset-uri-scheme", ""),
+        );
+        assert!(content(&html).contains("src=\"//www.youtube.com/embed/v?rel=0\""));
     }
 
     #[test]
@@ -2769,6 +4700,95 @@ mod tests {
         assert!(
             html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
         );
+    }
+
+    #[test]
+    fn ordered_list_passes_a_non_numbering_style_through() {
+        // A declared style that is not a numbering keyword is still passed
+        // through as the wrapper/`<ol>` class, matching Asciidoctor; the `<ol>`
+        // then carries no HTML `type`, since only the numbering keywords map to
+        // one.
+        let html = convert("[foo]\n. one\n. two");
+        assert!(
+            html.contains("<div class=\"olist foo\">\n<ol class=\"foo\">\n<li>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn callout_list_renders_ol() {
+        // A callout list annotating a verbatim block renders as `<div
+        // class="colist arabic"><ol>` of `<li><p>…</p></li>`, and the parser
+        // substitutes the callout numbers into the `<pre>` as `<b
+        // class="conum">(n)</b>`.
+        let html = convert("----\ncode <1>\nmore <2>\n----\n\n<1> first\n<2> second");
+        assert!(html.contains("code <b class=\"conum\">(1)</b>"));
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<ol>\n<li>\n<p>first</p>\n</li>\n<li>\n<p>second</p>\n</li>\n</ol>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_list_with_icons_renders_image_table() {
+        // With `icons` set, the list becomes a two-column `<table>` whose first
+        // cell is the numbered callout image.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new().attribute("icons", ""),
+        );
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<table>\n<tr>\n\
+             <td><img src=\"./images/icons/callouts/1.png\" alt=\"1\"></td>\n\
+             <td>first</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_icon_src_escapes_hostile_iconsdir() {
+        // A double quote in `iconsdir` must not break out of the callout list's
+        // `src` attribute: the path is attribute-escaped (`"` -> `&quot;`), so no
+        // raw event-handler markup reaches the `<td>` image. (The image the
+        // parser substitutes into the preceding `<pre>` is rendered by
+        // `asciidoc-parser`, not here.)
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new()
+                .attribute("icons", "")
+                .attribute("iconsdir", "x\"onerror=alert(1)"),
+        );
+        assert!(html
+            .contains("<td><img src=\"x&quot;onerror=alert(1)/callouts/1.png\" alt=\"1\"></td>"));
+    }
+
+    #[test]
+    fn callout_list_with_icons_font_renders_conum_table() {
+        // Under `:icons: font`, the first cell holds the Font Awesome
+        // `<i class="conum">`/`<b>` pair.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains(
+            "<div class=\"colist arabic\">\n<table>\n<tr>\n\
+             <td><i class=\"conum\" data-value=\"1\"></i><b>1</b></td>\n\
+             <td>first</td>\n</tr>\n</table>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn callout_list_with_icons_appends_attached_blocks_in_the_cell() {
+        // An icon-based callout item that carries attached blocks (a
+        // continuation paragraph here) renders them inside the second `<td>`,
+        // after the principal text and with no trailing newline before
+        // `</td>`, matching Asciidoctor's `#{item.text}#{LF + item.content}`.
+        let html = crate::convert_with(
+            "----\ncode <1>\n----\n\n<1> first line\n+\nsecond paragraph\n",
+            &Options::new().attribute("icons", "font"),
+        );
+        assert!(html.contains(
+            "<td><i class=\"conum\" data-value=\"1\"></i><b>1</b></td>\n\
+             <td>first line\n<div class=\"paragraph\">\n<p>second paragraph</p>\n</div></td>"
+        ));
     }
 
     #[test]
@@ -2959,6 +4979,21 @@ mod tests {
     }
 
     #[test]
+    fn empty_inline_passthrough_paragraph_renders_an_empty_p() {
+        // A paragraph whose entire content is an empty inline passthrough
+        // substitutes to nothing, but — unlike a line comment — it is real
+        // content, so Asciidoctor keeps it as `<p></p>`. The two spellings
+        // (`pass:[]` and `$$$$`) both render the empty paragraph.
+        for input in ["pass:[]", "$$$$"] {
+            let html = crate::convert(input);
+            assert_eq!(
+                html.trim_end(),
+                "<div class=\"paragraph\">\n<p></p>\n</div>"
+            );
+        }
+    }
+
+    #[test]
     fn adjacent_line_comment_is_stripped_within_a_paragraph() {
         // A `//` line between two content lines is stripped, joining them into a
         // single paragraph rather than dropping the whole block.
@@ -2990,6 +5025,38 @@ mod tests {
     }
 
     #[test]
+    fn is_line_comment_paragraph_classifies_sources() {
+        use super::is_line_comment_paragraph;
+
+        // A single line comment, and several stacked comment lines, are comment
+        // paragraphs; the multi-line case exercises the per-line scan.
+        assert!(is_line_comment_paragraph("// a comment"));
+        assert!(is_line_comment_paragraph("//c1\n//c2\n//c3"));
+
+        // A bare `//` (empty comment) still counts.
+        assert!(is_line_comment_paragraph("//"));
+
+        // A whitespace-only line among the comments is skipped, not treated as
+        // non-comment content — the branch a paragraph's own source never
+        // reaches (a blank line ends the paragraph), so it is pinned here.
+        assert!(is_line_comment_paragraph("//c1\n   \n//c2"));
+        assert!(is_line_comment_paragraph("//c1\n\t\n//c2"));
+
+        // Any non-comment line disqualifies the whole paragraph: real text, an
+        // empty inline passthrough (the #200 case), or a `///` that is ordinary
+        // text rather than a comment marker.
+        assert!(!is_line_comment_paragraph("pass:[]"));
+        assert!(!is_line_comment_paragraph("$$$$"));
+        assert!(!is_line_comment_paragraph("/// not a comment"));
+        assert!(!is_line_comment_paragraph("//c1\ntext"));
+        assert!(!is_line_comment_paragraph("text\n//c1"));
+
+        // A source with no non-blank line is not a comment paragraph.
+        assert!(!is_line_comment_paragraph(""));
+        assert!(!is_line_comment_paragraph("   \n\t"));
+    }
+
+    #[test]
     fn block_comment_at_end_of_document_creates_no_paragraph() {
         // Trailing newlines after a closing comment block must not produce a
         // spurious empty paragraph.
@@ -3006,7 +5073,7 @@ mod tests {
     }
 
     // The following exercise the document-attribute-driven skeleton, reading
-    // resolved attributes straight off the `Document` (asciidoc-parser#620).
+    // resolved attributes straight off the `Document`.
 
     #[test]
     fn lang_attribute_drives_html_lang() {
@@ -3217,6 +5284,20 @@ mod tests {
     }
 
     #[test]
+    fn revision_line_with_only_a_date_omits_the_version() {
+        // A revision line that carries no version number – just a date, which
+        // does not match the `v<digit>` standalone-revision shape – yields no
+        // `revnumber`, so only the `revdate` span is emitted. Matches
+        // Asciidoctor 2.0.26.
+        let html = convert("= Doc\nJane Doe\n2026-01-01\n\nBody.");
+        assert!(
+            html.contains("<span id=\"revdate\">2026-01-01</span>"),
+            "{html}"
+        );
+        assert!(!html.contains("id=\"revnumber\""), "{html}");
+    }
+
+    #[test]
     fn literal_style_paragraph_renders_a_literalblock() {
         let html = convert("[literal]\n<lit> & co");
         assert!(html.contains(
@@ -3246,6 +5327,129 @@ mod tests {
         assert!(!html.contains("unsupported"));
     }
 
+    #[test]
+    fn stem_block_wraps_the_equation_in_math_delimiters() {
+        // A `[stem]` block resolves to the document's `stem` notation, which
+        // defaults to AsciiMath (`\$ … \$`), matching Asciidoctor's
+        // `convert_stem`.
+        let html = convert("[stem]\n++++\nx = y^2\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\\$x = y^2\\$\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn latexmath_block_uses_bracket_delimiters() {
+        // An `[latexmath]` block wraps its equation in `\[ … \]`, and the
+        // parser has already escaped its special characters.
+        let html = convert("[latexmath]\n++++\nC = \\alpha < 1\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\
+                 \\[C = \\alpha &lt; 1\\]\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn bare_stem_block_follows_the_document_stem_attribute() {
+        // With `:stem: latexmath`, a bare `[stem]` block renders in LaTeX
+        // notation (`\[ … \]`) rather than the AsciiMath default.
+        let html = convert(":stem: latexmath\n\n[stem]\n++++\nC = 1\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\\[C = 1\\]\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn stem_block_honors_id_role_and_title() {
+        // The wrapper carries the block `id` and roles; a titled stem block
+        // gains a plain `<div class="title">` (stem blocks are not captioned).
+        let html = convert("[stem#eq1.myrole]\n.My equation\n++++\nx\n++++\n");
+        assert!(
+            html.contains(
+                "<div id=\"eq1\" class=\"stemblock myrole\">\n\
+                 <div class=\"title\">My equation</div>\n\
+                 <div class=\"content\">\n\\$x\\$\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_breaks_multiple_equations_with_br() {
+        // AsciiMath keeps blank-line-separated equations distinct, closing and
+        // reopening the delimiter around a `<br>` (Asciidoctor's `StemBreakRx`).
+        let html = convert("[asciimath]\n++++\ns = ut\n\nv = u + at\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$s = ut\\$\n<br>\n\\$v = u + at\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_breaks_on_a_line_continuation() {
+        // A trailing-backslash line continuation is also a break: the space and
+        // backslash are dropped and the delimiter closes and reopens with no
+        // `<br>` (one line break yields zero `<br>`s), matching `StemBreakRx`.
+        let html = convert("[asciimath]\n++++\na \\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_break_adds_one_br_per_extra_blank_line() {
+        // Two blank lines (three newlines) between equations emit two `<br>`
+        // elements — one per line break beyond the first.
+        let html = convert("[asciimath]\n++++\na\n\n\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_break_absorbs_a_multi_line_continuation_run() {
+        // A line continuation may span several lines (`\` then a bare `\`
+        // line); the whole run is one break, with one `<br>` per line break
+        // beyond the first — exercising `StemBreakRx`'s `(?:\\?\n)*` tail.
+        let html = convert("[asciimath]\n++++\na \\\n\\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn empty_stem_block_renders_the_bare_delimiter_pair() {
+        // An empty stem block still emits the delimiter pair (`\$\$`), matching
+        // Asciidoctor — the wrap applies even when there is no equation text.
+        let html = convert("[stem]\n++++\n++++\n");
+        assert!(
+            html.contains("<div class=\"stemblock\">\n<div class=\"content\">\n\\$\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn stem_block_does_not_double_wrap_an_already_delimited_equation() {
+        // An equation the author already delimited is left untouched.
+        let html = convert("[asciimath]\n++++\n\\$x\\$\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$x\\$\n</div>"),
+            "{html}"
+        );
+    }
+
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
     // default `html5` output (the parity oracle).
 
@@ -3269,6 +5473,63 @@ mod tests {
     }
 
     #[test]
+    fn delimited_source_block_wraps_code_in_a_highlight_pre() {
+        // A `[source,<lang>]` *delimited* (`----`) listing must render the same
+        // `<pre class="highlight"><code …>` wrapper as the paragraph form, not a
+        // bare `<pre>` listing block (see #159). The delimited form resolves to
+        // the `listing` context with `declared_style() == Some("source")`, so it
+        // is routed to `source()` rather than the plain verbatim path.
+        let html = convert("[source,ruby]\n----\ndef x\nend\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
+                 def x\nend</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn comma_shorthand_listing_renders_as_a_source_block() {
+        // The `[,<lang>]` comma shorthand is equivalent to `[source,<lang>]`, so
+        // a `----` listing declared that way must render the same
+        // `<pre class="highlight"><code …>` wrapper, not a bare `<pre>` listing
+        // block (see #207). Here the declared style is absent and the language
+        // sits in the second positional attribute, so the block is promoted to
+        // `source()` just as Asciidoctor promotes it.
+        let html = convert("[,ruby]\n----\nputs 1\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
+                 puts 1</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn plain_style_listing_stays_a_verbatim_listing() {
+        // A first-positional style that is *not* a language (`[ruby]`) leaves the
+        // block a plain listing with a bare `<pre>` — Asciidoctor only promotes a
+        // listing to `source` when the block style is absent and a language sits
+        // in the second position, so a single positional attribute is a style,
+        // not a comma-shorthand language.
+        let html = convert("[ruby]\n----\nputs 1\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre>puts 1</pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
     fn source_block_honors_nowrap() {
         // A source block adds `nowrap` after `highlight` when wrapping is off
         // (here via `:prewrap!:`), matching Asciidoctor's `highlight nowrap`.
@@ -3277,6 +5538,351 @@ mod tests {
             html.contains("<pre class=\"highlight nowrap\"><code class=\"language-ruby\""),
             "{html}"
         );
+    }
+
+    // The client-side syntax highlighters (`highlightjs`, `prettify`) reshape
+    // the source block's `<pre>`/`<code>` and add a CDN `<link>`/`<script>` to
+    // the document shell. Each fragment below is byte-checked against
+    // Asciidoctor 2.0.26 with the matching `-a source-highlighter=…` (the parity
+    // oracle). See #215.
+    //
+    // These set `source-highlighter` through the API (Asciidoctor's `-a
+    // source-highlighter=…`), the trusted opt-in honored even under the default
+    // `Secure` safe mode. A *document-set* `:source-highlighter:` is locked out
+    // at `Server` and above as a security measure (see the safe-mode tests
+    // below and `Options::apply`), so the byte-parity tests use the API form.
+
+    /// Converts `source` to a standalone document with the client-side
+    /// `highlighter` enabled through the API, so the highlighter takes effect
+    /// even under the default `Secure` safe mode.
+    fn convert_hl(highlighter: &str, source: &str) -> String {
+        convert_with(
+            source,
+            &Options::new().attribute("source-highlighter", highlighter),
+        )
+    }
+
+    #[test]
+    fn highlightjs_shapes_the_source_pre_and_code() {
+        // The `<pre>` gains the `highlightjs` class before `highlight`, and the
+        // `<code>` names the language with the trailing `hljs` class Asciidoctor
+        // adds for the browser-side highlighter.
+        let html = convert_hl("highlightjs", "[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-ruby hljs\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_uses_language_none_without_a_language() {
+        // With no declared language the `<code>` is `language-none hljs` and
+        // carries no `data-lang`, matching `HighlightJsAdapter#format`.
+        let html = convert_hl("highlightjs", "[source]\n----\nplain\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-none hljs\">plain</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_emits_head_link_and_footer_scripts() {
+        // The head links the theme stylesheet (default `github`) and the footer
+        // loads highlight.js and runs the initializer, both from the CDN.
+        let html = convert_hl("highlightjs", "[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/highlight.min.js\"></script>\n\
+                 <script>\n\
+                 if (!hljs.initHighlighting.called) {\n  \
+                 hljs.initHighlighting.called = true\n  \
+                 ;[].slice.call(document.querySelectorAll('pre.highlight > code[data-lang]'))\
+                 .forEach(function (el) { hljs.highlightBlock(el) })\n\
+                 }\n\
+                 </script>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_honors_theme_dir_and_languages() {
+        // `highlightjsdir` overrides the CDN base, `highlightjs-theme` the
+        // stylesheet, and each `highlightjs-languages` entry loads a language
+        // pack (with leading whitespace stripped). These secondary attributes
+        // are not safe-mode-locked, so the document may set them.
+        let html = convert_hl(
+            "highlightjs",
+            ":highlightjsdir: /assets/hjs\n\
+             :highlightjs-theme: monokai\n\
+             :highlightjs-languages: ruby, python\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"/assets/hjs/styles/monokai.min.css\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/highlight.min.js\"></script>\n"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/languages/ruby.min.js\"></script>\n"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/languages/python.min.js\"></script>\n"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_shapes_the_source_pre_and_code() {
+        // Prettify prepends `prettyprint` and leaves the `<code>` in its default
+        // shape — a bare `data-lang`, no class.
+        let html = convert_hl("prettify", "[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"prettyprint highlight\">\
+                 <code data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_appends_the_linenums_classes() {
+        // A `linenums` source block appends ` linenums` (or ` linenums:<start>`
+        // when a `start` is given) after the `highlight` classes.
+        let plain = convert_hl("prettify", "[source%linenums,ruby]\n----\nputs 1\n----");
+        assert!(
+            plain.contains("<pre class=\"prettyprint highlight linenums\">"),
+            "{plain}"
+        );
+
+        let started = convert_hl(
+            "prettify",
+            "[source%linenums,ruby,start=5]\n----\nputs 1\n----",
+        );
+        assert!(
+            started.contains("<pre class=\"prettyprint highlight linenums:5\">"),
+            "{started}"
+        );
+    }
+
+    #[test]
+    fn prettify_emits_head_link_and_footer_script() {
+        let html = convert_hl("prettify", "[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 prettify/r298/prettify.min.css\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 prettify/r298/run_prettify.min.js\"></script>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn serverside_highlighter_keeps_the_default_shape() {
+        // A server-side highlighter this crate does not render (coderay, tracked
+        // in #223) leaves the source block in the default unhighlighted shape and
+        // adds no CDN assets – even when enabled through the trusted API.
+        let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlight\">\
+                 <code class=\"language-ruby\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+        assert!(!html.contains("cdnjs.cloudflare.com"), "{html}");
+    }
+
+    #[test]
+    fn highlighter_reaches_a_source_block_in_a_table_cell() {
+        // The highlighter is a document-level property, so a source block nested
+        // in an AsciiDoc table cell is highlighted too.
+        let html = convert_hl(
+            "highlightjs",
+            "|===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
+        );
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-ruby hljs\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asset_uri_scheme_controls_the_cdn_scheme() {
+        // `asset-uri-scheme` sets the scheme of the CDN base URL: an explicit
+        // empty value (Asciidoctor's `-a asset-uri-scheme=`) yields a
+        // protocol-relative `//…`, and any other value is used as-is. (A *bare*
+        // `:asset-uri-scheme:` resolves to the `https` default in the parser, so
+        // the protocol-relative form is reached through an empty value.)
+        let relative = convert_with(
+            "[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .attribute("source-highlighter", "highlightjs")
+                .attribute("asset-uri-scheme", ""),
+        );
+        assert!(
+            relative.contains(
+                "<link rel=\"stylesheet\" href=\"//cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{relative}"
+        );
+
+        let http = convert_hl(
+            "highlightjs",
+            ":asset-uri-scheme: http\n\n[source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            http.contains(
+                "<link rel=\"stylesheet\" href=\"http://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{http}"
+        );
+    }
+
+    #[test]
+    fn prettify_honors_dir_and_theme() {
+        // `prettifydir` overrides the CDN base for both the stylesheet and the
+        // script, and `prettify-theme` selects the stylesheet.
+        let html = convert_hl(
+            "prettify",
+            ":prettifydir: /assets/pf\n\
+             :prettify-theme: sunburst\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"/assets/pf/sunburst.min.css\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/pf/run_prettify.min.js\"></script>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_theme_may_be_a_full_url() {
+        // An `http(s)` `prettify-theme` is linked directly rather than resolved
+        // against `prettifydir`.
+        let html = convert_hl(
+            "prettify",
+            ":prettify-theme: https://cdn.example.com/pp.css\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"https://cdn.example.com/pp.css\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_skips_empty_language_entries() {
+        // A trailing comma in `highlightjs-languages` leaves an empty entry,
+        // which is dropped rather than emitting a `languages/.min.js` script —
+        // matching Asciidoctor, whose `split` drops the trailing empty.
+        let html = convert_hl(
+            "highlightjs",
+            ":highlightjs-languages: ruby,\n\n[source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(html.contains("/languages/ruby.min.js"), "{html}");
+        assert!(!html.contains("/languages/.min.js"), "{html}");
+    }
+
+    #[test]
+    fn prettify_uses_a_bare_code_without_a_language() {
+        // With no declared language prettify leaves the `<code>` bare (no class,
+        // no `data-lang`).
+        let html = convert_hl("prettify", "[source]\n----\nplain\n----");
+        assert!(
+            html.contains("<pre class=\"prettyprint highlight\"><code>plain</code></pre>"),
+            "{html}"
+        );
+    }
+
+    // Safe-mode gating of `source-highlighter` (Greptile P1 / #45). A
+    // highlighter emits `<link>`/`<script>` tags whose origin a document
+    // attribute can steer, so an untrusted document must not be able to enable
+    // one under a server-side safe mode. This mirrors Asciidoctor's
+    // `attr_overrides['source-highlighter'] ||= nil` at `Server` and above.
+
+    #[test]
+    fn document_set_source_highlighter_is_ignored_at_server_and_above() {
+        // A document that both enables a highlighter and points its asset dir at
+        // an attacker origin must render neither the highlighter nor the script
+        // when converted under `Server` or `Secure` – it falls back to the plain
+        // unhighlighted shape.
+        for mode in [SafeMode::Server, SafeMode::Secure] {
+            let html = convert_with(
+                ":source-highlighter: highlightjs\n\
+                 :highlightjsdir: https://evil.example.com\n\n\
+                 [source,ruby]\n----\nputs 1\n----",
+                &Options::new().safe_mode(mode),
+            );
+            assert!(!html.contains("evil.example.com"), "{mode:?}: {html}");
+            assert!(!html.contains("highlightjs highlight"), "{mode:?}: {html}");
+            assert!(!html.contains("cdnjs.cloudflare.com"), "{mode:?}: {html}");
+            assert!(
+                html.contains(
+                    "<pre class=\"highlight\">\
+                     <code class=\"language-ruby\" data-lang=\"ruby\">puts 1</code></pre>"
+                ),
+                "{mode:?}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn document_set_source_highlighter_is_honored_below_server() {
+        // Below `Server` (here `Unsafe`) a document may enable a highlighter,
+        // matching Asciidoctor.
+        let html = convert_with(
+            ":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
+    fn api_set_source_highlighter_is_honored_under_secure() {
+        // A trusted API opt-in (`-a source-highlighter=…`) works even under the
+        // default `Secure` safe mode, matching Asciidoctor.
+        let html = convert_with(
+            "[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Secure)
+                .attribute("source-highlighter", "highlightjs"),
+        );
+        assert!(html.contains("highlightjs highlight"), "{html}");
     }
 
     // Tab expansion (`tabsize`) beyond the leading-tab fast path: an embedded
