@@ -905,7 +905,8 @@ struct Renderer<'a> {
 
     /// The document `imagesdir` attribute (Asciidoctor's asset base for image
     /// targets), or `None` when unset. It prefixes a block image's `src` unless
-    /// the target is already a URI or the macro carries its own `imagesdir`.
+    /// the target is already a URI; a macro-level `imagesdir` is ignored (see
+    /// [`image_src`](Self::image_src)).
     imagesdir: Option<String>,
 
     /// The document `tabsize` attribute as an integer (Asciidoctor's
