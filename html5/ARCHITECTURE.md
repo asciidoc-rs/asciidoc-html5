@@ -226,8 +226,9 @@ standalone even when piping. Embedded output emits no stylesheet, so the
 
 - Block **content** (`rendered_content()`) and **titles** (`title()`) are already
   HTML with substitutions applied — emitted verbatim.
-- Values **this crate** injects into attributes — ids, roles, and (later) image
-  `src`/`alt`, link `href` — are escaped with `html::escape_attribute`.
+- Values **this crate** injects into attributes — ids, roles, and a block image's
+  `src`/`alt`/dimensions and link `href` — are escaped with
+  `html::escape_attribute`.
 - Verbatim block bodies are emitted inside `<pre>` with their literal line breaks
   preserved and no added surrounding whitespace, so the rendered text is
   byte-faithful.
@@ -335,8 +336,9 @@ returned HTML is byte-identical to the writer-less path.
    and the attribute-driven skeleton (`lang`, `doctype`,
    `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** the delimited example/sidebar/open blocks, admonitions,
-   quotes/verses, and lists (un/ordered/description/callout) are done; images
-   are still to come.
+   quotes/verses, lists (un/ordered/description/callout), and block images are
+   done; the advanced image modes (`data-uri` #51, interactive/inline SVG #52,
+   icons #50) and the block audio/video macros are still to come.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;
    the `<body class>` TOC classes, the TOC (every placement —

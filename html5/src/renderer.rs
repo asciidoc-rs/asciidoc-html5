@@ -30,11 +30,12 @@ use asciidoc_parser::{
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
         ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
-        ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
-        SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
-        TocBlock, VerticalAlignment,
+        ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock, QuoteType, SectionBlock,
+        SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
+        TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue, TocMode},
+    parser::{DefaultPathResolver, PathResolver},
     Document, HasSpan, SafeMode,
 };
 
@@ -142,6 +143,80 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     match document.attribute_value(name) {
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
+    }
+}
+
+/// Asciidoctor's default `alt` for an image whose macro carries none: the
+/// target's basename (its final path segment, without extension) with each `_`
+/// and `-` turned into a space. Mirrors the `basename(target.tr('_-', ' '))`
+/// derivation the parser uses for inline images.
+fn default_alt(target: &str) -> String {
+    let spaced = target.replace(['_', '-'], " ");
+
+    let last_segment = spaced.rsplit(['/', '\\']).next().unwrap_or(&spaced);
+
+    // Drop the extension (the text after the final `.`), matching Rust's
+    // `Path::file_stem`: a leading-dot-only name keeps its text.
+    match last_segment.rfind('.') {
+        Some(dot) if dot > 0 => last_segment[..dot].to_string(),
+        _ => last_segment.to_string(),
+    }
+}
+
+/// Whether `target` looks like a URI (a scheme followed by `:`), so it should
+/// pass through as an image `src` rather than being joined with `imagesdir`.
+/// Mirrors the parser's `is_uri_ish`: a leading letter, then one or more of
+/// letters/digits/`.`/`+`/`-`, then a `:`.
+fn is_uri_ish(target: &str) -> bool {
+    let mut chars = target.chars();
+
+    match chars.next() {
+        Some(first) if first.is_alphabetic() => {}
+        _ => return false,
+    }
+
+    let mut saw_scheme_char = false;
+
+    for ch in chars {
+        if ch == ':' {
+            return saw_scheme_char;
+        }
+
+        if ch.is_alphanumeric() || matches!(ch, '.' | '+' | '-') {
+            saw_scheme_char = true;
+        } else {
+            return false;
+        }
+    }
+
+    false
+}
+
+/// The ` target="…"`/` rel="…"` fragment Asciidoctor's
+/// `append_link_constraint_attrs` adds to an image link: a `window` sets
+/// `target` (and, for `_blank` or an explicit `noopener` option, `rel`), while
+/// a `nofollow` option folds into `rel`.
+fn link_constraint_attrs(window: Option<&str>, nofollow: bool, noopener: bool) -> String {
+    let rel = if nofollow { Some("nofollow") } else { None };
+
+    match window {
+        Some(window) => {
+            let rel_noopener = if window == "_blank" || noopener {
+                match rel {
+                    Some(rel) => format!(" rel=\"{rel} noopener\""),
+                    None => " rel=\"noopener\"".to_string(),
+                }
+            } else {
+                String::new()
+            };
+
+            format!(" target=\"{}\"{rel_noopener}", escape_attribute(window))
+        }
+
+        None => match rel {
+            Some(rel) => format!(" rel=\"{rel}\""),
+            None => String::new(),
+        },
     }
 }
 
@@ -735,6 +810,7 @@ pub(crate) fn render_document<'a>(
         iconsdir: attribute_str(document, "iconsdir")
             .unwrap_or_else(|| "./images/icons".to_string()),
         icontype: attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string()),
+        imagesdir: attribute_str(document, "imagesdir"),
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
@@ -773,6 +849,7 @@ struct CellRenderConfig {
     icons_font: bool,
     iconsdir: String,
     icontype: String,
+    imagesdir: Option<String>,
     doc_tabsize: i64,
     source_indent: Option<i64>,
     prewrap: bool,
@@ -825,6 +902,11 @@ struct Renderer<'a> {
     /// The document `icontype` attribute (default `png`), the file extension of
     /// the callout-number images of an icon-based callout list.
     icontype: String,
+
+    /// The document `imagesdir` attribute (Asciidoctor's asset base for image
+    /// targets), or `None` when unset. It prefixes a block image's `src` unless
+    /// the target is already a URI or the macro carries its own `imagesdir`.
+    imagesdir: Option<String>,
 
     /// The document `tabsize` attribute as an integer (Asciidoctor's
     /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
@@ -1381,6 +1463,13 @@ impl Renderer<'_> {
             },
             Block::Table(table) => self.table(block, table),
             Block::Toc(toc) => self.toc_macro(block, toc),
+            Block::Media(media) => match media.type_() {
+                MediaType::Image => self.image(block, media),
+
+                // Only the block image macro is wired up so far; the audio and
+                // video block macros are deferred to later phases.
+                MediaType::Audio | MediaType::Video => self.unsupported(&block.resolved_context()),
+            },
 
             // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
             other => self.unsupported(&other.resolved_context()),
@@ -2324,6 +2413,7 @@ impl Renderer<'_> {
                         icons_font: self.icons_font,
                         iconsdir: self.iconsdir.clone(),
                         icontype: self.icontype.clone(),
+                        imagesdir: self.imagesdir.clone(),
                         doc_tabsize: self.doc_tabsize,
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
@@ -2620,6 +2710,162 @@ impl Renderer<'_> {
         }
     }
 
+    /// `<div class="imageblock …"><div class="content"><img
+    /// …></div>[title]</div>`, matching Asciidoctor's `convert_image` for a
+    /// block image (`image::…[]`).
+    ///
+    /// The `<img>` carries the resolved `src` (the target joined with
+    /// `imagesdir` — see [`image_src`](Self::image_src)), the `alt` text (an
+    /// explicit value, else the target's basename with `_`/`-` turned into
+    /// spaces), and any `width`/`height`. A `link` wraps the image in `<a
+    /// class="image">`. The wrapper's classes are `imageblock`, then a
+    /// `float` role, then a `text-<align>` class, then the block's roles; a
+    /// titled image gains a captioned `Figure N.` title *after* its content
+    /// (unlike most blocks, whose title precedes their content).
+    ///
+    /// The advanced image modes build on this baseline in their own issues: the
+    /// `data-uri` embed (#51), interactive/inline SVG (#52), and icons (#50).
+    /// An SVG target therefore renders as a plain `<img>` here. A `title=`
+    /// given *inside* the macro is not yet promoted to the figure caption
+    /// (the parser surfaces it only as a macro attribute); use the `.Title`
+    /// block line.
+    fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let macro_attrs = media.macro_attrlist();
+
+        // Asciidoctor merges the block attribute line and the macro's own
+        // attribute list into one set, with the macro list winning. Named
+        // lookups therefore try the macro list first and fall back to the block
+        // list; the positional `alt`/`width`/`height` live only in the macro
+        // list (the block line has no positional slots), so those fall back to a
+        // same-named attribute there.
+        let named = |name: &str| -> Option<&str> {
+            macro_attrs
+                .named_attribute(name)
+                .or_else(|| block.attrlist().and_then(|a| a.named_attribute(name)))
+                .map(|attr| attr.value())
+        };
+
+        let positional = |name: &str, n: usize| -> Option<&str> {
+            macro_attrs
+                .named_or_positional_attribute(name, n)
+                .or_else(|| block.attrlist().and_then(|a| a.named_attribute(name)))
+                .map(|attr| attr.value())
+        };
+
+        let target = media.resolved_target();
+        let src = self.image_src(target);
+
+        // An explicit `alt` wins; otherwise Asciidoctor derives it from the
+        // target's basename with `_`/`-` turned into spaces. The value is a raw
+        // source string (the block macro attribute list is parsed without the
+        // inline special-character pass), so it is attribute-escaped here to
+        // match Asciidoctor's `encode_attribute_value node.alt`.
+        let alt = positional("alt", 1)
+            .map(str::to_string)
+            .unwrap_or_else(|| default_alt(target));
+
+        let mut dimensions = String::new();
+
+        if let Some(width) = positional("width", 2) {
+            dimensions.push_str(&format!(" width=\"{}\"", escape_attribute(width)));
+        }
+
+        if let Some(height) = positional("height", 3) {
+            dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
+        }
+
+        let mut img = format!(
+            "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+            escape_attribute(&src),
+            escape_attribute(&alt),
+        );
+
+        // A `link` wraps the image in an anchor whose `href` is the link value
+        // verbatim (Asciidoctor 2.0.26 does not resolve `link=self` to the
+        // image's own `src`). Its `append_link_constraint_attrs` adds
+        // `target`/`rel` from `window` and the `nofollow`/`noopener` options.
+        if let Some(link) = named("link") {
+            let window = named("window");
+
+            let nofollow = macro_attrs.has_option("nofollow")
+                || block.attrlist().is_some_and(|a| a.has_option("nofollow"));
+
+            let noopener = macro_attrs.has_option("noopener")
+                || block.attrlist().is_some_and(|a| a.has_option("noopener"));
+
+            img = format!(
+                "<a class=\"image\" href=\"{}\"{}>{img}</a>",
+                escape_attribute(link),
+                link_constraint_attrs(window, nofollow, noopener),
+            );
+        }
+
+        // The wrapper classes follow Asciidoctor's order: `imageblock`, then the
+        // `float` role, then a `text-<align>` class, then the block's roles. A
+        // macro `role=` overrides the block line's roles entirely (last write
+        // wins in Asciidoctor's merged attribute set), so prefer it.
+        let mut classes = String::from("imageblock");
+
+        if let Some(float) = named("float") {
+            classes.push(' ');
+            classes.push_str(&escape_attribute(float));
+        }
+
+        if let Some(align) = named("align") {
+            classes.push_str(&format!(" text-{}", escape_attribute(align)));
+        }
+
+        match macro_attrs.named_attribute("role") {
+            Some(role) => {
+                for role in role.value().split_whitespace() {
+                    classes.push(' ');
+                    classes.push_str(&escape_attribute(role));
+                }
+            }
+
+            None => {
+                for role in block.roles() {
+                    classes.push(' ');
+                    classes.push_str(&escape_attribute(role));
+                }
+            }
+        }
+
+        self.line(&format!(
+            "<div{} class=\"{classes}\">",
+            id_attribute(block.id())
+        ));
+        self.line("<div class=\"content\">");
+        self.line(&img);
+        self.line("</div>");
+
+        // A block image places its captioned title *after* the content div.
+        if let Some(title) = block.title() {
+            let caption = block.caption().unwrap_or_default();
+            self.line(&format!("<div class=\"title\">{caption}{title}</div>"));
+        }
+
+        self.line("</div>");
+    }
+
+    /// Resolves a block image's `src`: the target joined with the document
+    /// `imagesdir` through the same web-path resolver Asciidoctor uses. A
+    /// target that is already a URI passes through unchanged (only its
+    /// spaces are percent-encoded); the `imagesdir` join never applies to
+    /// it.
+    ///
+    /// Unlike an inline image, a block image ignores a macro-level `imagesdir`
+    /// attribute — Asciidoctor's `image_uri` reads only the document attribute.
+    /// The `data-uri` embed is deferred to #51, so this crate never reads the
+    /// image bytes — the `src` is always a web path (or the verbatim URI).
+    fn image_src(&self, target: &str) -> String {
+        if is_uri_ish(target) {
+            return target.replace(' ', "%20");
+        }
+
+        DefaultPathResolver::default().web_path(target, self.imagesdir.as_deref())
+    }
+
     /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
     fn open_block_wrapper<'src>(&mut self, block: &'src Block<'src>, base_class: &str) {
         self.line(&format!(
@@ -2906,6 +3152,7 @@ fn render_cell_document<'s>(
         icons_font: config.icons_font,
         iconsdir: config.iconsdir.clone(),
         icontype: config.icontype.clone(),
+        imagesdir: config.imagesdir.clone(),
         doc_tabsize: config.doc_tabsize,
         source_indent: config.source_indent,
         prewrap: config.prewrap,
@@ -3234,11 +3481,81 @@ mod tests {
 
     #[test]
     fn unsupported_block_leaves_a_marker() {
-        // Block images are not rendered yet, so they still emit the placeholder
-        // marker (all list types – unordered, ordered, description, callout –
-        // now render).
-        let html = convert("image::foo.png[Alt]");
-        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'image' -->"));
+        // The audio block macro is not rendered yet, so it still emits the
+        // placeholder marker (block images now render; see the `image_*` tests).
+        let html = convert("audio::foo.mp3[]");
+        assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'audio' -->"));
+    }
+
+    #[test]
+    fn image_block_renders_imageblock() {
+        // The basic block image: `src`, positional `alt`/`width`/`height`, and
+        // the `imageblock` wrapper, matching Asciidoctor's `convert_image`.
+        let html = convert("image::screenshot.png[block image,800,450]");
+        assert!(content(&html).contains(
+            "<div class=\"imageblock\">\n\
+             <div class=\"content\">\n\
+             <img src=\"screenshot.png\" alt=\"block image\" width=\"800\" height=\"450\">\n\
+             </div>\n\
+             </div>"
+        ));
+    }
+
+    #[test]
+    fn image_block_default_alt_from_target() {
+        // With no explicit alt, Asciidoctor derives it from the target basename
+        // with `_`/`-` turned into spaces.
+        let html = convert("image::my_cool-pic.png[]");
+        assert!(html.contains("<img src=\"my_cool-pic.png\" alt=\"my cool pic\">"));
+    }
+
+    #[test]
+    fn image_block_title_is_a_captioned_figure_after_content() {
+        // A titled image gains a `Figure N.` caption in a title div placed after
+        // the content div.
+        let html = convert(".A caption\nimage::b.png[Alt Text]");
+        assert!(content(&html).contains(
+            "<img src=\"b.png\" alt=\"Alt Text\">\n\
+             </div>\n\
+             <div class=\"title\">Figure 1. A caption</div>"
+        ));
+    }
+
+    #[test]
+    fn image_block_honors_id_float_align_and_roles() {
+        let html = convert("[#myid.role1.role2]\nimage::c.png[align=center,float=left]");
+        assert!(
+            html.contains("<div id=\"myid\" class=\"imageblock left text-center role1 role2\">")
+        );
+    }
+
+    #[test]
+    fn image_block_link_wraps_the_image() {
+        let html = convert("image::e.png[link=https://example.com]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://example.com\">\
+             <img src=\"e.png\" alt=\"e\"></a>"
+        ));
+    }
+
+    #[test]
+    fn image_block_prefixes_imagesdir() {
+        let html = convert(":imagesdir: assets/img\n\nimage::a.png[]");
+        assert!(html.contains("<img src=\"assets/img/a.png\" alt=\"a\">"));
+    }
+
+    #[test]
+    fn image_block_uri_target_passes_through() {
+        let html = convert("image::http://example.com/a b.png[Remote]");
+        assert!(html.contains("<img src=\"http://example.com/a%20b.png\" alt=\"Remote\">"));
+    }
+
+    #[test]
+    fn audio_and_video_blocks_remain_unsupported() {
+        assert!(convert("video::v.mp4[]")
+            .contains("<!-- asciidoc-html5: unsupported block context 'video' -->"));
+        assert!(convert("audio::a.mp3[]")
+            .contains("<!-- asciidoc-html5: unsupported block context 'audio' -->"));
     }
 
     #[test]

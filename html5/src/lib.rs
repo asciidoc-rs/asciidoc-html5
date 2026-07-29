@@ -407,8 +407,9 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// This is an early baseline. It renders the document skeleton, the header, and
 /// paragraphs, sections, the preamble, verbatim (listing/literal) blocks, and
 /// thematic and page breaks. Constructs that are not yet wired up (lists,
-/// tables, admonitions, quotes, images, and the delimited example/sidebar/open
-/// blocks) emit a visible `<!-- asciidoc-html5: unsupported … -->` comment so
+/// tables, admonitions, quotes, block audio/video, and the delimited
+/// example/sidebar/open blocks) emit a visible `<!-- asciidoc-html5:
+/// unsupported … -->` comment so
 /// the output stays well-formed and the gaps are easy to see. The aim, as
 /// coverage grows, is parity with Asciidoctor's `html5` backend.
 ///
