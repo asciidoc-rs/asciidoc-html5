@@ -4103,6 +4103,52 @@ mod tests {
     }
 
     #[test]
+    fn asciimath_block_breaks_on_a_line_continuation() {
+        // A trailing-backslash line continuation is also a break: the space and
+        // backslash are dropped and the delimiter closes and reopens with no
+        // `<br>` (one line break yields zero `<br>`s), matching `StemBreakRx`.
+        let html = convert("[asciimath]\n++++\na \\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_break_adds_one_br_per_extra_blank_line() {
+        // Two blank lines (three newlines) between equations emit two `<br>`
+        // elements — one per line break beyond the first.
+        let html = convert("[asciimath]\n++++\na\n\n\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_break_absorbs_a_multi_line_continuation_run() {
+        // A line continuation may span several lines (`\` then a bare `\`
+        // line); the whole run is one break, with one `<br>` per line break
+        // beyond the first — exercising `StemBreakRx`'s `(?:\\?\n)*` tail.
+        let html = convert("[asciimath]\n++++\na \\\n\\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn empty_stem_block_renders_the_bare_delimiter_pair() {
+        // An empty stem block still emits the delimiter pair (`\$\$`), matching
+        // Asciidoctor — the wrap applies even when there is no equation text.
+        let html = convert("[stem]\n++++\n++++\n");
+        assert!(
+            html.contains("<div class=\"stemblock\">\n<div class=\"content\">\n\\$\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
     fn stem_block_does_not_double_wrap_an_already_delimited_equation() {
         // An equation the author already delimited is left untouched.
         let html = convert("[asciimath]\n++++\n\\$x\\$\n++++\n");
