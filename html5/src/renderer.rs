@@ -950,13 +950,20 @@ pub(crate) fn render_document<'a>(
 ) -> String {
     // Build the header/preamble TOC block once, up front — it is emitted at the
     // single site the placement selects. Only the placements that render a TOC
-    // in the document flow relative to fixed structure (`auto`/`left`/`right`
-    // near the top, `preamble` below the preamble) produce one here; the
-    // `macro` placement renders at its `toc::[]` block instead (see
-    // [`toc_macro`](Renderer::toc_macro)), and `disabled` produces none.
+    // in the document flow relative to fixed structure
+    // (`auto`/`left`/`right`/`top`/`bottom` near the top, `preamble` below the
+    // preamble) produce one here; the `macro` placement renders at its `toc::[]`
+    // block instead (see [`toc_macro`](Renderer::toc_macro)), and `disabled`
+    // produces none.
     let toc_mode = document.toc_mode();
     let toc_html = match toc_mode {
-        TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Preamble => render_toc(document),
+        TocMode::Auto
+        | TocMode::Left
+        | TocMode::Right
+        | TocMode::Top
+        | TocMode::Bottom
+        | TocMode::Preamble => render_toc(document),
+
         TocMode::Disabled | TocMode::Macro => String::new(),
     };
 
@@ -1314,15 +1321,16 @@ impl Renderer<'_> {
 
         let mut classes = doctype;
 
-        // An automatically placed TOC (`auto`/`left`/`right`) whose `toc-class`
-        // is set adds `<toc-class> toc-<toc-position>` to the `<body>` class —
-        // the side-column placements set `toc-class` to `toc2`, driving the
-        // fixed-column styling. This mirrors Asciidoctor's `<body>` classes; a
-        // plain `:toc:` (auto, no `toc-class`) leaves the class list untouched.
+        // An automatically placed TOC (`auto`/`left`/`right`/`top`/`bottom`)
+        // whose `toc-class` is set adds `<toc-class> toc-<toc-position>` to the
+        // `<body>` class — the positional placements set `toc-class` to `toc2`,
+        // driving the fixed-column styling. This mirrors Asciidoctor's `<body>`
+        // classes; a plain `:toc:` (auto, no `toc-class`) leaves the class list
+        // untouched.
         if !self.toc_html.is_empty()
             && matches!(
                 self.toc_mode,
-                TocMode::Auto | TocMode::Left | TocMode::Right
+                TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
             )
             && document.has_attribute("toc-class")
         {
@@ -1407,13 +1415,13 @@ impl Renderer<'_> {
             }
         }
 
-        // An `auto`/`left`/`right` TOC leads the embedded body, ahead of the
-        // content, matching Asciidoctor's embeddable output. A `preamble` TOC is
-        // instead emitted within the preamble itself (see [`preamble`]), so it
-        // is excluded here.
+        // An `auto`/`left`/`right`/`top`/`bottom` TOC leads the embedded body,
+        // ahead of the content, matching Asciidoctor's embeddable output. A
+        // `preamble` TOC is instead emitted within the preamble itself (see
+        // [`preamble`]), so it is excluded here.
         if matches!(
             self.toc_mode,
-            TocMode::Auto | TocMode::Left | TocMode::Right
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
         ) && !self.toc_html.is_empty()
         {
             self.line(&self.toc_html.clone());
@@ -1497,11 +1505,11 @@ impl Renderer<'_> {
         let author_line = header.author_line();
         let revision_line = header.revision_line();
 
-        // An `auto`/`left`/`right` TOC is emitted inside the header, after the
-        // details, matching Asciidoctor's `html5` backend.
+        // An `auto`/`left`/`right`/`top`/`bottom` TOC is emitted inside the
+        // header, after the details, matching Asciidoctor's `html5` backend.
         let header_toc = matches!(
             self.toc_mode,
-            TocMode::Auto | TocMode::Left | TocMode::Right
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
         ) && !self.toc_html.is_empty();
 
         if title.is_none() && author_line.is_none() && revision_line.is_none() && !header_toc {
