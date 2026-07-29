@@ -106,6 +106,32 @@ fn renders_nothing(block: &Block<'_>) -> bool {
         && is_line_comment_paragraph(block.span().data())
 }
 
+/// Whether a `----` listing block is source-styled — so it renders through
+/// [`source`](Renderer::source) as `<pre class="highlight"><code …>` rather
+/// than a plain listing.
+///
+/// This mirrors Asciidoctor's listing/source dispatch (`parser.rb`, the
+/// `when :listing, :source` arm): a listing becomes a source block when it
+/// either declares the `source` style explicitly (`[source,ruby]`) or uses the
+/// comma shorthand (`[,ruby]`) — an empty block style with a language in the
+/// second positional attribute. Asciidoctor promotes a bare listing to
+/// `source` only when its first positional (the block style) is absent and its
+/// second positional (the language) is present, so `[ruby]` (style `ruby`) or a
+/// plain `----` stays a listing.
+fn is_source_listing(block: &Block<'_>) -> bool {
+    if block.declared_style() == Some("source") {
+        return true;
+    }
+
+    // The `[,ruby]` shorthand: no declared block style, but a language sits in
+    // the second positional attribute (Asciidoctor's `attributes[2]`).
+    block.declared_style().is_none()
+        && block
+            .attrlist()
+            .and_then(|attrlist| attrlist.nth_attribute(2))
+            .is_some()
+}
+
 /// Whether every non-blank line of a paragraph's `source` is an AsciiDoc line
 /// comment — a line beginning (at column 0) with `//` not immediately followed
 /// by another `/` (which would start a `////` comment-block delimiter),
@@ -1479,10 +1505,11 @@ impl Renderer<'_> {
             Block::Preamble(_) => self.preamble(block),
             Block::Break(brk) => self.break_block(brk),
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
-                // A `[source]`-styled delimited listing renders like a source
-                // block (the `<pre class="highlight"><code …>` shape), matching
-                // Asciidoctor; a plain `----` listing is a verbatim block.
-                "listing" if block.declared_style() == Some("source") => self.source(block),
+                // A source-styled delimited listing renders like a source block
+                // (the `<pre class="highlight"><code …>` shape), matching
+                // Asciidoctor: `[source,ruby]` or the `[,ruby]` comma shorthand.
+                // A plain `----` listing is a verbatim block.
+                "listing" if is_source_listing(block) => self.source(block),
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
@@ -4193,6 +4220,44 @@ mod tests {
                 "<div class=\"listingblock\">\n<div class=\"content\">\n\
                  <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
                  def x\nend</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn comma_shorthand_listing_renders_as_a_source_block() {
+        // The `[,<lang>]` comma shorthand is equivalent to `[source,<lang>]`, so
+        // a `----` listing declared that way must render the same
+        // `<pre class="highlight"><code …>` wrapper, not a bare `<pre>` listing
+        // block (see #207). Here the declared style is absent and the language
+        // sits in the second positional attribute, so the block is promoted to
+        // `source()` just as Asciidoctor promotes it.
+        let html = convert("[,ruby]\n----\nputs 1\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre class=\"highlight\"><code class=\"language-ruby\" data-lang=\"ruby\">\
+                 puts 1</code></pre>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn plain_style_listing_stays_a_verbatim_listing() {
+        // A first-positional style that is *not* a language (`[ruby]`) leaves the
+        // block a plain listing with a bare `<pre>` — Asciidoctor only promotes a
+        // listing to `source` when the block style is absent and a language sits
+        // in the second position, so a single positional attribute is a style,
+        // not a comma-shorthand language.
+        let html = convert("[ruby]\n----\nputs 1\n----\n");
+        assert!(
+            html.contains(
+                "<div class=\"listingblock\">\n<div class=\"content\">\n\
+                 <pre>puts 1</pre>\n\
                  </div>\n</div>"
             ),
             "{html}"
