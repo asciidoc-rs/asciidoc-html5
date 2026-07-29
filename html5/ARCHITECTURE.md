@@ -135,7 +135,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
 | `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
 | `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
-| `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock">…` | ⬜ |
+| `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock"><div class="content"><video …>…</video></div></div>` (self-hosted, plus `youtube`/`vimeo` `<iframe>` embeds); `<div class="audioblock">…<audio …>…</audio>…</div>` | ✅ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
 | `Block::Toc` (`toc::[]`) | `toc` | `<div id="toc" class="toc"><div id="toctitle" class="title">…</div>…</div>` | ✅ |
 | `Block::Break` (Page) | `page_break` | `<div style="page-break-after: always;"></div>` | ✅ |

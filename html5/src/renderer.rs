@@ -27,12 +27,13 @@
 //! `render_*` method.
 
 use asciidoc_parser::{
+    attributes::Attrlist,
     blocks::{
         AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
         ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
-        ListItemMarker, ListType, QuoteBlock, QuoteType, SectionBlock, SectionType,
-        SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent, TableColumn, TableRow,
-        TocBlock, VerticalAlignment,
+        ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock, QuoteType, SectionBlock,
+        SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
+        TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
     document::{DocinfoLocation, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
@@ -467,27 +468,150 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
-/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
-/// for an olist: an explicit numbering keyword from the block's declared style
-/// (`[loweralpha]`, `[upperroman]`, …) wins, otherwise the style implied by the
-/// first item's marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to
-/// `arabic`, which a bare `.` marker also yields.
-fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
-    const ORDERED_LIST_STYLES: [&str; 5] = [
-        "arabic",
-        "loweralpha",
-        "lowerroman",
-        "upperalpha",
-        "upperroman",
-    ];
+/// Builds the URI reference a media block's `target` resolves to, mirroring
+/// Asciidoctor's `AbstractNode#media_uri` (whose asset directory key is
+/// `imagesdir`).
+///
+/// A URI target is preserved verbatim, with only its spaces percent-encoded
+/// (Asciidoctor's `encode_spaces_in_uri`). Otherwise the target is resolved as
+/// a web path relative to `imagesdir` — a direct port of
+/// `PathResolver#web_path`: the target is joined onto a non-empty `imagesdir`
+/// (unless it is web-absolute, `/…`), its `.`/`..` segments are collapsed, and
+/// any spaces are percent-encoded. Unlike [`normalize_web_path`], a bare
+/// relative result is *not* prefixed with `./`, matching `web_path`.
+///
+/// As with this crate's other web-path helpers, backslashes are posixified
+/// unconditionally (Asciidoctor's `posixify` only does so on Windows), keeping
+/// the result deterministic across platforms — a divergence invisible to any
+/// realistic media target.
+fn media_uri(target: &str, imagesdir: &str) -> String {
+    // `media_uri` preserves a URI target (Asciidoctor's default
+    // `preserve_uri_target`), encoding only its spaces.
+    if looks_like_uri(target) {
+        return target.replace(' ', "%20");
+    }
 
-    if let Some(style) = block.declared_style() {
-        if ORDERED_LIST_STYLES.contains(&style) {
-            return style;
+    // Posixify both (Asciidoctor works in forward-slash web paths), then join
+    // the target onto `imagesdir` unless the target is itself web-absolute
+    // (`/…`), which ignores the asset directory.
+    let target = target.replace('\\', "/");
+    let dir = imagesdir.replace('\\', "/");
+    let joined = if dir.is_empty() || target.starts_with('/') {
+        target
+    } else {
+        format!("{}/{}", dir.trim_end_matches('/'), target)
+    };
+
+    // Partition off the root the way `web_path` does: `/…` (web root) and `./…`
+    // keep their prefix, and every other relative path has *no* root prefix.
+    let (root, rest) = if let Some(rest) = joined.strip_prefix('/') {
+        ("/", rest)
+    } else if let Some(rest) = joined.strip_prefix("./") {
+        ("./", rest)
+    } else {
+        ("", joined.as_str())
+    };
+
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in rest.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." => match segments.last() {
+                // Pop the previous real segment.
+                Some(&last) if last != ".." => {
+                    segments.pop();
+                }
+
+                // A leading `..` at the web root has nowhere to go; drop it.
+                // Below the root, it is kept as a relative step.
+                _ if root == "/" => {}
+                _ => segments.push(".."),
+            },
+            other => segments.push(other),
         }
     }
 
-    list.marker_style().unwrap_or("arabic")
+    // Spaces in the resolved path are percent-encoded, matching `web_path`.
+    format!("{root}{}", segments.join("/")).replace(' ', "%20")
+}
+
+/// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
+/// with each author-supplied role escaped — the inner text of `class="…"`.
+fn class_list(base: &str, roles: &[&str]) -> String {
+    let mut classes = base.to_string();
+    for role in roles {
+        classes.push(' ');
+        classes.push_str(&escape_attribute(role));
+    }
+    classes
+}
+
+/// The boolean-attribute fragment ` <name>` when the block carries `<option>`,
+/// else empty — Asciidoctor's `append_boolean_attribute` for the default
+/// (non-XML) HTML5 backend, gated on a block option.
+fn boolean_option(attrs: &Attrlist<'_>, option: &str, name: &str) -> String {
+    if attrs.has_option(option) {
+        format!(" {name}")
+    } else {
+        String::new()
+    }
+}
+
+/// The ` controls` boolean attribute a `<video>`/`<audio>` carries unless the
+/// `nocontrols` option suppresses it.
+fn controls_option(attrs: &Attrlist<'_>) -> String {
+    if attrs.has_option("nocontrols") {
+        String::new()
+    } else {
+        " controls".to_string()
+    }
+}
+
+/// A hosted-embed query fragment (`param`, an already-formed `&amp;key=value`)
+/// when the block carries `<option>`, else empty.
+fn flag_param(attrs: &Attrlist<'_>, option: &str, param: &str) -> String {
+    if attrs.has_option(option) {
+        param.to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// Joins hosted-embed query `params` into a query string, introducing the
+/// first with `?` and the rest with `&amp;` (Asciidoctor's delimiter stack).
+fn join_query(params: &[String]) -> String {
+    if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&amp;"))
+    }
+}
+
+/// The ` allowfullscreen` boolean attribute a hosted embed carries unless the
+/// `nofullscreen` option suppresses it.
+fn allowfullscreen_attr(attrs: &Attrlist<'_>) -> String {
+    if attrs.has_option("nofullscreen") {
+        String::new()
+    } else {
+        " allowfullscreen".to_string()
+    }
+}
+
+/// The numbering style of an ordered list, matching Asciidoctor's `node.style`
+/// for an olist: an explicit declared style from the block (`[loweralpha]`,
+/// `[upperroman]`, …) wins, otherwise the style implied by the first item's
+/// marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to `arabic`, which a
+/// bare `.` marker also yields.
+///
+/// Like Asciidoctor, a declared style is passed through verbatim even when it
+/// is not one of the numbering keywords (`[foo]` ⇒ `class="olist foo"`); the
+/// `<ol>` then carries no HTML `type`, since only the numbering keywords map to
+/// one.
+fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
+    block
+        .declared_style()
+        .or_else(|| list.marker_style())
+        .unwrap_or("arabic")
 }
 
 /// One description-list entry: the terms sharing a single description (their
@@ -848,6 +972,9 @@ pub(crate) fn render_document<'a>(
         iconsdir: attribute_str(document, "iconsdir")
             .unwrap_or_else(|| "./images/icons".to_string()),
         icontype: attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string()),
+        imagesdir: attribute_str(document, "imagesdir").unwrap_or_default(),
+        asset_uri_scheme: attribute_str(document, "asset-uri-scheme")
+            .unwrap_or_else(|| "https".to_string()),
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
@@ -860,6 +987,7 @@ pub(crate) fn render_document<'a>(
             SectionAnchors::Before
         },
         sectlinks: document.is_attribute_set("sectlinks"),
+        stem_type: resolve_stem_type(document),
     };
     renderer.document(document);
     renderer.out
@@ -879,6 +1007,122 @@ enum SectionAnchors {
     After,
 }
 
+/// The STEM notation a stem block renders in, selecting its block math
+/// delimiter pair (Asciidoctor's `BLOCK_MATH_DELIMITERS`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StemType {
+    /// AsciiMath, delimited by `\$ … \$`.
+    AsciiMath,
+
+    /// LaTeX math, delimited by `\[ … \]`.
+    LatexMath,
+}
+
+impl StemType {
+    /// Maps a `stem`-attribute or block-style value to a STEM type, mirroring
+    /// Asciidoctor's `STEM_TYPE_ALIASES` (`latexmath`/`latex`/`tex` select
+    /// LaTeX; every other value, including an absent one, selects AsciiMath).
+    fn from_value(value: &str) -> Self {
+        match value {
+            "latexmath" | "latex" | "tex" => Self::LatexMath,
+            _ => Self::AsciiMath,
+        }
+    }
+
+    /// The block math delimiter pair (`open`, `close`) this notation wraps its
+    /// equation in.
+    fn block_delimiters(self) -> (&'static str, &'static str) {
+        match self {
+            Self::AsciiMath => (r"\$", r"\$"),
+            Self::LatexMath => (r"\[", r"\]"),
+        }
+    }
+}
+
+/// Resolves the document's default STEM type from its `stem` attribute, the
+/// notation a bare `[stem]` block renders in.
+fn resolve_stem_type(document: &Document<'_>) -> StemType {
+    StemType::from_value(&attribute_str(document, "stem").unwrap_or_default())
+}
+
+/// Rewrites the internal breaks of a multi-line AsciiMath equation, closing and
+/// reopening the delimiter pair around each `<br>` so each expression stands
+/// alone. Mirrors Asciidoctor's `StemBreakRx` pass (`/
+/// *\\\n(?:\\?\n)*|\n\n+/`): a blank-line run or trailing-backslash line
+/// continuation becomes `close`, one `<br>` per extra line break, then `open`
+/// again.
+fn rewrite_asciimath_breaks(equation: &str, open: &str, close: &str) -> String {
+    let bytes = equation.as_bytes();
+    let mut out = String::with_capacity(equation.len());
+    let mut i = 0;
+    let mut copied = 0;
+
+    while i < bytes.len() {
+        if let Some(end) = match_stem_break(bytes, i) {
+            out.push_str(&equation[copied..i]);
+
+            let breaks = bytes[i..end].iter().filter(|&&b| b == b'\n').count();
+            out.push_str(close);
+            for _ in 1..breaks {
+                out.push_str("\n<br>");
+            }
+            out.push('\n');
+            out.push_str(open);
+
+            i = end;
+            copied = end;
+        } else {
+            i += 1;
+        }
+    }
+
+    out.push_str(&equation[copied..]);
+    out
+}
+
+/// Matches one `StemBreakRx` occurrence starting at `start`, returning the byte
+/// index just past it, or `None` when neither alternative matches there. The
+/// first alternative is a line continuation (` *\\\n(?:\\?\n)*`); the second is
+/// a run of two or more newlines (`\n\n+`).
+fn match_stem_break(bytes: &[u8], start: usize) -> Option<usize> {
+    // Alternative 1: optional spaces, a backslash + newline, then any run of
+    // (optional backslash) + newline.
+    let mut j = start;
+    while bytes.get(j) == Some(&b' ') {
+        j += 1;
+    }
+
+    if bytes.get(j) == Some(&b'\\') && bytes.get(j + 1) == Some(&b'\n') {
+        j += 2;
+        loop {
+            let mut k = j;
+            if bytes.get(k) == Some(&b'\\') {
+                k += 1;
+            }
+
+            if bytes.get(k) == Some(&b'\n') {
+                j = k + 1;
+            } else {
+                break;
+            }
+        }
+
+        return Some(j);
+    }
+
+    // Alternative 2: two or more consecutive newlines.
+    if bytes.get(start) == Some(&b'\n') && bytes.get(start + 1) == Some(&b'\n') {
+        let mut j = start + 2;
+        while bytes.get(j) == Some(&b'\n') {
+            j += 1;
+        }
+
+        return Some(j);
+    }
+
+    None
+}
+
 /// The document-level render settings a nested AsciiDoc table cell inherits
 /// from its parent document, carried into the cell's sub-renderer.
 #[derive(Clone)]
@@ -887,12 +1131,15 @@ struct CellRenderConfig {
     icons_font: bool,
     iconsdir: String,
     icontype: String,
+    imagesdir: String,
+    asset_uri_scheme: String,
     doc_tabsize: i64,
     source_indent: Option<i64>,
     prewrap: bool,
     source_highlighter: Option<Highlighter>,
     section_anchors: SectionAnchors,
     sectlinks: bool,
+    stem_type: StemType,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -941,6 +1188,16 @@ struct Renderer<'a> {
     /// the callout-number images of an icon-based callout list.
     icontype: String,
 
+    /// The document `imagesdir` attribute (empty when unset), prepended to a
+    /// media block's target to build its `src`/`poster` URI (Asciidoctor's
+    /// `media_uri`, whose asset directory key is `imagesdir`).
+    imagesdir: String,
+
+    /// The document `asset-uri-scheme` attribute (default `https`), the URI
+    /// scheme prefixed to a hosted video embed (`youtube`/`vimeo`). An empty
+    /// value yields a scheme-relative `//…` URL, matching Asciidoctor.
+    asset_uri_scheme: String,
+
     /// The document `tabsize` attribute as an integer (Asciidoctor's
     /// `String#to_i`, so `0` when absent or non-numeric). A verbatim block's
     /// own `tabsize` attribute overrides this; a positive value expands tabs.
@@ -969,6 +1226,10 @@ struct Renderer<'a> {
     /// Whether the `sectlinks` document attribute is set, wrapping each
     /// non-discrete section heading's title text in `<a class="link">`.
     sectlinks: bool,
+
+    /// The document's default STEM notation (its `stem` attribute), the
+    /// delimiter pair a bare `[stem]` block renders in.
+    stem_type: StemType,
 }
 
 impl Renderer<'_> {
@@ -1592,6 +1853,7 @@ impl Renderer<'_> {
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
+                "stem" => self.stem(block),
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -1609,8 +1871,12 @@ impl Renderer<'_> {
             },
             Block::Table(table) => self.table(block, table),
             Block::Toc(toc) => self.toc_macro(block, toc),
+            Block::Media(media) if media.type_() == MediaType::Video => self.video(block, media),
+            Block::Media(media) if media.type_() == MediaType::Audio => self.audio(block, media),
 
-            // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
+            // A `Block::Media` image is not rendered yet, so it falls through to
+            // the placeholder arm below (context `image`), like every other
+            // construct deferred to a later phase; see ARCHITECTURE.md.
             other => self.unsupported(&other.resolved_context()),
         }
     }
@@ -1769,6 +2035,50 @@ impl Renderer<'_> {
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
         strip_surrounding_blank_lines(&mut lines);
         self.line(&lines.join("\n"));
+    }
+
+    /// A STEM block (`[stem]`, `[asciimath]`, or `[latexmath]` over a `++++`
+    /// delimited block): `<div class="stemblock">` wrapping a `<div
+    /// class="content">` whose equation is surrounded by the math delimiter
+    /// pair its notation selects. Mirrors Asciidoctor's `convert_stem`,
+    /// honoring the block title, `id`, and roles on the wrapper.
+    ///
+    /// A bare `[stem]` follows the document `stem` attribute default (see
+    /// [`stem_type`](Self::stem_type)); an explicit `[asciimath]` /
+    /// `[latexmath]` style overrides it. The equation's special characters
+    /// have already been escaped by the parser; the delimiters are added
+    /// here unless the author wrote them, and a multi-line AsciiMath
+    /// equation has its internal breaks rewritten to `<br>`-separated
+    /// expressions.
+    fn stem<'src>(&mut self, block: &'src Block<'src>) {
+        let stem_type = match block.declared_style() {
+            Some("asciimath") => StemType::AsciiMath,
+            Some("latexmath") => StemType::LatexMath,
+            _ => self.stem_type,
+        };
+
+        let (open, close) = stem_type.block_delimiters();
+
+        self.open_block_wrapper(block, "stemblock");
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        let mut equation = block.rendered_content().unwrap_or_default().to_string();
+
+        if stem_type == StemType::AsciiMath && equation.contains('\n') {
+            equation = rewrite_asciimath_breaks(&equation, open, close);
+        }
+
+        // Asciidoctor leaves an equation the author already delimited untouched;
+        // otherwise it wraps it in the notation's delimiter pair (an empty
+        // equation still becomes the bare `open`/`close` pair).
+        if !(equation.starts_with(open) && equation.ends_with(close)) {
+            equation = format!("{open}{equation}{close}");
+        }
+
+        self.line(&equation);
+        self.line("</div>");
+        self.line("</div>");
     }
 
     /// The reindented, blank-line-trimmed inner text of a verbatim block's
@@ -2613,12 +2923,15 @@ impl Renderer<'_> {
                         icons_font: self.icons_font,
                         iconsdir: self.iconsdir.clone(),
                         icontype: self.icontype.clone(),
+                        imagesdir: self.imagesdir.clone(),
+                        asset_uri_scheme: self.asset_uri_scheme.clone(),
                         doc_tabsize: self.doc_tabsize,
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
                         source_highlighter: self.source_highlighter,
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
+                        stem_type: self.stem_type,
                     },
                 )
             ),
@@ -2910,6 +3223,305 @@ impl Renderer<'_> {
         }
     }
 
+    /// The role(s) placed on a media block's wrapper, matching Asciidoctor's
+    /// `node.role`. A `role=` attribute *inside* the macro
+    /// (`video::x[role=…]`) wins outright over the block's shorthand role(s)
+    /// on the line above (`[.role]`), rather than merging with them.
+    fn media_roles<'src>(
+        &self,
+        block: &'src Block<'src>,
+        media: &'src MediaBlock<'src>,
+    ) -> Vec<&'src str> {
+        match media.macro_attrlist().named_attribute("role") {
+            Some(role) => role.value().split_whitespace().collect(),
+            None => block.roles(),
+        }
+    }
+
+    /// The URI-scheme prefix for a hosted video embed — `"https:"` for the
+    /// default `asset-uri-scheme`, or `""` when it is empty (yielding a
+    /// scheme-relative `//…` URL), mirroring Asciidoctor's `convert_video`.
+    fn asset_uri_scheme_prefix(&self) -> String {
+        if self.asset_uri_scheme.is_empty() {
+            String::new()
+        } else {
+            format!("{}:", self.asset_uri_scheme)
+        }
+    }
+
+    /// The `#t=<start>,<end>` media fragment appended to a self-hosted
+    /// `<video>`/`<audio>` `src`, or an empty string when neither bound is
+    /// given. Mirrors Asciidoctor's `#t=#{start || ''}#{end ? ",#{end}" : ''}`,
+    /// so a lone `end` yields `#t=,<end>`.
+    fn time_anchor(start: Option<&str>, end: Option<&str>) -> String {
+        if start.is_none() && end.is_none() {
+            return String::new();
+        }
+
+        format!(
+            "#t={}{}",
+            start.unwrap_or_default(),
+            end.map(|e| format!(",{e}")).unwrap_or_default()
+        )
+    }
+
+    /// `<div class="videoblock …">` wrapping either a self-hosted `<video>` or,
+    /// when the `poster` attribute names a hosted service, a `youtube`/`vimeo`
+    /// `<iframe>` embed — a port of Asciidoctor's `convert_video`.
+    fn video<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let attrs = media.macro_attrlist();
+
+        // The `float` and `text-<align>` classes sit between the base
+        // `videoblock` class and any role(s).
+        let mut classes = vec!["videoblock".to_string()];
+        if let Some(float) = attrs.named_attribute("float") {
+            classes.push(escape_attribute(float.value()));
+        }
+        if let Some(align) = attrs.named_attribute("align") {
+            classes.push(format!("text-{}", escape_attribute(align.value())));
+        }
+        for role in self.media_roles(block, media) {
+            classes.push(escape_attribute(role));
+        }
+
+        self.line(&format!(
+            "<div{} class=\"{}\">",
+            id_attribute(block.id()),
+            classes.join(" ")
+        ));
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        // The media target and the attribute values below (`width`/`height`/
+        // `poster`/`preload`, and the embed query parameters) are interpolated
+        // *verbatim*, not run through [`escape_attribute`] the way the wrapper's
+        // id/roles are. This matches Asciidoctor's `convert_video`/
+        // `convert_audio`, which emit these raw — so, as with Asciidoctor, a
+        // document built from untrusted input must be sanitized downstream. The
+        // choice keeps output byte-identical to the parity oracle (a real target
+        // or dimension never carries an HTML delimiter).
+
+        // `width`/`height` are shared by the self-hosted and embed forms
+        // (positional 2 and 3, or named).
+        let width = attrs.named_or_positional_attribute("width", 2);
+        let height = attrs.named_or_positional_attribute("height", 3);
+        let width_attr = width
+            .map(|w| format!(" width=\"{}\"", w.value()))
+            .unwrap_or_default();
+        let height_attr = height
+            .map(|h| format!(" height=\"{}\"", h.value()))
+            .unwrap_or_default();
+
+        // The `poster` attribute (positional 1, or named) selects the form: a
+        // `vimeo`/`youtube` value is a hosted embed, anything else is a
+        // self-hosted `<video>` whose poster image it supplies.
+        let poster = attrs
+            .named_or_positional_attribute("poster", 1)
+            .map(|p| p.value());
+
+        match poster {
+            Some("vimeo") => self.video_vimeo(media, attrs, &width_attr, &height_attr),
+            Some("youtube") => self.video_youtube(media, attrs, &width_attr, &height_attr),
+            _ => self.video_self_hosted(media, attrs, poster, &width_attr, &height_attr),
+        }
+
+        self.line("</div>");
+        self.line("</div>");
+    }
+
+    /// Emits the self-hosted `<video>` element (the `else` arm of
+    /// `convert_video`): the resolved target as `src` with an optional `#t=`
+    /// time fragment, the `poster`/`preload` attributes, and the
+    /// `autoplay`/`muted`/`controls`/`loop` boolean options.
+    fn video_self_hosted<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        poster: Option<&str>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        let poster_attr = match poster {
+            Some(p) if !p.is_empty() => {
+                format!(" poster=\"{}\"", media_uri(p, &self.imagesdir))
+            }
+
+            _ => String::new(),
+        };
+
+        let preload_attr = match attrs.named_attribute("preload").map(|p| p.value()) {
+            Some(p) if !p.is_empty() => format!(" preload=\"{p}\""),
+            _ => String::new(),
+        };
+
+        let start = attrs.named_attribute("start").map(|a| a.value());
+        let end = attrs.named_attribute("end").map(|a| a.value());
+        let time_anchor = Self::time_anchor(start, end);
+
+        self.line(&format!(
+            "<video src=\"{}{time_anchor}\"{width_attr}{height_attr}{poster_attr}{}{}{}{}{preload_attr}>",
+            media_uri(media.resolved_target(), &self.imagesdir),
+            boolean_option(attrs, "autoplay", "autoplay"),
+            boolean_option(attrs, "muted", "muted"),
+            controls_option(attrs),
+            boolean_option(attrs, "loop", "loop"),
+        ));
+        self.line("Your browser does not support the video tag.");
+        self.line("</video>");
+    }
+
+    /// Emits the Vimeo `<iframe>` embed (the `poster=vimeo` arm of
+    /// `convert_video`).
+    fn video_vimeo<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        // The target splits into `<video-id>/<hash>`; a `hash=` attribute
+        // supplies the hash when the target carries none.
+        let (target, hash) = match media.resolved_target().split_once('/') {
+            Some((t, h)) => (t, Some(h)),
+            None => (media.resolved_target(), None),
+        };
+        let hash = hash.or_else(|| attrs.named_attribute("hash").map(|a| a.value()));
+
+        // The query parameters, in Asciidoctor's order; the first present one
+        // is introduced by `?` and the rest by `&amp;`.
+        let mut params: Vec<String> = Vec::new();
+        if let Some(hash) = hash {
+            params.push(format!("h={hash}"));
+        }
+        if attrs.has_option("autoplay") {
+            params.push("autoplay=1".to_string());
+        }
+        if attrs.has_option("loop") {
+            params.push("loop=1".to_string());
+        }
+        if attrs.has_option("muted") {
+            params.push("muted=1".to_string());
+        }
+        let query = join_query(&params);
+
+        // The start time is a `#at=` fragment appended after the query.
+        let start_anchor = attrs
+            .named_attribute("start")
+            .map(|s| format!("#at={}", s.value()))
+            .unwrap_or_default();
+
+        self.line(&format!(
+            "<iframe{width_attr}{height_attr} src=\"{}//player.vimeo.com/video/{target}{query}{start_anchor}\" frameborder=\"0\"{}></iframe>",
+            self.asset_uri_scheme_prefix(),
+            allowfullscreen_attr(attrs),
+        ));
+    }
+
+    /// Emits the YouTube `<iframe>` embed (the `poster=youtube` arm of
+    /// `convert_video`).
+    fn video_youtube<'src>(
+        &mut self,
+        media: &'src MediaBlock<'src>,
+        attrs: &'src Attrlist<'src>,
+        width_attr: &str,
+        height_attr: &str,
+    ) {
+        let rel = if attrs.has_option("related") { 1 } else { 0 };
+
+        // Every parameter after the leading `?rel=` is introduced by `&amp;`.
+        let named_param = |name: &str, key: &str| {
+            attrs
+                .named_attribute(name)
+                .map(|a| format!("&amp;{key}={}", a.value()))
+                .unwrap_or_default()
+        };
+        let start_param = named_param("start", "start");
+        let end_param = named_param("end", "end");
+        let autoplay_param = flag_param(attrs, "autoplay", "&amp;autoplay=1");
+        let has_loop = attrs.has_option("loop");
+        let loop_param = flag_param(attrs, "loop", "&amp;loop=1");
+        let mute_param = flag_param(attrs, "muted", "&amp;mute=1");
+        let controls_param = flag_param(attrs, "nocontrols", "&amp;controls=0");
+
+        // Fullscreen can be controlled by a query parameter and an attribute.
+        let (fs_param, fs_attribute) = if attrs.has_option("nofullscreen") {
+            ("&amp;fs=0", "")
+        } else {
+            ("", " allowfullscreen")
+        };
+        let modest_param = flag_param(attrs, "modest", "&amp;modestbranding=1");
+        let theme_param = named_param("theme", "theme");
+        let hl_param = named_param("lang", "hl");
+
+        // Parse `<video-id>/<list-id>`; failing a list, parse a dynamic
+        // `<id1>,<id2>,…` playlist. Named `list=`/`playlist=` attributes fill
+        // in when the target carries neither.
+        let (mut target, list) = match media.resolved_target().split_once('/') {
+            Some((t, l)) => (t, Some(l)),
+            None => (media.resolved_target(), None),
+        };
+        let list = list.or_else(|| attrs.named_attribute("list").map(|a| a.value()));
+
+        let list_param = if let Some(list) = list {
+            format!("&amp;list={list}")
+        } else {
+            let (id, playlist) = match target.split_once(',') {
+                Some((id, playlist)) => (id, Some(playlist)),
+                None => (target, None),
+            };
+            target = id;
+            let playlist =
+                playlist.or_else(|| attrs.named_attribute("playlist").map(|a| a.value()));
+            if let Some(playlist) = playlist {
+                format!("&amp;playlist={target},{playlist}")
+            } else if has_loop {
+                // A loop needs an explicit playlist; fall back to the video id.
+                format!("&amp;playlist={target}")
+            } else {
+                String::new()
+            }
+        };
+
+        self.line(&format!(
+            "<iframe{width_attr}{height_attr} src=\"{}//www.youtube.com/embed/{target}?rel={rel}{start_param}{end_param}{autoplay_param}{loop_param}{mute_param}{controls_param}{list_param}{fs_param}{modest_param}{theme_param}{hl_param}\" frameborder=\"0\"{fs_attribute}></iframe>",
+            self.asset_uri_scheme_prefix(),
+        ));
+    }
+
+    /// `<div class="audioblock …">` wrapping a self-hosted `<audio>` element —
+    /// a port of Asciidoctor's `convert_audio`. Audio has no poster, width,
+    /// height, or hosted-service embeds.
+    fn audio<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
+        let attrs = media.macro_attrlist();
+
+        self.line(&format!(
+            "<div{} class=\"{}\">",
+            id_attribute(block.id()),
+            class_list("audioblock", &self.media_roles(block, media)),
+        ));
+        self.block_title(block);
+        self.line("<div class=\"content\">");
+
+        let start = attrs.named_attribute("start").map(|a| a.value());
+        let end = attrs.named_attribute("end").map(|a| a.value());
+        let time_anchor = Self::time_anchor(start, end);
+
+        // The target is interpolated verbatim, matching Asciidoctor (see the
+        // note in [`video`](Self::video)).
+        self.line(&format!(
+            "<audio src=\"{}{time_anchor}\"{}{}{}>",
+            media_uri(media.resolved_target(), &self.imagesdir),
+            boolean_option(attrs, "autoplay", "autoplay"),
+            controls_option(attrs),
+            boolean_option(attrs, "loop", "loop"),
+        ));
+        self.line("Your browser does not support the audio tag.");
+        self.line("</audio>");
+
+        self.line("</div>");
+        self.line("</div>");
+    }
+
     /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
     fn open_block_wrapper<'src>(&mut self, block: &'src Block<'src>, base_class: &str) {
         self.line(&format!(
@@ -3196,12 +3808,15 @@ fn render_cell_document<'s>(
         icons_font: config.icons_font,
         iconsdir: config.iconsdir.clone(),
         icontype: config.icontype.clone(),
+        imagesdir: config.imagesdir.clone(),
+        asset_uri_scheme: config.asset_uri_scheme.clone(),
         doc_tabsize: config.doc_tabsize,
         source_indent: config.source_indent,
         prewrap: config.prewrap,
         source_highlighter: config.source_highlighter,
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
+        stem_type: config.stem_type,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -3526,10 +4141,236 @@ mod tests {
     #[test]
     fn unsupported_block_leaves_a_marker() {
         // Block images are not rendered yet, so they still emit the placeholder
-        // marker (all list types – unordered, ordered, description, callout –
-        // now render).
+        // marker (all list types – unordered, ordered, description, callout,
+        // and now video/audio – render).
         let html = convert("image::foo.png[Alt]");
         assert!(html.contains("<!-- asciidoc-html5: unsupported block context 'image' -->"));
+    }
+
+    #[test]
+    fn media_uri_matches_web_path() {
+        use super::media_uri;
+
+        // A bare relative target keeps no `./` prefix (unlike a stylesheet web
+        // path); an `imagesdir` is joined ahead of it.
+        assert_eq!(media_uri("movie.mp4", ""), "movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "media"), "media/movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "media/"), "media/movie.mp4");
+        assert_eq!(media_uri("movie.mp4", "./media"), "./media/movie.mp4");
+
+        // A web-absolute target ignores `imagesdir`; `.`/`..` segments collapse,
+        // and a leading `..` at the web root is dropped — but a leading `..` on
+        // a bare relative path is kept as a relative step.
+        assert_eq!(media_uri("/abs.mp4", "media"), "/abs.mp4");
+        assert_eq!(media_uri("sub/../c.mp4", "media"), "media/c.mp4");
+        assert_eq!(media_uri("/x/../../y.mp4", ""), "/y.mp4");
+        assert_eq!(media_uri("../up.mp4", ""), "../up.mp4");
+
+        // Backslashes are posixified unconditionally, matching this crate's
+        // other web-path helpers (Asciidoctor only does so on Windows); a URI
+        // target is preserved with its spaces percent-encoded and ignores
+        // `imagesdir`.
+        assert_eq!(media_uri("a\\b.mp4", "media"), "media/a/b.mp4");
+        assert_eq!(
+            media_uri("https://ex.com/a b.mp4", "media"),
+            "https://ex.com/a%20b.mp4"
+        );
+    }
+
+    #[test]
+    fn video_self_hosted_renders_video_element() {
+        // The `width` positional maps to the `width` attribute; `controls` is
+        // present unless `nocontrols` is set. Matches Asciidoctor's
+        // `convert_video`.
+        let html = crate::convert("video::movie.mp4[width=640]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <video src=\"movie.mp4\" width=\"640\" controls>\n\
+             Your browser does not support the video tag.\n\
+             </video>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn audio_renders_audio_element() {
+        let html = crate::convert("audio::podcast.mp3[]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"audioblock\">\n\
+             <div class=\"content\">\n\
+             <audio src=\"podcast.mp3\" controls>\n\
+             Your browser does not support the audio tag.\n\
+             </audio>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn video_title_start_end_and_options() {
+        // A title becomes the `<div class="title">`; `start`/`end` form the
+        // `#t=` media fragment; `autoplay`/`loop` are boolean attributes and
+        // `nocontrols` suppresses `controls`.
+        let html = crate::convert(
+            ".My video\nvideo::vid.webm[start=10,end=20,opts=\"autoplay,loop,nocontrols\"]",
+        );
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"title\">My video</div>\n\
+             <div class=\"content\">\n\
+             <video src=\"vid.webm#t=10,20\" autoplay loop>\n\
+             Your browser does not support the video tag.\n\
+             </video>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn audio_start_only_and_autoplay() {
+        // A lone `start` yields `#t=<start>`; a lone `end` would yield
+        // `#t=,<end>`. Audio has no `muted` option.
+        let html = convert("audio::a.ogg[opts=autoplay,start=5]");
+        assert!(content(&html).contains("<audio src=\"a.ogg#t=5\" autoplay controls>"));
+    }
+
+    #[test]
+    fn video_youtube_embed() {
+        // A `youtube` poster value selects the YouTube `<iframe>` embed; the
+        // `?rel=0` parameter is always present and `allowfullscreen` is on by
+        // default.
+        let html = crate::convert("video::12345[youtube]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <iframe src=\"https://www.youtube.com/embed/12345?rel=0\" frameborder=\"0\" allowfullscreen></iframe>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn video_youtube_dynamic_playlist() {
+        // A comma-separated target is a dynamic playlist: the embed targets the
+        // first id and adds a `playlist=` of the whole list.
+        let html = convert("video::v1,v2,v3[youtube]");
+        assert!(content(&html).contains(
+            "src=\"https://www.youtube.com/embed/v1?rel=0&amp;playlist=v1,v2,v3\" frameborder=\"0\" allowfullscreen"
+        ));
+    }
+
+    #[test]
+    fn video_vimeo_embed() {
+        // A `vimeo` poster value selects the Vimeo `<iframe>` embed; `width`
+        // is honored on the iframe.
+        let html = crate::convert("video::67890[vimeo,width=300]");
+        assert_eq!(
+            html.trim_end(),
+            "<div class=\"videoblock\">\n\
+             <div class=\"content\">\n\
+             <iframe width=\"300\" src=\"https://player.vimeo.com/video/67890\" frameborder=\"0\" allowfullscreen></iframe>\n\
+             </div>\n\
+             </div>"
+        );
+    }
+
+    #[test]
+    fn media_id_and_role_on_wrapper() {
+        // The `[#id.role]` shorthand above the macro puts the id on the wrapper
+        // and appends the role to the class list.
+        let html = convert("[#myid.myrole]\nvideo::x.mp4[]");
+        assert!(content(&html).starts_with("<div id=\"myid\" class=\"videoblock myrole\">"));
+    }
+
+    #[test]
+    fn video_macro_role_overrides_block_role() {
+        // A `role=` inside the macro wins outright over the block's shorthand
+        // role, matching Asciidoctor's `node.role`.
+        let html = convert("[#aa.bb]\naudio::s.mp3[role=cc]");
+        assert!(content(&html).starts_with("<div id=\"aa\" class=\"audioblock cc\">"));
+    }
+
+    #[test]
+    fn video_float_and_align_classes() {
+        // `float` and `text-<align>` classes sit between `videoblock` and the
+        // role(s).
+        let html = convert("video::z.mp4[float=left,align=center,role=baz]");
+        assert!(content(&html).starts_with("<div class=\"videoblock left text-center baz\">"));
+    }
+
+    #[test]
+    fn video_poster_and_preload_self_hosted() {
+        // A non-service `poster` value is a poster image resolved through
+        // `imagesdir`; `preload` is emitted verbatim. `muted` is a boolean
+        // attribute for video (but not audio).
+        let html = convert(
+            ":imagesdir: media\n\nvideo::v.mp4[height=200,poster=thumb.jpg,preload=auto,opts=\"muted,nocontrols\"]",
+        );
+        assert!(content(&html).contains(
+            "<video src=\"media/v.mp4\" height=\"200\" poster=\"media/thumb.jpg\" muted preload=\"auto\">"
+        ));
+    }
+
+    #[test]
+    fn media_uri_prefixes_imagesdir_and_preserves_uri_target() {
+        // A bare target is resolved against `imagesdir` with no `./` prefix; a
+        // URI target is preserved (spaces percent-encoded) and ignores
+        // `imagesdir`.
+        let html = convert(
+            ":imagesdir: assets\n\nvideo::sub/clip.webm[]\n\nvideo::https://ex.com/a b.mp4[]",
+        );
+        let body = content(&html);
+        assert!(body.contains("<video src=\"assets/sub/clip.webm\" controls>"));
+        assert!(body.contains("<video src=\"https://ex.com/a%20b.mp4\" controls>"));
+    }
+
+    #[test]
+    fn video_vimeo_hash_query_params_and_nofullscreen() {
+        // A `<video-id>/<hash>` target supplies the `h=` parameter; the query
+        // params are introduced by `?` then `&amp;`; `nofullscreen` drops the
+        // `allowfullscreen` attribute.
+        let html = convert("video::vid/myhash[vimeo,opts=\"autoplay,loop,muted,nofullscreen\"]");
+        assert!(content(&html).contains(
+            "<iframe src=\"https://player.vimeo.com/video/vid?h=myhash&amp;autoplay=1&amp;loop=1&amp;muted=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_list_options_and_nofullscreen() {
+        // A `<video-id>/<list-id>` target sets `list=`; the query flags and the
+        // `fs=0`/no-`allowfullscreen` pair for `nofullscreen` are all covered.
+        let html = convert(
+            "video::abc/PL123[youtube,start=30,end=90,opts=\"autoplay,loop,modest,nocontrols,nofullscreen\"]",
+        );
+        assert!(content(&html).contains(
+            "<iframe src=\"https://www.youtube.com/embed/abc?rel=0&amp;start=30&amp;end=90&amp;autoplay=1&amp;loop=1&amp;controls=0&amp;list=PL123&amp;fs=0&amp;modestbranding=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_loop_falls_back_to_video_id_playlist() {
+        // With `loop` but no explicit list/playlist, the playlist falls back to
+        // the video id so the loop works.
+        let html = convert("video::vid[youtube,opts=loop]");
+        assert!(content(&html).contains(
+            "src=\"https://www.youtube.com/embed/vid?rel=0&amp;loop=1&amp;playlist=vid\""
+        ));
+    }
+
+    #[test]
+    fn video_embed_empty_asset_uri_scheme_is_scheme_relative() {
+        // An empty `asset-uri-scheme` yields a scheme-relative `//…` embed URL.
+        let html = convert_with(
+            "video::v[youtube]",
+            &Options::new().attribute("asset-uri-scheme", ""),
+        );
+        assert!(content(&html).contains("src=\"//www.youtube.com/embed/v?rel=0\""));
     }
 
     #[test]
@@ -3556,6 +4397,19 @@ mod tests {
         let html = convert("[loweralpha]\n. one\n. two");
         assert!(
             html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
+        );
+    }
+
+    #[test]
+    fn ordered_list_passes_a_non_numbering_style_through() {
+        // A declared style that is not a numbering keyword is still passed
+        // through as the wrapper/`<ol>` class, matching Asciidoctor; the `<ol>`
+        // then carries no HTML `type`, since only the numbering keywords map to
+        // one.
+        let html = convert("[foo]\n. one\n. two");
+        assert!(
+            html.contains("<div class=\"olist foo\">\n<ol class=\"foo\">\n<li>"),
+            "{html}"
         );
     }
 
@@ -4128,6 +4982,20 @@ mod tests {
     }
 
     #[test]
+    fn revision_line_with_only_a_date_omits_the_version() {
+        // A revision line that carries no version number – just a date, which
+        // does not match the `v<digit>` standalone-revision shape – yields no
+        // `revnumber`, so only the `revdate` span is emitted. Matches
+        // Asciidoctor 2.0.26.
+        let html = convert("= Doc\nJane Doe\n2026-01-01\n\nBody.");
+        assert!(
+            html.contains("<span id=\"revdate\">2026-01-01</span>"),
+            "{html}"
+        );
+        assert!(!html.contains("id=\"revnumber\""), "{html}");
+    }
+
+    #[test]
     fn literal_style_paragraph_renders_a_literalblock() {
         let html = convert("[literal]\n<lit> & co");
         assert!(html.contains(
@@ -4155,6 +5023,129 @@ mod tests {
         assert!(html.contains("<b>raw</b>"));
         assert!(!html.contains("&lt;b&gt;"));
         assert!(!html.contains("unsupported"));
+    }
+
+    #[test]
+    fn stem_block_wraps_the_equation_in_math_delimiters() {
+        // A `[stem]` block resolves to the document's `stem` notation, which
+        // defaults to AsciiMath (`\$ … \$`), matching Asciidoctor's
+        // `convert_stem`.
+        let html = convert("[stem]\n++++\nx = y^2\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\\$x = y^2\\$\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn latexmath_block_uses_bracket_delimiters() {
+        // An `[latexmath]` block wraps its equation in `\[ … \]`, and the
+        // parser has already escaped its special characters.
+        let html = convert("[latexmath]\n++++\nC = \\alpha < 1\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\
+                 \\[C = \\alpha &lt; 1\\]\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn bare_stem_block_follows_the_document_stem_attribute() {
+        // With `:stem: latexmath`, a bare `[stem]` block renders in LaTeX
+        // notation (`\[ … \]`) rather than the AsciiMath default.
+        let html = convert(":stem: latexmath\n\n[stem]\n++++\nC = 1\n++++\n");
+        assert!(
+            html.contains(
+                "<div class=\"stemblock\">\n<div class=\"content\">\n\\[C = 1\\]\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn stem_block_honors_id_role_and_title() {
+        // The wrapper carries the block `id` and roles; a titled stem block
+        // gains a plain `<div class="title">` (stem blocks are not captioned).
+        let html = convert("[stem#eq1.myrole]\n.My equation\n++++\nx\n++++\n");
+        assert!(
+            html.contains(
+                "<div id=\"eq1\" class=\"stemblock myrole\">\n\
+                 <div class=\"title\">My equation</div>\n\
+                 <div class=\"content\">\n\\$x\\$\n</div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_breaks_multiple_equations_with_br() {
+        // AsciiMath keeps blank-line-separated equations distinct, closing and
+        // reopening the delimiter around a `<br>` (Asciidoctor's `StemBreakRx`).
+        let html = convert("[asciimath]\n++++\ns = ut\n\nv = u + at\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$s = ut\\$\n<br>\n\\$v = u + at\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_breaks_on_a_line_continuation() {
+        // A trailing-backslash line continuation is also a break: the space and
+        // backslash are dropped and the delimiter closes and reopens with no
+        // `<br>` (one line break yields zero `<br>`s), matching `StemBreakRx`.
+        let html = convert("[asciimath]\n++++\na \\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_block_break_adds_one_br_per_extra_blank_line() {
+        // Two blank lines (three newlines) between equations emit two `<br>`
+        // elements — one per line break beyond the first.
+        let html = convert("[asciimath]\n++++\na\n\n\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asciimath_break_absorbs_a_multi_line_continuation_run() {
+        // A line continuation may span several lines (`\` then a bare `\`
+        // line); the whole run is one break, with one `<br>` per line break
+        // beyond the first — exercising `StemBreakRx`'s `(?:\\?\n)*` tail.
+        let html = convert("[asciimath]\n++++\na \\\n\\\nb\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$a\\$\n<br>\n\\$b\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn empty_stem_block_renders_the_bare_delimiter_pair() {
+        // An empty stem block still emits the delimiter pair (`\$\$`), matching
+        // Asciidoctor — the wrap applies even when there is no equation text.
+        let html = convert("[stem]\n++++\n++++\n");
+        assert!(
+            html.contains("<div class=\"stemblock\">\n<div class=\"content\">\n\\$\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn stem_block_does_not_double_wrap_an_already_delimited_equation() {
+        // An equation the author already delimited is left untouched.
+        let html = convert("[asciimath]\n++++\n\\$x\\$\n++++\n");
+        assert!(
+            html.contains("<div class=\"content\">\n\\$x\\$\n</div>"),
+            "{html}"
+        );
     }
 
     // The block shapes below are byte-checked against Asciidoctor 2.0.26's
