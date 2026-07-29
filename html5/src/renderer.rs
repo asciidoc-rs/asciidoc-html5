@@ -3551,6 +3551,69 @@ mod tests {
     }
 
     #[test]
+    fn image_block_rooted_target_is_not_prefixed() {
+        // A web-root target (leading `/`) is never joined with `imagesdir`, and
+        // its `default_alt` is the basename with the extension dropped.
+        let html = convert(":imagesdir: assets\n\nimage::/rooted.png[]");
+        assert!(html.contains("<img src=\"/rooted.png\" alt=\"rooted\">"));
+    }
+
+    #[test]
+    fn image_block_default_alt_for_extensionless_target() {
+        // A target with no extension keeps its final path segment verbatim as
+        // the derived `alt`.
+        let html = convert("image::gallery/photo[]");
+        assert!(html.contains("<img src=\"gallery/photo\" alt=\"photo\">"));
+    }
+
+    #[test]
+    fn image_block_role_attribute_overrides_block_roles() {
+        // A macro `role=` supplies the wrapper roles (splitting on whitespace),
+        // overriding any `[.role]` on the block line — matching Asciidoctor's
+        // last-write-wins merge of the `role` attribute.
+        let html = convert("[.ignored]\nimage::r.png[role=\"r1 r2\"]");
+        assert!(html.contains("<div class=\"imageblock r1 r2\">"));
+    }
+
+    #[test]
+    fn image_block_link_to_blank_window_adds_target_and_noopener() {
+        let html = convert("image::a.png[link=https://x.com,window=_blank]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"_blank\" rel=\"noopener\">"
+        ));
+    }
+
+    #[test]
+    fn image_block_link_nofollow_option_adds_rel() {
+        let html = convert("image::b.png[link=https://x.com,opts=nofollow]");
+        assert!(html.contains("<a class=\"image\" href=\"https://x.com\" rel=\"nofollow\">"));
+    }
+
+    #[test]
+    fn image_block_link_named_window_adds_only_target() {
+        // A named window that is not `_blank` and carries no `noopener` option
+        // sets `target` alone — no `rel`.
+        let html = convert("image::x.png[link=https://x.com,window=help]");
+        assert!(html.contains("<a class=\"image\" href=\"https://x.com\" target=\"help\">"));
+    }
+
+    #[test]
+    fn image_block_link_named_window_with_noopener() {
+        let html = convert("image::c.png[link=https://x.com,window=name,opts=noopener]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"name\" rel=\"noopener\">"
+        ));
+    }
+
+    #[test]
+    fn image_block_link_blank_window_with_nofollow_folds_both_into_rel() {
+        let html = convert("image::d.png[link=https://x.com,window=_blank,opts=nofollow]");
+        assert!(html.contains(
+            "<a class=\"image\" href=\"https://x.com\" target=\"_blank\" rel=\"nofollow noopener\">"
+        ));
+    }
+
+    #[test]
     fn audio_and_video_blocks_remain_unsupported() {
         assert!(convert("video::v.mp4[]")
             .contains("<!-- asciidoc-html5: unsupported block context 'video' -->"));
