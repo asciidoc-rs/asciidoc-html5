@@ -4779,7 +4779,7 @@ mod tests {
     }
 
     // The following exercise the document-attribute-driven skeleton, reading
-    // resolved attributes straight off the `Document` (asciidoc-parser#620).
+    // resolved attributes straight off the `Document`.
 
     #[test]
     fn lang_attribute_drives_html_lang() {
