@@ -14,4 +14,12 @@ version.workspace = true
 asciidoc-parser.workspace = true
 
 [dev-dependencies]
+divan = { package = "codspeed-divan-compat", version = "5.0.1" }
 scraper.workspace = true
+
+[[bench]]
+harness = false
+name = "convert"
+# `cargo test` would otherwise build and run the benchmark harness as a test,
+# which the coverage and minimum-version jobs have no reason to do.
+test = false

@@ -70,6 +70,25 @@ cat input.adoc | cargo run --bin adoc          # read from stdin, write to stdou
 > now. See [`html5/ARCHITECTURE.md`](html5/ARCHITECTURE.md) for the design and
 > roadmap.
 
+## Benchmarks
+
+`html5/benches/convert.rs` measures the conversion pipeline with
+[divan](https://github.com/nvzqz/divan) through the
+[`codspeed-divan-compat`](https://codspeed.io/docs/benchmarks/rust/divan) layer:
+the parse half (`load`), the render half (`convert_document`), the end-to-end
+entry points, and the outline, each over three sizes of a synthetic document.
+
+```sh
+cargo bench -p asciidoc-html5             # plain divan, wall-clock timings
+cargo install cargo-codspeed --locked     # once, for the CodSpeed runs below
+cargo codspeed build --workspace -m simulation
+codspeed run --mode simulation -- cargo codspeed run --workspace
+```
+
+CI runs the same benchmarks on every pull request
+([`.github/workflows/codspeed.yml`](.github/workflows/codspeed.yml)) and reports
+the comparison against `main` on the PR.
+
 ## Porting an Asciidoctor doc page ("page port")
 
 A recurring workflow: take one Asciidoctor reference page under

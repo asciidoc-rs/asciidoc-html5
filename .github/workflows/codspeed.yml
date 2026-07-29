@@ -1,0 +1,58 @@
+name: CodSpeed
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+  push:
+    branches: main
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  # Required for OpenID Connect authentication with CodSpeed.
+  id-token: write
+
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    # Same gate as the CI workflow: run automatically for pushes and for pull
+    # requests whose head branch lives in this repository; pull requests from
+    # forks await a human adding the "safe to test" label.
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository ||
+      contains(github.event.pull_request.labels.*.name, 'safe to test')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-codspeed
+        run: cargo install cargo-codspeed --locked
+
+      # `cargo codspeed build` replaces `cargo build` here: it compiles the
+      # benchmark targets with the instrumentation CodSpeed measures them
+      # through.
+      - name: Build the benchmark targets
+        run: cargo codspeed build --workspace --measurement-mode simulation
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: simulation
+          run: cargo codspeed run --workspace
