@@ -511,26 +511,20 @@ fn allowfullscreen_attr(attrs: &Attrlist<'_>) -> String {
 }
 
 /// The numbering style of an ordered list, matching Asciidoctor's `node.style`
-/// for an olist: an explicit numbering keyword from the block's declared style
-/// (`[loweralpha]`, `[upperroman]`, …) wins, otherwise the style implied by the
-/// first item's marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to
-/// `arabic`, which a bare `.` marker also yields.
+/// for an olist: an explicit declared style from the block (`[loweralpha]`,
+/// `[upperroman]`, …) wins, otherwise the style implied by the first item's
+/// marker (`.` ⇒ arabic, `..` ⇒ loweralpha, …). Falls back to `arabic`, which a
+/// bare `.` marker also yields.
+///
+/// Like Asciidoctor, a declared style is passed through verbatim even when it
+/// is not one of the numbering keywords (`[foo]` ⇒ `class="olist foo"`); the
+/// `<ol>` then carries no HTML `type`, since only the numbering keywords map to
+/// one.
 fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &'src str {
-    const ORDERED_LIST_STYLES: [&str; 5] = [
-        "arabic",
-        "loweralpha",
-        "lowerroman",
-        "upperalpha",
-        "upperroman",
-    ];
-
-    if let Some(style) = block.declared_style() {
-        if ORDERED_LIST_STYLES.contains(&style) {
-            return style;
-        }
-    }
-
-    list.marker_style().unwrap_or("arabic")
+    block
+        .declared_style()
+        .or_else(|| list.marker_style())
+        .unwrap_or("arabic")
 }
 
 /// One description-list entry: the terms sharing a single description (their
@@ -3974,6 +3968,19 @@ mod tests {
     }
 
     #[test]
+    fn ordered_list_passes_a_non_numbering_style_through() {
+        // A declared style that is not a numbering keyword is still passed
+        // through as the wrapper/`<ol>` class, matching Asciidoctor; the `<ol>`
+        // then carries no HTML `type`, since only the numbering keywords map to
+        // one.
+        let html = convert("[foo]\n. one\n. two");
+        assert!(
+            html.contains("<div class=\"olist foo\">\n<ol class=\"foo\">\n<li>"),
+            "{html}"
+        );
+    }
+
+    #[test]
     fn callout_list_renders_ol() {
         // A callout list annotating a verbatim block renders as `<div
         // class="colist arabic"><ol>` of `<li><p>…</p></li>`, and the parser
@@ -4539,6 +4546,20 @@ mod tests {
         let html = convert("= Doc\nJane Doe\nv2.0\n\nBody.");
         assert!(html.contains("<span id=\"revnumber\">version 2.0</span>"));
         assert!(!html.contains("id=\"revdate\""));
+    }
+
+    #[test]
+    fn revision_line_with_only_a_date_omits_the_version() {
+        // A revision line that carries no version number – just a date, which
+        // does not match the `v<digit>` standalone-revision shape – yields no
+        // `revnumber`, so only the `revdate` span is emitted. Matches
+        // Asciidoctor 2.0.26.
+        let html = convert("= Doc\nJane Doe\n2026-01-01\n\nBody.");
+        assert!(
+            html.contains("<span id=\"revdate\">2026-01-01</span>"),
+            "{html}"
+        );
+        assert!(!html.contains("id=\"revnumber\""), "{html}");
     }
 
     #[test]
