@@ -1526,16 +1526,12 @@ impl Renderer<'_> {
             },
             Block::Table(table) => self.table(block, table),
             Block::Toc(toc) => self.toc_macro(block, toc),
-            Block::Media(media) => match media.type_() {
-                MediaType::Video => self.video(block, media),
-                MediaType::Audio => self.audio(block, media),
+            Block::Media(media) if media.type_() == MediaType::Video => self.video(block, media),
+            Block::Media(media) if media.type_() == MediaType::Audio => self.audio(block, media),
 
-                // Block images are not rendered yet; they still emit the
-                // unsupported placeholder (context `image`).
-                MediaType::Image => self.unsupported(&block.resolved_context()),
-            },
-
-            // Deferred to later phases; see ARCHITECTURE.md for the roadmap.
+            // A `Block::Media` image is not rendered yet, so it falls through to
+            // the placeholder arm below (context `image`), like every other
+            // construct deferred to a later phase; see ARCHITECTURE.md.
             other => self.unsupported(&other.resolved_context()),
         }
     }
@@ -3698,10 +3694,12 @@ mod tests {
         assert_eq!(media_uri("movie.mp4", "./media"), "./media/movie.mp4");
 
         // A web-absolute target ignores `imagesdir`; `.`/`..` segments collapse,
-        // and a leading `..` at the web root is dropped.
+        // and a leading `..` at the web root is dropped — but a leading `..` on
+        // a bare relative path is kept as a relative step.
         assert_eq!(media_uri("/abs.mp4", "media"), "/abs.mp4");
         assert_eq!(media_uri("sub/../c.mp4", "media"), "media/c.mp4");
         assert_eq!(media_uri("/x/../../y.mp4", ""), "/y.mp4");
+        assert_eq!(media_uri("../up.mp4", ""), "../up.mp4");
 
         // Backslashes are posixified unconditionally, matching this crate's
         // other web-path helpers (Asciidoctor only does so on Windows); a URI
@@ -3865,6 +3863,49 @@ mod tests {
         let body = content(&html);
         assert!(body.contains("<video src=\"assets/sub/clip.webm\" controls>"));
         assert!(body.contains("<video src=\"https://ex.com/a%20b.mp4\" controls>"));
+    }
+
+    #[test]
+    fn video_vimeo_hash_query_params_and_nofullscreen() {
+        // A `<video-id>/<hash>` target supplies the `h=` parameter; the query
+        // params are introduced by `?` then `&amp;`; `nofullscreen` drops the
+        // `allowfullscreen` attribute.
+        let html = convert("video::vid/myhash[vimeo,opts=\"autoplay,loop,muted,nofullscreen\"]");
+        assert!(content(&html).contains(
+            "<iframe src=\"https://player.vimeo.com/video/vid?h=myhash&amp;autoplay=1&amp;loop=1&amp;muted=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_list_options_and_nofullscreen() {
+        // A `<video-id>/<list-id>` target sets `list=`; the query flags and the
+        // `fs=0`/no-`allowfullscreen` pair for `nofullscreen` are all covered.
+        let html = convert(
+            "video::abc/PL123[youtube,start=30,end=90,opts=\"autoplay,loop,modest,nocontrols,nofullscreen\"]",
+        );
+        assert!(content(&html).contains(
+            "<iframe src=\"https://www.youtube.com/embed/abc?rel=0&amp;start=30&amp;end=90&amp;autoplay=1&amp;loop=1&amp;controls=0&amp;list=PL123&amp;fs=0&amp;modestbranding=1\" frameborder=\"0\"></iframe>"
+        ));
+    }
+
+    #[test]
+    fn video_youtube_loop_falls_back_to_video_id_playlist() {
+        // With `loop` but no explicit list/playlist, the playlist falls back to
+        // the video id so the loop works.
+        let html = convert("video::vid[youtube,opts=loop]");
+        assert!(content(&html).contains(
+            "src=\"https://www.youtube.com/embed/vid?rel=0&amp;loop=1&amp;playlist=vid\""
+        ));
+    }
+
+    #[test]
+    fn video_embed_empty_asset_uri_scheme_is_scheme_relative() {
+        // An empty `asset-uri-scheme` yields a scheme-relative `//…` embed URL.
+        let html = convert_with(
+            "video::v[youtube]",
+            &Options::new().attribute("asset-uri-scheme", ""),
+        );
+        assert!(content(&html).contains("src=\"//www.youtube.com/embed/v?rel=0\""));
     }
 
     #[test]
