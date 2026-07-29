@@ -10,6 +10,7 @@
 //! on every platform.
 
 use std::{
+    ffi::OsString,
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
@@ -36,7 +37,8 @@ output. Given a file and no -o option, adoc derives the output file name from \
 the input, replacing its extension with .html, so `adoc document.adoc` writes \
 document.html. The output aims to be compatible with Asciidoctor's default html5 \
 backend.",
-    after_help = "Use -h for a short summary or --help for the full description.",
+    after_help = "Pass `--help syntax` for an AsciiDoc syntax crib sheet. \
+Use -h for a short summary or --help for the full description.",
     after_long_help = "Examples:\n  \
 adoc document.adoc              Convert a file; write the HTML to document.html\n  \
 adoc a.adoc b.adoc              Convert several files, each to its own .html\n  \
@@ -45,7 +47,9 @@ adoc document.adoc -o out.html  Convert a file; write the HTML to out.html\n  \
 adoc document.adoc -D build     Convert a file; write the HTML to build/document.html\n  \
 adoc document.adoc -o -         Convert a file; write the HTML to stdout\n  \
 cat document.adoc | adoc        Convert AsciiDoc from stdin; write to stdout\n  \
-cat document.adoc | adoc -e     Convert stdin; write just the body (embedded)\n\n\
+cat document.adoc | adoc -e     Convert stdin; write just the body (embedded)\n  \
+adoc --help syntax              Print an AsciiDoc syntax crib sheet (itself AsciiDoc)\n  \
+adoc --help syntax | adoc -o -  Render that crib sheet to HTML5 on stdout\n\n\
 Exit status is 0 on success, or 1 if any input cannot be read or its output \
 cannot be written."
 )]
@@ -298,7 +302,32 @@ lowers the bar."
     failure_level: String,
 }
 
+/// The AsciiDoc syntax crib sheet printed by `adoc --help syntax`, embedded at
+/// build time.
+///
+/// This is `adoc`'s counterpart to Asciidoctor's `--help syntax` topic (whose
+/// crib sheet lives in `data/reference/syntax.adoc`). Like Asciidoctor's, the
+/// document is itself valid AsciiDoc, so `adoc --help syntax | adoc -o -`
+/// renders it to HTML5 with this crate's own renderer. It is scoped to the
+/// constructs this renderer supports today, so that rendered preview is
+/// accurate; see the crib sheet's source for the constructs held back.
+const SYNTAX_CRIB_SHEET: &str = include_str!("../assets/syntax.adoc");
+
 fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().collect();
+
+    // Asciidoctor's `--help syntax` prints an AsciiDoc syntax crib sheet. clap's
+    // derived `--help` is a plain flag that ignores any trailing topic, so the
+    // topic is handled here, before clap parses the rest.
+    if syntax_help_topic(&args) {
+        let mut stdout = io::stdout().lock();
+
+        // Ignore a broken pipe, so `adoc --help syntax | head` (or piping into a
+        // reader that closes early) exits cleanly rather than panicking.
+        let _ = stdout.write_all(SYNTAX_CRIB_SHEET.as_bytes());
+        return ExitCode::SUCCESS;
+    }
+
     let cli = Cli::parse();
 
     let mut stdin = io::stdin().lock();
@@ -314,6 +343,33 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Whether the raw command-line `args` request the `syntax` help topic — the
+/// way Asciidoctor's `--help syntax` prints its AsciiDoc syntax crib sheet.
+///
+/// The topic may follow the help flag as its own argument (`--help syntax`,
+/// `-h syntax`) or be joined to it with `=` (`--help=syntax`, `-h=syntax`).
+/// Only the `syntax` topic is recognized; any other trailing word falls through
+/// to clap, which renders the usage statement (matching Asciidoctor, which
+/// shows usage for an unrecognized topic).
+fn syntax_help_topic(args: &[OsString]) -> bool {
+    args.iter().enumerate().any(|(i, arg)| {
+        // `--help=syntax` / `-h=syntax`: the topic is joined to the flag.
+        if let Some(topic) = arg.to_str().and_then(|arg| {
+            arg.strip_prefix("--help=")
+                .or_else(|| arg.strip_prefix("-h="))
+        }) {
+            return topic == "syntax";
+        }
+
+        // `--help syntax` / `-h syntax`: the topic is the following argument.
+        let flag = arg.as_os_str();
+        (flag == "--help" || flag == "-h")
+            && args
+                .get(i + 1)
+                .is_some_and(|topic| topic.as_os_str() == "syntax")
+    })
 }
 
 /// Reads the AsciiDoc input, converts it, and writes the HTML5 out.
