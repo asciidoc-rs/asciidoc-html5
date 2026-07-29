@@ -134,7 +134,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ✅ |
 | `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
 | `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
-| `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ⬜ |
+| `Block::Media` (Image) | `image` | `<div class="imageblock"><div class="content"><img …></div></div>` | ✅ |
 | `Block::Media` (Video/Audio) | `video`/`audio` | `<div class="videoblock"><div class="content"><video …>…</video></div></div>` (self-hosted, plus `youtube`/`vimeo` `<iframe>` embeds); `<div class="audioblock">…<audio …>…</audio>…</div>` | ✅ |
 | `Block::Table` | `table` | `<table class="tableblock frame-all grid-all">…` | ✅ |
 | `Block::Toc` (`toc::[]`) | `toc` | `<div id="toc" class="toc"><div id="toctitle" class="title">…</div>…</div>` | ✅ |
@@ -226,8 +226,9 @@ standalone even when piping. Embedded output emits no stylesheet, so the
 
 - Block **content** (`rendered_content()`) and **titles** (`title()`) are already
   HTML with substitutions applied — emitted verbatim.
-- Values **this crate** injects into attributes — ids, roles, and (later) image
-  `src`/`alt`, link `href` — are escaped with `html::escape_attribute`.
+- Values **this crate** injects into attributes — ids, roles, and a block image's
+  `src`/`alt`/dimensions and link `href` — are escaped with
+  `html::escape_attribute`.
 - Verbatim block bodies are emitted inside `<pre>` with their literal line breaks
   preserved and no added surrounding whitespace, so the rendered text is
   byte-faithful.
@@ -361,8 +362,9 @@ returned HTML is byte-identical to the writer-less path.
    and the attribute-driven skeleton (`lang`, `doctype`,
    `notitle`/`noheader`/`nofooter`).
 2. **Block coverage:** the delimited example/sidebar/open blocks, admonitions,
-   quotes/verses, and lists (un/ordered/description/callout) are done; images
-   are still to come.
+   quotes/verses, lists (un/ordered/description/callout), and the media blocks
+   (block images plus video/audio) are done; the advanced image modes
+   (`data-uri` #51, interactive/inline SVG #52, icons #50) are still to come.
 3. **Tables** (their own content model).
 4. **Document chrome:** footer "Last updated" (`docdatetime`) is still to come;
    the `<body class>` TOC classes, the TOC (every placement —
