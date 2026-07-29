@@ -13,9 +13,6 @@
 //! (embedded) / `convert_with(.. standalone(true) ..)`.
 //!
 //! What stays `non_normative!` here:
-//! - a handful of **Table of Contents** cases that need parser support this
-//!   crate does not yet have: the `>`/`<` direction shorthands and the
-//!   `toc-position` interaction (asciidoc-parser#992);
 //! - the **book doctype** context and book-conditioned tests — including the
 //!   book-only TOC cases (parts, preface/appendix numbering) — as non-article
 //!   doctypes are out of scope for 1.0 (like the DocBook-backend tests below);
@@ -3909,12 +3906,7 @@ mod section_numbering {
         );
     }
 
-    // Ignored: the parser aliases an API-set `numbered` to a locked `sectnums`,
-    // so the mid-document `:numbered!:` toggle is ignored and every section
-    // renders numbered rather than Asciidoctor's toggled result. Tracked by
-    // asciidoc-parser#989; unignore once the API-enabled case is body-toggleable.
     #[test]
-    #[ignore = "blocked on asciidoc-parser#989: API-set numbered locks sectnums"]
     fn section_numbers_can_be_toggled_even_if_numbered_attribute_is_enable_via_the_api() {
         verifies!(
             r#"
@@ -6183,11 +6175,10 @@ mod table_of_contents {
         );
     }
 
-    // Not verified: the `>` direction shorthand in the `toc` value is not mapped
-    // to a side by the parser (asciidoc-parser#992), so this resolves to a plain
-    // auto TOC instead of a right side column.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_set_toc_position_if_toc_attribute_is_set_to_position() {
+        verifies!(
+            r##"
     test 'should set toc position if toc attribute is set to position' do
       input = <<~'EOS'
       = Article
@@ -6210,13 +6201,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: the parser does not default `toc-class` to `toc2` when only
-    // the `toc-position` attribute (not the `toc` value) selects a side, so the
-    // `<body>` side-column classes are missing (asciidoc-parser#992).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc: >\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc_and_toc_position_attributes_are_set() {
+        verifies!(
+            r##"
     test 'should set toc position if toc and toc-position attributes are set' do
       input = <<~'EOS'
       = Article
@@ -6240,13 +6246,28 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
 
-    // Not verified: an explicit `toc-position` does not override the `left`
-    // implied by the `toc2` alias in the parser, so this resolves to a left
-    // side column instead of the requested right (asciidoc-parser#992).
-    non_normative!(
-        r##"
+        let output = convert_standalone(
+            "= Article\n:toc:\n:toc-position: right\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_set_toc_position_if_toc2_and_toc_position_attribute_are_set() {
+        verifies!(
+            r##"
     test 'should set toc position if toc2 and toc-position attribute are set' do
       input = <<~'EOS'
       = Article
@@ -6270,7 +6291,23 @@ mod table_of_contents {
     end
 
 "##
-    );
+        );
+
+        let output = convert_standalone(
+            "= Article\n:toc2:\n:toc-position: right\n:numbered:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
+        );
+        assert_xpath(&output, r#"//body[@class="article toc2 toc-right"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//*[@id="header"]//*[@id="toc"][@class="toc2"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r##"//*[@id="header"]//*[@id="toc"]/ul/li[1]/a[@href="#_section_one"][text()="1. Section One"]"##,
+            1,
+        );
+    }
 
     #[test]
     fn should_set_toc_position_if_toc_attribute_is_set_to_direction() {

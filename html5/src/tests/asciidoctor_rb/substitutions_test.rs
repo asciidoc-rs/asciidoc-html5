@@ -5220,12 +5220,10 @@ mod passthroughs {
 "#
     );
 
-    // The role-enclosed-in-quotes robustness case renders differently here —
-    // this crate does not emit the `<span class="'role'">` wrapper the test
-    // asserts. An inline-substitution divergence in `asciidoc-parser` (the
-    // renderer holds no passthrough logic); tracked by asciidoc-parser#973.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_crash_if_role_on_passthrough_is_enclosed_in_quotes() {
+        verifies!(
+            r#"
     test 'should not crash if role on passthrough is enclosed in quotes' do
       %W(
         ['role']#{BACKSLASH}++This++++++++++++
@@ -5237,7 +5235,15 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
+
+        for input in [
+            "['role']\\++This++++++++++++",
+            "['role']\\+++++++++This++++++++++++",
+        ] {
+            assert!(subs(input).contains(r#"<span class="'role'">"#));
+        }
+    }
 
     #[test]
     fn should_allow_inline_double_plus_passthrough_to_be_escaped_using_backslash() {
@@ -6608,13 +6614,10 @@ mod post_replacements {
         );
     }
 
-    // Enables hardbreaks via the API `hardbreaks` document attribute
-    // (`attributes: { 'hardbreaks' => '' }`), which `asciidoc-parser` does not
-    // honor for paragraph line breaks — though the header `:hardbreaks:`
-    // assignment and the `[%hardbreaks]` block option both are. Tracked by
-    // asciidoc-parser#974.
-    non_normative!(
-        r#"
+    #[test]
+    fn line_break_inserted_after_line_wrap_with_hardbreaks_enabled() {
+        verifies!(
+            r#"
     test 'line break inserted after line wrap with hardbreaks enabled' do
       para = block_from_string("First line\nSecond line", attributes: { 'hardbreaks' => '' })
       result = para.apply_subs para.lines, (para.expand_subs :post_replacements)
@@ -6622,7 +6625,13 @@ mod post_replacements {
     end
 
 "#
-    );
+        );
+
+        assert_eq!(
+            subs_with("First line\nSecond line", &[("hardbreaks", "")]),
+            "First line<br>\nSecond line"
+        );
+    }
 
     #[test]
     fn line_break_character_stripped_from_end_of_line_with_hardbreaks_enabled() {
