@@ -20,11 +20,12 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // link-vs-embed choice (`SECURE` "prevents access to stylesheets" and so links
 // it, while a lower mode embeds it inline), and the `docfile`/`docdir`
 // concealment under `SERVER`/`SECURE`. Other mode effects this crate honors —
-// the `docinfo`, `backend`, and `doctype` restrictions, and (through
-// asciidoc-parser's own safe mode, which this crate sets; see #37) include
-// directives and URI reads — are exercised by unit tests elsewhere, so their
-// spans stay non-normative here. What remains unsurfaced — icons, `data-uri`,
-// `source-highlighter`, and SVG modes — is likewise non-normative.
+// the `docinfo`, `backend`, `doctype`, and `source-highlighter` restrictions,
+// and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
+// include directives and URI reads – are exercised by unit tests elsewhere, so
+// their spans stay non-normative here (the `source-highlighter` bullet excepted
+// – it is verified below). What remains unsurfaced – icons, `data-uri`, and SVG
+// modes – is likewise non-normative.
 
 non_normative!(
     r#"
@@ -109,18 +110,17 @@ Its integer value is `1`.
 
 // SERVER's host-revealing intrinsics `docfile` and `docdir` are enforced here:
 // `docfile` is trimmed to its basename and `docdir` is emptied by
-// `Options::apply`, verified below. Docinfo, backend, and doctype are likewise
-// enforced. A document `:docinfo:` is ignored under SERVER and above, so only
-// an API value enables docinfo. Backend and doctype go further than the page:
-// because html5 is the only backend this crate produces and `article` the only
-// doctype it models, `backend` is pinned to `html5` and `doctype` to `article`,
-// each locked against the document (and the API) in *every* safe mode —
-// subsuming SERVER's restriction rather than merely matching it. Docinfo,
-// backend, doctype, docfile, and docdir are all covered by unit tests in
-// `options.rs`. The remaining document-set restriction is not modeled yet,
-// tracked for later implementation: source-highlighter
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45); enforcing it is
-// tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/56.
+// `Options::apply`, verified below. Docinfo, backend, doctype, and
+// source-highlighter are likewise enforced. A document `:docinfo:` or
+// `:source-highlighter:` is ignored under SERVER and above, so only an API
+// value enables either. Backend and doctype go further than the page: because
+// html5 is the only backend this crate produces and `article` the only doctype
+// it models, `backend` is pinned to `html5` and `doctype` to `article`, each
+// locked against the document (and the API) in *every* safe mode – subsuming
+// SERVER's restriction rather than merely matching it. Docinfo, backend,
+// doctype, source-highlighter, docfile, and docdir are all covered by unit
+// tests in `options.rs`; the source-highlighter lock (#215, the renderer half
+// of #56) is also verified from the `setting …` bullet just below.
 non_normative!(
     r#"
 [#server]
@@ -153,14 +153,40 @@ This level trims `docfile` to its relative path and prevents the document from:
     assert!(!html.contains("/docs/guide"), "{html}");
 }
 
-// The `setting …` bullet folds the docinfo, backend, and doctype restrictions
-// (all enforced, and covered by the `Options` tests) together with
-// source-highlighter (tracked in #45), so it stays non-normative here.
-non_normative!(
-    r#"
+// SERVER prevents the document from *setting* attributes that affect
+// conversion. `doctype`/`docinfo`/`backend` are enforced and covered by the
+// `Options` tests; `source-highlighter` is now enforced too (#215) – a document
+// that enables a highlighter under SERVER is ignored, so no highlighter class
+// or asset `<script>` is emitted and its origin cannot be steered by the
+// document.
+#[test]
+fn server_prevents_the_document_from_setting_source_highlighter() {
+    verifies!(
+        r#"
 * setting `source-highlighter`, `doctype`, `docinfo` and `backend`
 "#
-);
+    );
+
+    let html = convert_with(
+        "= Doc\n:source-highlighter: highlightjs\n:highlightjsdir: https://evil.example.com\n\n\
+         [source,ruby]\n----\nputs 1\n----",
+        &Options::new().safe_mode(SafeMode::Server),
+    );
+    // The source block falls back to the default unhighlighted shape, and no
+    // highlighter asset – from the attacker origin or the CDN – is emitted. (The
+    // default stylesheet names a `pre.highlightjs` CSS rule, so the checks target
+    // the highlighter markup itself, not the bare word.)
+    assert!(
+        html.contains(
+            "<pre class=\"highlight\">\
+             <code class=\"language-ruby\" data-lang=\"ruby\">puts 1</code></pre>"
+        ),
+        "{html}"
+    );
+    assert!(!html.contains("highlightjs highlight"), "{html}");
+    assert!(!html.contains("evil.example.com"), "{html}");
+    assert!(!html.contains("cdnjs.cloudflare.com"), "{html}");
+}
 
 // SERVER hides `docdir` from the document entirely, since it can expose the
 // host filesystem layout. This crate empties it, so a document reference

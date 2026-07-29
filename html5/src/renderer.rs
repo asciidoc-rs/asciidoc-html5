@@ -89,10 +89,11 @@ impl Highlighter {
     /// highlighter this crate does not render client-side (a server-side one,
     /// or an unknown name).
     ///
-    /// Note this does not apply Asciidoctor's safe-mode gating of a
-    /// document-set `source-highlighter` (locked to unset at `Server` and
-    /// above); that is tracked in
-    /// <https://github.com/asciidoc-rs/asciidoc-html5/issues/45>.
+    /// Asciidoctor's safe-mode gating of a *document-set* `source-highlighter`
+    /// (locked to unset at `Server` and above, so an untrusted document cannot
+    /// enable a highlighter and steer its asset origin) is applied upstream in
+    /// [`Options::apply`](crate::Options), so by the time this reads the
+    /// resolved attribute a disallowed value has already been dropped.
     fn from_document(document: &Document<'_>) -> Option<Self> {
         match attribute_str(document, "source-highlighter").as_deref() {
             Some("highlightjs" | "highlight.js") => Some(Self::HighlightJs),
@@ -4251,13 +4252,29 @@ mod tests {
     // the document shell. Each fragment below is byte-checked against
     // Asciidoctor 2.0.26 with the matching `-a source-highlighter=…` (the parity
     // oracle). See #215.
+    //
+    // These set `source-highlighter` through the API (Asciidoctor's `-a
+    // source-highlighter=…`), the trusted opt-in honored even under the default
+    // `Secure` safe mode. A *document-set* `:source-highlighter:` is locked out
+    // at `Server` and above as a security measure (see the safe-mode tests
+    // below and `Options::apply`), so the byte-parity tests use the API form.
+
+    /// Converts `source` to a standalone document with the client-side
+    /// `highlighter` enabled through the API, so the highlighter takes effect
+    /// even under the default `Secure` safe mode.
+    fn convert_hl(highlighter: &str, source: &str) -> String {
+        convert_with(
+            source,
+            &Options::new().attribute("source-highlighter", highlighter),
+        )
+    }
 
     #[test]
     fn highlightjs_shapes_the_source_pre_and_code() {
         // The `<pre>` gains the `highlightjs` class before `highlight`, and the
         // `<code>` names the language with the trailing `hljs` class Asciidoctor
         // adds for the browser-side highlighter.
-        let html = convert(":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----");
+        let html = convert_hl("highlightjs", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
                 "<pre class=\"highlightjs highlight\">\
@@ -4271,7 +4288,7 @@ mod tests {
     fn highlightjs_uses_language_none_without_a_language() {
         // With no declared language the `<code>` is `language-none hljs` and
         // carries no `data-lang`, matching `HighlightJsAdapter#format`.
-        let html = convert(":source-highlighter: highlightjs\n\n[source]\n----\nplain\n----");
+        let html = convert_hl("highlightjs", "[source]\n----\nplain\n----");
         assert!(
             html.contains(
                 "<pre class=\"highlightjs highlight\">\
@@ -4285,7 +4302,7 @@ mod tests {
     fn highlightjs_emits_head_link_and_footer_scripts() {
         // The head links the theme stylesheet (default `github`) and the footer
         // loads highlight.js and runs the initializer, both from the CDN.
-        let html = convert(":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----");
+        let html = convert_hl("highlightjs", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
                 "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
@@ -4313,10 +4330,11 @@ mod tests {
     fn highlightjs_honors_theme_dir_and_languages() {
         // `highlightjsdir` overrides the CDN base, `highlightjs-theme` the
         // stylesheet, and each `highlightjs-languages` entry loads a language
-        // pack (with leading whitespace stripped).
-        let html = convert(
-            ":source-highlighter: highlightjs\n\
-             :highlightjsdir: /assets/hjs\n\
+        // pack (with leading whitespace stripped). These secondary attributes
+        // are not safe-mode-locked, so the document may set them.
+        let html = convert_hl(
+            "highlightjs",
+            ":highlightjsdir: /assets/hjs\n\
              :highlightjs-theme: monokai\n\
              :highlightjs-languages: ruby, python\n\n\
              [source,ruby]\n----\nputs 1\n----",
@@ -4343,7 +4361,7 @@ mod tests {
     fn prettify_shapes_the_source_pre_and_code() {
         // Prettify prepends `prettyprint` and leaves the `<code>` in its default
         // shape — a bare `data-lang`, no class.
-        let html = convert(":source-highlighter: prettify\n\n[source,ruby]\n----\nputs 1\n----");
+        let html = convert_hl("prettify", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
                 "<pre class=\"prettyprint highlight\">\
@@ -4357,15 +4375,15 @@ mod tests {
     fn prettify_appends_the_linenums_classes() {
         // A `linenums` source block appends ` linenums` (or ` linenums:<start>`
         // when a `start` is given) after the `highlight` classes.
-        let plain =
-            convert(":source-highlighter: prettify\n\n[source%linenums,ruby]\n----\nputs 1\n----");
+        let plain = convert_hl("prettify", "[source%linenums,ruby]\n----\nputs 1\n----");
         assert!(
             plain.contains("<pre class=\"prettyprint highlight linenums\">"),
             "{plain}"
         );
 
-        let started = convert(
-            ":source-highlighter: prettify\n\n[source%linenums,ruby,start=5]\n----\nputs 1\n----",
+        let started = convert_hl(
+            "prettify",
+            "[source%linenums,ruby,start=5]\n----\nputs 1\n----",
         );
         assert!(
             started.contains("<pre class=\"prettyprint highlight linenums:5\">"),
@@ -4375,7 +4393,7 @@ mod tests {
 
     #[test]
     fn prettify_emits_head_link_and_footer_script() {
-        let html = convert(":source-highlighter: prettify\n\n[source,ruby]\n----\nputs 1\n----");
+        let html = convert_hl("prettify", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
                 "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
@@ -4396,8 +4414,8 @@ mod tests {
     fn serverside_highlighter_keeps_the_default_shape() {
         // A server-side highlighter this crate does not render (coderay, tracked
         // in #223) leaves the source block in the default unhighlighted shape and
-        // adds no CDN assets.
-        let html = convert(":source-highlighter: coderay\n\n[source,ruby]\n----\nputs 1\n----");
+        // adds no CDN assets – even when enabled through the trusted API.
+        let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
                 "<pre class=\"highlight\">\
@@ -4412,9 +4430,9 @@ mod tests {
     fn highlighter_reaches_a_source_block_in_a_table_cell() {
         // The highlighter is a document-level property, so a source block nested
         // in an AsciiDoc table cell is highlighted too.
-        let html = convert(
-            ":source-highlighter: highlightjs\n\n\
-             |===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
+        let html = convert_hl(
+            "highlightjs",
+            "|===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
         );
         assert!(
             html.contains(
@@ -4433,8 +4451,10 @@ mod tests {
         // `:asset-uri-scheme:` resolves to the `https` default in the parser, so
         // the protocol-relative form is reached through an empty value.)
         let relative = convert_with(
-            ":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
-            &Options::new().attribute("asset-uri-scheme", ""),
+            "[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .attribute("source-highlighter", "highlightjs")
+                .attribute("asset-uri-scheme", ""),
         );
         assert!(
             relative.contains(
@@ -4444,9 +4464,9 @@ mod tests {
             "{relative}"
         );
 
-        let http = convert(
-            ":source-highlighter: highlightjs\n:asset-uri-scheme: http\n\n\
-             [source,ruby]\n----\nputs 1\n----",
+        let http = convert_hl(
+            "highlightjs",
+            ":asset-uri-scheme: http\n\n[source,ruby]\n----\nputs 1\n----",
         );
         assert!(
             http.contains(
@@ -4461,9 +4481,9 @@ mod tests {
     fn prettify_honors_dir_and_theme() {
         // `prettifydir` overrides the CDN base for both the stylesheet and the
         // script, and `prettify-theme` selects the stylesheet.
-        let html = convert(
-            ":source-highlighter: prettify\n\
-             :prettifydir: /assets/pf\n\
+        let html = convert_hl(
+            "prettify",
+            ":prettifydir: /assets/pf\n\
              :prettify-theme: sunburst\n\n\
              [source,ruby]\n----\nputs 1\n----",
         );
@@ -4481,9 +4501,9 @@ mod tests {
     fn prettify_theme_may_be_a_full_url() {
         // An `http(s)` `prettify-theme` is linked directly rather than resolved
         // against `prettifydir`.
-        let html = convert(
-            ":source-highlighter: prettify\n\
-             :prettify-theme: https://cdn.example.com/pp.css\n\n\
+        let html = convert_hl(
+            "prettify",
+            ":prettify-theme: https://cdn.example.com/pp.css\n\n\
              [source,ruby]\n----\nputs 1\n----",
         );
         assert!(
@@ -4497,10 +4517,9 @@ mod tests {
         // A trailing comma in `highlightjs-languages` leaves an empty entry,
         // which is dropped rather than emitting a `languages/.min.js` script —
         // matching Asciidoctor, whose `split` drops the trailing empty.
-        let html = convert(
-            ":source-highlighter: highlightjs\n\
-             :highlightjs-languages: ruby,\n\n\
-             [source,ruby]\n----\nputs 1\n----",
+        let html = convert_hl(
+            "highlightjs",
+            ":highlightjs-languages: ruby,\n\n[source,ruby]\n----\nputs 1\n----",
         );
         assert!(html.contains("/languages/ruby.min.js"), "{html}");
         assert!(!html.contains("/languages/.min.js"), "{html}");
@@ -4510,11 +4529,67 @@ mod tests {
     fn prettify_uses_a_bare_code_without_a_language() {
         // With no declared language prettify leaves the `<code>` bare (no class,
         // no `data-lang`).
-        let html = convert(":source-highlighter: prettify\n\n[source]\n----\nplain\n----");
+        let html = convert_hl("prettify", "[source]\n----\nplain\n----");
         assert!(
             html.contains("<pre class=\"prettyprint highlight\"><code>plain</code></pre>"),
             "{html}"
         );
+    }
+
+    // Safe-mode gating of `source-highlighter` (Greptile P1 / #45). A
+    // highlighter emits `<link>`/`<script>` tags whose origin a document
+    // attribute can steer, so an untrusted document must not be able to enable
+    // one under a server-side safe mode. This mirrors Asciidoctor's
+    // `attr_overrides['source-highlighter'] ||= nil` at `Server` and above.
+
+    #[test]
+    fn document_set_source_highlighter_is_ignored_at_server_and_above() {
+        // A document that both enables a highlighter and points its asset dir at
+        // an attacker origin must render neither the highlighter nor the script
+        // when converted under `Server` or `Secure` – it falls back to the plain
+        // unhighlighted shape.
+        for mode in [SafeMode::Server, SafeMode::Secure] {
+            let html = convert_with(
+                ":source-highlighter: highlightjs\n\
+                 :highlightjsdir: https://evil.example.com\n\n\
+                 [source,ruby]\n----\nputs 1\n----",
+                &Options::new().safe_mode(mode),
+            );
+            assert!(!html.contains("evil.example.com"), "{mode:?}: {html}");
+            assert!(!html.contains("highlightjs highlight"), "{mode:?}: {html}");
+            assert!(!html.contains("cdnjs.cloudflare.com"), "{mode:?}: {html}");
+            assert!(
+                html.contains(
+                    "<pre class=\"highlight\">\
+                     <code class=\"language-ruby\" data-lang=\"ruby\">puts 1</code></pre>"
+                ),
+                "{mode:?}: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn document_set_source_highlighter_is_honored_below_server() {
+        // Below `Server` (here `Unsafe`) a document may enable a highlighter,
+        // matching Asciidoctor.
+        let html = convert_with(
+            ":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
+    fn api_set_source_highlighter_is_honored_under_secure() {
+        // A trusted API opt-in (`-a source-highlighter=…`) works even under the
+        // default `Secure` safe mode, matching Asciidoctor.
+        let html = convert_with(
+            "[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Secure)
+                .attribute("source-highlighter", "highlightjs"),
+        );
+        assert!(html.contains("highlightjs highlight"), "{html}");
     }
 
     // Tab expansion (`tabsize`) beyond the leading-tab fast path: an embedded

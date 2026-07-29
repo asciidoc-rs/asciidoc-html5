@@ -266,8 +266,14 @@ purely a matter of CSS classes on each source block's `<pre>`/`<code>` (e.g.
 (`coderay`, `pygments`, `rouge`), which emit tokenized `<span>` markup, are not
 rendered — they leave the source block in its default unhighlighted shape and are
 tracked in [#223](https://github.com/asciidoc-rs/asciidoc-html5/issues/223).
-Asciidoctor's safe-mode gating of a document-set `source-highlighter` is a
-separate gap tracked in
+
+Because a highlighter emits `<link>`/`<script>` tags whose origin a document
+`highlightjsdir`/`prettifydir` can steer, enabling one is safe-mode gated: at
+`Server` and above a *document-set* `:source-highlighter:` is locked to unset in
+[`Options::apply`](Options) (mirroring Asciidoctor's `attr_overrides['source-
+highlighter'] ||= nil`), so only a trusted API/CLI `-a source-highlighter=…`
+opt-in can turn one on – which is still honored under `Secure`, matching
+Asciidoctor 2.0.26. This is the document-lock half of
 [#45](https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 
 The `doctype` attribute is normally pinned to `article` — the only structural

@@ -520,6 +520,38 @@ impl Options {
             };
         }
 
+        // Matching Asciidoctor: `Server` and above forbid the *document* from
+        // setting `source-highlighter` (Asciidoctor's SERVER "restrict document
+        // from setting … source-highlighter" – `attr_overrides['source-
+        // highlighter'] ||= nil`). This is a real security boundary: a
+        // highlighter emits `<link>`/`<script>` tags into the output whose origin
+        // a document `:highlightjsdir:`/`:prettifydir:` can steer, so an
+        // untrusted document must not be able to turn one on. Re-seed it silently
+        // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
+        // API did not touch it – so a document `:source-highlighter:` is dropped
+        // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
+        // opt-in) is still honored, even under `Secure`. This adds the
+        // `source-highlighter` piece of the SERVER attribute lock (#56, the
+        // renderer half of #45); note Asciidoctor 2.0.26 does *not* additionally
+        // disable an API-set highlighter under `Secure` (verified against the
+        // oracle), so neither does this crate.
+        if mode >= SafeMode::Server {
+            let ctx = ModificationContext::ApiOnly;
+            parser = match self.last_action("source-highlighter") {
+                Some(Action::Value(value)) => {
+                    parser.with_intrinsic_attribute_silent("source-highlighter", value, ctx)
+                }
+                Some(Action::Set) => {
+                    parser.with_intrinsic_attribute_bool_silent("source-highlighter", true, ctx)
+                }
+                // An explicit API unset, or no API mention at all: no
+                // highlighter, locked against the document.
+                Some(Action::Unset) | None => {
+                    parser.with_intrinsic_attribute_bool_silent("source-highlighter", false, ctx)
+                }
+            };
+        }
+
         // Surface the input-file attribute family — `docfile`, `docdir`,
         // `docname`, `docfilesuffix` — the way Asciidoctor's loader does,
         // honoring the safe mode. Asciidoctor derives all four from the input
@@ -1287,6 +1319,65 @@ mod tests {
 
         assert!(with.contains("name=\"private\""));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // `source-highlighter` gets the same `Server`+ lock as `docinfo`: a
+    // highlighter emits `<link>`/`<script>` assets whose origin a document
+    // attribute can steer, so an untrusted document must not enable one under a
+    // server-side safe mode. Mirrors Asciidoctor's `attr_overrides['source-
+    // highlighter'] ||= nil` (#215 / #45).
+
+    #[test]
+    fn document_set_source_highlighter_is_ignored_under_server() {
+        // A document that enables a highlighter itself is ignored under `Server`,
+        // so no highlighter class is emitted on the source block.
+        let html = convert_with(
+            "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
+
+        assert!(!html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
+    fn api_set_source_highlighter_still_applies_under_server() {
+        // The restriction is on the *document*, not the API: an API-set
+        // `source-highlighter` is honored under `Server` (and, being the default,
+        // under `Secure` too), with the document not mentioning it.
+        let html = convert_with(
+            "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute("source-highlighter", "highlightjs"),
+        );
+
+        assert!(html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
+    fn document_source_highlighter_cannot_override_an_api_unset_under_server() {
+        // An API unset locks the highlighter off; the document's own
+        // `:source-highlighter:` cannot turn it back on under `Server`.
+        let html = convert_with(
+            "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .unset("source-highlighter"),
+        );
+
+        assert!(!html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
+    fn document_set_source_highlighter_is_honored_below_server() {
+        // Below `Server` (here `Safe`) a document may enable a highlighter,
+        // matching Asciidoctor.
+        let html = convert_with(
+            "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().safe_mode(SafeMode::Safe),
+        );
+
+        assert!(html.contains("highlightjs highlight"), "{html}");
     }
 
     // `docfile` and `docdir` are intrinsic attributes this crate originates
