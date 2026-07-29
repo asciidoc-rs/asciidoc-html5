@@ -58,6 +58,50 @@ pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
 /// headings, Noto Serif for body text, Droid Sans Mono for monospaced text.
 const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
 
+/// The `highlight.js` release Asciidoctor v2.0.26 links from the CDN
+/// (`Asciidoctor::HIGHLIGHT_JS_VERSION`).
+const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
+
+/// The active *client-side* syntax highlighter, resolved from the
+/// `source-highlighter` document attribute.
+///
+/// Only the two client-side highlighters are modelled. They perform no
+/// server-side tokenizing, so honoring them is purely a matter of the CSS
+/// classes on the source block's `<pre>`/`<code>` plus a CDN `<link>` in the
+/// `<head>` and a `<script>` before `</body>` — no new dependency, matching the
+/// library's "depend only on `asciidoc-parser`" constraint. The server-side
+/// highlighters (`coderay`, `pygments`, `rouge`), which emit tokenized `<span>`
+/// markup, are tracked separately in
+/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/223> and leave the
+/// source block in its default unhighlighted shape here.
+#[derive(Clone, Copy, PartialEq)]
+enum Highlighter {
+    /// `:source-highlighter: highlightjs` (also `highlight.js`).
+    HighlightJs,
+
+    /// `:source-highlighter: prettify`.
+    Prettify,
+}
+
+impl Highlighter {
+    /// Resolves the active client-side highlighter from the document's
+    /// `source-highlighter` attribute, or `None` when unset or set to a
+    /// highlighter this crate does not render client-side (a server-side one,
+    /// or an unknown name).
+    ///
+    /// Note this does not apply Asciidoctor's safe-mode gating of a
+    /// document-set `source-highlighter` (locked to unset at `Server` and
+    /// above); that is tracked in
+    /// <https://github.com/asciidoc-rs/asciidoc-html5/issues/45>.
+    fn from_document(document: &Document<'_>) -> Option<Self> {
+        match attribute_str(document, "source-highlighter").as_deref() {
+            Some("highlightjs" | "highlight.js") => Some(Self::HighlightJs),
+            Some("prettify") => Some(Self::Prettify),
+            _ => None,
+        }
+    }
+}
+
 /// Whether `block` is one Asciidoctor renders to nothing, so the renderer emits
 /// no output for it at all.
 ///
@@ -143,6 +187,43 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
     }
+}
+
+/// The CDN base URL Asciidoctor builds its asset links from —
+/// `{scheme}//cdnjs.cloudflare.com/ajax/libs`. The scheme comes from
+/// `asset-uri-scheme` (default `https`); an empty value yields a
+/// protocol-relative `//…` URL.
+fn cdn_base_url(document: &Document<'_>) -> String {
+    let scheme = match attribute_str(document, "asset-uri-scheme") {
+        Some(scheme) if scheme.is_empty() => String::new(),
+        Some(scheme) => format!("{scheme}:"),
+        None => "https:".to_string(),
+    };
+
+    format!("{scheme}//cdnjs.cloudflare.com/ajax/libs")
+}
+
+/// The base directory `highlightjs` assets load from: the `highlightjsdir`
+/// attribute, or `{cdn}/highlight.js/{version}` by default.
+fn highlightjs_dir(document: &Document<'_>) -> String {
+    attribute_str(document, "highlightjsdir").map_or_else(
+        || {
+            format!(
+                "{}/highlight.js/{HIGHLIGHT_JS_VERSION}",
+                cdn_base_url(document)
+            )
+        },
+        |dir| escape_attribute(&dir),
+    )
+}
+
+/// The base directory `prettify` assets load from: the `prettifydir`
+/// attribute, or `{cdn}/prettify/r298` by default.
+fn prettify_dir(document: &Document<'_>) -> String {
+    attribute_str(document, "prettifydir").map_or_else(
+        || format!("{}/prettify/r298", cdn_base_url(document)),
+        |dir| escape_attribute(&dir),
+    )
 }
 
 /// The byte length of the leading run of supplemental inline anchors
@@ -738,6 +819,7 @@ pub(crate) fn render_document<'a>(
         doc_tabsize: ruby_to_i(&attribute_str(document, "tabsize").unwrap_or_default()),
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
+        source_highlighter: Highlighter::from_document(document),
         section_anchors: if !document.is_attribute_set("sectanchors") {
             SectionAnchors::None
         } else if attribute_str(document, "sectanchors").as_deref() == Some("after") {
@@ -776,6 +858,7 @@ struct CellRenderConfig {
     doc_tabsize: i64,
     source_indent: Option<i64>,
     prewrap: bool,
+    source_highlighter: Option<Highlighter>,
     section_anchors: SectionAnchors,
     sectlinks: bool,
 }
@@ -840,6 +923,12 @@ struct Renderer<'a> {
     /// default; when it is unset (`:prewrap!:`) every verbatim `<pre>` gains
     /// the `nowrap` class.
     prewrap: bool,
+
+    /// The active client-side syntax highlighter (`highlightjs`/`prettify`),
+    /// resolved once from the document's `source-highlighter` attribute. It
+    /// selects the CSS classes on each source block's `<pre>`/`<code>` and
+    /// drives the CDN `<link>`/`<script>` injected into the document shell.
+    source_highlighter: Option<Highlighter>,
 
     /// How the `sectanchors` document attribute decorates non-discrete section
     /// headings with a self-anchor.
@@ -907,6 +996,11 @@ impl Renderer<'_> {
         // the `<title>`. This renderer always produces standalone output, so it
         // does the same unless the document opts out.
         self.stylesheet(document);
+
+        // The active syntax highlighter's `<head>` docinfo (its stylesheet
+        // `<link>`) sits after the stylesheet and before the head docinfo,
+        // matching Asciidoctor's placement.
+        self.highlighter_head(document);
 
         // Head docinfo is appended to the bottom of the `<head>`, below the
         // default stylesheet, matching Asciidoctor.
@@ -984,6 +1078,11 @@ impl Renderer<'_> {
             self.line("</div>");
             self.line("</div>");
         }
+
+        // The active syntax highlighter's `<footer>` docinfo (the scripts that
+        // load and run the highlighter) is emitted after the footer `<div>`,
+        // matching Asciidoctor — where JavaScript loads at the end of the body.
+        self.highlighter_footer(document);
 
         // Footer docinfo is inserted immediately after the footer `<div>`, again
         // whether or not the footer itself is suppressed by `nofooter`.
@@ -1203,6 +1302,102 @@ impl Renderer<'_> {
         let content = document.docinfo(location);
         if !content.is_empty() {
             self.line(content);
+        }
+    }
+
+    /// Emits the active client-side highlighter's `<head>` docinfo — the
+    /// stylesheet `<link>` — matching Asciidoctor's `docinfo :head`.
+    ///
+    /// `highlightjs` links its theme stylesheet
+    /// (`{highlightjsdir}/styles/{highlightjs-theme}.min.css`, default theme
+    /// `github`); `prettify` links its theme stylesheet
+    /// (`{prettifydir}/{prettify-theme}.min.css`, default theme `prettify`),
+    /// or, when `prettify-theme` is itself an `http(s)` URL, that URL
+    /// directly.
+    fn highlighter_head(&mut self, document: &Document<'_>) {
+        let href = match self.source_highlighter {
+            None => return,
+
+            Some(Highlighter::HighlightJs) => {
+                let theme = attribute_str(document, "highlightjs-theme")
+                    .unwrap_or_else(|| "github".to_string());
+
+                format!(
+                    "{}/styles/{}.min.css",
+                    highlightjs_dir(document),
+                    escape_attribute(&theme)
+                )
+            }
+
+            Some(Highlighter::Prettify) => {
+                let theme = attribute_str(document, "prettify-theme")
+                    .unwrap_or_else(|| "prettify".to_string());
+
+                if theme.starts_with("http://") || theme.starts_with("https://") {
+                    escape_attribute(&theme)
+                } else {
+                    format!(
+                        "{}/{}.min.css",
+                        prettify_dir(document),
+                        escape_attribute(&theme)
+                    )
+                }
+            }
+        };
+
+        self.line(&format!("<link rel=\"stylesheet\" href=\"{href}\">"));
+    }
+
+    /// Emits the active client-side highlighter's `<footer>` docinfo — the
+    /// scripts that load and run the highlighter — matching Asciidoctor's
+    /// `docinfo :footer`.
+    ///
+    /// `highlightjs` loads the core script, then one script per
+    /// `highlightjs-languages` entry, then an inline initializer;
+    /// `prettify` loads its single `run_prettify.min.js`.
+    fn highlighter_footer(&mut self, document: &Document<'_>) {
+        match self.source_highlighter {
+            None => {}
+
+            Some(Highlighter::HighlightJs) => {
+                let base = highlightjs_dir(document);
+                let mut footer = format!("<script src=\"{base}/highlight.min.js\"></script>\n");
+
+                // Each comma-separated `highlightjs-languages` entry loads an
+                // extra language pack (Ruby `lstrip`s the leading whitespace).
+                if let Some(languages) = attribute_str(document, "highlightjs-languages") {
+                    for language in languages.split(',') {
+                        let language = language.trim_start();
+                        if language.is_empty() {
+                            continue;
+                        }
+
+                        footer.push_str(&format!(
+                            "<script src=\"{base}/languages/{}.min.js\"></script>\n",
+                            escape_attribute(language)
+                        ));
+                    }
+                }
+
+                footer.push_str(
+                    "<script>\n\
+                     if (!hljs.initHighlighting.called) {\n  \
+                     hljs.initHighlighting.called = true\n  \
+                     ;[].slice.call(document.querySelectorAll('pre.highlight > code[data-lang]'))\
+                     .forEach(function (el) { hljs.highlightBlock(el) })\n\
+                     }\n\
+                     </script>",
+                );
+
+                self.line(&footer);
+            }
+
+            Some(Highlighter::Prettify) => {
+                self.line(&format!(
+                    "<script src=\"{}/run_prettify.min.js\"></script>",
+                    prettify_dir(document)
+                ));
+            }
         }
     }
 
@@ -1428,6 +1623,13 @@ impl Renderer<'_> {
     /// declared. This matches Asciidoctor's default output even when no
     /// syntax highlighter is active.
     ///
+    /// When a client-side highlighter is active
+    /// ([`source_highlighter`](Self::source_highlighter)), the `<pre>`/`<code>`
+    /// classes take the highlighter-specific shape instead — `highlightjs
+    /// highlight` / `prettyprint highlight` on the `<pre>`, and `hljs` (plus
+    /// the `linenums`/`start` line-number classes for prettify) — matching
+    /// Asciidoctor's `HighlightJsAdapter`/`PrettifyAdapter`.
+    ///
     /// A source block resolves to the `listing` context, so its title is
     /// captioned the same way a listing block's is (see
     /// [`verbatim`](Self::verbatim)).
@@ -1438,15 +1640,6 @@ impl Renderer<'_> {
 
         let content = self.verbatim_content(block, true);
 
-        // A `nowrap` block (or a document with `prewrap` disabled) adds the
-        // class after `highlight`, matching Asciidoctor's `pre class="highlight
-        // nowrap"`.
-        let highlight = if self.is_nowrap(block) {
-            "highlight nowrap"
-        } else {
-            "highlight"
-        };
-
         // The language is the second positional attribute of `[source, lang]`
         // (the first is the `source` style itself), or an explicit `language=`.
         let language = block
@@ -1454,21 +1647,84 @@ impl Renderer<'_> {
             .and_then(|attrlist| attrlist.named_or_positional_attribute("language", 2))
             .map(|attr| attr.value());
 
-        match language {
-            Some(language) => {
-                let language = escape_attribute(language);
-                self.line(&format!(
-                    "<pre class=\"{highlight}\"><code class=\"language-{language}\" \
-                     data-lang=\"{language}\">{content}</code></pre>"
-                ));
-            }
-            None => self.line(&format!(
-                "<pre class=\"{highlight}\"><code>{content}</code></pre>"
-            )),
-        }
+        let (pre_class, code_open) = self.source_pre_code(block, language);
+        self.line(&format!(
+            "<pre class=\"{pre_class}\">{code_open}{content}</code></pre>"
+        ));
 
         self.line("</div>");
         self.line("</div>");
+    }
+
+    /// Builds the `<pre>` class list and the opening `<code …>` tag for a
+    /// source block, keyed off the active client-side highlighter.
+    ///
+    /// With no highlighter the default shape is used (`highlight` plus an
+    /// optional `nowrap`, and `class="language-…" data-lang="…"` on the
+    /// `<code>` when a language is declared). `highlightjs` and `prettify`
+    /// prepend their `@pre_class` and reshape the `<code>` attributes to match
+    /// their Asciidoctor adapters.
+    fn source_pre_code(&self, block: &Block<'_>, language: Option<&str>) -> (String, String) {
+        // A `nowrap` block (or a document with `prewrap` disabled) adds the
+        // class after `highlight`, matching Asciidoctor's `pre class="highlight
+        // nowrap"`.
+        let nowrap = if self.is_nowrap(block) { " nowrap" } else { "" };
+        let language = language.map(escape_attribute);
+
+        match self.source_highlighter {
+            None => {
+                let code_open = match &language {
+                    Some(language) => {
+                        format!("<code class=\"language-{language}\" data-lang=\"{language}\">")
+                    }
+                    None => "<code>".to_string(),
+                };
+
+                (format!("highlight{nowrap}"), code_open)
+            }
+
+            Some(Highlighter::HighlightJs) => {
+                // `code['class'] = "language-#{lang || 'none'} hljs"`, and
+                // `data-lang` is only added when a language is declared.
+                let code_open = match &language {
+                    Some(language) => format!(
+                        "<code class=\"language-{language} hljs\" data-lang=\"{language}\">"
+                    ),
+                    None => "<code class=\"language-none hljs\">".to_string(),
+                };
+
+                (format!("highlightjs highlight{nowrap}"), code_open)
+            }
+
+            Some(Highlighter::Prettify) => {
+                // Prettify leaves the `<code>` in its default shape (a bare
+                // `data-lang`, no class) and, for a `linenums` block, appends
+                // ` linenums` (or ` linenums:<start>`) after the `highlight`
+                // classes.
+                let linenums = if block.has_option("linenums") {
+                    match block
+                        .attrlist()
+                        .and_then(|attrlist| attrlist.named_attribute("start"))
+                        .map(|attr| attr.value())
+                    {
+                        Some(start) => format!(" linenums:{}", escape_attribute(start)),
+                        None => " linenums".to_string(),
+                    }
+                } else {
+                    String::new()
+                };
+
+                let code_open = match &language {
+                    Some(language) => format!("<code data-lang=\"{language}\">"),
+                    None => "<code>".to_string(),
+                };
+
+                (
+                    format!("prettyprint highlight{nowrap}{linenums}"),
+                    code_open,
+                )
+            }
+        }
     }
 
     /// A passthrough block (`++++`): its content is emitted raw and unescaped,
@@ -2327,6 +2583,7 @@ impl Renderer<'_> {
                         doc_tabsize: self.doc_tabsize,
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
+                        source_highlighter: self.source_highlighter,
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
                     },
@@ -2909,6 +3166,7 @@ fn render_cell_document<'s>(
         doc_tabsize: config.doc_tabsize,
         source_indent: config.source_indent,
         prewrap: config.prewrap,
+        source_highlighter: config.source_highlighter,
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
     };
@@ -3914,6 +4172,185 @@ mod tests {
         let html = convert(":prewrap!:\n\n[source,ruby]\n    def x");
         assert!(
             html.contains("<pre class=\"highlight nowrap\"><code class=\"language-ruby\""),
+            "{html}"
+        );
+    }
+
+    // The client-side syntax highlighters (`highlightjs`, `prettify`) reshape
+    // the source block's `<pre>`/`<code>` and add a CDN `<link>`/`<script>` to
+    // the document shell. Each fragment below is byte-checked against
+    // Asciidoctor 2.0.26 with the matching `-a source-highlighter=…` (the parity
+    // oracle). See #215.
+
+    #[test]
+    fn highlightjs_shapes_the_source_pre_and_code() {
+        // The `<pre>` gains the `highlightjs` class before `highlight`, and the
+        // `<code>` names the language with the trailing `hljs` class Asciidoctor
+        // adds for the browser-side highlighter.
+        let html = convert(":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-ruby hljs\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_uses_language_none_without_a_language() {
+        // With no declared language the `<code>` is `language-none hljs` and
+        // carries no `data-lang`, matching `HighlightJsAdapter#format`.
+        let html = convert(":source-highlighter: highlightjs\n\n[source]\n----\nplain\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-none hljs\">plain</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_emits_head_link_and_footer_scripts() {
+        // The head links the theme stylesheet (default `github`) and the footer
+        // loads highlight.js and runs the initializer, both from the CDN.
+        let html = convert(":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/highlight.min.js\"></script>\n\
+                 <script>\n\
+                 if (!hljs.initHighlighting.called) {\n  \
+                 hljs.initHighlighting.called = true\n  \
+                 ;[].slice.call(document.querySelectorAll('pre.highlight > code[data-lang]'))\
+                 .forEach(function (el) { hljs.highlightBlock(el) })\n\
+                 }\n\
+                 </script>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_honors_theme_dir_and_languages() {
+        // `highlightjsdir` overrides the CDN base, `highlightjs-theme` the
+        // stylesheet, and each `highlightjs-languages` entry loads a language
+        // pack (with leading whitespace stripped).
+        let html = convert(
+            ":source-highlighter: highlightjs\n\
+             :highlightjsdir: /assets/hjs\n\
+             :highlightjs-theme: monokai\n\
+             :highlightjs-languages: ruby, python\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"/assets/hjs/styles/monokai.min.css\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/highlight.min.js\"></script>\n"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/languages/ruby.min.js\"></script>\n"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/hjs/languages/python.min.js\"></script>\n"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_shapes_the_source_pre_and_code() {
+        // Prettify prepends `prettyprint` and leaves the `<code>` in its default
+        // shape — a bare `data-lang`, no class.
+        let html = convert(":source-highlighter: prettify\n\n[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"prettyprint highlight\">\
+                 <code data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_appends_the_linenums_classes() {
+        // A `linenums` source block appends ` linenums` (or ` linenums:<start>`
+        // when a `start` is given) after the `highlight` classes.
+        let plain =
+            convert(":source-highlighter: prettify\n\n[source%linenums,ruby]\n----\nputs 1\n----");
+        assert!(
+            plain.contains("<pre class=\"prettyprint highlight linenums\">"),
+            "{plain}"
+        );
+
+        let started = convert(
+            ":source-highlighter: prettify\n\n[source%linenums,ruby,start=5]\n----\nputs 1\n----",
+        );
+        assert!(
+            started.contains("<pre class=\"prettyprint highlight linenums:5\">"),
+            "{started}"
+        );
+    }
+
+    #[test]
+    fn prettify_emits_head_link_and_footer_script() {
+        let html = convert(":source-highlighter: prettify\n\n[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 prettify/r298/prettify.min.css\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/\
+                 prettify/r298/run_prettify.min.js\"></script>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn serverside_highlighter_keeps_the_default_shape() {
+        // A server-side highlighter this crate does not render (coderay, tracked
+        // in #223) leaves the source block in the default unhighlighted shape and
+        // adds no CDN assets.
+        let html = convert(":source-highlighter: coderay\n\n[source,ruby]\n----\nputs 1\n----");
+        assert!(
+            html.contains(
+                "<pre class=\"highlight\">\
+                 <code class=\"language-ruby\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
+            "{html}"
+        );
+        assert!(!html.contains("cdnjs.cloudflare.com"), "{html}");
+    }
+
+    #[test]
+    fn highlighter_reaches_a_source_block_in_a_table_cell() {
+        // The highlighter is a document-level property, so a source block nested
+        // in an AsciiDoc table cell is highlighted too.
+        let html = convert(
+            ":source-highlighter: highlightjs\n\n\
+             |===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
+        );
+        assert!(
+            html.contains(
+                "<pre class=\"highlightjs highlight\">\
+                 <code class=\"language-ruby hljs\" data-lang=\"ruby\">puts 1</code></pre>"
+            ),
             "{html}"
         );
     }

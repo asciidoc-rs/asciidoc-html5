@@ -250,6 +250,26 @@ needs a caller-supplied `docdatetime`. The `<body class>` now carries the TOC
 classes Asciidoctor appends for a side-column TOC (`toc2 toc-left` /
 `toc2 toc-right`).
 
+### Syntax highlighting (`source-highlighter`)
+
+The two *client-side* highlighters — `highlightjs` (aka `highlight.js`) and
+`prettify` — are rendered. They do no server-side tokenizing, so honoring them is
+purely a matter of CSS classes on each source block's `<pre>`/`<code>` (e.g.
+`highlightjs highlight` / `prettyprint highlight`, and the `hljs` /
+`linenums` classes) plus the CDN `<link>` in `<head>` and `<script>` before
+`</body>` that load the highlighter — matching Asciidoctor's `HighlightJsAdapter`
+/ `PrettifyAdapter`, and adding no new dependency. The `Highlighter` enum in
+`renderer.rs` resolves the active highlighter once from `source-highlighter`, and
+`Highlighter::from_document` / `highlighter_head` / `highlighter_footer` carry the
+`highlightjsdir`/`highlightjs-theme`/`highlightjs-languages` and
+`prettifydir`/`prettify-theme` attributes. The *server-side* highlighters
+(`coderay`, `pygments`, `rouge`), which emit tokenized `<span>` markup, are not
+rendered — they leave the source block in its default unhighlighted shape and are
+tracked in [#223](https://github.com/asciidoc-rs/asciidoc-html5/issues/223).
+Asciidoctor's safe-mode gating of a document-set `source-highlighter` is a
+separate gap tracked in
+[#45](https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+
 The `doctype` attribute is normally pinned to `article` — the only structural
 doctype this renderer models — and locked against the document. The one value a
 caller can select through [`Options::doctype`] is `inline`: `document()` then
