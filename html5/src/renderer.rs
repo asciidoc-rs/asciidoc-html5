@@ -2840,6 +2840,15 @@ impl Renderer<'_> {
         self.block_title(block);
         self.line("<div class=\"content\">");
 
+        // The media target and the attribute values below (`width`/`height`/
+        // `poster`/`preload`, and the embed query parameters) are interpolated
+        // *verbatim*, not run through [`escape_attribute`] the way the wrapper's
+        // id/roles are. This matches Asciidoctor's `convert_video`/
+        // `convert_audio`, which emit these raw — so, as with Asciidoctor, a
+        // document built from untrusted input must be sanitized downstream. The
+        // choice keeps output byte-identical to the parity oracle (a real target
+        // or dimension never carries an HTML delimiter).
+
         // `width`/`height` are shared by the self-hosted and embed forms
         // (positional 2 and 3, or named).
         let width = attrs.named_or_positional_attribute("width", 2);
@@ -3045,6 +3054,8 @@ impl Renderer<'_> {
         let end = attrs.named_attribute("end").map(|a| a.value());
         let time_anchor = Self::time_anchor(start, end);
 
+        // The target is interpolated verbatim, matching Asciidoctor (see the
+        // note in [`video`](Self::video)).
         self.line(&format!(
             "<audio src=\"{}{time_anchor}\"{}{}{}>",
             media_uri(media.resolved_target(), &self.imagesdir),
