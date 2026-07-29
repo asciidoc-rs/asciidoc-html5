@@ -1355,6 +1355,24 @@ mod tests {
     }
 
     #[test]
+    fn api_bare_set_source_highlighter_locks_out_the_document_under_server() {
+        // A *bare* API `source-highlighter` (a set with no value, `Action::Set`)
+        // is seeded locked under `Server` just like a valued one, exercising the
+        // `Some(Action::Set)` arm. Being valueless it names no client-side
+        // highlighter, so nothing is rendered — but, crucially, it locks the
+        // attribute so the document's own `:source-highlighter: highlightjs` is
+        // dropped rather than taking effect.
+        let html = convert_with(
+            "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .set("source-highlighter"),
+        );
+
+        assert!(!html.contains("highlightjs highlight"), "{html}");
+    }
+
+    #[test]
     fn document_source_highlighter_cannot_override_an_api_unset_under_server() {
         // An API unset locks the highlighter off; the document's own
         // `:source-highlighter:` cannot turn it back on under `Server`.
