@@ -65,8 +65,8 @@ fn the_crib_sheet_is_an_asciidoc_document() {
 
 // The whole point of the topic: the crib sheet is valid AsciiDoc that this
 // crate's own renderer converts, so `adoc --help syntax | adoc -o -` yields an
-// accurate HTML5 preview. Because the crib sheet is scoped to supported
-// constructs, that render must contain no `unsupported` fallback marker.
+// accurate HTML5 preview. Every construct the crib sheet demonstrates renders,
+// so that preview must contain no `unsupported` fallback marker.
 #[test]
 fn the_crib_sheet_renders_without_unsupported_markers() {
     let html = asciidoc_html5::convert(SYNTAX_CRIB_SHEET);
@@ -79,4 +79,36 @@ fn the_crib_sheet_renders_without_unsupported_markers() {
         !html.contains("unsupported"),
         "every construct in the crib sheet should render, but found an unsupported marker:\n{html}"
     );
+}
+
+// Guards that the crib sheet's block-styled constructs keep their block
+// treatment rather than degrading to plain paragraphs. Several sit directly
+// below an explanatory `//` comment, the pattern that asciidoc-parser#995
+// mis-parses (the attribute line is surfaced as paragraph text); the crib sheet
+// separates each such comment from its block with a blank line to sidestep it.
+// If that regresses — or a parser bump reintroduces the bug — these assertions
+// fail loudly instead of the preview silently losing styling.
+#[test]
+fn the_crib_sheet_keeps_its_block_styles() {
+    let html = asciidoc_html5::convert(SYNTAX_CRIB_SHEET);
+
+    for (needle, construct) in [
+        (
+            "<div class=\"admonitionblock note\">",
+            "NOTE admonition block",
+        ),
+        ("<div class=\"colist arabic\">", "callout list"),
+        ("<div class=\"stemblock\">", "STEM block"),
+        ("<div class=\"imageblock\">", "block image"),
+        ("<div class=\"videoblock\">", "video block"),
+        (
+            "<code class=\"language-ruby\" data-lang=\"ruby\">",
+            "source-highlighted callout listing",
+        ),
+    ] {
+        assert!(
+            html.contains(needle),
+            "the crib sheet's {construct} should keep its block styling ({needle} missing)"
+        );
+    }
 }
