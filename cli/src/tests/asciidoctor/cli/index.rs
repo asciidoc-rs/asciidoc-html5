@@ -7,11 +7,12 @@ track_file!("ref/asciidoctor/docs/modules/cli/pages/index.adoc");
 // Asciidoctor's "Process AsciiDoc Using the CLI" overview, tracked from the CLI
 // crate. It walks through confirming the CLI is installed (`--version`),
 // converting a file, and printing help (`--help`). This crate's `adoc` command
-// supports the same three invocations, so each is driven by a test below. The
-// parts with no `adoc` counterpart are non-normative here: the Ruby runtime
-// banner `asciidoctor --version` prints (adoc is a native binary with no such
-// banner), the option catalog reached through the man page, and the `manpage`
-// and `syntax` help topics, which `adoc` does not provide.
+// supports the same three invocations, so each is driven by a test below, as is
+// the `syntax` help topic (`adoc --help syntax`). The parts with no `adoc`
+// counterpart are non-normative here: the Ruby runtime banner `asciidoctor
+// --version` prints (adoc is a native binary with no such banner), the option
+// catalog reached through the man page, and the `manpage` help topic, which
+// `adoc` does not provide.
 
 non_normative!(
     r#"
@@ -165,7 +166,9 @@ Alternately, you can shorten the `--help` CLI option flag to `-h`:
 "#
     );
 
-    // TODO (https://github.com/asciidoc-rs/asciidoc-html5/issues/31): Implement the `--help syntax` topic so `adoc` prints an AsciiDoc syntax crib sheet, then promote its lines below from non_normative! to verifies!.
+    // The `manpage` topic has no `adoc` counterpart — `adoc` is a native binary
+    // with no man page to dump — so it stays non-normative here. Generating one
+    // is tracked in <https://github.com/asciidoc-rs/asciidoc-html5/issues/94>.
     non_normative!(
         r#"
 You can generate the full documentation (i.e., man page) for the `asciidoctor` command by passing the `manpage` topic to the `--help` option.
@@ -176,6 +179,17 @@ You can pipe that output to the `man` pager to view it:
 You can also find the man page for the `asciidoctor` command rendered as HTML in this documentation, which you can view in a browser instead.
 See xref:man1/asciidoctor.adoc[asciidoctor(1)].
 
+"#
+    );
+
+    // `adoc --help syntax` prints the AsciiDoc syntax crib sheet, and because the
+    // crib sheet is itself AsciiDoc, `adoc --help syntax | adoc -o -` renders it
+    // with this crate's own renderer — the `adoc` counterpart of Asciidoctor's
+    // `--help syntax` and its `| asciidoctor -o syntax.html -` preview. Driven
+    // below through `syntax_help_topic` (the pre-clap topic detector) and the
+    // embedded crib sheet.
+    verifies!(
+        r#"
 You can print an AsciiDoc syntax crib sheet by passing the `syntax` topic to the `--help` option.
 
  $ asciidoctor --help syntax
@@ -187,6 +201,21 @@ You can convert it to HTML by piping the output back into the `asciidoctor` comm
 
 Navigate to the [.path]_syntax.html_ file in your browser to see what the examples in the crib sheet look like when converted to HTML.
 "#
+    );
+
+    // `adoc --help syntax` is recognized as the syntax topic, and the crib sheet
+    // it prints is valid AsciiDoc this crate renders (the pipe-back-to-render
+    // claim) without any `unsupported` fallback.
+    let syntax_args: Vec<std::ffi::OsString> = ["adoc", "--help", "syntax"]
+        .iter()
+        .map(std::ffi::OsString::from)
+        .collect();
+    assert!(crate::syntax_help_topic(&syntax_args));
+
+    let rendered = asciidoc_html5::convert(crate::SYNTAX_CRIB_SHEET);
+    assert!(
+        !rendered.contains("unsupported"),
+        "the crib sheet should render without an unsupported marker"
     );
 
     // clap reports a help request as a `DisplayHelp` "error" whose message is
