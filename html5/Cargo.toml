@@ -14,4 +14,23 @@ version.workspace = true
 asciidoc-parser.workspace = true
 
 [dev-dependencies]
+codspeed-criterion-compat = "5.0.1"
+criterion = "0.8.2"
 scraper.workspace = true
+
+[[bench]]
+harness = false
+name = "render_micro"
+
+[[bench]]
+harness = false
+name = "render_scaling"
+
+[[bench]]
+harness = false
+name = "convert_pipeline"
+
+# The benches use `codspeed-criterion-compat`; `criterion` is pulled in for
+# local `cargo bench` runs, so cargo-udeps can't see it used directly.
+[package.metadata.cargo-udeps.ignore]
+development = ["criterion"]
