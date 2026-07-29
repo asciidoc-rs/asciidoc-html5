@@ -191,13 +191,18 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
 
 /// The CDN base URL Asciidoctor builds its asset links from —
 /// `{scheme}//cdnjs.cloudflare.com/ajax/libs`. The scheme comes from
-/// `asset-uri-scheme` (default `https`); an empty value yields a
-/// protocol-relative `//…` URL.
+/// `asset-uri-scheme` (Asciidoctor's `attr 'asset-uri-scheme', 'https'`):
+/// absent or explicitly unset falls back to `https`, while a bare
+/// `:asset-uri-scheme:` (or an explicit empty value) yields a protocol-relative
+/// `//…` URL.
 fn cdn_base_url(document: &Document<'_>) -> String {
-    let scheme = match attribute_str(document, "asset-uri-scheme") {
-        Some(scheme) if scheme.is_empty() => String::new(),
-        Some(scheme) => format!("{scheme}:"),
-        None => "https:".to_string(),
+    let scheme = match document.attribute_value("asset-uri-scheme") {
+        InterpretedValue::Value(scheme) if !scheme.is_empty() => format!("{scheme}:"),
+        InterpretedValue::Unset => "https:".to_string(),
+
+        // A bare `:asset-uri-scheme:` (`Set`) or an explicit empty value: the
+        // scheme is empty, so the URL is protocol-relative.
+        _ => String::new(),
     };
 
     format!("{scheme}//cdnjs.cloudflare.com/ajax/libs")
@@ -4351,6 +4356,98 @@ mod tests {
                 "<pre class=\"highlightjs highlight\">\
                  <code class=\"language-ruby hljs\" data-lang=\"ruby\">puts 1</code></pre>"
             ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn asset_uri_scheme_controls_the_cdn_scheme() {
+        // `asset-uri-scheme` sets the scheme of the CDN base URL: an explicit
+        // empty value (Asciidoctor's `-a asset-uri-scheme=`) yields a
+        // protocol-relative `//…`, and any other value is used as-is. (A *bare*
+        // `:asset-uri-scheme:` resolves to the `https` default in the parser, so
+        // the protocol-relative form is reached through an empty value.)
+        let relative = convert_with(
+            ":source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().attribute("asset-uri-scheme", ""),
+        );
+        assert!(
+            relative.contains(
+                "<link rel=\"stylesheet\" href=\"//cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{relative}"
+        );
+
+        let http = convert(
+            ":source-highlighter: highlightjs\n:asset-uri-scheme: http\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            http.contains(
+                "<link rel=\"stylesheet\" href=\"http://cdnjs.cloudflare.com/ajax/libs/\
+                 highlight.js/9.18.3/styles/github.min.css\">"
+            ),
+            "{http}"
+        );
+    }
+
+    #[test]
+    fn prettify_honors_dir_and_theme() {
+        // `prettifydir` overrides the CDN base for both the stylesheet and the
+        // script, and `prettify-theme` selects the stylesheet.
+        let html = convert(
+            ":source-highlighter: prettify\n\
+             :prettifydir: /assets/pf\n\
+             :prettify-theme: sunburst\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"/assets/pf/sunburst.min.css\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<script src=\"/assets/pf/run_prettify.min.js\"></script>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn prettify_theme_may_be_a_full_url() {
+        // An `http(s)` `prettify-theme` is linked directly rather than resolved
+        // against `prettifydir`.
+        let html = convert(
+            ":source-highlighter: prettify\n\
+             :prettify-theme: https://cdn.example.com/pp.css\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"https://cdn.example.com/pp.css\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn highlightjs_skips_empty_language_entries() {
+        // A trailing comma in `highlightjs-languages` leaves an empty entry,
+        // which is dropped rather than emitting a `languages/.min.js` script —
+        // matching Asciidoctor, whose `split` drops the trailing empty.
+        let html = convert(
+            ":source-highlighter: highlightjs\n\
+             :highlightjs-languages: ruby,\n\n\
+             [source,ruby]\n----\nputs 1\n----",
+        );
+        assert!(html.contains("/languages/ruby.min.js"), "{html}");
+        assert!(!html.contains("/languages/.min.js"), "{html}");
+    }
+
+    #[test]
+    fn prettify_uses_a_bare_code_without_a_language() {
+        // With no declared language prettify leaves the `<code>` bare (no class,
+        // no `data-lang`).
+        let html = convert(":source-highlighter: prettify\n\n[source]\n----\nplain\n----");
+        assert!(
+            html.contains("<pre class=\"prettyprint highlight\"><code>plain</code></pre>"),
             "{html}"
         );
     }
