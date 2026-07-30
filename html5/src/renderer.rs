@@ -885,7 +885,10 @@ const MAX_TAB_SIZE: i64 = 16;
 /// interior blank lines, so the two align line for line. A raw span with fewer
 /// lines than `lines` (which should not happen) leaves them untouched.
 fn restore_literal_paragraph_indent(lines: &mut [String], raw_span: &str) {
-    let raw_lines: Vec<&str> = raw_span.split('\n').collect();
+    // `split_terminator` (not `split`) so a raw span that ends with a newline
+    // does not yield a trailing empty element: the content lines are aligned as
+    // a *suffix*, so an extra trailing entry would shift every pairing by one.
+    let raw_lines: Vec<&str> = raw_span.split_terminator('\n').collect();
     if raw_lines.len() < lines.len() {
         return;
     }
@@ -6007,6 +6010,16 @@ mod tests {
         let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         super::restore_literal_paragraph_indent(&mut lines, "only one line");
         assert_eq!(lines, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn restore_literal_paragraph_indent_ignores_a_trailing_newline_in_the_raw_span() {
+        // A raw span ending in a newline must not shift the suffix alignment: the
+        // first rendered line still pairs with the first raw line, so the leading
+        // indent lands on `literal` rather than being lost to a phantom line.
+        let mut lines = vec!["literal".to_string(), "next".to_string()];
+        super::restore_literal_paragraph_indent(&mut lines, "  literal\nnext\n");
+        assert_eq!(lines, ["  literal", "next"]);
     }
 
     #[test]
