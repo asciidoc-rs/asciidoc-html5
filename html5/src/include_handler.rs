@@ -235,12 +235,22 @@ fn read_file(path: &Path) -> ReadOutcome {
     match fs::read_to_string(path) {
         Ok(content) => ReadOutcome::Read(content),
 
-        // Non-UTF-8 content is reported as not found, matching the parser's
-        // contract for a handler that cannot transcode; any other IO failure on a
-        // regular file (typically a permission error) is a genuine "not
-        // readable".
-        Err(error) if error.kind() == io::ErrorKind::InvalidData => ReadOutcome::NotFound,
+        // Both of these read as "not found": non-UTF-8 content (this handler
+        // only deals in UTF-8 and does not transcode, matching the parser's
+        // contract), and a file that vanished between the `is_file` check and
+        // the read — a race with concurrent file generation or cleanup — which
+        // surfaces as `NotFound` and must not be mistaken for an unreadable file.
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::InvalidData | io::ErrorKind::NotFound
+            ) =>
+        {
+            ReadOutcome::NotFound
+        }
 
+        // Any other IO failure on a regular file (typically a permission error)
+        // is a genuine "not readable".
         Err(_) => ReadOutcome::NotReadable,
     }
 }
