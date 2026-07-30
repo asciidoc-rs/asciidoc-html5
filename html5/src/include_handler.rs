@@ -33,13 +33,13 @@
 //! directory itself, matching Asciidoctor's recovery behavior.
 
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
 use asciidoc_parser::{
     attributes::Attrlist,
-    parser::{IncludeContent, IncludeFileHandler},
+    parser::{IncludeContent, IncludeFileHandler, IncludeResolution},
     Parser, SafeMode,
 };
 
@@ -169,30 +169,80 @@ fn resolve_jailed(base_dir: &Path, start: &str, target: &str) -> PathBuf {
     path
 }
 
-/// Reads the file at `path`, enforcing the safe mode's jail.
+/// The outcome of a [`read_confined`] call: the file's UTF-8 content, or the
+/// reason it could not be read.
+///
+/// The two failure reasons mirror Asciidoctor's distinction between a missing
+/// include file (`include file not found`) and one that is present but cannot
+/// be read (`include file not readable`), and map onto the matching
+/// [`IncludeResolution`] variants.
+pub(crate) enum ReadOutcome {
+    /// The file was read; its UTF-8 content is carried here.
+    Read(String),
+
+    /// No readable file exists at the path: it is missing, is not a regular
+    /// file (e.g. a directory), lies outside the jail, or holds non-UTF-8
+    /// content this handler cannot decode.
+    NotFound,
+
+    /// A regular file exists at the path but could not be read, typically
+    /// because of a permission or other IO error.
+    NotReadable,
+}
+
+/// Reads the file at `path`, enforcing the safe mode's jail and classifying any
+/// failure the way Asciidoctor does.
 ///
 /// Under a jailed safe mode (`safe`/`server`) the real path is resolved
 /// (following symlinks) and the read is refused when it escapes `base_dir`;
-/// under `unsafe` the file is read directly. A read failure (missing file, a
-/// directory, non-UTF-8 content) or an escaping symlink yields `None`. Shared
-/// by the include and docinfo handlers.
-pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<String> {
+/// under `unsafe` the file is read directly. A path that does not resolve, sits
+/// outside the jail, or is not a regular file yields [`ReadOutcome::NotFound`];
+/// a regular file that cannot be read yields [`ReadOutcome::NotReadable`].
+/// Shared by the include and docinfo handlers.
+pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> ReadOutcome {
     if jailed(safe) {
         // Lexical resolution keeps the *path* inside the base directory, but a
         // symlink under the base directory could still point outside it. Resolve
         // the real path (following symlinks) and refuse the read when it escapes
         // the base directory. This is stricter than Asciidoctor, whose jail is
-        // purely lexical (see the module docs); canonicalization also fails for
-        // a path the recovery relocated to somewhere that does not exist, which
-        // likewise leaves the resource unresolved.
-        let real = path.canonicalize().ok()?;
+        // purely lexical (see the module docs); canonicalization also fails for a
+        // path the recovery relocated to somewhere that does not exist. Either
+        // way the resource is unavailable, which reads as "not found".
+        let Ok(real) = path.canonicalize() else {
+            return ReadOutcome::NotFound;
+        };
+
         if !real.starts_with(base_dir) {
-            return None;
+            return ReadOutcome::NotFound;
         }
-        return fs::read_to_string(real).ok();
+
+        return read_file(&real);
     }
 
-    fs::read_to_string(path).ok()
+    read_file(path)
+}
+
+/// Reads `path` as UTF-8 text, classifying failure the way Asciidoctor does: a
+/// path that is not a regular file is [`ReadOutcome::NotFound`] (Asciidoctor
+/// gates on `File.file?` before reading), while a regular file whose read fails
+/// is [`ReadOutcome::NotReadable`]. Non-UTF-8 content is treated as not found,
+/// since this handler only deals in UTF-8 and does not transcode.
+fn read_file(path: &Path) -> ReadOutcome {
+    if !path.is_file() {
+        return ReadOutcome::NotFound;
+    }
+
+    match fs::read_to_string(path) {
+        Ok(content) => ReadOutcome::Read(content),
+
+        // Non-UTF-8 content is reported as not found, matching the parser's
+        // contract for a handler that cannot transcode; any other IO failure on a
+        // regular file (typically a permission error) is a genuine "not
+        // readable".
+        Err(error) if error.kind() == io::ErrorKind::InvalidData => ReadOutcome::NotFound,
+
+        Err(_) => ReadOutcome::NotReadable,
+    }
 }
 
 impl IncludeFileHandler for FsIncludeFileHandler {
@@ -202,17 +252,25 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         target: &str,
         _attrlist: &Attrlist<'src>,
         _parser: &Parser,
-    ) -> Option<IncludeContent> {
+    ) -> IncludeResolution {
         let path = self.resolve(source, target);
 
-        // The handler only ever reads UTF-8 files from the local filesystem
-        // and does not interpret the `encoding` attribute, so the content is
+        // The handler only ever reads UTF-8 files from the local filesystem and
+        // does not interpret the `encoding` attribute, so found content is
         // returned via `IncludeContent::new` (the parser emits the non-UTF-8
         // include-encoding warning itself when a non-UTF-8 encoding was asked
-        // for).
-        read_confined(&self.base_dir, self.safe, &path)
-            .map(strip_utf8_bom)
-            .map(IncludeContent::new)
+        // for). A missing or non-UTF-8 file maps to `NotFound` and an unreadable
+        // one to `NotReadable`, so the parser can distinguish Asciidoctor's
+        // `include file not found` from `include file not readable`.
+        match read_confined(&self.base_dir, self.safe, &path) {
+            ReadOutcome::Read(content) => {
+                IncludeResolution::Found(IncludeContent::new(strip_utf8_bom(content)))
+            }
+
+            ReadOutcome::NotFound => IncludeResolution::NotFound,
+
+            ReadOutcome::NotReadable => IncludeResolution::NotReadable,
+        }
     }
 }
 

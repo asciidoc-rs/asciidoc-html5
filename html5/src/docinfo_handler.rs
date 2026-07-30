@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use asciidoc_parser::{parser::DocinfoFileHandler, Parser, SafeMode};
 
-use crate::include_handler::{read_confined, resolve};
+use crate::include_handler::{read_confined, resolve, ReadOutcome};
 
 /// Reads docinfo files from the filesystem, anchored at a base directory and
 /// honoring the safe mode's jail (the same one [`FsIncludeFileHandler`]
@@ -76,9 +76,12 @@ impl DocinfoFileHandler for FsDocinfoFileHandler {
 
         // Asciidoctor normalizes docinfo content, dropping a single trailing
         // newline so the injected fragment sits flush against the element that
-        // follows it in the output.
-        read_confined(&self.base_dir, self.safe, &path)
-            .map(|content| chomp_trailing_newline(&content))
+        // follows it in the output. Docinfo does not distinguish a missing file
+        // from an unreadable one, so both failure reasons collapse to `None`.
+        match read_confined(&self.base_dir, self.safe, &path) {
+            ReadOutcome::Read(content) => Some(chomp_trailing_newline(&content)),
+            ReadOutcome::NotFound | ReadOutcome::NotReadable => None,
+        }
     }
 }
 
