@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.3...asciidoc-html5-v0.1.4)
+_30 July 2026_
+
+### Added
+
+* *(html5)* Distinguish an unreadable include file from a missing one ([#146](https://github.com/asciidoc-rs/asciidoc-html5/pull/146)) ([#234](https://github.com/asciidoc-rs/asciidoc-html5/pull/234))
+* *(html5)* Render block images (image:: block macro) ([#224](https://github.com/asciidoc-rs/asciidoc-html5/pull/224))
+* *(html5)* Add renderer performance benchmarks with CodSpeed CI ([#228](https://github.com/asciidoc-rs/asciidoc-html5/pull/228))
+* *(html5)* Render source blocks with a client-side syntax highlighter ([#225](https://github.com/asciidoc-rs/asciidoc-html5/pull/225))
+* *(html5)* Render video and audio blocks (video::, audio::) ([#226](https://github.com/asciidoc-rs/asciidoc-html5/pull/226))
+* *(html5)* Render STEM blocks ([stem]/[latexmath]/[asciimath]) ([#222](https://github.com/asciidoc-rs/asciidoc-html5/pull/222))
+* *(html5)* Render the table of contents (:toc:), all placements ([#220](https://github.com/asciidoc-rs/asciidoc-html5/pull/220))
+* *(html5)* Render AsciiDoc callout lists (colist) ([#214](https://github.com/asciidoc-rs/asciidoc-html5/pull/214))
+* *(cli)* Add `--help syntax` topic printing an AsciiDoc crib sheet ([#232](https://github.com/asciidoc-rs/asciidoc-html5/pull/232))
+* *(cli)* Print usage at a terminal when no input file is given ([#212](https://github.com/asciidoc-rs/asciidoc-html5/pull/212))
+* *(cli)* Add -t/--timings to report conversion time ([#209](https://github.com/asciidoc-rs/asciidoc-html5/pull/209))
+
+### Documented
+
+* *(html5)* Point stale footnote-cell markers at asciidoc-parser#975 ([#210](https://github.com/asciidoc-rs/asciidoc-html5/pull/210))
+
+### Fixed
+
+* *(html5)* Pass a non-numbering ordered-list style through, matching Asciidoctor ([#227](https://github.com/asciidoc-rs/asciidoc-html5/pull/227))
+* *(html5)* Render [,lang] source-block shorthand with the <code> wrapper ([#221](https://github.com/asciidoc-rs/asciidoc-html5/pull/221))
+* *(html5)* Render an empty inline passthrough paragraph as <p></p> ([#203](https://github.com/asciidoc-rs/asciidoc-html5/pull/203))
+
+### Other
+
+* *(html5)* Verify example block caption and counter model ([#113](https://github.com/asciidoc-rs/asciidoc-html5/pull/113)) ([#219](https://github.com/asciidoc-rs/asciidoc-html5/pull/219))
+* *(html5)* Verify the remote include:: link fallback under a non-secure safe mode ([#136](https://github.com/asciidoc-rs/asciidoc-html5/pull/136)) ([#218](https://github.com/asciidoc-rs/asciidoc-html5/pull/218))
+* *(html5)* Cover delimited source block <code> wrapper ([#159](https://github.com/asciidoc-rs/asciidoc-html5/pull/159)) ([#208](https://github.com/asciidoc-rs/asciidoc-html5/pull/208))
+* *(cli)* Port Asciidoctor options_test.rb ([#233](https://github.com/asciidoc-rs/asciidoc-html5/pull/233))
+
 ## [0.1.3](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.2...asciidoc-html5-v0.1.3)
 _26 July 2026_
 
