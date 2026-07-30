@@ -4145,6 +4145,56 @@ mod tests {
     }
 
     #[test]
+    fn asciidoc_cell_renders_its_own_footnotes_block() {
+        // An AsciiDoc (`a`) cell is a nested document with its own footnote
+        // registry: Asciidoctor renders the cell's footnotes as a `#footnotes`
+        // block inside the cell's `<div class="content">`, isolated from the
+        // enclosing document (asciidoc-html5#231).
+        let cell_only =
+            convert("|===\na|AsciiDoc footnote:[A lightweight markup language.]\n|===\n");
+
+        // The cell's footnote definition renders inside the cell content — the
+        // block closes with the cell wrapper (`</div></div></td>`), not at the
+        // document level ...
+        assert!(cell_only.contains(
+            "<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_1\">\n\
+             <a href=\"#_footnoteref_1\">1</a>. A lightweight markup language.\n\
+             </div>\n</div></div></td>"
+        ));
+
+        // ... and, the sole footnote being the cell's, the document adds no
+        // footnotes block of its own: exactly one `#footnotes` block exists.
+        assert_eq!(cell_only.matches("id=\"footnotes\"").count(), 1);
+
+        // A document footnote *and* a cell footnote keep separate registries:
+        // each block lists only its own definition, while the document-wide
+        // `footnote-number` counter still numbers them uniquely (document = 1,
+        // cell = 2).
+        let both =
+            convert("Doc footnote:[Doc note.]\n\n|===\na|Cell footnote:[Cell note.]\n|===\n");
+        assert_eq!(both.matches("id=\"footnotes\"").count(), 2);
+
+        // The cell-local block carries only the cell's definition, inside the
+        // cell.
+        assert!(both.contains(
+            "<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_2\">\n\
+             <a href=\"#_footnoteref_2\">2</a>. Cell note.\n\
+             </div>\n</div></div></td>"
+        ));
+
+        // The document-level block, a sibling after the content, carries only
+        // the document's own definition.
+        assert!(both.contains(
+            "</div>\n<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_1\">\n\
+             <a href=\"#_footnoteref_1\">1</a>. Doc note.\n\
+             </div>\n</div>"
+        ));
+    }
+
+    #[test]
     fn paragraph_carries_parser_inline_html() {
         // The parser renders inline markup; the block renderer only wraps it.
         let html = convert("A _quiet_ *storm*.");

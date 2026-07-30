@@ -3626,6 +3626,24 @@ fn footnotes_should_not_be_shared_between_an_asciidoc_table_cell_and_the_main_do
     let input = "|===\na|AsciiDoc footnote:[A lightweight markup language.]\n|===\n";
     let result = convert_standalone(input);
     assert_css(&result, "#_footnotedef_1", 1);
+
+    // The ported `assert_css '#_footnotedef_1', result, 1` above only counts the
+    // definition somewhere in the document; it would still pass if the cell's
+    // footnote leaked into the document-level registry. Pin down the behavior the
+    // test is named for — the cell keeps its *own* registry — by asserting both
+    // scopes explicitly. The definition renders inside the cell's `#footnotes`
+    // block (a descendant of the `td`) ...
+    assert_css(
+        &result,
+        "td.tableblock div.content div#footnotes div.footnote#_footnotedef_1",
+        1,
+    );
+
+    // ... and the document renders no footnotes block of its own: the sole
+    // footnote is the cell's, so the only `#footnotes` block is that cell-local
+    // one, and none sits at the document level (a sibling after `#content`).
+    assert_css(&result, "#footnotes", 1);
+    assert_css(&result, "#content ~ #footnotes", 0);
 }
 
 // This test targets the DocBook backend; this crate renders only the `html5`
