@@ -35,7 +35,7 @@ use asciidoc_parser::{
         SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
         TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
-    document::{DocinfoLocation, Header, InterpretedValue, TocMode},
+    document::{DocinfoLocation, Footnote, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
 };
 
@@ -1494,6 +1494,20 @@ impl Renderer<'_> {
             return;
         }
 
+        self.footnotes_block(footnotes);
+    }
+
+    /// Emits the `#footnotes` block for the given footnotes — the `<div
+    /// id="footnotes"><hr>` frame followed by one `<div class="footnote"
+    /// id="_footnotedef_N">` definition per footnote, each linking back to its
+    /// reference.
+    ///
+    /// This is shared between the document-level [`footnotes`](Self::footnotes)
+    /// block and the cell-local block an AsciiDoc (`a`) table cell renders from
+    /// its own footnote registry. The caller is responsible for the emptiness
+    /// and `nofootnotes` checks; this assumes there is at least one footnote to
+    /// list.
+    fn footnotes_block(&mut self, footnotes: &[Footnote]) {
         self.line("<div id=\"footnotes\">");
         self.line("<hr>");
 
@@ -2970,6 +2984,7 @@ impl Renderer<'_> {
                     ad.blocks(),
                     ad.title(),
                     ad.is_inline(),
+                    ad.footnotes(),
                     CellRenderConfig {
                         icons_set: self.icons_set,
                         icons_font: self.icons_font,
@@ -3955,6 +3970,7 @@ fn render_cell_document<'s>(
     blocks: &'s [Block<'s>],
     title: Option<&str>,
     inline: bool,
+    footnotes: &[Footnote],
     config: CellRenderConfig,
 ) -> String {
     if inline {
@@ -4001,6 +4017,15 @@ fn render_cell_document<'s>(
         renderer.line(&format!("<h1>{title}</h1>"));
     }
     renderer.blocks(blocks.iter());
+
+    // An AsciiDoc cell keeps its own footnote registry, isolated from the
+    // enclosing document; Asciidoctor renders those footnotes as a cell-local
+    // `#footnotes` block inside the cell content, after the cell's blocks. The
+    // `footnote-number` counter is document-wide, so the indices (and thus the
+    // `_footnotedef_N` ids) stay globally unique.
+    if !footnotes.is_empty() {
+        renderer.footnotes_block(footnotes);
+    }
 
     // `convert` joins its lines with no trailing newline; drop the one the
     // line-oriented renderer left behind.
