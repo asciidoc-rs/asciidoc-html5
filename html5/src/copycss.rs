@@ -267,6 +267,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // A custom stylesheet whose source file is missing yields no copy: the read
+    // comes back empty (`read_source` -> `None`), so there is nothing to write.
+    #[test]
+    fn no_copy_when_the_custom_stylesheet_source_is_missing() {
+        let dir = scratch("missing-source", &[]);
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .base_dir(dir.clone())
+            .set("linkcss")
+            .set("copycss")
+            .attribute("stylesheet", "absent.css");
+        assert!(plan("= Doc\n\nBody.", &options).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // A `copycss=<path>` value reads the stylesheet from that path but still
     // writes it to the `stylesheet` destination (the copy/link split).
     #[test]

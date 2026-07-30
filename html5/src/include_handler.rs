@@ -681,6 +681,127 @@ mod tests {
         assert_eq!(norm("../a"), "../a");
     }
 
+    // Direct coverage of `read_confined`'s outcome classification: each read
+    // failure is mapped the way the include handler needs, distinguishing a
+    // missing/non-file target (`NotFound`) from a present-but-unreadable one
+    // (`NotReadable`), with non-UTF-8 content folded into `NotFound`.
+    mod read_outcomes {
+        use std::{
+            fs,
+            path::PathBuf,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+
+        use asciidoc_parser::SafeMode;
+
+        use crate::include_handler::{read_confined, ReadOutcome};
+
+        /// Creates a fresh, canonicalized temp directory (unique per call) so
+        /// each case gets an isolated sandbox and the paths it builds share one
+        /// absolute form.
+        fn scratch() -> PathBuf {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+            let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir =
+                std::env::temp_dir().join(format!("ahtml5-read-{}-{unique}", std::process::id()));
+            fs::create_dir_all(&dir).expect("create scratch dir");
+            dir.canonicalize().expect("canonicalize scratch dir")
+        }
+
+        // A readable UTF-8 file is read; its content is returned verbatim.
+        #[test]
+        fn a_readable_file_is_read() {
+            let dir = scratch();
+            let file = dir.join("part.adoc");
+            fs::write(&file, "Body.\n").expect("write file");
+
+            let outcome = read_confined(&dir, SafeMode::Unsafe, &file);
+            assert!(
+                matches!(&outcome, ReadOutcome::Read(content) if content == "Body.\n"),
+                "unexpected outcome for a readable file",
+            );
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A path with no file at it is "not found".
+        #[test]
+        fn a_missing_path_is_not_found() {
+            let dir = scratch();
+            let missing = dir.join("absent.adoc");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &missing),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A path that resolves to a directory (not a regular file) is "not
+        // found", matching Asciidoctor's `File.file?` gate rather than being
+        // treated as an unreadable file.
+        #[test]
+        fn a_directory_is_not_found() {
+            let dir = scratch();
+            let subdir = dir.join("nested");
+            fs::create_dir_all(&subdir).expect("create nested dir");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &subdir),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A regular file whose bytes are not valid UTF-8 is reported as "not
+        // found": this handler only reads UTF-8 and does not transcode.
+        #[test]
+        fn a_non_utf8_file_is_not_found() {
+            let dir = scratch();
+            let file = dir.join("latin1.adoc");
+            // `0xFF` is not a valid UTF-8 lead byte, so the read fails to decode.
+            fs::write(&file, [b'A', 0xff, b'B']).expect("write non-utf8 file");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &file),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A regular file that exists but cannot be read (permission stripped) is
+        // "not readable", distinct from "not found". Permission bits only bite on
+        // Unix and not as root, mirroring the reader-test gate.
+        #[cfg(unix)]
+        #[test]
+        fn an_unreadable_file_is_not_readable() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = scratch();
+            let file = dir.join("locked.adoc");
+            fs::write(&file, "secret\n").expect("write file");
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).expect("chmod file");
+
+            // Root bypasses permission bits, so the file stays readable; skip.
+            if fs::read_to_string(&file).is_ok() {
+                let _ = fs::set_permissions(&file, fs::Permissions::from_mode(0o644));
+                let _ = fs::remove_dir_all(&dir);
+                return;
+            }
+
+            let outcome = read_confined(&dir, SafeMode::Unsafe, &file);
+
+            let _ = fs::set_permissions(&file, fs::Permissions::from_mode(0o644));
+            let _ = fs::remove_dir_all(&dir);
+
+            assert!(matches!(outcome, ReadOutcome::NotReadable));
+        }
+    }
+
     // End-to-end resolution against a real temporary project directory,
     // exercising `convert_file_with` (which anchors the base directory at the
     // primary file's directory) across safe modes.
