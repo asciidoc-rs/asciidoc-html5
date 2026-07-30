@@ -69,15 +69,21 @@ You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 
  $ adoc -h
 
+Pass the `syntax` topic to print an AsciiDoc syntax crib sheet. The crib sheet is
+itself AsciiDoc, so you can pipe it back through `adoc` to preview it as HTML5:
+
+ $ adoc --help syntax
+
+ $ adoc --help syntax | adoc -o syntax.html -
+
 [NOTE]
 .Known limitations
 ====
 The `adoc` command covers a small part of the `asciidoctor` CLI. Beyond the
 `-a`/`--attribute` option shown above, it does not yet accept the many behavior
 options that `asciidoctor` provides, and its `--help` output is a single usage
-statement rather than the topic-grouped help of `asciidoctor`; the `manpage` and
-`syntax` help topics are not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
-tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
+statement rather than the topic-grouped help of `asciidoctor`; the `manpage` help
+topic is not available.
 The short form of `--version` is `-V`, following the Rust convention, rather than
 the `-v` used by `asciidoctor`.
 ====

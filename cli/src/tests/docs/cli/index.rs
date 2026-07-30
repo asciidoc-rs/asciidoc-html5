@@ -229,6 +229,13 @@ You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 
  $ adoc -h
 
+Pass the `syntax` topic to print an AsciiDoc syntax crib sheet. The crib sheet is
+itself AsciiDoc, so you can pipe it back through `adoc` to preview it as HTML5:
+
+ $ adoc --help syntax
+
+ $ adoc --help syntax | adoc -o syntax.html -
+
 "#
     );
 
@@ -240,9 +247,8 @@ You can shorten the `--help` flag to `-h`, which prints a shorter summary:
 The `adoc` command covers a small part of the `asciidoctor` CLI. Beyond the
 `-a`/`--attribute` option shown above, it does not yet accept the many behavior
 options that `asciidoctor` provides, and its `--help` output is a single usage
-statement rather than the topic-grouped help of `asciidoctor`; the `manpage` and
-`syntax` help topics are not available. Printing an AsciiDoc syntax crib sheet with `--help syntax` is
-tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/31[issue #31].
+statement rather than the topic-grouped help of `asciidoctor`; the `manpage` help
+topic is not available.
 The short form of `--version` is `-V`, following the Rust convention, rather than
 the `-v` used by `asciidoctor`.
 ====
@@ -263,4 +269,14 @@ the `-v` used by `asciidoctor`.
         short.to_string().len() < long.to_string().len(),
         "-h summary should be shorter than --help"
     );
+
+    // The `syntax` topic (`adoc --help syntax`) is recognized before clap, and
+    // the crib sheet it prints is valid AsciiDoc this crate renders back to HTML5
+    // (the pipe-to-preview claim) with no `unsupported` fallback.
+    let syntax_args: Vec<std::ffi::OsString> = ["adoc", "--help", "syntax"]
+        .iter()
+        .map(std::ffi::OsString::from)
+        .collect();
+    assert!(crate::syntax_help_topic(&syntax_args));
+    assert!(!asciidoc_html5::convert(crate::SYNTAX_CRIB_SHEET).contains("unsupported"));
 }

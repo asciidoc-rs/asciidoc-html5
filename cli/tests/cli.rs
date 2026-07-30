@@ -93,6 +93,85 @@ fn help_shows_usage_examples() {
     assert!(help.contains("read from standard input") || help.contains("standard input"));
 }
 
+/// Runs `adoc --help syntax` and checks it prints the AsciiDoc syntax crib
+/// sheet to standard output and exits cleanly, matching Asciidoctor's
+/// `--help syntax`.
+#[test]
+fn help_syntax_prints_the_crib_sheet() {
+    let output = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("--help")
+        .arg("syntax")
+        .output()
+        .expect("run the adoc binary");
+
+    assert!(
+        output.status.success(),
+        "adoc --help syntax exited with {}",
+        output.status
+    );
+
+    let sheet = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
+    // The topic prints the crib sheet itself – a well-formed AsciiDoc document –
+    // rather than clap's usage statement.
+    assert!(
+        sheet.starts_with("= AsciiDoc Syntax\n"),
+        "adoc --help syntax should print the crib sheet, got:\n{sheet}"
+    );
+    assert!(
+        sheet.contains("== Paragraphs"),
+        "the crib sheet should include its section headings"
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "adoc --help syntax wrote to stderr"
+    );
+}
+
+/// Runs the documented `adoc --help syntax | adoc -o -` pipeline end to end:
+/// the crib sheet the first command prints is valid AsciiDoc that the second
+/// renders to HTML5 without any `unsupported` fallback marker.
+#[test]
+fn help_syntax_output_round_trips_through_the_renderer() {
+    let sheet = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("--help")
+        .arg("syntax")
+        .output()
+        .expect("run the adoc binary")
+        .stdout;
+
+    let mut render = Command::new(env!("CARGO_BIN_EXE_adoc"))
+        .arg("-o")
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn the adoc binary");
+
+    render
+        .stdin
+        .take()
+        .expect("child stdin")
+        .write_all(&sheet)
+        .expect("pipe the crib sheet in");
+
+    let output = render.wait_with_output().expect("wait for adoc");
+
+    assert!(
+        output.status.success(),
+        "the rendering adoc exited with {}",
+        output.status
+    );
+
+    let html = String::from_utf8(output.stdout).expect("stdout is UTF-8");
+
+    assert!(html.starts_with("<!DOCTYPE html>"));
+    assert!(
+        !html.contains("unsupported"),
+        "the rendered crib sheet should contain no unsupported marker:\n{html}"
+    );
+}
+
 /// Runs `adoc <input> -o <output>` and checks the HTML5 lands in the file.
 #[test]
 fn writes_html_to_the_output_file() {
