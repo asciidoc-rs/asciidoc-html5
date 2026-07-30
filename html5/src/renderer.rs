@@ -5999,6 +5999,25 @@ mod tests {
         assert!(lines.is_empty());
     }
 
+    #[test]
+    fn restore_literal_paragraph_indent_is_a_no_op_when_the_raw_span_is_short() {
+        // Defensive guard: a raw span with fewer lines than the rendered content
+        // (which should not happen — verbatim substitutions never drop lines)
+        // leaves the lines untouched rather than underflowing the line offset.
+        let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        super::restore_literal_paragraph_indent(&mut lines, "only one line");
+        assert_eq!(lines, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn verbatim_restores_indent_for_a_titled_literal_paragraph() {
+        // An implicit literal paragraph's raw span carries its `.title` ahead of
+        // the content, so indent restoration must align to the trailing content
+        // lines; the common indent (2) is then removed, matching Asciidoctor.
+        let html = convert(".Cap\n    x\n  y\n");
+        assert!(html.contains("<pre>  x\ny</pre>"), "{html}");
+    }
+
     /// Counts the leading spaces of the sole `<pre>`'s content.
     fn pre_leading_spaces(html: &str) -> usize {
         let start = html.find("<pre>").expect("a <pre>") + "<pre>".len();
