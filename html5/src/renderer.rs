@@ -868,6 +868,44 @@ const MAX_VERBATIM_INDENT: i64 = 100;
 /// to any real document.
 const MAX_TAB_SIZE: i64 = 16;
 
+/// Restores the original leading indentation of an *implicit* literal
+/// paragraph's content `lines` from its raw source span.
+///
+/// A literal paragraph detected from indentation has its content flattened by
+/// the parser: it strips the first line's indent from every line before the
+/// renderer sees it (via `rendered_content`). Asciidoctor instead removes only
+/// the *common* (minimum) indent, so an over-indented first line keeps the
+/// extra. Re-applying each source line's true leading whitespace here lets the
+/// common-indent removal in [`adjust_indentation`] reproduce that (#168).
+///
+/// The block's raw span may carry leading metadata lines (a `.title`, an
+/// `[[anchor]]`, or an `[attrlist]`) ahead of the content, so the content lines
+/// are the trailing `lines.len()` lines of the span — verbatim substitutions
+/// never add or remove lines, and an implicit literal paragraph holds no
+/// interior blank lines, so the two align line for line. A raw span with fewer
+/// lines than `lines` (which should not happen) leaves them untouched.
+fn restore_literal_paragraph_indent(lines: &mut [String], raw_span: &str) {
+    let raw_lines: Vec<&str> = raw_span.split('\n').collect();
+    if raw_lines.len() < lines.len() {
+        return;
+    }
+
+    // Only the trailing lines of the raw span are content; skip any leading
+    // metadata lines.
+    let offset = raw_lines.len() - lines.len();
+    for (line, raw) in lines.iter_mut().zip(&raw_lines[offset..]) {
+        let indent = &raw[..leading_whitespace_len(raw)];
+        if indent.is_empty() {
+            continue;
+        }
+
+        // Replace the residual indentation the parser left with the raw line's
+        // full leading whitespace.
+        let body = &line[leading_whitespace_len(line)..];
+        *line = format!("{indent}{body}");
+    }
+}
+
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
 /// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
 /// and a tab is present), then — unless `indent_size` is negative — removes the
@@ -2146,6 +2184,23 @@ impl Renderer<'_> {
         let content = block.rendered_content().unwrap_or_default();
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
 
+        // An *implicit* literal paragraph — one detected from indentation rather
+        // than an explicit `[literal]`/`[source]`/`[listing]` style — is the one
+        // verbatim shape Asciidoctor reindents by common (minimum) indent even
+        // without an `indent` attribute. The parser instead flattens it,
+        // stripping the first line's indent from every line before the renderer
+        // sees it (#168); restore each line's true leading whitespace from the
+        // raw span so the common-indent removal below can match Asciidoctor. A
+        // delimited or explicitly-styled block preserves its indentation as-is,
+        // so it is left untouched.
+        let is_implicit_literal_paragraph = matches!(block, Block::Simple(simple)
+            if simple.style() == SimpleBlockStyle::Literal)
+            && block.declared_style().is_none();
+
+        if is_implicit_literal_paragraph {
+            restore_literal_paragraph_indent(&mut lines, block.span().data());
+        }
+
         // A block-level `tabsize` overrides the document one; `indent` (falling
         // back to `source-indent` for source blocks) drives reindentation.
         let tab_size = block
@@ -2160,10 +2215,13 @@ impl Renderer<'_> {
             .map(|attr| ruby_to_i(attr.value()))
             .or(if is_source { self.source_indent } else { None });
 
-        // Asciidoctor reindents when an indent is in force, or (to expand tabs
-        // only) when a positive tabsize is set with the indentation preserved.
+        // Asciidoctor reindents when an indent is in force, when an implicit
+        // literal paragraph has its common indent removed (indent 0, which also
+        // expands tabs), or (to expand tabs only) when a positive tabsize is set
+        // with the indentation otherwise preserved.
         match indent_size {
             Some(indent) => adjust_indentation(&mut lines, indent, tab_size),
+            None if is_implicit_literal_paragraph => adjust_indentation(&mut lines, 0, tab_size),
             None if tab_size > 0 => adjust_indentation(&mut lines, -1, tab_size),
             None => {}
         }
