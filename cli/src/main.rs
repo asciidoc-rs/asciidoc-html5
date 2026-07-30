@@ -1288,24 +1288,40 @@ fn warning_location(
 /// Parses a `--failure-level` value (case-insensitive) into the [`LogLevel`]
 /// threshold at or above which a diagnostic makes `adoc` exit non-zero.
 ///
-/// Accepts `info`, `warn`/`warning`, `error`, and `fatal`, matching the set
-/// Asciidoctor's `--failure-level` takes.
+/// Accepts `info`, `warning` (`warn`), `error`, and `fatal`, as well as any
+/// unambiguous abbreviation of them — so `f`, `e`/`err`, and `w`/`warn` all
+/// resolve — matching how Asciidoctor's `--failure-level` completes its option
+/// list. The four canonical names begin with distinct letters, so every
+/// non-empty prefix names exactly one level.
 ///
 /// # Errors
 ///
-/// Returns an [`io::ErrorKind::InvalidInput`] error when `name` is none of
-/// those.
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `name` is empty or is
+/// not a prefix of any level name.
 fn parse_failure_level(name: &str) -> io::Result<LogLevel> {
-    match name.to_lowercase().as_str() {
-        "info" => Ok(LogLevel::Info),
-        "warn" | "warning" => Ok(LogLevel::Warn),
-        "error" => Ok(LogLevel::Error),
-        "fatal" => Ok(LogLevel::Fatal),
-        _ => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("invalid failure level '{name}': expected info, warn, error, or fatal"),
-        )),
+    // The canonical level names, in the order Asciidoctor lists them; `warning`
+    // carries the `warn`/`w` abbreviations too.
+    const LEVELS: [(&str, LogLevel); 4] = [
+        ("info", LogLevel::Info),
+        ("warning", LogLevel::Warn),
+        ("error", LogLevel::Error),
+        ("fatal", LogLevel::Fatal),
+    ];
+
+    let lower = name.to_lowercase();
+    if !lower.is_empty() {
+        if let Some((_, level)) = LEVELS
+            .iter()
+            .find(|(canonical, _)| canonical.starts_with(&lower))
+        {
+            return Ok(*level);
+        }
     }
+
+    Err(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid failure level '{name}': expected info, warn, error, or fatal"),
+    ))
 }
 
 /// Builds the conversion [`Options`] from the `-n`/`--section-numbers` flag and
