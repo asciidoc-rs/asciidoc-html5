@@ -15,3 +15,4 @@
 //! starting with `invoker_test.rb`.
 
 mod invoker_test;
+mod options_test;
