@@ -146,7 +146,13 @@ fn read_source(options: &Options, target: &str) -> Option<String> {
     let safe = options.safe_mode_or_default();
 
     let path = include_handler::resolve(&base_dir, safe, None, target);
-    include_handler::read_confined(&base_dir, safe, &path)
+
+    // A stylesheet source only needs its content; a missing and an unreadable
+    // file are both simply unavailable here.
+    match include_handler::read_confined(&base_dir, safe, &path) {
+        include_handler::ReadOutcome::Read(content) => Some(content),
+        include_handler::ReadOutcome::NotFound | include_handler::ReadOutcome::NotReadable => None,
+    }
 }
 
 /// Turns a normalized web path into a path relative to the output directory, or
@@ -258,6 +264,21 @@ mod tests {
         let (dest, content) = plan("= Doc\n\nBody.", &options).expect("a copy");
         assert_eq!(dest, "css/theme.css");
         assert_eq!(content, "body { color: red; }");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A custom stylesheet whose source file is missing yields no copy: the read
+    // comes back empty (`read_source` -> `None`), so there is nothing to write.
+    #[test]
+    fn no_copy_when_the_custom_stylesheet_source_is_missing() {
+        let dir = scratch("missing-source", &[]);
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .base_dir(dir.clone())
+            .set("linkcss")
+            .set("copycss")
+            .attribute("stylesheet", "absent.css");
+        assert!(plan("= Doc\n\nBody.", &options).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

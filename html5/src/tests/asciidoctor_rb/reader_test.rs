@@ -26,9 +26,8 @@
 //! memory `remote-fetch-not-planned`), so the `allow-uri-read` cases stay
 //! `non_normative!`; the no-fetch link fallback for a remote target under a
 //! non-secure safe mode *is* verified, as it only links the target rather than
-//! reading it. The jruby/classloader, non-UTF-8-encoding, and chmod-unreadable
-//! cases and every test that asserts only on `Reader` internals stay
-//! `non_normative!`.
+//! reading it. The jruby/classloader and non-UTF-8-encoding cases and every
+//! test that asserts only on `Reader` internals stay `non_normative!`.
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
 //! this crate diverges from the Asciidoctor oracle. One divergence is
@@ -42,14 +41,11 @@
 //! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
 //! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
 //!   [#138]
-//! - an unreadable include file is not distinguished from a missing one, so it
-//!   reports the generic not-found diagnostic — [#146]
 //!
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
 //! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
-//! [#146]: https://github.com/asciidoc-rs/asciidoc-html5/issues/146
 
 use std::path::PathBuf;
 
@@ -1549,10 +1545,18 @@ mod preprocessor_reader {
             );
         }
 
-        // Non-normative: an unreadable include file is not distinguished from a missing
-        // one (#146).
-        non_normative!(
-            r#"
+        // An unreadable include file (present but not readable) is replaced with
+        // the same "Unresolved directive" message as a missing one, but the
+        // parser distinguishes the two, raising an include-file-not-readable
+        // warning rather than not-found (#146). Simulating an unreadable file
+        // relies on Unix permission bits and does not work as root (which
+        // bypasses them), so this is Unix-only and skips under root — mirroring
+        // the Ruby test's `unless windows? || Process.euid == 0` gate.
+        #[cfg(unix)]
+        #[test]
+        fn should_replace_include_directive_that_references_unreadable_file_with_message() {
+            verifies!(
+                r#"
       test 'should replace include directive that references unreadable file with message', unless: (windows? || Process.euid == 0) do
         include_file = File.join DIRNAME, 'fixtures', 'chapter-a.adoc'
         old_mode = (File.stat include_file).mode
@@ -1579,7 +1583,63 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            use std::{fs, os::unix::fs::PermissionsExt};
+
+            // Build a throwaway base directory holding `fixtures/chapter-a.adoc`,
+            // then strip its permissions so it exists but cannot be read (rather
+            // than chmod-ing the vendored fixture the Ruby test mutates in place).
+            let base =
+                std::env::temp_dir().join(format!("ahtml5-unreadable-{}", std::process::id()));
+            let fixtures = base.join("fixtures");
+            fs::create_dir_all(&fixtures).expect("create fixtures dir");
+
+            let include_file = fixtures.join("chapter-a.adoc");
+            fs::write(&include_file, "= Chapter A\n\nContent.\n").expect("write include");
+            fs::set_permissions(&include_file, fs::Permissions::from_mode(0o000))
+                .expect("chmod include");
+
+            // Root bypasses permission bits, so the file stays readable and an
+            // unreadable include cannot be simulated; skip, matching the Ruby gate.
+            if fs::read_to_string(&include_file).is_ok() {
+                let _ = fs::set_permissions(&include_file, fs::Permissions::from_mode(0o644));
+                let _ = fs::remove_dir_all(&base);
+                return;
+            }
+
+            let src = "include::fixtures/chapter-a.adoc[]\n\ntrailing content";
+            let options = Options::new()
+                .safe_mode(SafeMode::Safe)
+                .base_dir(base.clone());
+            let html = convert_with(src, &options);
+            let warnings: Vec<_> = load_with(src, &options)
+                .warnings()
+                .map(|w| w.warning.clone())
+                .collect();
+
+            // Restore permissions so the scratch directory can be removed.
+            let _ = fs::set_permissions(&include_file, fs::Permissions::from_mode(0o644));
+            let _ = fs::remove_dir_all(&base);
+
+            // The directive is replaced with the same "Unresolved directive"
+            // message a missing file would produce, and trailing content survives
+            // ...
+            assert!(html.contains("Unresolved directive"), "{html}");
+            assert!(
+                html.contains("include::fixtures/chapter-a.adoc[]"),
+                "{html}"
+            );
+            assert!(html.contains("trailing content"), "{html}");
+
+            // ... but the file is reported as *unreadable*, not *not found*.
+            assert!(
+                warnings
+                    .iter()
+                    .any(|w| matches!(w, WarningType::IncludeFileNotReadable(_))),
+                "{warnings:?}"
+            );
+        }
 
         non_normative!(
             r#"

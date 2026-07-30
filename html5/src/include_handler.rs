@@ -33,13 +33,13 @@
 //! directory itself, matching Asciidoctor's recovery behavior.
 
 use std::{
-    fs,
+    fs, io,
     path::{Path, PathBuf},
 };
 
 use asciidoc_parser::{
     attributes::Attrlist,
-    parser::{IncludeContent, IncludeFileHandler},
+    parser::{IncludeContent, IncludeFileHandler, IncludeResolution},
     Parser, SafeMode,
 };
 
@@ -169,30 +169,90 @@ fn resolve_jailed(base_dir: &Path, start: &str, target: &str) -> PathBuf {
     path
 }
 
-/// Reads the file at `path`, enforcing the safe mode's jail.
+/// The outcome of a [`read_confined`] call: the file's UTF-8 content, or the
+/// reason it could not be read.
+///
+/// The two failure reasons mirror Asciidoctor's distinction between a missing
+/// include file (`include file not found`) and one that is present but cannot
+/// be read (`include file not readable`), and map onto the matching
+/// [`IncludeResolution`] variants.
+pub(crate) enum ReadOutcome {
+    /// The file was read; its UTF-8 content is carried here.
+    Read(String),
+
+    /// No readable file exists at the path: it is missing, is not a regular
+    /// file (e.g. a directory), lies outside the jail, or holds non-UTF-8
+    /// content this handler cannot decode.
+    NotFound,
+
+    /// A regular file exists at the path but could not be read, typically
+    /// because of a permission or other IO error.
+    NotReadable,
+}
+
+/// Reads the file at `path`, enforcing the safe mode's jail and classifying any
+/// failure the way Asciidoctor does.
 ///
 /// Under a jailed safe mode (`safe`/`server`) the real path is resolved
 /// (following symlinks) and the read is refused when it escapes `base_dir`;
-/// under `unsafe` the file is read directly. A read failure (missing file, a
-/// directory, non-UTF-8 content) or an escaping symlink yields `None`. Shared
-/// by the include and docinfo handlers.
-pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<String> {
+/// under `unsafe` the file is read directly. A path that does not resolve, sits
+/// outside the jail, or is not a regular file yields [`ReadOutcome::NotFound`];
+/// a regular file that cannot be read yields [`ReadOutcome::NotReadable`].
+/// Shared by the include and docinfo handlers.
+pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> ReadOutcome {
     if jailed(safe) {
         // Lexical resolution keeps the *path* inside the base directory, but a
         // symlink under the base directory could still point outside it. Resolve
         // the real path (following symlinks) and refuse the read when it escapes
         // the base directory. This is stricter than Asciidoctor, whose jail is
-        // purely lexical (see the module docs); canonicalization also fails for
-        // a path the recovery relocated to somewhere that does not exist, which
-        // likewise leaves the resource unresolved.
-        let real = path.canonicalize().ok()?;
+        // purely lexical (see the module docs); canonicalization also fails for a
+        // path the recovery relocated to somewhere that does not exist. Either
+        // way the resource is unavailable, which reads as "not found".
+        let Ok(real) = path.canonicalize() else {
+            return ReadOutcome::NotFound;
+        };
+
         if !real.starts_with(base_dir) {
-            return None;
+            return ReadOutcome::NotFound;
         }
-        return fs::read_to_string(real).ok();
+
+        return read_file(&real);
     }
 
-    fs::read_to_string(path).ok()
+    read_file(path)
+}
+
+/// Reads `path` as UTF-8 text, classifying failure the way Asciidoctor does: a
+/// path that is not a regular file is [`ReadOutcome::NotFound`] (Asciidoctor
+/// gates on `File.file?` before reading), while a regular file whose read fails
+/// is [`ReadOutcome::NotReadable`]. Non-UTF-8 content is treated as not found,
+/// since this handler only deals in UTF-8 and does not transcode.
+fn read_file(path: &Path) -> ReadOutcome {
+    if !path.is_file() {
+        return ReadOutcome::NotFound;
+    }
+
+    match fs::read_to_string(path) {
+        Ok(content) => ReadOutcome::Read(content),
+
+        // Both of these read as "not found": non-UTF-8 content (this handler
+        // only deals in UTF-8 and does not transcode, matching the parser's
+        // contract), and a file that vanished between the `is_file` check and
+        // the read — a race with concurrent file generation or cleanup — which
+        // surfaces as `NotFound` and must not be mistaken for an unreadable file.
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::InvalidData | io::ErrorKind::NotFound
+            ) =>
+        {
+            ReadOutcome::NotFound
+        }
+
+        // Any other IO failure on a regular file (typically a permission error)
+        // is a genuine "not readable".
+        Err(_) => ReadOutcome::NotReadable,
+    }
 }
 
 impl IncludeFileHandler for FsIncludeFileHandler {
@@ -202,17 +262,25 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         target: &str,
         _attrlist: &Attrlist<'src>,
         _parser: &Parser,
-    ) -> Option<IncludeContent> {
+    ) -> IncludeResolution {
         let path = self.resolve(source, target);
 
-        // The handler only ever reads UTF-8 files from the local filesystem
-        // and does not interpret the `encoding` attribute, so the content is
+        // The handler only ever reads UTF-8 files from the local filesystem and
+        // does not interpret the `encoding` attribute, so found content is
         // returned via `IncludeContent::new` (the parser emits the non-UTF-8
         // include-encoding warning itself when a non-UTF-8 encoding was asked
-        // for).
-        read_confined(&self.base_dir, self.safe, &path)
-            .map(strip_utf8_bom)
-            .map(IncludeContent::new)
+        // for). A missing or non-UTF-8 file maps to `NotFound` and an unreadable
+        // one to `NotReadable`, so the parser can distinguish Asciidoctor's
+        // `include file not found` from `include file not readable`.
+        match read_confined(&self.base_dir, self.safe, &path) {
+            ReadOutcome::Read(content) => {
+                IncludeResolution::Found(IncludeContent::new(strip_utf8_bom(content)))
+            }
+
+            ReadOutcome::NotFound => IncludeResolution::NotFound,
+
+            ReadOutcome::NotReadable => IncludeResolution::NotReadable,
+        }
     }
 }
 
@@ -621,6 +689,127 @@ mod tests {
         assert_eq!(norm("./a/b"), "a/b");
         // A leading `..` in a relative path is kept (nothing to pop).
         assert_eq!(norm("../a"), "../a");
+    }
+
+    // Direct coverage of `read_confined`'s outcome classification: each read
+    // failure is mapped the way the include handler needs, distinguishing a
+    // missing/non-file target (`NotFound`) from a present-but-unreadable one
+    // (`NotReadable`), with non-UTF-8 content folded into `NotFound`.
+    mod read_outcomes {
+        use std::{
+            fs,
+            path::PathBuf,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+
+        use asciidoc_parser::SafeMode;
+
+        use crate::include_handler::{read_confined, ReadOutcome};
+
+        /// Creates a fresh, canonicalized temp directory (unique per call) so
+        /// each case gets an isolated sandbox and the paths it builds share one
+        /// absolute form.
+        fn scratch() -> PathBuf {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+            let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir =
+                std::env::temp_dir().join(format!("ahtml5-read-{}-{unique}", std::process::id()));
+            fs::create_dir_all(&dir).expect("create scratch dir");
+            dir.canonicalize().expect("canonicalize scratch dir")
+        }
+
+        // A readable UTF-8 file is read; its content is returned verbatim.
+        #[test]
+        fn a_readable_file_is_read() {
+            let dir = scratch();
+            let file = dir.join("part.adoc");
+            fs::write(&file, "Body.\n").expect("write file");
+
+            let outcome = read_confined(&dir, SafeMode::Unsafe, &file);
+            assert!(
+                matches!(&outcome, ReadOutcome::Read(content) if content == "Body.\n"),
+                "unexpected outcome for a readable file",
+            );
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A path with no file at it is "not found".
+        #[test]
+        fn a_missing_path_is_not_found() {
+            let dir = scratch();
+            let missing = dir.join("absent.adoc");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &missing),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A path that resolves to a directory (not a regular file) is "not
+        // found", matching Asciidoctor's `File.file?` gate rather than being
+        // treated as an unreadable file.
+        #[test]
+        fn a_directory_is_not_found() {
+            let dir = scratch();
+            let subdir = dir.join("nested");
+            fs::create_dir_all(&subdir).expect("create nested dir");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &subdir),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A regular file whose bytes are not valid UTF-8 is reported as "not
+        // found": this handler only reads UTF-8 and does not transcode.
+        #[test]
+        fn a_non_utf8_file_is_not_found() {
+            let dir = scratch();
+            let file = dir.join("latin1.adoc");
+            // `0xFF` is not a valid UTF-8 lead byte, so the read fails to decode.
+            fs::write(&file, [b'A', 0xff, b'B']).expect("write non-utf8 file");
+
+            assert!(matches!(
+                read_confined(&dir, SafeMode::Unsafe, &file),
+                ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A regular file that exists but cannot be read (permission stripped) is
+        // "not readable", distinct from "not found". Permission bits only bite on
+        // Unix and not as root, mirroring the reader-test gate.
+        #[cfg(unix)]
+        #[test]
+        fn an_unreadable_file_is_not_readable() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let dir = scratch();
+            let file = dir.join("locked.adoc");
+            fs::write(&file, "secret\n").expect("write file");
+            fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).expect("chmod file");
+
+            // Root bypasses permission bits, so the file stays readable; skip.
+            if fs::read_to_string(&file).is_ok() {
+                let _ = fs::set_permissions(&file, fs::Permissions::from_mode(0o644));
+                let _ = fs::remove_dir_all(&dir);
+                return;
+            }
+
+            let outcome = read_confined(&dir, SafeMode::Unsafe, &file);
+
+            let _ = fs::set_permissions(&file, fs::Permissions::from_mode(0o644));
+            let _ = fs::remove_dir_all(&dir);
+
+            assert!(matches!(outcome, ReadOutcome::NotReadable));
+        }
     }
 
     // End-to-end resolution against a real temporary project directory,
