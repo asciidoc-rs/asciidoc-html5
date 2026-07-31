@@ -23,10 +23,12 @@
 //!   `adjust_indentation!`) — their observable slices (section-title
 //!   recognition, block id/role/option rendering, verbatim indentation) are
 //!   covered by `sections_test`, `attribute_list_test`, and `blocks_test`;
-//! - the raw metadata-hash-shape assertion made without a document;
-//! - two parser divergences from Asciidoctor: an explicit `:authors:` entry is
-//!   not reconciled against the implicit author line, and an `:author:`
-//!   attribute value is not run through substitutions before partitioning.
+//! - the raw metadata-hash-shape assertion made without a document.
+//!
+//! One residual divergence remains: an indexed `:author_N:` override updates
+//! the `author_N` attribute but not the combined `authors` string / resolved
+//! author list (asciidoc-rs/asciidoc-parser#1013), so the override case
+//! verifies the individual attributes and skips the combined string.
 
 use asciidoc_parser::{document::InterpretedValue, warnings::WarningType, Document};
 
@@ -298,6 +300,7 @@ fn parse_author_first() {
     assert_eq!(attr(&doc, "author").as_deref(), Some("Stuart"));
     assert_eq!(attr(&doc, "firstname").as_deref(), Some("Stuart"));
     assert_eq!(attr(&doc, "authorinitials").as_deref(), Some("S"));
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -326,6 +329,7 @@ fn parse_author_first_last() {
     assert_eq!(a.lastname(), Some("Matsumoto"));
     assert_eq!(a.initials(), "YM");
     assert_eq!(attr(&doc, "author").as_deref(), Some("Yukihiro Matsumoto"));
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -355,6 +359,7 @@ fn parse_author_first_middle_last() {
     assert_eq!(a.middlename(), Some("Heinemeier"));
     assert_eq!(a.lastname(), Some("Hansson"));
     assert_eq!(a.initials(), "DHH");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -386,6 +391,7 @@ fn parse_author_first_middle_last_email() {
     assert_eq!(a.lastname(), Some("Hansson"));
     assert_eq!(a.email(), Some("rails@ruby-lang.org"));
     assert_eq!(a.initials(), "DHH");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -413,6 +419,7 @@ fn parse_author_first_email() {
     assert_eq!(a.firstname(), "Stuart");
     assert_eq!(a.email(), Some("founder@asciidoc.org"));
     assert_eq!(a.initials(), "S");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -442,6 +449,7 @@ fn parse_author_first_last_email() {
     assert_eq!(a.lastname(), Some("Rackham"));
     assert_eq!(a.email(), Some("founder@asciidoc.org"));
     assert_eq!(a.initials(), "SR");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -470,6 +478,7 @@ fn parse_author_with_hyphen() {
     assert_eq!(a.lastname(), Some("Berners-Lee"));
     assert_eq!(a.email(), Some("founder@www.org"));
     assert_eq!(a.initials(), "TB");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -498,6 +507,7 @@ fn parse_author_with_single_quote() {
     assert_eq!(a.lastname(), Some("O'Grady"));
     assert_eq!(a.email(), Some("founder@redmonk.com"));
     assert_eq!(a.initials(), "SO");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -528,6 +538,7 @@ fn parse_author_with_dotted_initial() {
     assert_eq!(a.lastname(), Some("Rupp"));
     assert_eq!(a.email(), Some("hwr@example.de"));
     assert_eq!(a.initials(), "HWR");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -554,6 +565,7 @@ fn parse_author_with_underscore() {
     assert_eq!(a.firstname(), "Tim E");
     assert_eq!(a.lastname(), Some("Fella"));
     assert_eq!(a.initials(), "TF");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -580,6 +592,7 @@ fn parse_author_name_with_letters_outside_basic_latin() {
     assert_eq!(a.firstname(), "St\u{e9}phane");
     assert_eq!(a.lastname(), Some("Bront\u{eb}"));
     assert_eq!(a.initials(), "SB");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -608,6 +621,7 @@ fn parse_ideographic_author_names() {
     assert_eq!(a.lastname(), Some("\u{56db}"));
     assert_eq!(a.email(), Some("si.li@example.com"));
     assert_eq!(a.initials(), "\u{674e}\u{56db}");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -636,6 +650,7 @@ fn parse_author_condenses_whitespace() {
     assert_eq!(a.lastname(), Some("Rackham"));
     assert_eq!(a.email(), Some("founder@asciidoc.org"));
     assert_eq!(a.initials(), "SR");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -667,6 +682,7 @@ fn parse_invalid_author_line_becomes_author() {
         "Stuart Rackham, founder of AsciiDoc <founder@asciidoc.org>"
     );
     assert_eq!(a.initials(), "S");
+    assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
 #[test]
@@ -687,14 +703,12 @@ fn parse_multiple_authors() {
 
     let doc = header("Doc Writer <doc.writer@asciidoc.org>; John Smith <john.smith@asciidoc.org>");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("2"));
-    assert_eq!(doc.authors()[0].name(), "Doc Writer");
-    assert_eq!(doc.authors()[1].name(), "John Smith");
-    // The first author is exposed as `author`; subsequent ones as
-    // `author_N`. Asciidoctor also sets a combined `authors` and an
-    // `author_1`, which this parser does not
-    // (asciidoc-rs/asciidoc-parser#1005), so this asserts `author` /
-    // `author_2` and the `authors()` list instead.
+    assert_eq!(
+        attr(&doc, "authors").as_deref(),
+        Some("Doc Writer, John Smith")
+    );
     assert_eq!(attr(&doc, "author").as_deref(), Some("Doc Writer"));
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Doc Writer"));
     assert_eq!(attr(&doc, "author_2").as_deref(), Some("John Smith"));
 }
 
@@ -731,8 +745,7 @@ fn skips_blank_author_entries_in_implicit_author_line() {
 
     let doc = header("Doc Writer; ; John Smith <john.smith@asciidoc.org>;");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("2"));
-    assert_eq!(doc.authors()[0].name(), "Doc Writer");
-    assert_eq!(doc.authors()[1].name(), "John Smith");
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Doc Writer"));
     assert_eq!(attr(&doc, "author_2").as_deref(), Some("John Smith"));
 }
 
@@ -828,17 +841,14 @@ fn use_implicit_authors_if_value_of_authors_attribute_matches_computed_value() {
         attr(&doc, "authors").as_deref(),
         Some("Doc Writer, Junior Writer")
     );
-    assert_eq!(doc.authors()[0].name(), "Doc Writer");
-    assert_eq!(doc.authors()[1].name(), "Junior Writer");
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Doc Writer"));
     assert_eq!(attr(&doc, "author_2").as_deref(), Some("Junior Writer"));
 }
 
-// Divergence (asciidoc-rs/asciidoc-parser#1003): unlike Asciidoctor,
-// this parser does not reconcile an explicit `:authors:` entry against
-// the implicit author line, so it neither replaces the author list nor
-// recomputes `authorcount`.
-non_normative!(
-    r#"
+#[test]
+fn replace_implicit_authors_if_value_of_authors_attribute_does_not_match_computed_value() {
+    verifies!(
+        r#"
   test 'replace implicit authors if value of authors attribute does not match computed value' do
     input = <<~'EOS'
     Doc Writer; Junior Writer
@@ -855,7 +865,19 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    let doc = header("Doc Writer; Junior Writer\n:authors: Stuart Rackham; Dan Allen; Sarah White");
+    // The explicit `:authors:` entry replaces the implicit author line.
+    assert_eq!(attr(&doc, "authorcount").as_deref(), Some("3"));
+    assert_eq!(
+        attr(&doc, "authors").as_deref(),
+        Some("Stuart Rackham, Dan Allen, Sarah White")
+    );
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Stuart Rackham"));
+    assert_eq!(attr(&doc, "author_2").as_deref(), Some("Dan Allen"));
+    assert_eq!(attr(&doc, "author_3").as_deref(), Some("Sarah White"));
+}
 
 #[test]
 fn sets_authorcount_to_0_if_document_has_no_authors() {
@@ -909,9 +931,12 @@ fn does_not_drop_name_joiner_when_using_multiple_authors() {
 
     let doc = header("Kismet Chameleon; Lazarus het_Draeke");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("2"));
-    assert_eq!(doc.authors()[0].name(), "Kismet Chameleon");
     // The name joiner keeps `het Draeke` intact as the second author's name.
-    assert_eq!(doc.authors()[1].name(), "Lazarus het Draeke");
+    assert_eq!(
+        attr(&doc, "authors").as_deref(),
+        Some("Kismet Chameleon, Lazarus het Draeke")
+    );
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Kismet Chameleon"));
     assert_eq!(
         attr(&doc, "author_2").as_deref(),
         Some("Lazarus het Draeke")
@@ -943,6 +968,7 @@ fn allows_authors_to_be_overridden_using_explicit_author_attributes() {
 
     let doc = header("Kismet Chameleon; Johnny Bravo; Lazarus het_Draeke\n:author_2: Danger Mouse");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("3"));
+    assert_eq!(attr(&doc, "author_1").as_deref(), Some("Kismet Chameleon"));
     // The explicit `:author_2:` entry overrides the second implicit author.
     assert_eq!(attr(&doc, "author_2").as_deref(), Some("Danger Mouse"));
     assert_eq!(
@@ -950,14 +976,16 @@ fn allows_authors_to_be_overridden_using_explicit_author_attributes() {
         Some("Lazarus het Draeke")
     );
     assert_eq!(attr(&doc, "lastname_3").as_deref(), Some("het Draeke"));
+    // Residual divergence (asciidoc-rs/asciidoc-parser#1013): the combined
+    // `authors` string is not recomputed for the indexed override, so it is
+    // not asserted here (Asciidoctor yields
+    // "Kismet Chameleon, Danger Mouse, Lazarus het Draeke").
 }
 
-// Divergence (asciidoc-rs/asciidoc-parser#1004): this parser does not
-// run an `:author:` attribute value through substitutions before
-// partitioning it, so inline formatting and a `pass:[...]` macro are
-// not removed from the name parts.
-non_normative!(
-    r#"
+#[test]
+fn removes_formatting_before_partitioning_author_defined_using_author_attribute() {
+    verifies!(
+        r#"
   test 'removes formatting before partitioning author defined using author attribute' do
     input = ':author: pass:n[http://example.org/community/team.html[Ze_**Project** team]]'
 
@@ -970,7 +998,23 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    let doc =
+        header(":author: pass:n[http://example.org/community/team.html[Ze_**Project** team]]");
+    assert_eq!(attr(&doc, "authorcount").as_deref(), Some("1"));
+    // The `pass:[]` macro and inline formatting are resolved before the
+    // name is partitioned, and `Ze_Project` becomes `Ze Project`. The
+    // resolved value lands in `author`; `authors` is not derived from an
+    // `:author:` attribute entry (only from the implicit author line), so
+    // this asserts `author`.
+    assert_eq!(
+            attr(&doc, "author").as_deref(),
+            Some("<a href=\"http://example.org/community/team.html\">Ze <strong>Project</strong> team</a>")
+        );
+    assert_eq!(attr(&doc, "firstname").as_deref(), Some("Ze Project"));
+    assert_eq!(attr(&doc, "lastname").as_deref(), Some("team"));
+}
 
 #[test]
 fn parse_rev_number_date_remark() {
