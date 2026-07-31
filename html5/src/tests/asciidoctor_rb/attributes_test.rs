@@ -44,12 +44,12 @@
 //!   the raw `toc` value (`left`, `macro`, `auto`, …) rather than normalizing
 //!   it to `''` the way the Ruby matrix asserts, so the matrix's `attr?('toc',
 //!   '')` check has no faithful re-expression.
-//! - the **missing-attribute drop-line diagnostic**: this crate drops/blanks
-//!   the line exactly as Asciidoctor does (verified through the rendered
-//!   output), but `asciidoc-parser` surfaces no `INFO`-level message for it, so
-//!   a test whose *only* assertion is that log message cannot be verified
-//!   (tracked upstream as
-//!   <https://github.com/asciidoc-rs/asciidoc-parser/issues/1011>).
+//!
+//! Asciidoctor's `INFO`-level "dropping line containing reference to missing
+//! attribute" messages (asserted with `assert_message @logger, :INFO, …`) map
+//! to `WarningType::SkippingReferenceToMissingAttribute` on the loaded
+//! document (asciidoc-parser 0.29.1 surfaces these for both header attribute
+//! values and body content).
 
 use asciidoc_parser::{document::InterpretedValue, warnings::WarningType};
 
@@ -483,8 +483,10 @@ mod assignment {
         );
     }
 
-    non_normative!(
-        r#"
+    #[test]
+    fn assigns_attribute_to_empty_string_if_substitution_fails_to_resolve_attribute() {
+        verifies!(
+            r#"
     test 'assigns attribute to empty string if substitution fails to resolve attribute' do
       input = ':release: Asciidoctor {version}'
       document_from_string input, attributes: { 'attribute-missing' => 'drop-line' }
@@ -492,7 +494,18 @@ mod assignment {
     end
 
 "#
-    );
+        );
+
+        let doc = load_with(
+            ":release: Asciidoctor {version}",
+            &Options::new().attribute("attribute-missing", "drop-line"),
+        );
+        // Asciidoctor logs an INFO "dropping line ... missing attribute: version";
+        // asciidoc-parser surfaces the same as a SkippingReferenceToMissingAttribute
+        // warning (asciidoc-parser 0.29.1, #1011).
+        assert!(doc.warnings().any(|w| w.warning
+            == WarningType::SkippingReferenceToMissingAttribute("version".to_string())));
+    }
 
     #[test]
     fn assigns_multi_line_attribute_to_empty_string_if_substitution_fails_to_resolve_attribute() {
@@ -516,9 +529,9 @@ mod assignment {
             src,
             &Options::new().attribute("attribute-missing", "drop-line"),
         );
-        // The unresolved reference blanks the value (Asciidoctor also logs an INFO
-        // message, which asciidoc-parser does not surface: asciidoc-parser#1011).
         assert_eq!(doc.attribute_value("release"), val(""));
+        assert!(doc.warnings().any(|w| w.warning
+            == WarningType::SkippingReferenceToMissingAttribute("version".to_string())));
     }
 
     #[test]
@@ -1513,10 +1526,12 @@ mod interpolation {
         let input =
             ":attribute-missing: drop-line\n\nThis is\nblah blah {foobarbaz}\nall there is.\n";
         let output = convert(input);
-        // The line referencing the missing attribute is dropped (Asciidoctor also logs
-        // an INFO message, which asciidoc-parser does not surface:
-        // asciidoc-parser#1011).
+        // The line referencing the missing attribute is dropped, and asciidoc-parser
+        // records the same diagnostic Asciidoctor logs at INFO level
+        // (asciidoc-parser 0.29.1, #1011).
         refute_includes(&output, "blah blah");
+        assert!(load(input).warnings().any(|w| w.warning
+            == WarningType::SkippingReferenceToMissingAttribute("foobarbaz".to_string())));
     }
 
     #[test]
@@ -1569,6 +1584,8 @@ mod interpolation {
         let output = convert(input);
         assert_includes(&output, "Line 1");
         refute_includes(&output, "Line 2");
+        assert!(load(input).warnings().any(|w| w.warning
+            == WarningType::SkippingReferenceToMissingAttribute("bogus-attribute".to_string())));
     }
 
     #[test]
