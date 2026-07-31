@@ -5133,7 +5133,41 @@ mod macros {
 }
 
 mod passthroughs {
+    use asciidoc_parser::{
+        blocks::{Block, FindBlocks as _},
+        content::{SubstitutionGroup, SubstitutionStep},
+    };
+
     use super::*;
+
+    /// Loads `input` and returns the inline passthrough collection extracted
+    /// from its first simple (paragraph) block, as `(stored text, resolved
+    /// subs)` pairs in extraction order. This is the end-to-end analogue of
+    /// reading back Asciidoctor's `@passthroughs` array — each entry's `:text`
+    /// and resolved `:subs` — via the parser's [`Content::passthroughs`]
+    /// accessor (surfaced in `asciidoc-parser` 0.29.1, asciidoc-html5#202).
+    ///
+    /// [`Content::passthroughs`]: asciidoc_parser::content::Content::passthroughs
+    #[track_caller]
+    fn collected_passthroughs(input: &str) -> Vec<(String, SubstitutionGroup)> {
+        let doc = load(input);
+
+        let block = doc
+            .child_blocks()
+            .next()
+            .expect("expected at least one block");
+
+        let Block::Simple(simple) = block else {
+            panic!("expected a simple (paragraph) block");
+        };
+
+        simple
+            .content()
+            .passthroughs()
+            .iter()
+            .map(|p| (p.text().to_string(), p.subs().clone()))
+            .collect()
+    }
 
     non_normative!(
         r#"
@@ -5141,13 +5175,15 @@ mod passthroughs {
 "#
     );
 
-    // Inspects the parser's internal passthrough collection
-    // (`extract_passthroughs`, the `@passthroughs` array, its `:text` and
-    // `:subs` entries) — machinery this crate does not surface. (The rendered
-    // `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+    // Asserts the extracted passthrough collection directly via
+    // `Content::passthroughs()`: `+++…+++` stores the text verbatim with an
+    // empty (`None`) subs list. The convert check confirms the rendered parity —
+    // no subs means the special characters pass through unescaped. (Matches
+    // Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_inline_triple_plus_passthroughs() {
+        verifies!(
+            r#"
     test 'collect inline triple plus passthroughs' do
       para = block_from_string('+++<code>inline code</code>+++')
       result = para.extract_passthroughs(para.source)
@@ -5159,14 +5195,30 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface. (The
-    // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("+++<code>inline code</code>+++"),
+            vec![(
+                "<code>inline code</code>".to_string(),
+                SubstitutionGroup::None
+            )]
+        );
+
+        assert_eq!(
+            subs("+++<code>inline code</code>+++"),
+            "<code>inline code</code>"
+        );
+    }
+
+    // Asserts the extracted collection directly: `+++…+++` stores the multi-line
+    // text verbatim (embedded newline preserved) with an empty (`None`) subs
+    // list. The convert check confirms the rendered parity. (Matches Asciidoctor
+    // 2.0.26.)
+    #[test]
+    fn collect_multi_line_inline_triple_plus_passthroughs() {
+        verifies!(
+            r#"
     test 'collect multi-line inline triple plus passthroughs' do
       para = block_from_string("+++<code>inline\ncode</code>+++")
       result = para.extract_passthroughs(para.source)
@@ -5178,15 +5230,31 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection (and its
-    // `:specialcharacters` subs entry) — machinery this crate does not surface.
-    // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.) Porting tracked by asciidoc-
-    // html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("+++<code>inline\ncode</code>+++"),
+            vec![(
+                "<code>inline\ncode</code>".to_string(),
+                SubstitutionGroup::None
+            )]
+        );
+
+        assert_eq!(
+            subs("+++<code>inline\ncode</code>+++"),
+            "<code>inline\ncode</code>"
+        );
+    }
+
+    // Asserts the extracted collection directly: `$$…$$` stores the text
+    // verbatim and resolves subs to `Verbatim` (Asciidoctor's
+    // `[:specialcharacters]`). The convert check confirms the rendered parity —
+    // special characters escaped, `{code}` left unexpanded. (Matches Asciidoctor
+    // 2.0.26.)
+    #[test]
+    fn collect_inline_double_dollar_passthroughs() {
+        verifies!(
+            r#"
     test 'collect inline double dollar passthroughs' do
       para = block_from_string('$$<code>{code}</code>$$')
       result = para.extract_passthroughs(para.source)
@@ -5198,15 +5266,30 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection (and its
-    // `:specialcharacters` subs entry) — machinery this crate does not surface.
-    // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.) Porting tracked by asciidoc-
-    // html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("$$<code>{code}</code>$$"),
+            vec![(
+                "<code>{code}</code>".to_string(),
+                SubstitutionGroup::Verbatim
+            )]
+        );
+
+        assert_eq!(
+            subs("$$<code>{code}</code>$$"),
+            "&lt;code&gt;{code}&lt;/code&gt;"
+        );
+    }
+
+    // Asserts the extracted collection directly: `++…++` stores the text
+    // verbatim and resolves subs to `Verbatim` (Asciidoctor's
+    // `[:specialcharacters]`). The convert check confirms the rendered parity.
+    // (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_inline_double_plus_passthroughs() {
+        verifies!(
+            r#"
     test 'collect inline double plus passthroughs' do
       para = block_from_string('++<code>{code}</code>++')
       result = para.extract_passthroughs(para.source)
@@ -5218,7 +5301,21 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
+
+        assert_eq!(
+            collected_passthroughs("++<code>{code}</code>++"),
+            vec![(
+                "<code>{code}</code>".to_string(),
+                SubstitutionGroup::Verbatim
+            )]
+        );
+
+        assert_eq!(
+            subs("++<code>{code}</code>++"),
+            "&lt;code&gt;{code}&lt;/code&gt;"
+        );
+    }
 
     #[test]
     fn should_not_crash_if_role_on_passthrough_is_enclosed_in_quotes() {
@@ -5280,12 +5377,13 @@ mod passthroughs {
         assert_eq!(subs("=[attrs]\\\\++text++"), "=[attrs]++text++");
     }
 
-    // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface. (The
-    // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+    // Asserts the extracted collection directly: the multi-line `$$…$$` content
+    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs. The
+    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_multi_line_inline_double_dollar_passthroughs() {
+        verifies!(
+            r#"
     test 'collect multi-line inline double dollar passthroughs' do
       para = block_from_string("$$<code>\n{code}\n</code>$$")
       result = para.extract_passthroughs(para.source)
@@ -5297,14 +5395,29 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection from
-    // `extract_passthroughs` — machinery this crate does not surface. (The
-    // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("$$<code>\n{code}\n</code>$$"),
+            vec![(
+                "<code>\n{code}\n</code>".to_string(),
+                SubstitutionGroup::Verbatim
+            )]
+        );
+
+        assert_eq!(
+            subs("$$<code>\n{code}\n</code>$$"),
+            "&lt;code&gt;\n{code}\n&lt;/code&gt;"
+        );
+    }
+
+    // Asserts the extracted collection directly: the multi-line `++…++` content
+    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs. The
+    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_multi_line_inline_double_plus_passthroughs() {
+        verifies!(
+            r#"
     test 'collect multi-line inline double plus passthroughs' do
       para = block_from_string("++<code>\n{code}\n</code>++")
       result = para.extract_passthroughs(para.source)
@@ -5316,15 +5429,30 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection (and resolved subs list)
-    // from an inline `pass:` macro — machinery this crate does not surface.
-    // (The rendered `convert` output matches Asciidoctor exactly; only the
-    // internal collection is unverifiable here.) Porting tracked by asciidoc-
-    // html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("++<code>\n{code}\n</code>++"),
+            vec![(
+                "<code>\n{code}\n</code>".to_string(),
+                SubstitutionGroup::Verbatim
+            )]
+        );
+
+        assert_eq!(
+            subs("++<code>\n{code}\n</code>++"),
+            "&lt;code&gt;\n{code}\n&lt;/code&gt;"
+        );
+    }
+
+    // Asserts the extracted collection directly: the `\]` escape yields a literal
+    // `]` in the stored text, and the `specialcharacters,quotes` list resolves to
+    // a `Custom` subs group (Asciidoctor's `[:specialcharacters, :quotes]`). The
+    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_passthroughs_from_inline_pass_macro() {
+        verifies!(
+            r#"
     test 'collect passthroughs from inline pass macro' do
       para = block_from_string(%Q{pass:specialcharacters,quotes[<code>['code'\\]</code>]})
       result = para.extract_passthroughs(para.source)
@@ -5336,14 +5464,33 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects the internal `@passthroughs` collection from a multi-line
-    // `pass:` macro — machinery this crate does not surface. (The rendered
-    // `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("pass:specialcharacters,quotes[<code>['code'\\]</code>]"),
+            vec![(
+                "<code>['code']</code>".to_string(),
+                SubstitutionGroup::Custom(vec![
+                    SubstitutionStep::SpecialCharacters,
+                    SubstitutionStep::Quotes,
+                ]),
+            )]
+        );
+
+        assert_eq!(
+            subs("pass:specialcharacters,quotes[<code>['code'\\]</code>]"),
+            "&lt;code&gt;['code']&lt;/code&gt;"
+        );
+    }
+
+    // Asserts the extracted collection directly: the multi-line macro content is
+    // stored verbatim (embedded newline preserved, `\]` → literal `]`) with a
+    // `Custom` subs group. The convert check confirms the rendered parity.
+    // (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn collect_multi_line_passthroughs_from_inline_pass_macro() {
+        verifies!(
+            r#"
     test 'collect multi-line passthroughs from inline pass macro' do
       para = block_from_string(%Q{pass:specialcharacters,quotes[<code>['more\ncode'\\]</code>]})
       result = para.extract_passthroughs(para.source)
@@ -5355,7 +5502,24 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
+
+        assert_eq!(
+            collected_passthroughs("pass:specialcharacters,quotes[<code>['more\ncode'\\]</code>]"),
+            vec![(
+                "<code>['more\ncode']</code>".to_string(),
+                SubstitutionGroup::Custom(vec![
+                    SubstitutionStep::SpecialCharacters,
+                    SubstitutionStep::Quotes,
+                ]),
+            )]
+        );
+
+        assert_eq!(
+            subs("pass:specialcharacters,quotes[<code>['more\ncode'\\]</code>]"),
+            "&lt;code&gt;['more\ncode']&lt;/code&gt;"
+        );
+    }
 
     #[test]
     fn should_find_and_replace_placeholder_duplicated_by_substitution() {
@@ -5373,13 +5537,16 @@ mod passthroughs {
         assert_eq!(subs("+first passthrough+ followed by link:$$http://example.com/__u_no_format_me__$$[] with passthrough"), "first passthrough followed by <a href=\"http://example.com/__u_no_format_me__\" class=\"bare\">http://example.com/__u_no_format_me__</a> with passthrough");
     }
 
-    // Inspects `@passthroughs` sub-shorthand resolution and drives
-    // `restore_passthroughs` directly — a parser-model API this crate does not
-    // surface. (The rendered `convert` output matches Asciidoctor exactly; only
-    // the internal collection is unverifiable here.) Porting tracked by
-    // asciidoc-html5#202.
-    non_normative!(
-        r#"
+    // Asserts the resolved `q,a` shorthand directly: it maps to a `Custom` subs
+    // group of `[Quotes, AttributeReferences]` (Asciidoctor's
+    // `[:quotes, :attributes]`). The convert check confirms the restore result —
+    // `q` renders `*…*` as `<strong>`, `a` expands `{backend}` to `html5`, and
+    // specialcharacters is *not* applied, so the angle brackets stay literal.
+    // (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn resolves_sub_shorthands_on_inline_pass_macro() {
+        verifies!(
+            r#"
     test 'resolves sub shorthands on inline pass macro' do
       para = block_from_string 'pass:q,a[*<{backend}>*]'
       result = para.extract_passthroughs para.source
@@ -5391,15 +5558,33 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
 
-    // Inspects incremental-subs resolution on `@passthroughs` and drives
-    // `restore_passthroughs` directly — a parser-model API this crate does not
-    // surface. (The rendered `convert` output matches Asciidoctor exactly; only
-    // the internal collection is unverifiable here.) Porting tracked by
-    // asciidoc-html5#202.
-    non_normative!(
-        r#"
+        assert_eq!(
+            collected_passthroughs("pass:q,a[*<{backend}>*]"),
+            vec![(
+                "*<{backend}>*".to_string(),
+                SubstitutionGroup::Custom(vec![
+                    SubstitutionStep::Quotes,
+                    SubstitutionStep::AttributeReferences,
+                ]),
+            )]
+        );
+
+        assert_eq!(subs("pass:q,a[*<{backend}>*]"), "<strong><html5></strong>");
+    }
+
+    // The `n,-a` list (normal minus attributes) collects a single passthrough
+    // storing `<{backend}>`. The Ruby test asserts the count and the
+    // `restore_passthroughs` result but not the resolved subs list (an
+    // incremental-resolution detail), so this asserts the count/text directly and
+    // the restore result via `convert`: the angle brackets are escaped
+    // (specialcharacters is part of `normal`) while `{backend}` is left
+    // unexpanded (attributes removed). (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn inline_pass_macro_supports_incremental_subs() {
+        verifies!(
+            r#"
     test 'inline pass macro supports incremental subs' do
       para = block_from_string 'pass:n,-a[<{backend}>]'
       result = para.extract_passthroughs para.source
@@ -5410,7 +5595,14 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
+
+        let collected = collected_passthroughs("pass:n,-a[<{backend}>]");
+        assert_eq!(collected.len(), 1);
+        assert_eq!(collected[0].0, "<{backend}>");
+
+        assert_eq!(subs("pass:n,-a[<{backend}>]"), "&lt;{backend}&gt;");
+    }
 
     #[test]
     fn should_not_recognize_pass_macro_with_invalid_substitution_list() {
@@ -5485,11 +5677,16 @@ mod passthroughs {
 "#
     );
 
-    // Manually populates the `@passthroughs` array and calls
-    // `restore_passthroughs` on a hand-built placeholder — a parser-model API
-    // this crate does not surface. Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r##"
+    // The Ruby test hand-injects a no-subs `@passthroughs` entry and drives
+    // `restore_passthroughs` in isolation. The observable equivalent — now that
+    // the collection is surfaced (asciidoc-parser 0.29.1) — is a real no-subs
+    // (`+++…+++`) passthrough embedded in surrounding text: the collection stores
+    // the same text with `None` subs, and `convert` restores it verbatim into the
+    // paragraph. (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn restore_inline_passthroughs_without_subs() {
+        verifies!(
+            r##"
     test 'restore inline passthroughs without subs' do
       para = block_from_string("some #{Asciidoctor::Substitutors::PASS_START}" + '0' + "#{Asciidoctor::Substitutors::PASS_END} to study")
       para.extract_passthroughs ''
@@ -5501,13 +5698,33 @@ mod passthroughs {
 
     # NOTE placeholder is surrounded by text to prevent reader from stripping trailing boundary char (unique to test scenario)
 "##
-    );
+        );
 
-    // Manually populates two `@passthroughs` entries and calls
-    // `restore_passthroughs` — a parser-model API this crate does not surface.
-    // Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r##"
+        assert_eq!(
+            collected_passthroughs("some +++<code>inline code</code>+++ to study"),
+            vec![(
+                "<code>inline code</code>".to_string(),
+                SubstitutionGroup::None
+            )]
+        );
+
+        assert_eq!(
+            subs("some +++<code>inline code</code>+++ to study"),
+            "some <code>inline code</code> to study"
+        );
+    }
+
+    // The Ruby test hand-injects two `specialcharacters` `@passthroughs` entries
+    // and drives `restore_passthroughs` in isolation. The observable equivalent —
+    // now that the collection is surfaced (asciidoc-parser 0.29.1) — is two real
+    // `++…++` passthroughs embedded in surrounding text: the collection stores
+    // both texts with `Verbatim` subs, and `convert` restores them with special
+    // characters escaped (`{language}` is inside a passthrough, so it stays
+    // literal). (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn restore_inline_passthroughs_with_subs() {
+        verifies!(
+            r##"
     test 'restore inline passthroughs with subs' do
       para = block_from_string("some #{Asciidoctor::Substitutors::PASS_START}" + '0' + "#{Asciidoctor::Substitutors::PASS_END} to study in the #{Asciidoctor::Substitutors::PASS_START}" + '1' + "#{Asciidoctor::Substitutors::PASS_END} programming language")
       para.extract_passthroughs ''
@@ -5519,7 +5736,28 @@ mod passthroughs {
     end
 
 "##
-    );
+        );
+
+        assert_eq!(
+            collected_passthroughs(
+                "some ++<code>{code}</code>++ to study in the ++{language}++ programming language"
+            ),
+            vec![
+                (
+                    "<code>{code}</code>".to_string(),
+                    SubstitutionGroup::Verbatim
+                ),
+                ("{language}".to_string(), SubstitutionGroup::Verbatim),
+            ]
+        );
+
+        assert_eq!(
+            subs(
+                "some ++<code>{code}</code>++ to study in the ++{language}++ programming language"
+            ),
+            "some &lt;code&gt;{code}&lt;/code&gt; to study in the {language} programming language"
+        );
+    }
 
     #[test]
     fn should_restore_nested_passthroughs() {
@@ -5573,12 +5811,15 @@ mod passthroughs {
         );
     }
 
-    // Inspects the collected `@passthroughs` entries (their unescaped `:text`)
-    // from `extract_passthroughs` — machinery this crate does not surface. (The
-    // rendered `convert` output matches Asciidoctor exactly; only the internal
-    // collection is unverifiable here.) Porting tracked by asciidoc-html5#202.
-    non_normative!(
-        r#"
+    // Asserts the collected `:text` of each passthrough directly: both forms —
+    // the `$$…$$` literal and the `pass:specialcharacters[…]` macro whose `\]`
+    // escapes yield literal `]` — collect the *same* unescaped text. The convert
+    // checks confirm they then render identically (special characters escaped).
+    // (Matches Asciidoctor 2.0.26.)
+    #[test]
+    fn complex_inline_passthrough_macro() {
+        verifies!(
+            r#"
     test 'complex inline passthrough macro' do
       text_to_escape = %q{[(] <'basic form'> <'logical operator'> <'basic form'> [)]}
       para = block_from_string %($$#{text_to_escape}$$)
@@ -5596,7 +5837,33 @@ mod passthroughs {
     end
 
 "#
-    );
+        );
+
+        let text_to_escape = "[(] <'basic form'> <'logical operator'> <'basic form'> [)]";
+
+        let dollar = collected_passthroughs(&format!("$${text_to_escape}$$"));
+        assert_eq!(dollar.len(), 1);
+        assert_eq!(dollar[0].0, text_to_escape);
+
+        let macro_form = collected_passthroughs(
+            "pass:specialcharacters[[(\\] <'basic form'> <'logical operator'> <'basic form'> [)\\]]",
+        );
+        assert_eq!(macro_form.len(), 1);
+        assert_eq!(macro_form[0].0, text_to_escape);
+
+        let expected =
+            "[(] &lt;'basic form'&gt; &lt;'logical operator'&gt; &lt;'basic form'&gt; [)]";
+
+        assert_eq!(
+            subs("$$[(] <'basic form'> <'logical operator'> <'basic form'> [)]$$"),
+            expected
+        );
+
+        assert_eq!(
+            subs("pass:specialcharacters[[(\\] <'basic form'> <'logical operator'> <'basic form'> [)\\]]"),
+            expected
+        );
+    }
 
     #[test]
     fn inline_pass_macro_with_a_composite_sub() {
