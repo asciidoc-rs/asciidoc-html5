@@ -35,7 +35,7 @@ use asciidoc_parser::{
         SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
         TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
-    document::{DocinfoLocation, Header, InterpretedValue, TocMode},
+    document::{DocinfoLocation, Footnote, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
 };
 
@@ -868,6 +868,47 @@ const MAX_VERBATIM_INDENT: i64 = 100;
 /// to any real document.
 const MAX_TAB_SIZE: i64 = 16;
 
+/// Restores the original leading indentation of an *implicit* literal
+/// paragraph's content `lines` from its raw source span.
+///
+/// A literal paragraph detected from indentation has its content flattened by
+/// the parser: it strips the first line's indent from every line before the
+/// renderer sees it (via `rendered_content`). Asciidoctor instead removes only
+/// the *common* (minimum) indent, so an over-indented first line keeps the
+/// extra. Re-applying each source line's true leading whitespace here lets the
+/// common-indent removal in [`adjust_indentation`] reproduce that (#168).
+///
+/// The block's raw span may carry leading metadata lines (a `.title`, an
+/// `[[anchor]]`, or an `[attrlist]`) ahead of the content, so the content lines
+/// are the trailing `lines.len()` lines of the span — verbatim substitutions
+/// never add or remove lines, and an implicit literal paragraph holds no
+/// interior blank lines, so the two align line for line. A raw span with fewer
+/// lines than `lines` (which should not happen) leaves them untouched.
+fn restore_literal_paragraph_indent(lines: &mut [String], raw_span: &str) {
+    // `split_terminator` (not `split`) so a raw span that ends with a newline
+    // does not yield a trailing empty element: the content lines are aligned as
+    // a *suffix*, so an extra trailing entry would shift every pairing by one.
+    let raw_lines: Vec<&str> = raw_span.split_terminator('\n').collect();
+    if raw_lines.len() < lines.len() {
+        return;
+    }
+
+    // Only the trailing lines of the raw span are content; skip any leading
+    // metadata lines.
+    let offset = raw_lines.len() - lines.len();
+    for (line, raw) in lines.iter_mut().zip(&raw_lines[offset..]) {
+        let indent = &raw[..leading_whitespace_len(raw)];
+        if indent.is_empty() {
+            continue;
+        }
+
+        // Replace the residual indentation the parser left with the raw line's
+        // full leading whitespace.
+        let body = &line[leading_whitespace_len(line)..];
+        *line = format!("{indent}{body}");
+    }
+}
+
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
 /// `Parser.adjust_indentation!`: it expands tabs (when `tab_size` is positive
 /// and a tab is present), then — unless `indent_size` is negative — removes the
@@ -1494,6 +1535,20 @@ impl Renderer<'_> {
             return;
         }
 
+        self.footnotes_block(footnotes);
+    }
+
+    /// Emits the `#footnotes` block for the given footnotes — the `<div
+    /// id="footnotes"><hr>` frame followed by one `<div class="footnote"
+    /// id="_footnotedef_N">` definition per footnote, each linking back to its
+    /// reference.
+    ///
+    /// This is shared between the document-level [`footnotes`](Self::footnotes)
+    /// block and the cell-local block an AsciiDoc (`a`) table cell renders from
+    /// its own footnote registry. The caller is responsible for the emptiness
+    /// and `nofootnotes` checks; this assumes there is at least one footnote to
+    /// list.
+    fn footnotes_block(&mut self, footnotes: &[Footnote]) {
         self.line("<div id=\"footnotes\">");
         self.line("<hr>");
 
@@ -2146,6 +2201,23 @@ impl Renderer<'_> {
         let content = block.rendered_content().unwrap_or_default();
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
 
+        // An *implicit* literal paragraph — one detected from indentation rather
+        // than an explicit `[literal]`/`[source]`/`[listing]` style — is the one
+        // verbatim shape Asciidoctor reindents by common (minimum) indent even
+        // without an `indent` attribute. The parser instead flattens it,
+        // stripping the first line's indent from every line before the renderer
+        // sees it (#168); restore each line's true leading whitespace from the
+        // raw span so the common-indent removal below can match Asciidoctor. A
+        // delimited or explicitly-styled block preserves its indentation as-is,
+        // so it is left untouched.
+        let is_implicit_literal_paragraph = matches!(block, Block::Simple(simple)
+            if simple.style() == SimpleBlockStyle::Literal)
+            && block.declared_style().is_none();
+
+        if is_implicit_literal_paragraph {
+            restore_literal_paragraph_indent(&mut lines, block.span().data());
+        }
+
         // A block-level `tabsize` overrides the document one; `indent` (falling
         // back to `source-indent` for source blocks) drives reindentation.
         let tab_size = block
@@ -2160,10 +2232,13 @@ impl Renderer<'_> {
             .map(|attr| ruby_to_i(attr.value()))
             .or(if is_source { self.source_indent } else { None });
 
-        // Asciidoctor reindents when an indent is in force, or (to expand tabs
-        // only) when a positive tabsize is set with the indentation preserved.
+        // Asciidoctor reindents when an indent is in force, when an implicit
+        // literal paragraph has its common indent removed (indent 0, which also
+        // expands tabs), or (to expand tabs only) when a positive tabsize is set
+        // with the indentation otherwise preserved.
         match indent_size {
             Some(indent) => adjust_indentation(&mut lines, indent, tab_size),
+            None if is_implicit_literal_paragraph => adjust_indentation(&mut lines, 0, tab_size),
             None if tab_size > 0 => adjust_indentation(&mut lines, -1, tab_size),
             None => {}
         }
@@ -2970,6 +3045,7 @@ impl Renderer<'_> {
                     ad.blocks(),
                     ad.title(),
                     ad.is_inline(),
+                    ad.footnotes(),
                     CellRenderConfig {
                         icons_set: self.icons_set,
                         icons_font: self.icons_font,
@@ -3955,6 +4031,7 @@ fn render_cell_document<'s>(
     blocks: &'s [Block<'s>],
     title: Option<&str>,
     inline: bool,
+    footnotes: &[Footnote],
     config: CellRenderConfig,
 ) -> String {
     if inline {
@@ -4001,6 +4078,15 @@ fn render_cell_document<'s>(
         renderer.line(&format!("<h1>{title}</h1>"));
     }
     renderer.blocks(blocks.iter());
+
+    // An AsciiDoc cell keeps its own footnote registry, isolated from the
+    // enclosing document; Asciidoctor renders those footnotes as a cell-local
+    // `#footnotes` block inside the cell content, after the cell's blocks. The
+    // `footnote-number` counter is document-wide, so the indices (and thus the
+    // `_footnotedef_N` ids) stay globally unique.
+    if !footnotes.is_empty() {
+        renderer.footnotes_block(footnotes);
+    }
 
     // `convert` joins its lines with no trailing newline; drop the one the
     // line-oriented renderer left behind.
@@ -4117,6 +4203,56 @@ mod tests {
 
         // A document with no footnotes emits no `#footnotes` block.
         assert!(!convert("plain text").contains("id=\"footnotes\""));
+    }
+
+    #[test]
+    fn asciidoc_cell_renders_its_own_footnotes_block() {
+        // An AsciiDoc (`a`) cell is a nested document with its own footnote
+        // registry: Asciidoctor renders the cell's footnotes as a `#footnotes`
+        // block inside the cell's `<div class="content">`, isolated from the
+        // enclosing document (asciidoc-html5#231).
+        let cell_only =
+            convert("|===\na|AsciiDoc footnote:[A lightweight markup language.]\n|===\n");
+
+        // The cell's footnote definition renders inside the cell content — the
+        // block closes with the cell wrapper (`</div></div></td>`), not at the
+        // document level ...
+        assert!(cell_only.contains(
+            "<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_1\">\n\
+             <a href=\"#_footnoteref_1\">1</a>. A lightweight markup language.\n\
+             </div>\n</div></div></td>"
+        ));
+
+        // ... and, the sole footnote being the cell's, the document adds no
+        // footnotes block of its own: exactly one `#footnotes` block exists.
+        assert_eq!(cell_only.matches("id=\"footnotes\"").count(), 1);
+
+        // A document footnote *and* a cell footnote keep separate registries:
+        // each block lists only its own definition, while the document-wide
+        // `footnote-number` counter still numbers them uniquely (document = 1,
+        // cell = 2).
+        let both =
+            convert("Doc footnote:[Doc note.]\n\n|===\na|Cell footnote:[Cell note.]\n|===\n");
+        assert_eq!(both.matches("id=\"footnotes\"").count(), 2);
+
+        // The cell-local block carries only the cell's definition, inside the
+        // cell.
+        assert!(both.contains(
+            "<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_2\">\n\
+             <a href=\"#_footnoteref_2\">2</a>. Cell note.\n\
+             </div>\n</div></div></td>"
+        ));
+
+        // The document-level block, a sibling after the content, carries only
+        // the document's own definition.
+        assert!(both.contains(
+            "</div>\n<div id=\"footnotes\">\n<hr>\n\
+             <div class=\"footnote\" id=\"_footnotedef_1\">\n\
+             <a href=\"#_footnoteref_1\">1</a>. Doc note.\n\
+             </div>\n</div>"
+        ));
     }
 
     #[test]
@@ -5939,6 +6075,35 @@ mod tests {
         let mut lines: Vec<String> = Vec::new();
         super::adjust_indentation(&mut lines, 0, 4);
         assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn restore_literal_paragraph_indent_is_a_no_op_when_the_raw_span_is_short() {
+        // Defensive guard: a raw span with fewer lines than the rendered content
+        // (which should not happen — verbatim substitutions never drop lines)
+        // leaves the lines untouched rather than underflowing the line offset.
+        let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        super::restore_literal_paragraph_indent(&mut lines, "only one line");
+        assert_eq!(lines, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn restore_literal_paragraph_indent_ignores_a_trailing_newline_in_the_raw_span() {
+        // A raw span ending in a newline must not shift the suffix alignment: the
+        // first rendered line still pairs with the first raw line, so the leading
+        // indent lands on `literal` rather than being lost to a phantom line.
+        let mut lines = vec!["literal".to_string(), "next".to_string()];
+        super::restore_literal_paragraph_indent(&mut lines, "  literal\nnext\n");
+        assert_eq!(lines, ["  literal", "next"]);
+    }
+
+    #[test]
+    fn verbatim_restores_indent_for_a_titled_literal_paragraph() {
+        // An implicit literal paragraph's raw span carries its `.title` ahead of
+        // the content, so indent restoration must align to the trailing content
+        // lines; the common indent (2) is then removed, matching Asciidoctor.
+        let html = convert(".Cap\n    x\n  y\n");
+        assert!(html.contains("<pre>  x\ny</pre>"), "{html}");
     }
 
     /// Counts the leading spaces of the sole `<pre>`'s content.
