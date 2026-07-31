@@ -35,12 +35,10 @@
 //!   `starts-with(following-sibling::text(), …)` assertions the `assert_html`
 //!   xpath subset does not implement, and a following-heading test that needs
 //!   setext (`~~~~`) section parsing `asciidoc-parser` does not provide;
-//! - two literal-paragraph tests whose `<pre>` content, and one wrapped
-//!   list-item paragraph, whose first line loses its leading indent because
-//!   `asciidoc-parser` strips it before the renderer sees it (standalone
-//!   verbatim indent was fixed by #153; this list-attached case is a distinct
-//!   parser-side divergence,
-//!   <https://github.com/asciidoc-rs/asciidoc-html5/issues/168>).
+//! - one wrapped list-item principal paragraph whose hanging-indent second line
+//!   loses its leading indent: the renderer now restores an attached literal paragraph's
+//!   indent (#168), but a wrapped *principal* line still needs node-text extraction
+//!   the `assert_html` xpath subset does not implement (<https://github.com/asciidoc-rs/asciidoc-html5/issues/157>).
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -1037,11 +1035,11 @@ wrapped text"]"#,
             assert_xpath(&output, r#"(//ul/li)[2]/p[text()="list item 2"]"#, 1);
         }
 
-        // Non-normative: asserts the attached literal keeps its ` literal`
-        // first-line indent, which the parser strips before the renderer sees it
-        // (#168).
-        non_normative!(
-            r#"
+        #[test]
+        fn a_literal_paragraph_with_a_line_that_appears_as_a_list_item_that_is_followed_by_a_continuation_should_create_two_blocks(
+        ) {
+            verifies!(
+                r#"
     test "a literal paragraph with a line that appears as a list item that is followed by a continuation should create two blocks" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -1066,7 +1064,37 @@ wrapped text"]"#,
     end
 
 "#
-        );
+            );
+            let output =
+                convert_standalone("* Foo\n+\n  literal\n. still literal\n+\npara\n\n* Bar\n");
+            assert_xpath(&output, r#"//ul"#, 1);
+            assert_xpath(&output, r#"//ul/li"#, 2);
+            assert_xpath(&output, r#"(//ul/li)[1]/p[text() = "Foo"]"#, 1);
+            assert_xpath(&output, r#"(//ul/li)[1]/*[@class="literalblock"]"#, 1);
+            assert_xpath(
+                &output,
+                r#"(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]"#,
+                1,
+            );
+
+            // The attached literal keeps its `  literal` first-line indent (#168).
+            assert_xpath(
+                &output,
+                r#"((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text() = "  literal
+. still literal"]"#,
+                1,
+            );
+            assert_xpath(
+                &output,
+                r#"(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]"#,
+                1,
+            );
+            assert_xpath(
+                &output,
+                r#"(//ul/li)[1]/*[@class="literalblock"]/following-sibling::*[@class="paragraph"]/p[text()="para"]"#,
+                1,
+            );
+        }
 
         #[test]
         fn consecutive_literal_paragraph_offset_by_blank_lines_in_list_content_are_appended_as_a_literal_blocks(
@@ -1126,11 +1154,10 @@ literal']"#,
             );
         }
 
-        // Non-normative: asserts the attached literal keeps its ` literal`
-        // first-line indent, which the parser strips before the renderer sees it
-        // (#168).
-        non_normative!(
-            r#"
+        #[test]
+        fn a_literal_paragraph_without_a_trailing_blank_line_consumes_following_list_items() {
+            verifies!(
+                r#"
     test "a literal paragraph without a trailing blank line consumes following list items" do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -1153,7 +1180,27 @@ literal']"#,
     end
 
 "#
-        );
+            );
+            let output = convert_standalone("List\n====\n\n- Foo\n\n  literal\n- Boo\n- Blech\n");
+            assert_xpath(&output, r#"//ul"#, 1);
+            assert_xpath(&output, r#"//ul/li"#, 1);
+            assert_xpath(&output, r#"(//ul/li)[1]/p[text() = "Foo"]"#, 1);
+            assert_xpath(&output, r#"(//ul/li)[1]/*[@class="literalblock"]"#, 1);
+            assert_xpath(
+                &output,
+                r#"(//ul/li)[1]/p/following-sibling::*[@class="literalblock"]"#,
+                1,
+            );
+
+            // The attached literal keeps its `  literal` first-line indent (#168).
+            assert_xpath(
+                &output,
+                r#"((//ul/li)[1]/*[@class='literalblock'])[1]//pre[text() = '  literal
+- Boo
+- Blech']"#,
+                1,
+            );
+        }
 
         #[test]
         fn asterisk_elements_with_no_blank_lines() {

@@ -14,8 +14,7 @@
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - tests whose assertions depend on constructs this renderer does not yet
 //!   emit — description lists inside AsciiDoc cells (#154), table of contents
-//!   (#86), the cell-local footnotes block for AsciiDoc cells (#231),
-//!   `cellbgcolor` (#163), and font-based admonition icons (#50);
+//!   (#86), `cellbgcolor` (#163), and font-based admonition icons (#50);
 //! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
@@ -3606,12 +3605,10 @@ fn should_catalog_anchor_at_start_of_cell_in_first_row() {
     assert!(doc.catalog().contains_id("foo"));
 }
 
-// Asserts on a footnotes block (`#_footnotedef_1`) rendered inside the AsciiDoc
-// cell. The parser exposes the cell's own footnotes via
-// `AsciiDocCell::footnotes()`, but this crate's renderer does not yet emit the
-// cell-local `#footnotes` block from them (asciidoc-html5#231).
-non_normative!(
-    r#"
+#[test]
+fn footnotes_should_not_be_shared_between_an_asciidoc_table_cell_and_the_main_document() {
+    verifies!(
+        r#"
     test 'footnotes should not be shared between an AsciiDoc table cell and the main document' do
       input = <<~'EOS'
       |===
@@ -3624,7 +3621,30 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "|===\na|AsciiDoc footnote:[A lightweight markup language.]\n|===\n";
+    let result = convert_standalone(input);
+    assert_css(&result, "#_footnotedef_1", 1);
+
+    // The ported `assert_css '#_footnotedef_1', result, 1` above only counts the
+    // definition somewhere in the document; it would still pass if the cell's
+    // footnote leaked into the document-level registry. Pin down the behavior the
+    // test is named for — the cell keeps its *own* registry — by asserting both
+    // scopes explicitly. The definition renders inside the cell's `#footnotes`
+    // block (a descendant of the `td`) ...
+    assert_css(
+        &result,
+        "td.tableblock div.content div#footnotes div.footnote#_footnotedef_1",
+        1,
+    );
+
+    // ... and the document renders no footnotes block of its own: the sole
+    // footnote is the cell's, so the only `#footnotes` block is that cell-local
+    // one, and none sits at the document level (a sibling after `#content`).
+    assert_css(&result, "#footnotes", 1);
+    assert_css(&result, "#content ~ #footnotes", 0);
+}
 
 // This test targets the DocBook backend; this crate renders only the `html5`
 // backend.
