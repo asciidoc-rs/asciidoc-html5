@@ -140,13 +140,18 @@ mod load {
         // crate does not recognize setext (two-line) titles – so verify instead
         // the input-file attribute family this test derives: Asciidoctor's
         // `File.expand_path` of the source path, its directory, and the suffix.
+        // The suffix comparisons normalize `\` to `/` so they hold on Windows.
         let docfile = attr_str(&doc, "docfile");
         assert!(Path::new(&docfile).is_absolute(), "{docfile}");
         assert!(
-            docfile.ends_with("ref/asciidoctor/test/fixtures/sample.adoc"),
+            docfile
+                .replace('\\', "/")
+                .ends_with("ref/asciidoctor/test/fixtures/sample.adoc"),
             "{docfile}"
         );
-        assert!(attr_str(&doc, "docdir").ends_with("ref/asciidoctor/test/fixtures"));
+        assert!(attr_str(&doc, "docdir")
+            .replace('\\', "/")
+            .ends_with("ref/asciidoctor/test/fixtures"));
         assert_eq!(attr_str(&doc, "docfilesuffix"), ".adoc");
     }
 
@@ -188,10 +193,13 @@ mod load {
         // As with the `.adoc` case above, the setext `doctitle` assertion is not
         // reproduced (setext is unsupported); the behavior under test – that the
         // `docfilesuffix` follows the alternate `.asciidoc` extension – is what
-        // we verify.
+        // we verify. The suffix comparisons normalize `\` to `/` for Windows.
         assert!(attr_str(&doc, "docfile")
+            .replace('\\', "/")
             .ends_with("ref/asciidoctor/test/fixtures/sample-alt-extension.asciidoc"));
-        assert!(attr_str(&doc, "docdir").ends_with("ref/asciidoctor/test/fixtures"));
+        assert!(attr_str(&doc, "docdir")
+            .replace('\\', "/")
+            .ends_with("ref/asciidoctor/test/fixtures"));
         assert_eq!(attr_str(&doc, "docfilesuffix"), ".asciidoc");
     }
 
