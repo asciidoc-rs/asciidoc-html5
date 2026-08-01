@@ -3739,11 +3739,10 @@ mod math_blocks {
         assert_css(&html, ".stemblock", 1);
     }
 
-    // `doc.blocks[0].content` inspects the parser's block model (verified in
-    // `asciidoc-parser`); an empty block's content string has no rendered form
-    // for a `convert`-driven test to re-express.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_return_content_as_empty_string_for_stem_or_pass_block_that_has_no_lines() {
+        verifies!(
+            r#"
     test 'should return content as empty string for stem or pass block that has no lines' do
       [%(++++\n++++), %([stem]\n++++\n++++)].each do |input|
         doc = document_from_string input
@@ -3752,7 +3751,18 @@ mod math_blocks {
     end
 
 "#
-    );
+        );
+
+        // `doc.blocks[0].content` maps to the first top-level block's
+        // post-substitution content, reached through `load`. An empty raw block —
+        // both the bare `++++` (pass) and the `[stem]` form — has an empty
+        // content string.
+        for input in ["++++\n++++", "[stem]\n++++\n++++"] {
+            let doc = load(input);
+            let block = doc.child_blocks().next().expect("one top-level block");
+            assert_eq!(block.rendered_content(), Some(""), "{input}");
+        }
+    }
 
     #[test]
     fn should_add_latex_math_delimiters_around_latexmath_block_content() {
