@@ -20,14 +20,21 @@
 //!   `-b`, manpage), the non-`article` doctypes (`book`, `manpage`, `inline`)
 //!   that `-d`/`--doctype` rejects, and custom template engines (`-T`/`-E`
 //!   haml/slim).
-//! - Tracked for later work: the coderay source-highlighter stylesheet (<https://github.com/asciidoc-rs/asciidoc-html5/issues/150>),
-//!   the document date/time attributes and `SOURCE_DATE_EPOCH` (<https://github.com/asciidoc-rs/asciidoc-html5/issues/152>),
-//!   image-based admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
+//! - Tracked for later work: image-based admonition icons (<https://github.com/asciidoc-rs/asciidoc-html5/issues/50>),
 //!   and the table of contents that `toc-title` renders into (<https://github.com/asciidoc-rs/asciidoc-html5/issues/86>).
+//!
+//! The document date/time attributes (`docdate`/`doctime`/`docdatetime`/
+//! `docyear` and their `local*` siblings), their `-a` overrides, and
+//! `SOURCE_DATE_EPOCH` are now wired through `adoc`: they drive the footer's
+//! "Last updated" stamp, which the ported tests assert against. The one
+//! remaining gap is a local timezone *offset* derived from the system `TZ`:
+//! this toolchain carries no timezone database, so an unpinned clock reads as
+//! UTC (the `-d inline` tests below, which also need a doctype `adoc` rejects,
+//! stay `non_normative!`).
 
 use std::path::PathBuf;
 
-use asciidoc_html5::SafeMode;
+use asciidoc_html5::{Options, ReferenceTime, SafeMode};
 use clap::Parser as _;
 
 use crate::{
@@ -290,12 +297,12 @@ fn should_parse_source_and_convert_to_html5_article_by_default() {
     assert!(output.contains("<h1>Document Title</h1>"));
 }
 
-// Not exposed: the test reads implicit doc-info attributes (`docname`,
-// `docfile`, `docdir`, `docdate`, `doctime`, ...) off the `Document` object.
-// `adoc` returns only rendered HTML, and these attributes surface nowhere in
-// its default output, so there is nothing to assert against. The date/time
-// attributes are tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
+// Not exposed: the test reads implicit doc-info attributes off the `Document`
+// object. The date/time members (`docdate`, `doctime`, `docdatetime`,
+// `docyear`) now surface in the footer's "Last updated" stamp – covered by the
+// override and `SOURCE_DATE_EPOCH` tests below – but the path members
+// (`docname`, `docfile`, `docdir`) appear nowhere in `adoc`'s rendered HTML, so
+// the whole-`Document` assertion this test makes has no `adoc` analog.
 non_normative!(
     r#"
   test 'should set implicit doc info attributes' do
@@ -316,11 +323,10 @@ non_normative!(
 "#
 );
 
-// Not exposed: same as above — overriding `docdate`/`doctime` via `-a` and
-// reading back the derived `docyear`/`docdatetime` off the `Document`. Tracked
-// in <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
-non_normative!(
-    r#"
+#[test]
+fn should_allow_docdate_and_doctime_to_be_overridden() {
+    verifies!(
+        r#"
   test 'should allow docdate and doctime to be overridden' do
     sample_filepath = fixture_path 'sample.adoc'
     invoker = invoke_cli_to_buffer %w(-o /dev/null -a docdate=2015-01-01 -a doctime=10:00:00-0700), sample_filepath
@@ -332,7 +338,35 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // `adoc` does not expose the `Document`'s attributes, but the derived
+    // `docdatetime` surfaces in the standalone footer's "Last updated" stamp.
+    // Overriding `docdate`/`doctime` with `-a` therefore drives that stamp:
+    // `docdatetime` is "{docdate} {doctime}" = "2015-01-01 10:00:00-0700",
+    // built from the two explicit overrides exactly as Asciidoctor computes it.
+    let project = Project::new("docdate-doctime-override");
+    let input = project.write("sample.adoc", "= Sample\n\nBody.\n");
+    let output = String::from_utf8(
+        project
+            .run(&[
+                input.to_str().unwrap(),
+                "-o",
+                "-",
+                "-a",
+                "docdate=2015-01-01",
+                "-a",
+                "doctime=10:00:00-0700",
+            ])
+            .expect("adoc converts"),
+    )
+    .expect("output is UTF-8");
+
+    assert!(
+        output.contains("Last updated 2015-01-01 10:00:00-0700"),
+        "footer should show the overridden docdatetime: {output}"
+    );
+}
 
 #[test]
 fn should_accept_document_from_stdin_and_write_to_stdout() {
@@ -1017,13 +1051,10 @@ fn should_output_to_file_specified() {
     assert!(out.exists());
 }
 
-// Not implemented: asserts the coderay highlighter stylesheet is copied
-// alongside the default one. `adoc` copies the default stylesheet (verified
-// elsewhere) but does no source highlighting, so it has no coderay stylesheet
-// to copy. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/150>.
-non_normative!(
-    r#"
+#[test]
+fn should_copy_coderay_stylesheet_to_target_directory_if_linkcss_is_specified() {
+    verifies!(
+        r#"
   test 'should copy default stylesheet to target directory if linkcss is specified' do
     sample_outpath = fixture_path 'sample-output.html'
     asciidoctor_stylesheet = fixture_path 'asciidoctor.css'
@@ -1047,13 +1078,54 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: the negative coderay case (no highlighted blocks, so no
-// coderay stylesheet). Same source-highlighting gap. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/150>.
-non_normative!(
-    r#"
+    // With `linkcss` and `source-highlighter=coderay`, a document that contains
+    // a source block gets both companion stylesheets copied next to the output:
+    // the default `asciidoctor.css` and the CodeRay `coderay-asciidoctor.css`.
+    let project = Project::new("linkcss-coderay");
+    let input = project.write(
+        "source-block.adoc",
+        "= Doc\n\n[source,ruby]\n----\nputs 1\n----\n",
+    );
+    let out = project.path("sample-output.html");
+    project
+        .run(&[
+            "-o",
+            out.to_str().unwrap(),
+            "-a",
+            "linkcss",
+            "-a",
+            "source-highlighter=coderay",
+            input.to_str().unwrap(),
+        ])
+        .expect("adoc converts");
+    assert!(out.exists());
+    assert!(project.exists("asciidoctor.css"));
+    assert!(project.exists("coderay-asciidoctor.css"));
+
+    // Both copied stylesheets have the line-ending discipline the Ruby test
+    // asserts: each uses LF, carries no CR, and — because Asciidoctor `rstrip`s
+    // the stylesheet data it writes — ends without a trailing newline.
+    for name in ["asciidoctor.css", "coderay-asciidoctor.css"] {
+        let contents = project.read(name);
+        assert!(contents.contains('\n'), "{name} should contain LF");
+        assert!(!contents.contains('\r'), "{name} should carry no CR");
+        assert!(
+            !contents.ends_with('\n'),
+            "{name} should have no trailing newline"
+        );
+    }
+
+    // Deviation from the Ruby test: it applies that same discipline to the
+    // rendered HTML output too, but `adoc` appends a final newline to the HTML
+    // — a separate convention from the stylesheet copies this test covers.
+}
+
+#[test]
+fn should_not_copy_coderay_stylesheet_when_no_source_blocks_were_highlighted() {
+    verifies!(
+        r#"
   test 'should not copy coderay stylesheet to target directory when no source blocks where highlighted' do
     sample_outpath = fixture_path 'sample-output.html'
     asciidoctor_stylesheet = fixture_path 'asciidoctor.css'
@@ -1071,7 +1143,29 @@ non_normative!(
   end
 
 "#
-);
+    );
+
+    // A document with no source block highlights nothing, so — even with
+    // `linkcss` and `source-highlighter=coderay` — `adoc` copies the default
+    // stylesheet but writes no `coderay-asciidoctor.css`.
+    let project = Project::new("linkcss-coderay-nosrc");
+    let input = project.write("sample.adoc", "= Doc\n\nJust a paragraph.\n");
+    let out = project.path("sample-output.html");
+    project
+        .run(&[
+            "-o",
+            out.to_str().unwrap(),
+            "-a",
+            "linkcss",
+            "-a",
+            "source-highlighter=coderay",
+            input.to_str().unwrap(),
+        ])
+        .expect("adoc converts");
+    assert!(out.exists());
+    assert!(project.exists("asciidoctor.css"));
+    assert!(!project.exists("coderay-asciidoctor.css"));
+}
 
 #[test]
 fn should_not_copy_default_stylesheet_to_target_directory_if_linkcss_is_set_and_copycss_is_unset() {
@@ -2012,10 +2106,12 @@ fn should_print_timings_when_t_flag_is_specified() {
     );
 }
 
-// Not implemented: reads the `doctime`/`localtime` attributes (rendered via
-// `-d inline`) to check UTC timezone formatting. `adoc` has neither `-d inline`
-// nor these date/time attributes. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
+// Not implemented: renders the `doctime`/`localtime` attributes via `-d inline`
+// to check timezone formatting. `adoc` rejects the `inline` doctype (an
+// unsupported structural doctype, like `book`/`manpage`), so there is no way to
+// emit the two bare attribute lines this test reads. The UTC case would in fact
+// hold – an unpinned `adoc` clock reads as UTC – but the offset counterpart
+// below cannot, as this toolchain carries no timezone database.
 non_normative!(
     r#"
   test 'should show timezone as UTC if system TZ is set to UTC' do
@@ -2029,9 +2125,10 @@ non_normative!(
 "#
 );
 
-// Not implemented: the offset-timezone counterpart of the previous test. Same
-// date/time attribute gap. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
+// Not implemented: the offset-timezone counterpart of the previous test. It
+// needs the same `-d inline` mode `adoc` lacks, and additionally a local
+// timezone offset derived from the system `TZ` – which this toolchain cannot
+// compute, having no timezone database (an unpinned clock reads as UTC).
 non_normative!(
     r#"
   test 'should show timezone as offset if system TZ is not set to UTC' do
@@ -2045,12 +2142,17 @@ non_normative!(
 "#
 );
 
-// Not implemented: `SOURCE_DATE_EPOCH` seeds `docdate`/`docyear`/`docdatetime`
-// (and the `local*` variants) for reproducible builds. `adoc` does not read the
-// variable, and does not expose these attributes. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
-non_normative!(
-    r#"
+// `SOURCE_DATE_EPOCH` seeds the `doc*` and `local*` date/time attributes for
+// reproducible builds – `adoc` honors it, and the derived `docdatetime`
+// surfaces in the footer's "Last updated" stamp. This is verified without
+// mutating the shared process environment (which every concurrent `adoc` run
+// reads on startup, so a stray value would race the whole test binary): the
+// CLI's parse of the raw value and the rendering of the resulting instant are
+// checked separately.
+#[test]
+fn should_use_source_date_epoch_as_modified_time_of_input_file_and_local_time() {
+    verifies!(
+        r#"
   test 'should use SOURCE_DATE_EPOCH as modified time of input file and local time' do
     old_source_date_epoch = ENV.delete 'SOURCE_DATE_EPOCH'
     begin
@@ -2074,13 +2176,39 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: an empty `SOURCE_DATE_EPOCH` is ignored (dates fall back to
-// the current time). Same reproducible-builds gap. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>.
-non_normative!(
-    r#"
+    // `1234123412` is 2009-02-08T20:03:32Z. The CLI parses the raw value into
+    // exactly that instant.
+    let epoch = crate::parse_source_date_epoch("1234123412").expect("valid epoch");
+    assert_eq!(
+        epoch,
+        Some(ReferenceTime::from_unix_timestamp(1_234_123_412))
+    );
+
+    // Pinning the clock there (with no input mtime) drives both the `doc*` and
+    // `local*` families, so the footer's docdatetime reads
+    // "2009-02-08 20:03:32 UTC" – matching the Ruby assertions on both
+    // docdatetime and localdatetime.
+    let options = Options::new()
+        .standalone(true)
+        .reference_time(ReferenceTime::from_unix_timestamp(1_234_123_412));
+
+    let output = asciidoc_html5::convert_with("= Sample\n\nBody.\n", &options);
+
+    assert!(
+        output.contains("Last updated 2009-02-08 20:03:32 UTC"),
+        "footer should show the SOURCE_DATE_EPOCH instant: {output}"
+    );
+}
+
+// An empty (or all-whitespace) `SOURCE_DATE_EPOCH` is ignored – the clock falls
+// back to the wall clock rather than being pinned. Verified against the CLI's
+// parse directly, for the same process-environment reason as above.
+#[test]
+fn should_ignore_source_date_epoch_if_value_is_empty() {
+    verifies!(
+        r#"
   test 'should ignore SOURCE_DATE_EPOCH is value is empty' do
     old_source_date_epoch = ENV.delete 'SOURCE_DATE_EPOCH'
     begin
@@ -2100,14 +2228,23 @@ non_normative!(
   end
 
 "#
-);
+    );
 
-// Not implemented: a malformed `SOURCE_DATE_EPOCH` should fail the run. `adoc`
-// does not read the variable, so it cannot fail on it. Tracked in
-// <https://github.com/asciidoc-rs/asciidoc-html5/issues/152>. (The trailing
-// line closes the Ruby `context` block.)
-non_normative!(
-    r#"
+    // An empty or whitespace-only value parses to `None` (ignored), so the clock
+    // is left unpinned and the dates fall back to the current time.
+    assert!(matches!(crate::parse_source_date_epoch(""), Ok(None)));
+    assert!(matches!(crate::parse_source_date_epoch("   "), Ok(None)));
+}
+
+// A malformed `SOURCE_DATE_EPOCH` fails the run rather than silently falling
+// back to the wall clock. Verified against the CLI's parse directly (the same
+// process-environment reason as above); `main` turns the returned error into
+// the non-zero exit the Ruby test asserts. The trailing line closes the Ruby
+// `context` block.
+#[test]
+fn should_fail_if_source_date_epoch_is_malformed() {
+    verifies!(
+        r#"
   test 'should fail if SOURCE_DATE_EPOCH is malformed' do
     old_source_date_epoch = ENV.delete 'SOURCE_DATE_EPOCH'
     begin
@@ -2124,4 +2261,14 @@ non_normative!(
   end
 end
 "#
-);
+    );
+
+    // A non-integer value is rejected with an `InvalidInput` error, which
+    // `run_with_streams` propagates and `main` maps to a non-zero exit code.
+    let result = crate::parse_source_date_epoch("aaaaaaaa");
+    assert!(result.is_err(), "a malformed value must fail the run");
+    assert_eq!(
+        result.expect_err("malformed epoch errors").kind(),
+        std::io::ErrorKind::InvalidInput
+    );
+}

@@ -1,11 +1,14 @@
-# The vendored Asciidoctor stylesheet is embedded verbatim via `include_str!`
-# and compared byte-for-byte against Asciidoctor's LF output, so it must stay LF
-# on every platform — a CRLF checkout (e.g. Windows `core.autocrlf`) would embed
-# `\r\n` and diverge from Asciidoctor. The `ref/` copy is pinned too so the
-# drift-guard test (which reads it back) sees the same bytes. Everything else is
-# left to each contributor's git defaults.
+# The vendored Asciidoctor stylesheets are embedded verbatim via `include_str!`
+# and compared byte-for-byte against Asciidoctor's LF output, so they must stay
+# LF on every platform — a CRLF checkout (e.g. Windows `core.autocrlf`) would
+# embed `\r\n` and diverge from Asciidoctor (and the CodeRay copy asserts it
+# carries no `\r`). The `ref/` copies are pinned too so the drift-guard tests
+# (which read them back) see the same bytes. Everything else is left to each
+# contributor's git defaults.
 html5/assets/asciidoctor-default.css text eol=lf
 ref/asciidoctor/data/stylesheets/asciidoctor-default.css text eol=lf
+html5/assets/coderay-asciidoctor.css text eol=lf
+ref/asciidoctor/data/stylesheets/coderay-asciidoctor.css text eol=lf
 
 # The `adoc --help syntax` crib sheet is embedded via `include_str!` and the
 # tests assert its exact bytes (it opens with `= AsciiDoc Syntax\n`), so it must
