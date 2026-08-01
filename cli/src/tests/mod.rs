@@ -17,5 +17,6 @@ mod output_naming;
 mod path_helpers;
 mod run_errors;
 mod section_numbers;
+mod source_date_epoch;
 mod syntax_help;
 mod warnings;

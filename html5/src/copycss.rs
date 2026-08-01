@@ -28,9 +28,9 @@ use crate::{
     include_handler,
     options::Options,
     renderer::{
-        attribute_str, custom_stylesheet_value, links_stylesheet, looks_like_uri,
-        normalize_web_path, stylesdir_join, stylesheet_disabled, DEFAULT_STYLESHEET,
-        DEFAULT_STYLESHEET_NAME,
+        attribute_str, coderay_stylesheet_required, custom_stylesheet_value, links_stylesheet,
+        looks_like_uri, normalize_web_path, stylesdir_join, stylesheet_disabled,
+        CODERAY_STYLESHEET, CODERAY_STYLESHEET_NAME, DEFAULT_STYLESHEET, DEFAULT_STYLESHEET_NAME,
     },
 };
 
@@ -88,6 +88,50 @@ pub(crate) fn stylesheet_copy(
         // A custom stylesheet: mirror its web path and read its bytes.
         Some(stylesheet) => custom_stylesheet_copy(document, options, &stylesheet, &stylesdir),
     }
+}
+
+/// Computes the [`StylesheetCopy`] for the active syntax highlighter's own
+/// stylesheet, or `None` when none applies.
+///
+/// Today only CodeRay carries a stylesheet this crate copies. The copy is gated
+/// like the primary one — below the `secure` safe mode, with the stylesheet
+/// *linked* (`linkcss`) and `copycss` enabled — plus the highlighter-specific
+/// condition that the document actually calls for the CodeRay stylesheet
+/// ([`coderay_stylesheet_required`]): CodeRay is active, in class CSS mode, and
+/// a source block is present. This mirrors Asciidoctor's convert-to-file path,
+/// where `copy_syntax_hl_stylesheet = syntax_hl.write_stylesheet? doc` sits
+/// under the same `linkcss`/`copycss`/safe-mode gate as the primary copy.
+///
+/// Unlike [`stylesheet_copy`], this does *not* depend on the `stylesheet`
+/// attribute: Asciidoctor copies (and links) the highlighter stylesheet even
+/// when the primary stylesheet is disabled, since it is a separate docinfo. A
+/// URI `stylesdir` yields no `./`-relative destination, so it is skipped — the
+/// same way [`relative_web_path`] filters the primary copy.
+pub(crate) fn syntax_highlighter_stylesheet_copy(
+    document: &Document<'_>,
+    options: &Options,
+) -> Option<StylesheetCopy> {
+    if options.safe_mode_or_default() >= SafeMode::Secure {
+        return None;
+    }
+
+    if !links_stylesheet(document) || !copycss_enabled(document) {
+        return None;
+    }
+
+    if !coderay_stylesheet_required(document) {
+        return None;
+    }
+
+    let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+    let dest = relative_web_path(&normalize_web_path(CODERAY_STYLESHEET_NAME, &stylesdir))?;
+
+    Some(StylesheetCopy {
+        dest,
+        // Asciidoctor writes the CodeRay stylesheet through `read_stylesheet`,
+        // which `rstrip`s it, so the file ends without a trailing newline.
+        content: CODERAY_STYLESHEET.trim_end().to_string(),
+    })
 }
 
 /// Whether `copycss` is enabled: set (with or without a value) rather than
@@ -178,7 +222,10 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::{
-        copycss::stylesheet_copy, options::Options, renderer::DEFAULT_STYLESHEET, SafeMode,
+        copycss::{stylesheet_copy, syntax_highlighter_stylesheet_copy},
+        options::Options,
+        renderer::{CODERAY_STYLESHEET, DEFAULT_STYLESHEET},
+        SafeMode,
     };
 
     /// Parses `source` under `options` and returns the copy plan as
@@ -190,6 +237,18 @@ mod tests {
         stylesheet_copy(&document, options)
             .map(|copy| (copy.dest.to_string_lossy().replace('\\', "/"), copy.content))
     }
+
+    /// Like [`plan`], but for the syntax-highlighter stylesheet copy.
+    fn hl_plan(source: &str, options: &Options) -> Option<(String, String)> {
+        let mut parser = options.apply(asciidoc_parser::Parser::default());
+        let document = parser.parse(source);
+        syntax_highlighter_stylesheet_copy(&document, options)
+            .map(|copy| (copy.dest.to_string_lossy().replace('\\', "/"), copy.content))
+    }
+
+    /// A minimal document with one source block — the trigger for the CodeRay
+    /// stylesheet.
+    const SOURCE_DOC: &str = "= Doc\n\n[source,ruby]\n----\nputs 1\n----";
 
     // With `linkcss` and `copycss` set, the default stylesheet is copied as
     // `asciidoctor.css` with the embedded default CSS as its content. Asciidoctor
@@ -332,6 +391,163 @@ mod tests {
         assert_eq!(relative_web_path("../up.css"), None);
         assert_eq!(relative_web_path("/abs.css"), None);
         assert_eq!(relative_web_path("https://example.org/x.css"), None);
+    }
+
+    // With coderay active (in its default class CSS mode), `linkcss`, and
+    // `copycss`, a source block draws a copy of `coderay-asciidoctor.css` with
+    // the embedded CodeRay CSS — trailing newline chomped, as Asciidoctor's
+    // `read_stylesheet` `rstrip`s it.
+    #[test]
+    fn coderay_stylesheet_is_copied_when_a_source_block_is_present() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        let (dest, content) = hl_plan(SOURCE_DOC, &options).expect("a copy");
+        assert_eq!(dest, "coderay-asciidoctor.css");
+        assert_eq!(content, CODERAY_STYLESHEET.trim_end());
+        assert!(!content.ends_with('\n'), "no trailing newline");
+    }
+
+    // The coderay stylesheet copy honors `stylesdir`, mirroring the web path the
+    // head links it at.
+    #[test]
+    fn coderay_stylesheet_copy_honors_stylesdir() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("stylesdir", "css");
+        let (dest, _) = hl_plan(SOURCE_DOC, &options).expect("a copy");
+        assert_eq!(dest, "css/coderay-asciidoctor.css");
+    }
+
+    // The coderay stylesheet copy is independent of the primary stylesheet: with
+    // the primary one disabled (`:stylesheet!:`), the CodeRay stylesheet is still
+    // copied, matching Asciidoctor (the highlighter docinfo is separate).
+    #[test]
+    fn coderay_stylesheet_copy_survives_a_disabled_primary_stylesheet() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        let source = "= Doc\n:stylesheet!:\n\n[source,ruby]\n----\nputs 1\n----";
+        assert!(hl_plan(source, &options).is_some());
+        // ... while the primary copy is suppressed by the disabled stylesheet.
+        assert!(plan(source, &options).is_none());
+    }
+
+    // No source block means coderay highlighted nothing, so there is no
+    // stylesheet to copy.
+    #[test]
+    fn no_coderay_copy_without_a_source_block() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        assert!(hl_plan("= Doc\n\nBody.", &options).is_none());
+    }
+
+    // `coderay-css=style` inlines the colors, so no stylesheet is copied.
+    #[test]
+    fn no_coderay_copy_in_style_css_mode() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("coderay-css", "style");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // An explicit `:coderay-css!:` (unset) falls back to the `class` default —
+    // Asciidoctor's `attr('coderay-css', 'class')` returns `class` for an unset
+    // attribute — so the stylesheet is still copied.
+    #[test]
+    fn coderay_copy_survives_an_explicitly_unset_coderay_css() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        let source = "= Doc\n:coderay-css!:\n\n[source,ruby]\n----\nputs 1\n----";
+        let (dest, _) = hl_plan(source, &options).expect("a copy");
+        assert_eq!(dest, "coderay-asciidoctor.css");
+    }
+
+    // A `stylesdir` that resolves outside the output directory (here an absolute
+    // path) gives no `./`-relative destination, so the CodeRay stylesheet is not
+    // copied — the same containment `relative_web_path` applies to the primary
+    // copy.
+    #[test]
+    fn no_coderay_copy_for_an_escaping_stylesdir() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("stylesdir", "/abs");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // A URI `stylesdir` links the stylesheet remotely, so there is no local file
+    // to copy — the link is a URI (not a `./`-relative path), which
+    // `relative_web_path` rejects. This matches Asciidoctor, which skips copying
+    // entirely when `stylesdir` is a URI.
+    #[test]
+    fn no_coderay_copy_for_a_uri_stylesdir() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("stylesdir", "https://cdn.example.com/css");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+        // The primary stylesheet copy is skipped for the same reason.
+        assert!(plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // A different (or no) highlighter carries no stylesheet this crate copies.
+    #[test]
+    fn no_coderay_copy_for_a_different_highlighter() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "highlightjs");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // Under `secure` nothing is copied, even with coderay and a source block.
+    #[test]
+    fn no_coderay_copy_under_secure() {
+        let options = Options::new().attribute("source-highlighter", "coderay");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // Without `linkcss` the stylesheet is embedded, not copied.
+    #[test]
+    fn no_coderay_copy_when_embedding() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
+    // A `:!copycss:` disables the coderay copy under a linking safe mode.
+    #[test]
+    fn document_can_disable_the_coderay_copy() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .attribute("source-highlighter", "coderay");
+        let source = "= Doc\n:!copycss:\n\n[source,ruby]\n----\nputs 1\n----";
+        assert!(hl_plan(source, &options).is_none());
     }
 
     /// Creates a fresh temp directory named after `tag`, populated with `files`

@@ -15,10 +15,10 @@ use std::{
     io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, SafeMode};
+use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, ReferenceTime, SafeMode};
 use asciidoc_parser::{
     parser::SourceLine,
     warnings::{Warning, WarningType},
@@ -479,6 +479,35 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
+    // Resolve `SOURCE_DATE_EPOCH` before touching the input: a malformed value
+    // must fail the whole run (exit 1), matching Asciidoctor and the
+    // reproducible-builds spec, rather than silently converting with the wall
+    // clock. A valid value pins the whole clock (both the `local*` and `doc*`
+    // date/time families), so it overrides any input file's modification time.
+    let source_date_epoch = source_date_epoch_from_env()?;
+
+    run_with_streams_using(
+        cli,
+        source_date_epoch,
+        stdin_is_terminal,
+        stdin,
+        stdout,
+        stderr,
+    )
+}
+
+/// The core of [`run_with_streams`] with the reproducible clock already
+/// resolved into `source_date_epoch`, so tests can pin it without mutating the
+/// process environment. A `Some` value overrides each input file's modification
+/// time; `None` leaves the `doc*` attributes to follow that mtime.
+fn run_with_streams_using(
+    cli: &Cli,
+    source_date_epoch: Option<ReferenceTime>,
+    stdin_is_terminal: bool,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<bool> {
     // Reject an unsupported backend or doctype before reading or converting
     // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
     // touching the input.
@@ -486,13 +515,24 @@ fn run_with_streams(
     check_doctype(cli)?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
-    // a standalone document — matching Asciidoctor's command, which writes a full
+    // a standalone document – matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
-    let base_options = build_options(cli.section_numbers, &cli.attribute)?
+    let mut base_options = build_options(cli.section_numbers, &cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
+
+    // A valid `SOURCE_DATE_EPOCH` pins the reference time, so it drives every
+    // date/time attribute and overrides any input file's modification time.
+    if let Some(reference_time) = &source_date_epoch {
+        base_options = base_options.reference_time(reference_time.clone());
+    }
+
+    // Absent a pinned `SOURCE_DATE_EPOCH`, each file input's modification time
+    // seeds its `doc*` attributes; standard input has no mtime, so it falls
+    // through to the wall clock.
+    let seed_input_mtime = source_date_epoch.is_none();
 
     let reporter = WarningReporter::from_cli(cli)?;
 
@@ -549,6 +589,7 @@ fn run_with_streams(
             source,
             &input_paths,
             &input_ids,
+            seed_input_mtime,
             &reporter,
             stdin,
             stdout,
@@ -566,6 +607,8 @@ fn run_with_streams(
 /// The shared `base_options` are cloned and the source's own base directory and
 /// input file are applied, so a file's top-level `include::` targets resolve
 /// against its own directory and each file gets its own derived output name.
+/// When `seed_input_mtime` is set (no `SOURCE_DATE_EPOCH` pinned the clock), a
+/// file source's modification time seeds its `doc*` date/time attributes.
 ///
 /// `input_paths` and `input_ids` describe the same set of inputs two ways:
 /// `input_paths` drives the up-front, best-effort path check below, while
@@ -581,13 +624,25 @@ fn convert_source(
     source: &InputSource,
     input_paths: &[PathBuf],
     input_ids: &[fs::Metadata],
+    seed_input_mtime: bool,
     reporter: &WarningReporter,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
     let input = source.file();
-    let options = apply_base_dir(cli, base_options.clone(), input)?;
+    let mut options = apply_base_dir(cli, base_options.clone(), input)?;
+
+    // Seed the `doc*` date/time attributes from the input file's modification
+    // time, matching Asciidoctor's `input_mtime`. Skipped when a
+    // `SOURCE_DATE_EPOCH` already pinned the clock (it takes precedence), and
+    // for standard input, which has no file to stat.
+    if seed_input_mtime {
+        if let Some(mtime) = input.and_then(input_file_mtime) {
+            options = options.input_mtime(mtime);
+        }
+    }
+
     let target = output_target_for(cli, input);
 
     // Refuse to write the output onto any input file in this invocation, matching
@@ -1108,6 +1163,125 @@ fn has_explicit_docdir(cli: &Cli) -> bool {
             None => false,
         }
     })
+}
+
+/// The name of the reproducible-builds environment variable that pins the
+/// document's date/time attributes.
+const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
+
+/// Resolves the `SOURCE_DATE_EPOCH` environment variable into a pinned
+/// [`ReferenceTime`] for reproducible builds.
+///
+/// Per the [reproducible-builds specification], the variable holds a count of
+/// seconds since the Unix epoch (interpreted as UTC) that fixes the document's
+/// time-dependent attributes. `adoc` honors it the way Asciidoctor does: a
+/// valid value pins the whole clock – both the `local*` and `doc*` families –
+/// so it overrides any input file's modification time; an unset or empty value
+/// is ignored (`Ok(None)`); and a *malformed* value fails the run rather than
+/// silently falling back to the wall clock.
+///
+/// This is the CLI's own gate: `asciidoc-parser` reads the same variable but
+/// tolerates a malformed value (it has no error channel there), so `adoc`
+/// validates it up front and pins the resolved instant explicitly.
+///
+/// [reproducible-builds specification]: https://reproducible-builds.org/specs/source-date-epoch/
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when the variable is set to
+/// a non-empty value that is not a valid integer. A non-Unicode value is read
+/// lossily and so is rejected as malformed too.
+fn source_date_epoch_from_env() -> io::Result<Option<ReferenceTime>> {
+    resolve_source_date_epoch(std::env::var_os(SOURCE_DATE_EPOCH))
+}
+
+/// Resolves a raw `SOURCE_DATE_EPOCH` value (as read from the environment by
+/// [`source_date_epoch_from_env`]) into a pinned [`ReferenceTime`], independent
+/// of the process environment so the rules can be unit-tested without mutating
+/// shared state.
+///
+/// An absent, empty, or all-whitespace value yields `Ok(None)`; a valid integer
+/// count of seconds since the Unix epoch yields `Ok(Some(_))`; any other value
+/// (including non-Unicode, read lossily) is malformed and yields an error.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `raw` is a non-empty
+/// value that is not a valid integer.
+fn resolve_source_date_epoch(raw: Option<OsString>) -> io::Result<Option<ReferenceTime>> {
+    match raw {
+        Some(value) => parse_source_date_epoch(&value.to_string_lossy()),
+        None => Ok(None),
+    }
+}
+
+/// Parses a raw `SOURCE_DATE_EPOCH` value into a pinned [`ReferenceTime`],
+/// applying the reproducible-builds rules independently of the process
+/// environment (so the rules can be unit-tested without mutating shared state).
+///
+/// An empty or all-whitespace value yields `Ok(None)` (ignored, per
+/// Asciidoctor's `nil_or_empty?` guard); a valid integer count of seconds since
+/// the Unix epoch yields `Ok(Some(_))`; any other value is malformed and yields
+/// an error.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `raw` is non-empty but
+/// not a valid integer.
+fn parse_source_date_epoch(raw: &str) -> io::Result<Option<ReferenceTime>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    match trimmed.parse::<i64>() {
+        Ok(secs) => Ok(Some(ReferenceTime::from_unix_timestamp(secs))),
+        Err(_) => Err(source_date_epoch_error(trimmed)),
+    }
+}
+
+/// Builds the error reported for a malformed `SOURCE_DATE_EPOCH` value.
+fn source_date_epoch_error(value: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!(
+            "malformed SOURCE_DATE_EPOCH value '{value}': \
+             expected an integer count of seconds since the Unix epoch"
+        ),
+    )
+}
+
+/// Reads `path`'s modification time as a [`ReferenceTime`] that seeds the
+/// `doc*` document attributes (`docdate`, `doctime`, `docdatetime`, `docyear`),
+/// matching Asciidoctor's `input_mtime`.
+///
+/// The time is read as UTC: this toolchain carries no timezone database, so the
+/// computed `doctime`/`docdatetime` print a `UTC` zone rather than a local
+/// offset – the same convention `asciidoc-parser` uses for an unpinned clock.
+/// Returns `None` when the file's metadata or modification time is unavailable,
+/// leaving the `doc*` attributes to fall back to the wall clock.
+fn input_file_mtime(path: &Path) -> Option<ReferenceTime> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+
+    Some(ReferenceTime::from_unix_timestamp(unix_seconds(modified)))
+}
+
+/// Whole seconds from the Unix epoch to `time`, negative for an instant before
+/// it (a source file whose modification time predates 1970). Split out from
+/// [`input_file_mtime`] so the sign handling can be unit-tested without a file.
+fn unix_seconds(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(delta) => delta.as_secs() as i64,
+
+        // A time before the Unix epoch yields a negative count, floored toward
+        // the containing Unix second rather than truncated toward zero: a
+        // fractional pre-epoch instant belongs to the earlier second, so its
+        // sub-second remainder subtracts a further second.
+        Err(err) => {
+            let delta = err.duration();
+            -(delta.as_secs() as i64) - i64::from(delta.subsec_nanos() != 0)
+        }
+    }
 }
 
 /// Returns the input file path when `adoc` reads from a single real file, or
