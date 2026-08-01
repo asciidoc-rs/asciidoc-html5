@@ -26,14 +26,18 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 //   covered on the dedicated sourcemap page (see `api::sourcemap`), so the row
 //   is non-normative here.
 //
-// The remaining rows are tracked as non-normative, in three groups:
+// The remaining rows are tracked as non-normative, in these groups:
 //
 // * Ruby- and template-engine-specific options (`:converter`, `:eruby`,
 //   `:extensions`, `:extension_registry`, `:logger`, `:template_*`, `:timings`)
 //   have no place in this library.
 // * Parser behaviors this crate does not yet expose are tracked by GitHub
-//   issues, linked at their rows: `:catalog_assets` (#95), `:parse_header_only`
-//   (#96), and `:parse` / deferred parsing (#97).
+//   issues, linked at their rows: `:catalog_assets` (#95) and
+//   `:parse_header_only` (#96).
+// * `:parse` (deferred parsing) has no counterpart at all: all parse-time
+//   configuration is supplied up front through `Options`, and `load` returns a
+//   fully parsed, owned `Document`, so there is no unparsed object to configure
+//   and parse in two steps (see its row for detail).
 // * Output-writing options (`:to_file`, `:to_dir`, `:mkdirs`) do not apply to
 //   the library, which converts text to text (`convert_file` returns a
 //   `String`). The `adoc` CLI already covers output naming via `-o` and
@@ -351,10 +355,15 @@ non_normative!(
 "#
 );
 
-// `:parse` toggles eager vs. deferred parsing. This crate's `load`/`load_file`
-// are eager only; `asciidoc-parser` exposes `parse_deferred`, so a deferred
-// variant is feasible but unimplemented. Tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/97.
+// `:parse` toggles eager vs. deferred parsing. In Asciidoctor `:parse => false`
+// hands back an unparsed `Document` so the caller can mutate it -- register
+// extensions, adjust attributes -- before invoking `document.parse`. This crate
+// has no counterpart because that mutate-then-parse gap does not exist here:
+// all parse-time configuration is supplied up front through `Options` before
+// `load`/`load_file` runs, and the returned `Document<'static>` is a fully
+// owned, already-parsed, immutable model rather than a two-phase object. (The
+// `asciidoc-parser` `parse_deferred` method is unrelated: it defers only
+// cross-reference resolution for multi-document workflows, not block parsing.)
 non_normative!(
     r#"
 |`:parse`
