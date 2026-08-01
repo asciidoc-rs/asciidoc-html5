@@ -3159,9 +3159,14 @@ impl Renderer<'_> {
         // the `cellbgcolor` document attribute is set, reading its value as it
         // renders each cell. This crate honors the document-attribute form
         // (uniform across the table); see the `cellbgcolor` field for why the
-        // inline per-cell form is out of scope.
+        // inline per-cell form is out of scope. The value is document-controlled
+        // and lands inside a quoted attribute, so escape it to keep a stray `"`
+        // from breaking out and injecting markup (as we do for author fields).
+        // This is a deliberate divergence: Asciidoctor interpolates the value
+        // raw, but escaping only differs for values that would be malformed
+        // anyway, never for a real color.
         let style = match &self.cellbgcolor {
-            Some(color) => format!(" style=\"background-color: {color};\""),
+            Some(color) => format!(" style=\"background-color: {};\"", escape_attribute(color)),
             None => String::new(),
         };
 
@@ -7060,6 +7065,19 @@ mod tests {
             html.contains("<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">a</p></td>"),
             "{html}"
         );
+    }
+
+    #[test]
+    fn cellbgcolor_value_is_escaped() {
+        // `cellbgcolor` is document-controlled and lands inside a quoted
+        // attribute, so a stray `"` must be escaped rather than break out and
+        // inject markup (cf. `author_name_and_email_are_escaped`).
+        let html = crate::convert(":cellbgcolor: red\" onmouseover=\"alert(1)\n\n|===\n|a\n|===\n");
+        assert!(
+            html.contains("style=\"background-color: red&quot; onmouseover=&quot;alert(1);\""),
+            "{html}"
+        );
+        assert!(!html.contains("onmouseover=\"alert"), "{html}");
     }
 
     #[test]
