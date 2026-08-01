@@ -14,7 +14,11 @@
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - tests whose assertions depend on constructs this renderer does not yet
 //!   emit — description lists inside AsciiDoc cells (#154), table of contents
-//!   (#86), `cellbgcolor` (#163), and font-based admonition icons (#50);
+//!   (#86), and font-based admonition icons (#50);
+//! - the per-cell, order-dependent form of `cellbgcolor` (set through inline
+//!   attribute entries, `{set:cellbgcolor:…}`) – permanently out of scope,
+//!   because `asciidoc-parser` does not implement inline attribute entries; the
+//!   `cellbgcolor` document attribute is honored instead;
 //! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
@@ -4035,7 +4039,15 @@ fn document_in_an_asciidoc_table_cell_should_not_see_doctitle_of_parent() {
     assert_css(&output, "table > tbody > tr > td .paragraph", 1);
 }
 
-// `cellbgcolor` cell background styling is not implemented yet (#163).
+// `cellbgcolor` cell background styling is supported only through the
+// `cellbgcolor` *document attribute* (`:cellbgcolor: …`), which colors every
+// cell in the document uniformly – see the `cellbgcolor_*` renderer tests. This
+// Asciidoctor case instead exercises the per-cell, order-dependent form driven
+// by *inline attribute entries* (`{set:cellbgcolor:…}` / `{set:cellbgcolor!}`).
+// That form is permanently out of scope: `asciidoc-parser` does not implement
+// inline attribute entries (a syntax the AsciiDoc language is moving to
+// remove), so the parser cannot surface the per-cell attribute state this test
+// asserts.
 non_normative!(
     r#"
     test 'cell background color' do
