@@ -607,19 +607,13 @@ mod writer_tests {
         let mut writer = RecordingAssetWriter::default();
         convert_with_writer(source, &options, &mut writer).expect("convert");
 
-        let written: Vec<_> = writer
+        let mut names: Vec<&str> = writer
             .written
             .iter()
-            .map(|(path, _)| path.clone())
+            .filter_map(|(p, _)| p.to_str())
             .collect();
-        assert!(
-            written.contains(&PathBuf::from("asciidoctor.css")),
-            "{written:?}"
-        );
-        assert!(
-            written.contains(&PathBuf::from("coderay-asciidoctor.css")),
-            "{written:?}"
-        );
+        names.sort_unstable();
+        assert_eq!(names, ["asciidoctor.css", "coderay-asciidoctor.css"]);
     }
 
     // A write error on the primary stylesheet copy is propagated by the
