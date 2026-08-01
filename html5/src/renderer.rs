@@ -237,22 +237,19 @@ fn coderay_active(document: &Document<'_>) -> bool {
 }
 
 /// Whether CodeRay is in its class-based CSS mode — the mode that needs a
-/// stylesheet. Asciidoctor reads `coderay-css` defaulting to `class`, and only
-/// `class` mode sets the adapter's `@requires_stylesheet` flag; `style` mode
-/// inlines the colors into each span, and any other value is likewise not
-/// `class`.
+/// stylesheet. Only `class` mode sets the adapter's `@requires_stylesheet`
+/// flag; `style` mode inlines the colors into each span.
+///
+/// Asciidoctor reads the mode as `attr('coderay-css', 'class')`: the `class`
+/// default holds unless an explicit value overrides it. The parser seeds that
+/// default, so an absent attribute already reads back as `class`, and an
+/// explicit `:coderay-css!:` (unset) falls back to the same `class` default —
+/// only a non-`class` value (such as `style`) turns the stylesheet off.
 fn coderay_css_is_class(document: &Document<'_>) -> bool {
-    match document.attribute_value("coderay-css") {
-        // An explicit value: only `class` (Asciidoctor's default) drives the
-        // class-based stylesheet.
-        InterpretedValue::Value(value) => value == "class",
-
-        // Absent (the common case): `coderay-css` defaults to `class`. A bare
-        // `:coderay-css:` (Set) or an explicit `:coderay-css!:` (unset) is not
-        // the `class` mode.
-        InterpretedValue::Set => false,
-        InterpretedValue::Unset => !document.has_attribute("coderay-css"),
-    }
+    !matches!(
+        attribute_str(document, "coderay-css").as_deref(),
+        Some(mode) if mode != "class"
+    )
 }
 
 /// Whether the CodeRay stylesheet (`coderay-asciidoctor.css`) applies to this

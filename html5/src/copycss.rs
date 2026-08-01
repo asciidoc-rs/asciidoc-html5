@@ -459,6 +459,36 @@ mod tests {
         assert!(hl_plan(SOURCE_DOC, &options).is_none());
     }
 
+    // An explicit `:coderay-css!:` (unset) falls back to the `class` default —
+    // Asciidoctor's `attr('coderay-css', 'class')` returns `class` for an unset
+    // attribute — so the stylesheet is still copied.
+    #[test]
+    fn coderay_copy_survives_an_explicitly_unset_coderay_css() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay");
+        let source = "= Doc\n:coderay-css!:\n\n[source,ruby]\n----\nputs 1\n----";
+        let (dest, _) = hl_plan(source, &options).expect("a copy");
+        assert_eq!(dest, "coderay-asciidoctor.css");
+    }
+
+    // A `stylesdir` that resolves outside the output directory (here an absolute
+    // path) gives no `./`-relative destination, so the CodeRay stylesheet is not
+    // copied — the same containment `relative_web_path` applies to the primary
+    // copy.
+    #[test]
+    fn no_coderay_copy_for_an_escaping_stylesdir() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("stylesdir", "/abs");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+    }
+
     // A different (or no) highlighter carries no stylesheet this crate copies.
     #[test]
     fn no_coderay_copy_for_a_different_highlighter() {
