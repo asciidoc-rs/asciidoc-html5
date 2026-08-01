@@ -31,6 +31,24 @@
 //! file's own directory sits inside the base directory, targets resolve
 //! relative to that directory; otherwise resolution falls back to the base
 //! directory itself, matching Asciidoctor's recovery behavior.
+//!
+//! # Encoding
+//!
+//! Include files are read as UTF-8 by default. When an `include::` directive's
+//! `encoding` attribute names a legacy single-byte encoding this handler
+//! recognizes (`iso-8859-1` or `windows-1252`), the raw bytes are transcoded to
+//! UTF-8 instead, and the result is reported to the parser as already
+//! transcoded (via [`IncludeContent::transcoded`]) so it raises no non-UTF-8
+//! include-encoding warning. An unrecognized `encoding` value is ignored and
+//! the file is read as UTF-8, matching Asciidoctor, which ignores the encoding
+//! attribute when its value is not a valid encoding. A non-UTF-8 file whose
+//! encoding this handler cannot transcode (no `encoding` attribute, or one it
+//! does not recognize) is left unresolved, since the parser's
+//! [`IncludeFileHandler`] contract accepts UTF-8 content only. This diverges
+//! from Asciidoctor, which raises `invalid byte sequence in UTF-8` for an
+//! undeclared non-UTF-8 include; this crate's handlers cannot raise mid-parse,
+//! so the include is dropped and the parser records an include-file warning
+//! instead.
 
 use std::{
     fs, io,
@@ -190,6 +208,27 @@ pub(crate) enum ReadOutcome {
     NotReadable,
 }
 
+/// The outcome of a [`read_confined_bytes`] call: the file's raw bytes, or the
+/// reason it could not be read.
+///
+/// Mirrors [`ReadOutcome`] but carries undecoded bytes for the transcoding path
+/// that honors a non-UTF-8 `encoding` attribute. Because there is no UTF-8
+/// decoding step, no content is rejected as non-UTF-8 – the caller transcodes
+/// the bytes. The failure reasons map onto the same [`IncludeResolution`]
+/// variants.
+pub(crate) enum ReadBytesOutcome {
+    /// The file was read; its raw bytes are carried here.
+    Read(Vec<u8>),
+
+    /// No readable file exists at the path: it is missing, is not a regular
+    /// file (e.g. a directory), or lies outside the jail.
+    NotFound,
+
+    /// A regular file exists at the path but could not be read, typically
+    /// because of a permission or other IO error.
+    NotReadable,
+}
+
 /// Reads the file at `path`, enforcing the safe mode's jail and classifying any
 /// failure the way Asciidoctor does.
 ///
@@ -200,33 +239,60 @@ pub(crate) enum ReadOutcome {
 /// a regular file that cannot be read yields [`ReadOutcome::NotReadable`].
 /// Shared by the include and docinfo handlers.
 pub(crate) fn read_confined(base_dir: &Path, safe: SafeMode, path: &Path) -> ReadOutcome {
-    if jailed(safe) {
-        // Lexical resolution keeps the *path* inside the base directory, but a
-        // symlink under the base directory could still point outside it. Resolve
-        // the real path (following symlinks) and refuse the read when it escapes
-        // the base directory. This is stricter than Asciidoctor, whose jail is
-        // purely lexical (see the module docs); canonicalization also fails for a
-        // path the recovery relocated to somewhere that does not exist. Either
-        // way the resource is unavailable, which reads as "not found".
-        let Ok(real) = path.canonicalize() else {
-            return ReadOutcome::NotFound;
-        };
+    match confined_target(base_dir, safe, path) {
+        Some(real) => read_file(&real),
+        None => ReadOutcome::NotFound,
+    }
+}
 
-        if !real.starts_with(base_dir) {
-            return ReadOutcome::NotFound;
-        }
+/// The raw-byte counterpart to [`read_confined`], used by the transcoding path
+/// that honors a non-UTF-8 `encoding` attribute.
+///
+/// Enforces the same jail and classifies failures the same way, but returns the
+/// file's undecoded bytes so the caller can transcode them rather than
+/// rejecting anything that is not valid UTF-8.
+pub(crate) fn read_confined_bytes(
+    base_dir: &Path,
+    safe: SafeMode,
+    path: &Path,
+) -> ReadBytesOutcome {
+    match confined_target(base_dir, safe, path) {
+        Some(real) => read_file_bytes(&real),
+        None => ReadBytesOutcome::NotFound,
+    }
+}
 
-        return read_file(&real);
+/// Resolves `path` to the concrete file a read should target under `safe`, or
+/// `None` when the jail forbids it.
+///
+/// Under a jailed safe mode (`safe`/`server`) the real path is canonicalized
+/// (following symlinks) and must remain within `base_dir`; a path that does not
+/// resolve or escapes the jail yields `None`, which callers report as a
+/// "not found" outcome. Under `unsafe` there is no jail and `path` is used
+/// as-is. Shared by the UTF-8 ([`read_confined`]) and raw-byte
+/// ([`read_confined_bytes`]) reads.
+fn confined_target(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<PathBuf> {
+    if !jailed(safe) {
+        return Some(path.to_path_buf());
     }
 
-    read_file(path)
+    // Lexical resolution keeps the *path* inside the base directory, but a
+    // symlink under the base directory could still point outside it. Resolve the
+    // real path (following symlinks) and refuse the read when it escapes the base
+    // directory. This is stricter than Asciidoctor, whose jail is purely lexical
+    // (see the module docs); canonicalization also fails for a path the recovery
+    // relocated to somewhere that does not exist. Either way the resource is
+    // unavailable, which reads as "not found".
+    let real = path.canonicalize().ok()?;
+    real.starts_with(base_dir).then_some(real)
 }
 
 /// Reads `path` as UTF-8 text, classifying failure the way Asciidoctor does: a
 /// path that is not a regular file is [`ReadOutcome::NotFound`] (Asciidoctor
 /// gates on `File.file?` before reading), while a regular file whose read fails
-/// is [`ReadOutcome::NotReadable`]. Non-UTF-8 content is treated as not found,
-/// since this handler only deals in UTF-8 and does not transcode.
+/// is [`ReadOutcome::NotReadable`]. Non-UTF-8 content is treated as not found:
+/// this is the UTF-8 read path, taken when no recognized `encoding` attribute
+/// asks for transcoding, so undecodable bytes cannot be honored.
 fn read_file(path: &Path) -> ReadOutcome {
     if !path.is_file() {
         return ReadOutcome::NotFound;
@@ -255,31 +321,144 @@ fn read_file(path: &Path) -> ReadOutcome {
     }
 }
 
+/// Reads `path` as raw bytes, classifying failure exactly as [`read_file`]
+/// does – a path that is not a regular file is [`ReadBytesOutcome::NotFound`],
+/// a regular file whose read fails is [`ReadBytesOutcome::NotReadable`] – but
+/// without a decoding step, so nothing is rejected for invalid UTF-8. The
+/// caller transcodes the returned bytes per the requested `encoding`.
+fn read_file_bytes(path: &Path) -> ReadBytesOutcome {
+    if !path.is_file() {
+        return ReadBytesOutcome::NotFound;
+    }
+
+    match fs::read(path) {
+        Ok(bytes) => ReadBytesOutcome::Read(bytes),
+
+        // A file that vanished between the `is_file` check and the read – a race
+        // with concurrent file generation or cleanup – surfaces as `NotFound` and
+        // must not be mistaken for an unreadable file.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => ReadBytesOutcome::NotFound,
+
+        // Any other IO failure on a regular file (typically a permission error)
+        // is a genuine "not readable".
+        Err(_) => ReadBytesOutcome::NotReadable,
+    }
+}
+
+/// A legacy single-byte encoding this handler can transcode to UTF-8 when an
+/// `include::` directive's `encoding` attribute names it.
+///
+/// Both encodings agree with Unicode on the ASCII range (0x00..=0x7F) and on
+/// the high Latin-1 range (0xA0..=0xFF); they differ only in 0x80..=0x9F, where
+/// ISO-8859-1 carries the C1 control characters (each byte mapping to the
+/// scalar of the same value) and windows-1252 carries printable characters
+/// instead.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LegacyEncoding {
+    /// ISO-8859-1 (Latin-1): every byte maps to the Unicode scalar of the same
+    /// value (U+0000..=U+00FF).
+    Iso8859_1,
+
+    /// windows-1252: Latin-1 with printable characters in place of the
+    /// 0x80..=0x9F C1 controls.
+    Windows1252,
+}
+
+impl LegacyEncoding {
+    /// Maps an `encoding` attribute label to the encoding this handler
+    /// transcodes from, or `None` for UTF-8 or a label it does not recognize
+    /// (both of which are read as UTF-8). Matching is case-insensitive.
+    fn from_label(label: &str) -> Option<Self> {
+        match label.to_ascii_lowercase().as_str() {
+            "iso-8859-1" | "iso8859-1" | "latin1" | "latin-1" => Some(Self::Iso8859_1),
+            "windows-1252" | "cp1252" | "cp-1252" => Some(Self::Windows1252),
+            _ => None,
+        }
+    }
+
+    /// Decodes `bytes` to an owned UTF-8 string. Every byte yields exactly one
+    /// character, so decoding always succeeds.
+    fn decode(self, bytes: &[u8]) -> String {
+        bytes.iter().map(|&byte| self.decode_byte(byte)).collect()
+    }
+
+    /// Maps a single byte to its character in this encoding.
+    fn decode_byte(self, byte: u8) -> char {
+        match self {
+            Self::Iso8859_1 => byte as char,
+
+            Self::Windows1252 => match byte {
+                0x80..=0x9f => WINDOWS_1252_C1[(byte - 0x80) as usize],
+                other => other as char,
+            },
+        }
+    }
+}
+
+/// The 0x80..=0x9F rows of windows-1252, where it departs from ISO-8859-1. Each
+/// entry is the character for byte `0x80 + index`. The five positions WHATWG
+/// leaves undefined map to the C1 control of the same value, so every byte
+/// still decodes to exactly one character.
+const WINDOWS_1252_C1: [char; 32] = [
+    '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', // 0x80..=0x83
+    '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}', // 0x84..=0x87
+    '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', // 0x88..=0x8B
+    '\u{0152}', '\u{008D}', '\u{017D}', '\u{008F}', // 0x8C..=0x8F
+    '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', // 0x90..=0x93
+    '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}', // 0x94..=0x97
+    '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', // 0x98..=0x9B
+    '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}', // 0x9C..=0x9F
+];
+
+/// Returns the [`LegacyEncoding`] the directive's `encoding` attribute asks
+/// this handler to transcode from, or `None` when the file should be read as
+/// UTF-8 (no `encoding` attribute, an explicit UTF-8 label, or an unrecognized
+/// label, which Asciidoctor ignores).
+fn legacy_encoding(attrlist: &Attrlist) -> Option<LegacyEncoding> {
+    LegacyEncoding::from_label(attrlist.named_attribute("encoding")?.value())
+}
+
 impl IncludeFileHandler for FsIncludeFileHandler {
     fn resolve_target<'src>(
         &self,
         source: Option<&str>,
         target: &str,
-        _attrlist: &Attrlist<'src>,
+        attrlist: &Attrlist<'src>,
         _parser: &Parser,
     ) -> IncludeResolution {
         let path = self.resolve(source, target);
 
-        // The handler only ever reads UTF-8 files from the local filesystem and
-        // does not interpret the `encoding` attribute, so found content is
-        // returned via `IncludeContent::new` (the parser emits the non-UTF-8
-        // include-encoding warning itself when a non-UTF-8 encoding was asked
-        // for). A missing or non-UTF-8 file maps to `NotFound` and an unreadable
-        // one to `NotReadable`, so the parser can distinguish Asciidoctor's
-        // `include file not found` from `include file not readable`.
-        match read_confined(&self.base_dir, self.safe, &path) {
-            ReadOutcome::Read(content) => {
-                IncludeResolution::Found(IncludeContent::new(strip_utf8_bom(content)))
-            }
+        // A non-UTF-8 `encoding` this handler recognizes (e.g. `iso-8859-1`) is
+        // honored by reading the raw bytes and transcoding them to UTF-8; the
+        // content is returned via `IncludeContent::transcoded` so the parser
+        // suppresses its non-UTF-8 include-encoding warning. Every other case –
+        // no `encoding`, an explicit `utf-8`, or an unrecognized label (which
+        // Asciidoctor ignores) – falls back to reading the file as UTF-8 and
+        // returning it via `IncludeContent::new`, letting the parser emit that
+        // warning itself if a non-UTF-8 encoding was requested. In both paths a
+        // missing/non-regular file maps to `NotFound` and an unreadable one to
+        // `NotReadable`, so the parser can distinguish Asciidoctor's `include
+        // file not found` from `include file not readable`.
+        match legacy_encoding(attrlist) {
+            Some(encoding) => match read_confined_bytes(&self.base_dir, self.safe, &path) {
+                ReadBytesOutcome::Read(bytes) => {
+                    IncludeResolution::Found(IncludeContent::transcoded(encoding.decode(&bytes)))
+                }
 
-            ReadOutcome::NotFound => IncludeResolution::NotFound,
+                ReadBytesOutcome::NotFound => IncludeResolution::NotFound,
 
-            ReadOutcome::NotReadable => IncludeResolution::NotReadable,
+                ReadBytesOutcome::NotReadable => IncludeResolution::NotReadable,
+            },
+
+            None => match read_confined(&self.base_dir, self.safe, &path) {
+                ReadOutcome::Read(content) => {
+                    IncludeResolution::Found(IncludeContent::new(strip_utf8_bom(content)))
+                }
+
+                ReadOutcome::NotFound => IncludeResolution::NotFound,
+
+                ReadOutcome::NotReadable => IncludeResolution::NotReadable,
+            },
         }
     }
 }
@@ -428,10 +607,77 @@ mod tests {
 
     use super::{
         directory_of, fold_into, is_absolute, normalize, posixify, strip_root, strip_utf8_bom,
-        FsIncludeFileHandler,
+        FsIncludeFileHandler, LegacyEncoding,
     };
 
     const BASE: &str = "/home/user/project";
+
+    // `from_label` recognizes the ISO-8859-1 and windows-1252 labels
+    // (case-insensitively) and treats UTF-8 and unknown labels as "read as
+    // UTF-8" (`None`).
+    #[test]
+    fn legacy_encoding_from_label_recognizes_known_labels() {
+        assert_eq!(
+            LegacyEncoding::from_label("iso-8859-1"),
+            Some(LegacyEncoding::Iso8859_1)
+        );
+        assert_eq!(
+            LegacyEncoding::from_label("ISO-8859-1"),
+            Some(LegacyEncoding::Iso8859_1)
+        );
+        assert_eq!(
+            LegacyEncoding::from_label("latin1"),
+            Some(LegacyEncoding::Iso8859_1)
+        );
+        assert_eq!(
+            LegacyEncoding::from_label("windows-1252"),
+            Some(LegacyEncoding::Windows1252)
+        );
+        assert_eq!(
+            LegacyEncoding::from_label("CP1252"),
+            Some(LegacyEncoding::Windows1252)
+        );
+
+        // UTF-8 and an unrecognized label both read as UTF-8 (no transcoding).
+        assert_eq!(LegacyEncoding::from_label("utf-8"), None);
+        assert_eq!(LegacyEncoding::from_label("iso-1000-1"), None);
+    }
+
+    // ISO-8859-1 maps every byte to the Unicode scalar of the same value,
+    // including the reader-test fixture's bytes.
+    #[test]
+    fn iso_8859_1_decodes_each_byte_to_the_same_scalar() {
+        // The `iso-8859-1.txt` fixture: `O`, 0xF9 (ù), ` est l'h`, 0xF4 (ô),
+        // `pital ?`.
+        let bytes = [
+            0x4f, 0xf9, 0x20, 0x65, 0x73, 0x74, 0x20, 0x6c, 0x27, 0x68, 0xf4, 0x70, 0x69, 0x74,
+            0x61, 0x6c, 0x20, 0x3f,
+        ];
+        assert_eq!(
+            LegacyEncoding::Iso8859_1.decode(&bytes),
+            "Où est l'hôpital ?"
+        );
+
+        // Endpoints of every sub-range map to the scalar of the same value.
+        assert_eq!(
+            LegacyEncoding::Iso8859_1.decode(&[0x00, 0x7f, 0x80, 0xa0, 0xff]),
+            "\u{00}\u{7f}\u{80}\u{a0}\u{ff}"
+        );
+    }
+
+    // windows-1252 agrees with ISO-8859-1 outside 0x80..=0x9F but carries
+    // printable characters within it.
+    #[test]
+    fn windows_1252_decodes_the_c1_range_to_printable_characters() {
+        // 0x80 -> euro, 0x92 -> right single quote, 0x99 -> trademark.
+        assert_eq!(
+            LegacyEncoding::Windows1252.decode(&[0x80, 0x92, 0x99]),
+            "€’™"
+        );
+
+        // ASCII and the high Latin-1 range decode the same as ISO-8859-1.
+        assert_eq!(LegacyEncoding::Windows1252.decode(&[0x41, 0xe9]), "Aé");
+    }
 
     #[test]
     fn strip_utf8_bom_removes_only_a_leading_bom() {
@@ -704,7 +950,9 @@ mod tests {
 
         use asciidoc_parser::SafeMode;
 
-        use crate::include_handler::{read_confined, ReadOutcome};
+        use crate::include_handler::{
+            read_confined, read_confined_bytes, ReadBytesOutcome, ReadOutcome,
+        };
 
         /// Creates a fresh, canonicalized temp directory (unique per call) so
         /// each case gets an isolated sandbox and the paths it builds share one
@@ -778,6 +1026,38 @@ mod tests {
             assert!(matches!(
                 read_confined(&dir, SafeMode::Unsafe, &file),
                 ReadOutcome::NotFound
+            ));
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // The raw-byte read returns the same non-UTF-8 file's bytes verbatim
+        // (rather than folding it into `NotFound` as the UTF-8 read does), so the
+        // transcoding path can decode them per the `encoding` attribute.
+        #[test]
+        fn a_non_utf8_file_is_read_as_raw_bytes() {
+            let dir = scratch();
+            let file = dir.join("latin1.adoc");
+            fs::write(&file, [b'A', 0xff, b'B']).expect("write non-utf8 file");
+
+            let outcome = read_confined_bytes(&dir, SafeMode::Unsafe, &file);
+            assert!(
+                matches!(&outcome, ReadBytesOutcome::Read(bytes) if bytes == &[b'A', 0xff, b'B']),
+                "unexpected outcome for a raw-byte read",
+            );
+
+            let _ = fs::remove_dir_all(&dir);
+        }
+
+        // A missing target is "not found" on the raw-byte read too.
+        #[test]
+        fn a_missing_path_is_not_found_for_raw_bytes() {
+            let dir = scratch();
+            let missing = dir.join("absent.adoc");
+
+            assert!(matches!(
+                read_confined_bytes(&dir, SafeMode::Unsafe, &missing),
+                ReadBytesOutcome::NotFound
             ));
 
             let _ = fs::remove_dir_all(&dir);
@@ -914,6 +1194,42 @@ mod tests {
             let safe_html =
                 convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
             assert!(!safe_html.contains("Included from secret."));
+        }
+
+        // A non-UTF-8 include named with a matching `encoding` attribute is
+        // transcoded to UTF-8 and its content is rendered in place; without the
+        // attribute the same file is undecodable and left unresolved.
+        #[test]
+        fn encoding_attribute_transcodes_a_non_utf8_include() {
+            let main = project("encoding");
+            let base = main.parent().expect("base dir");
+
+            // `latin1.txt` holds ISO-8859-1 bytes for `Où est l'hôpital ?`
+            // (0xF9 = ù, 0xF4 = ô).
+            fs::write(
+                base.join("latin1.txt"),
+                [
+                    0x4f, 0xf9, 0x20, 0x65, 0x73, 0x74, 0x20, 0x6c, 0x27, 0x68, 0xf4, 0x70, 0x69,
+                    0x74, 0x61, 0x6c, 0x20, 0x3f, 0x0a,
+                ],
+            )
+            .expect("write latin1 file");
+
+            // With `encoding=iso-8859-1` the bytes are transcoded and rendered.
+            fs::write(
+                &main,
+                "= Main\n\n....\ninclude::latin1.txt[encoding=iso-8859-1]\n....\n",
+            )
+            .expect("rewrite main");
+            let html = convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
+            assert!(html.contains("Où est l'hôpital ?"), "{html}");
+
+            // Without the attribute the same file is not valid UTF-8, so it is
+            // left unresolved and the content never appears.
+            fs::write(&main, "= Main\n\n....\ninclude::latin1.txt[]\n....\n")
+                .expect("rewrite main");
+            let html = convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
+            assert!(!html.contains("Où est l'hôpital ?"), "{html}");
         }
     }
 }
