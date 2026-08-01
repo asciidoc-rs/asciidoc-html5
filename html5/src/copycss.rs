@@ -494,6 +494,23 @@ mod tests {
         assert!(hl_plan(SOURCE_DOC, &options).is_none());
     }
 
+    // A URI `stylesdir` links the stylesheet remotely, so there is no local file
+    // to copy — the link is a URI (not a `./`-relative path), which
+    // `relative_web_path` rejects. This matches Asciidoctor, which skips copying
+    // entirely when `stylesdir` is a URI.
+    #[test]
+    fn no_coderay_copy_for_a_uri_stylesdir() {
+        let options = Options::new()
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .set("copycss")
+            .attribute("source-highlighter", "coderay")
+            .attribute("stylesdir", "https://cdn.example.com/css");
+        assert!(hl_plan(SOURCE_DOC, &options).is_none());
+        // The primary stylesheet copy is skipped for the same reason.
+        assert!(plan(SOURCE_DOC, &options).is_none());
+    }
+
     // A different (or no) highlighter carries no stylesheet this crate copies.
     #[test]
     fn no_coderay_copy_for_a_different_highlighter() {

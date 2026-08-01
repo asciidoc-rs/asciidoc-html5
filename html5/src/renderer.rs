@@ -531,6 +531,20 @@ pub(crate) fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     // separator on `stylesdir` is dropped so the join never doubles the `/`.
     let sheet = stylesheet.replace('\\', "/");
     let dir = stylesdir.replace('\\', "/");
+
+    // A URI styles directory joins into a URI href
+    // (`https://cdn/css` + `asciidoctor.css` -> `https://cdn/css/asciidoctor.css`)
+    // and is returned as-is rather than run through `web_normalize`, which would
+    // collapse the `//` in the scheme into `./https:/…`. This mirrors
+    // Asciidoctor's `web_path`, which lifts the URI prefix off before
+    // normalizing and restores it after. The resulting non-`./` path is also
+    // what makes `copycss` skip it — a URI stylesheet has no local file to copy,
+    // matching Asciidoctor's URI-`stylesdir` gate. A relative `stylesheet` joins
+    // under the URI; an absolute one still ignores `stylesdir` (handled below).
+    if !dir.is_empty() && !sheet.starts_with('/') && looks_like_uri(&dir) {
+        return format!("{}/{sheet}", dir.trim_end_matches('/'));
+    }
+
     let joined = if dir.is_empty() || sheet.starts_with('/') {
         sheet
     } else {
@@ -6185,6 +6199,25 @@ mod tests {
         );
     }
 
+    // A URI `stylesdir` links the coderay stylesheet as a URI, not a mangled
+    // `./https:/…` local path — matching how the primary stylesheet link (and
+    // Asciidoctor) treats a URI styles directory.
+    #[test]
+    fn coderay_stylesheet_link_honors_a_uri_stylesdir() {
+        let html = convert_with(
+            "= Doc\n:stylesdir: https://cdn.example.com/css\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().attribute("source-highlighter", "coderay"),
+        );
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" \
+                 href=\"https://cdn.example.com/css/coderay-asciidoctor.css\">"
+            ),
+            "{html}"
+        );
+        assert!(!html.contains("./https:/"), "{html}");
+    }
+
     // Without `linkcss` (here via an `Unsafe` safe mode, which embeds), coderay
     // embeds its stylesheet inline as a second `<style>` block below the primary
     // one, rather than linking it.
@@ -6969,6 +7002,27 @@ mod tests {
         );
         assert_eq!(
             normalize_web_path("/abs/custom.css", "css"),
+            "/abs/custom.css"
+        );
+
+        // A URI `stylesdir` joins with a relative stylesheet into a URI href,
+        // preserving the scheme's `//` rather than collapsing it to `./https:/…`
+        // — matching Asciidoctor 2.0.26, which lifts the URI prefix off before
+        // normalizing and restores it afterward.
+        assert_eq!(
+            normalize_web_path("asciidoctor.css", "https://cdn.example.com/css"),
+            "https://cdn.example.com/css/asciidoctor.css"
+        );
+
+        // A trailing slash on the URI `stylesdir` is not doubled.
+        assert_eq!(
+            normalize_web_path("coderay-asciidoctor.css", "https://cdn.example.com/css/"),
+            "https://cdn.example.com/css/coderay-asciidoctor.css"
+        );
+
+        // An absolute stylesheet ignores `stylesdir`, even a URI one.
+        assert_eq!(
+            normalize_web_path("/abs/custom.css", "https://cdn.example.com/css"),
             "/abs/custom.css"
         );
     }
