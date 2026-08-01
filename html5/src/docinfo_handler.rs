@@ -77,10 +77,11 @@ impl DocinfoFileHandler for FsDocinfoFileHandler {
         // Asciidoctor normalizes docinfo content, dropping a single trailing
         // newline so the injected fragment sits flush against the element that
         // follows it in the output. Docinfo does not distinguish a missing file
-        // from an unreadable one, so both failure reasons collapse to `None`.
+        // from an unreadable or non-UTF-8 one, so every failure reason collapses
+        // to `None`.
         match read_confined(&self.base_dir, self.safe, &path) {
             ReadOutcome::Read(content) => Some(chomp_trailing_newline(&content)),
-            ReadOutcome::NotFound | ReadOutcome::NotReadable => None,
+            ReadOutcome::NotFound | ReadOutcome::NotReadable | ReadOutcome::NotDecodable => None,
         }
     }
 }

@@ -43,12 +43,12 @@
 //! the file is read as UTF-8, matching Asciidoctor, which ignores the encoding
 //! attribute when its value is not a valid encoding. A non-UTF-8 file whose
 //! encoding this handler cannot transcode (no `encoding` attribute, or one it
-//! does not recognize) is left unresolved, since the parser's
-//! [`IncludeFileHandler`] contract accepts UTF-8 content only. This diverges
-//! from Asciidoctor, which raises `invalid byte sequence in UTF-8` for an
-//! undeclared non-UTF-8 include; this crate's handlers cannot raise mid-parse,
-//! so the include is dropped and the parser records an include-file warning
-//! instead.
+//! does not recognize) is reported via [`IncludeResolution::NotDecodable`],
+//! since the parser's [`IncludeFileHandler`] contract accepts UTF-8 content
+//! only. This diverges from Asciidoctor, which treats that condition as fatal
+//! (`invalid byte sequence in UTF-8`); this crate favors recoverable warnings,
+//! so the parser drops the include and records a
+//! `WarningType::IncludeFileNotDecodable` warning instead.
 
 use std::{
     fs, io,
@@ -199,13 +199,17 @@ pub(crate) enum ReadOutcome {
     Read(String),
 
     /// No readable file exists at the path: it is missing, is not a regular
-    /// file (e.g. a directory), lies outside the jail, or holds non-UTF-8
-    /// content this handler cannot decode.
+    /// file (e.g. a directory), or lies outside the jail.
     NotFound,
 
     /// A regular file exists at the path but could not be read, typically
     /// because of a permission or other IO error.
     NotReadable,
+
+    /// A regular file was read but its bytes are not valid UTF-8, and no
+    /// recognized `encoding` attribute asked for transcoding, so it cannot be
+    /// decoded.
+    NotDecodable,
 }
 
 /// The outcome of a [`read_confined_bytes`] call: the file's raw bytes, or the
@@ -289,34 +293,25 @@ fn confined_target(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<PathB
 
 /// Reads `path` as UTF-8 text, classifying failure the way Asciidoctor does: a
 /// path that is not a regular file is [`ReadOutcome::NotFound`] (Asciidoctor
-/// gates on `File.file?` before reading), while a regular file whose read fails
-/// is [`ReadOutcome::NotReadable`]. Non-UTF-8 content is treated as not found:
-/// this is the UTF-8 read path, taken when no recognized `encoding` attribute
-/// asks for transcoding, so undecodable bytes cannot be honored.
+/// gates on `File.file?` before reading). A regular file that then fails to
+/// decode as UTF-8 – this being the UTF-8 read path, taken when no recognized
+/// `encoding` attribute asks for transcoding – is
+/// [`ReadOutcome::NotDecodable`]; any other read failure is
+/// [`ReadOutcome::NotReadable`].
 fn read_file(path: &Path) -> ReadOutcome {
     if !path.is_file() {
         return ReadOutcome::NotFound;
     }
 
+    // The `is_file` gate already reports a missing/non-regular target as "not
+    // found", so a failure now is one of two things. Invalid UTF-8 is "not
+    // decodable": this handler does not transcode without a recognized
+    // `encoding`, matching the parser's contract. Anything else – typically a
+    // permission error, or the rare race where the file is removed in between –
+    // is "not readable".
     match fs::read_to_string(path) {
         Ok(content) => ReadOutcome::Read(content),
-
-        // Both of these read as "not found": non-UTF-8 content (this handler
-        // only deals in UTF-8 and does not transcode, matching the parser's
-        // contract), and a file that vanished between the `is_file` check and
-        // the read — a race with concurrent file generation or cleanup — which
-        // surfaces as `NotFound` and must not be mistaken for an unreadable file.
-        Err(error)
-            if matches!(
-                error.kind(),
-                io::ErrorKind::InvalidData | io::ErrorKind::NotFound
-            ) =>
-        {
-            ReadOutcome::NotFound
-        }
-
-        // Any other IO failure on a regular file (typically a permission error)
-        // is a genuine "not readable".
+        Err(error) if error.kind() == io::ErrorKind::InvalidData => ReadOutcome::NotDecodable,
         Err(_) => ReadOutcome::NotReadable,
     }
 }
@@ -431,11 +426,13 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         // suppresses its non-UTF-8 include-encoding warning. Every other case –
         // no `encoding`, an explicit `utf-8`, or an unrecognized label (which
         // Asciidoctor ignores) – falls back to reading the file as UTF-8 and
-        // returning it via `IncludeContent::new`, letting the parser emit that
-        // warning itself if a non-UTF-8 encoding was requested. In both paths a
-        // missing/non-regular file maps to `NotFound` and an unreadable one to
-        // `NotReadable`, so the parser can distinguish Asciidoctor's `include
-        // file not found` from `include file not readable`.
+        // returning it via `IncludeContent::new`. A missing/non-regular file
+        // maps to `NotFound` and an unreadable one to `NotReadable` in both
+        // paths; on the UTF-8 path a file whose bytes are not valid UTF-8 maps to
+        // `NotDecodable`. The parser can thus distinguish Asciidoctor's `include
+        // file not found`, `include file not readable`, and `invalid byte
+        // sequence in UTF-8` conditions. (The transcoding path never yields
+        // `NotDecodable`: a recognized single-byte encoding always decodes.)
         match legacy_encoding(attrlist) {
             Some(encoding) => match read_confined_bytes(&self.base_dir, self.safe, &path) {
                 ReadBytesOutcome::Read(bytes) => {
@@ -455,6 +452,8 @@ impl IncludeFileHandler for FsIncludeFileHandler {
                 ReadOutcome::NotFound => IncludeResolution::NotFound,
 
                 ReadOutcome::NotReadable => IncludeResolution::NotReadable,
+
+                ReadOutcome::NotDecodable => IncludeResolution::NotDecodable,
             },
         }
     }
@@ -1012,9 +1011,10 @@ mod tests {
         }
 
         // A regular file whose bytes are not valid UTF-8 is reported as "not
-        // found": this handler only reads UTF-8 and does not transcode.
+        // decodable" on the UTF-8 read path (distinct from a missing file), so
+        // the caller can surface the real cause rather than "not found".
         #[test]
-        fn a_non_utf8_file_is_not_found() {
+        fn a_non_utf8_file_is_not_decodable() {
             let dir = scratch();
             let file = dir.join("latin1.adoc");
             // `0xFF` is not a valid UTF-8 lead byte, so the read fails to decode.
@@ -1022,7 +1022,7 @@ mod tests {
 
             assert!(matches!(
                 read_confined(&dir, SafeMode::Unsafe, &file),
-                ReadOutcome::NotFound
+                ReadOutcome::NotDecodable
             ));
 
             let _ = fs::remove_dir_all(&dir);

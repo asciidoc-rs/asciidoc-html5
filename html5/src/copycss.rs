@@ -147,11 +147,13 @@ fn read_source(options: &Options, target: &str) -> Option<String> {
 
     let path = include_handler::resolve(&base_dir, safe, None, target);
 
-    // A stylesheet source only needs its content; a missing and an unreadable
-    // file are both simply unavailable here.
+    // A stylesheet source only needs its content; a missing, unreadable, or
+    // non-UTF-8 file is simply unavailable here.
     match include_handler::read_confined(&base_dir, safe, &path) {
         include_handler::ReadOutcome::Read(content) => Some(content),
-        include_handler::ReadOutcome::NotFound | include_handler::ReadOutcome::NotReadable => None,
+        include_handler::ReadOutcome::NotFound
+        | include_handler::ReadOutcome::NotReadable
+        | include_handler::ReadOutcome::NotDecodable => None,
     }
 }
 

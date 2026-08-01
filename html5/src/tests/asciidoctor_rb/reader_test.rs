@@ -1388,9 +1388,10 @@ mod preprocessor_reader {
         // The divergence documented above, asserted: an undeclared non-UTF-8
         // include cannot be decoded as UTF-8, so it is left unresolved – the
         // ISO-8859-1 content never appears, an "Unresolved directive" message
-        // takes the directive's place, and an include-file-not-found warning is
-        // raised. (A matching `encoding` attribute makes the same file resolve;
-        // see `should_use_encoding_specified_by_encoding_attribute_when_reading_include_file`.)
+        // takes the directive's place, and an include-file-not-decodable warning
+        // is raised (naming the real cause, rather than "not found"). A matching
+        // `encoding` attribute makes the same file resolve; see
+        // `should_use_encoding_specified_by_encoding_attribute_when_reading_include_file`.
         #[test]
         fn undeclared_non_utf8_include_is_left_unresolved() {
             let src = "....\ninclude::fixtures/iso-8859-1.txt[]\n....";
@@ -1403,7 +1404,7 @@ mod preprocessor_reader {
             assert!(
                 warnings
                     .iter()
-                    .any(|(w, _)| matches!(w, WarningType::IncludeFileNotFound(_))),
+                    .any(|(w, _)| matches!(w, WarningType::IncludeFileNotDecodable(_))),
                 "{warnings:?}"
             );
         }
