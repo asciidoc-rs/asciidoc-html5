@@ -2340,16 +2340,31 @@ impl Renderer<'_> {
     ///
     /// A bare `[stem]` follows the document `stem` attribute default (see
     /// [`stem_type`](Self::stem_type)); an explicit `[asciimath]` /
-    /// `[latexmath]` style overrides it. The equation's special characters
-    /// have already been escaped by the parser; the delimiters are added
-    /// here unless the author wrote them, and a multi-line AsciiMath
-    /// equation has its internal breaks rewritten to `<br>`-separated
-    /// expressions.
+    /// `[latexmath]` style — or a notation named as the block's second
+    /// positional attribute (`[stem, asciimath]`) — overrides it. The
+    /// equation's special characters have already been escaped by the parser;
+    /// the delimiters are added here unless the author wrote them, and a
+    /// multi-line AsciiMath equation has its internal breaks rewritten to
+    /// `<br>`-separated expressions.
     fn stem<'src>(&mut self, block: &'src Block<'src>) {
         let stem_type = match block.declared_style() {
             Some("asciimath") => StemType::AsciiMath,
             Some("latexmath") => StemType::LatexMath,
-            _ => self.stem_type,
+
+            // A bare `[stem]` may still name its notation as the block's second
+            // positional attribute (`[stem, asciimath]`), which Asciidoctor
+            // promotes to the block style and which overrides the document
+            // `stem` default. An absent or unrecognized second positional falls
+            // back to that document default.
+            _ => match block
+                .attrlist()
+                .and_then(|attrlist| attrlist.nth_attribute(2))
+                .map(|attr| attr.value())
+            {
+                Some("latexmath" | "latex" | "tex") => StemType::LatexMath,
+                Some("asciimath") => StemType::AsciiMath,
+                _ => self.stem_type,
+            },
         };
 
         let (open, close) = stem_type.block_delimiters();
