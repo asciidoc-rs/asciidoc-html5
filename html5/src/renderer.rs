@@ -1332,7 +1332,7 @@ struct Renderer<'a> {
     /// (`:cellbgcolor: …`), which colors every cell uniformly; Asciidoctor's
     /// per-cell, order-dependent form set through inline attribute entries
     /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
-    /// not implement inline attribute entries (asciidoc-html5#163).
+    /// not implement inline attribute entries.
     cellbgcolor: Option<String>,
 }
 
