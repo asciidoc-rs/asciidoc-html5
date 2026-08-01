@@ -1,5 +1,6 @@
 //! Port of Asciidoctor's `blocks_test.rb` — the front half plus the
-//! `Passthrough Blocks` and `Math blocks` contexts (through source line 2208).
+//! `Passthrough Blocks`, `Math blocks`, `Custom Blocks`, and `Metadata`
+//! contexts (through source line 2324).
 //!
 //! This crate already renders the block types these contexts exercise — layout
 //! breaks, comments, sidebar/quote/verse/example/admonition/open blocks,
@@ -7,15 +8,16 @@
 //! (`stem`/`latexmath`/`asciimath`) blocks — so they port directly, driven
 //! through `convert` (embedded) / `convert_with(..standalone(true)..)`.
 //!
-//! The remaining back half (Custom Blocks, Metadata, Images, Media, Admonition
-//! icons, Source code, Abstract/Part Intro, Substitutions, References — lines
-//! 2210+) is being sequenced as its own implement-then-port work.
+//! The remaining back half (Images, Media, Admonition icons, Source code,
+//! Abstract/Part Intro, Substitutions, References — lines 2326+) is being
+//! sequenced as its own implement-then-port work.
 //!
-//! What stays `non_normative!` in the `Math blocks` context: the
-//! DocBook-backend equation tests, the `doc.blocks[0].content` parser-model
-//! check, and the four `eqnums`/`autoNumber` tests that assert on the MathJax
-//! docinfo config script this renderer does not emit yet (tracked in
-//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/250>).
+//! What stays `non_normative!` through the ported back-half contexts: the
+//! DocBook-backend equation tests and the four `eqnums`/`autoNumber` tests in
+//! `Math blocks` (the MathJax docinfo this renderer does not emit yet — html5
+//! #250); and the two block-title-above-document-title demotion tests in
+//! `Metadata` (0.29.5 demotes at the parse level but does not yet render the
+//! `sect0` heading — asciidoc-rs/asciidoc-parser#1042).
 //!
 //! What stays `non_normative!` in the front half:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -4398,20 +4400,27 @@ mod custom_blocks {
 "#
         );
 
-        // An unknown block style falls back to a plain open block; loading it
-        // surfaces no warnings — the parse-model counterpart to Asciidoctor's
-        // `assert_empty @logger.messages` (a WARN-level diagnostic would appear
-        // in the document's warnings inventory).
+        // An unknown block style falls back to a plain open block. The only
+        // diagnostic it raises is the low-severity `UnknownBlockStyle` recorded
+        // by the debug-message test below — which Asciidoctor logs at DEBUG,
+        // below the default WARN threshold that `assert_empty @logger.messages`
+        // checks. So the WARN-level counterpart is "no diagnostics other than
+        // that Debug one". (`WarningType::severity()` is `pub(crate)`, so this
+        // excludes the Debug variant by name; asciidoc-rs/asciidoc-parser#1041
+        // would let it filter by severity instead.)
         let input = "[foo]\n--\nbar\n--\n";
-        assert_eq!(load(input).warnings().count(), 0);
+        let warn_level = load(input)
+            .warnings()
+            .filter(|w| !matches!(w.warning, WarningType::UnknownBlockStyle(..)))
+            .count();
+
+        assert_eq!(warn_level, 0);
     }
 
-    // Asciidoctor logs "unknown style for open block: foo" at DEBUG severity.
-    // `asciidoc-parser` does not yet surface an unknown-block-style diagnostic in
-    // its warnings inventory (asciidoc-rs/asciidoc-parser#1036), so there is
-    // nothing to assert on. Held until the parser records it.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_log_debug_message_if_block_style_is_unknown_and_debug_level_is_enabled() {
+        verifies!(
+            r#"
     test 'should log debug message if block style is unknown and debug level is enabled' do
       input = <<~'EOS'
       [foo]
@@ -4427,7 +4436,28 @@ mod custom_blocks {
   end
 
 "#
-    );
+        );
+
+        // Asciidoctor logs this at DEBUG; `asciidoc-parser` 0.29.5 records it as
+        // a (Debug-severity) `UnknownBlockStyle` diagnostic carrying the block
+        // context ("open") and the unknown style ("foo"). The parser anchors it
+        // to the style line (line 1) rather than Asciidoctor's block-delimiter
+        // line (line 2, asciidoc-rs/asciidoc-parser#1043), so the substance — not
+        // the exact line — is what is re-expressed here.
+        let input = "[foo]\n--\nbar\n--\n";
+        let found = load(input)
+            .warnings()
+            .filter(|w| {
+                matches!(
+                    &w.warning,
+                    WarningType::UnknownBlockStyle(context, style)
+                        if context == "open" && style == "foo"
+                )
+            })
+            .count();
+
+        assert_eq!(found, 1);
+    }
 }
 
 mod metadata {
@@ -4471,12 +4501,13 @@ mod metadata {
 
     // A block title above the *document* title should demote that title to a
     // level-0 section (rendered `<h1 class="sect0">` in the body) and carry the
-    // block title onto the following block. `asciidoc-parser` 0.29.3 added the
-    // block-title carryover (asciidoc-rs/asciidoc-parser#1022) but still reports
-    // the `= …` line as the document title rather than demoting it —
-    // `doctitle()` stays set, the header is not cleared, and the
-    // `Level0SectionHeadingNotSupported` warning is not raised. Tracked upstream
-    // in asciidoc-rs/asciidoc-parser#1037; held until the demotion lands.
+    // block title onto the following block. `asciidoc-parser` 0.29.5 now demotes
+    // it at the parse level — `doctitle()` is `None` and
+    // `Level0SectionHeadingNotSupported` is raised
+    // (asciidoc-rs/asciidoc-parser#1037) — but the `= …` line is still emitted
+    // as a literal paragraph rather than a `sect0` heading
+    // (asciidoc-rs/asciidoc-parser#1042), so these assertions cannot hold. Held
+    // until level-0 sections render.
     non_normative!(
         r#"
     test 'block title above document title demotes document title to a section title' do
