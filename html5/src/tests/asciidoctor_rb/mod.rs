@@ -11,6 +11,7 @@
 //! yet rendered — are tracked as `non_normative!`.
 
 mod attribute_list_test;
+mod attributes_test;
 mod blocks_test;
 mod converter_test;
 mod extensions_test;
