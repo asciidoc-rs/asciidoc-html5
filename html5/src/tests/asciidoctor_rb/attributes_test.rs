@@ -87,12 +87,14 @@ fn convert_standalone(input: &str) -> String {
     convert_with(input, &Options::new().standalone(true))
 }
 
-/// Renders `input` with the inline doctype and returns it trimmed of the single
-/// trailing newline — the counterpart to Asciidoctor's `convert_inline_string`.
+/// Renders `input` with the inline doctype — the counterpart to Asciidoctor's
+/// `convert_inline_string`. Asciidoctor's inline output carries no trailing
+/// newline while this crate emits exactly one, so a single trailing newline is
+/// stripped (not all of them): the exact-output contract is preserved, so a
+/// zero- or multiple-newline regression still fails the caller's `assert_eq!`.
 fn convert_inline(input: &str, options: Options) -> String {
-    convert_with(input, &options.doctype("inline"))
-        .trim_end_matches('\n')
-        .to_string()
+    let out = convert_with(input, &options.doctype("inline"));
+    out.strip_suffix('\n').map(str::to_owned).unwrap_or(out)
 }
 
 /// Asserts that `html` contains `needle` (the counterpart to the Ruby suite's
@@ -714,14 +716,17 @@ mod assignment {
 "#
         );
 
+        // Below SERVER, `{user-home}` resolves to the user's home directory —
+        // the counterpart of Ruby's `Asciidoctor::USER_HOME`, which this crate's
+        // parser resolves from the same environment via `std::env::home_dir`
+        // (matching asciidoc-parser's own port of this test).
+        let home = std::env::home_dir()
+            .expect("home directory should resolve in the test environment")
+            .to_string_lossy()
+            .into_owned();
         let input = ":imagesdir: {user-home}/etc/images\n\n{imagesdir}\n";
         let output = convert_inline(input, Options::new().safe_mode(SafeMode::Safe));
-        refute_includes(&output, "{user-home}");
-        assert!(output.ends_with("/etc/images"), "output was: {output}");
-        assert!(
-            !output.starts_with("./"),
-            "user-home should resolve to an absolute path, was: {output}"
-        );
+        assert_eq!(output, format!("{home}/etc/images"));
     }
 
     #[test]
@@ -2385,7 +2390,7 @@ mod intrinsic_attributes {
         let input = "[subs=attributes]\n++++\n{counter:mycounter:1}\n{counter:mycounter}\n{counter:mycounter}\n{mycounter}\n++++\n";
         let doc = load(input);
         assert_eq!(doc.attribute_value("mycounter"), val("3"));
-        assert_includes(&convert(input), "1\n2\n3\n3");
+        assert_eq!(convert(input), "1\n2\n3\n3\n");
     }
 
     #[test]
@@ -2415,7 +2420,7 @@ mod intrinsic_attributes {
         let input = "[subs=attributes]\n++++\n{counter:mycounter:-2}\n{counter:mycounter}\n{counter:mycounter}\n{mycounter}\n++++\n";
         let doc = load(input);
         assert_eq!(doc.attribute_value("mycounter"), val("0"));
-        assert_includes(&convert(input), "-2\n-1\n0\n0");
+        assert_eq!(convert(input), "-2\n-1\n0\n0\n");
     }
 
     #[test]
@@ -2441,7 +2446,7 @@ mod intrinsic_attributes {
         );
 
         let input = "[subs=attributes]\n++++\n{counter:mycounter:A}\n{counter:mycounter}\n{counter:mycounter}\n{mycounter}\n++++\n";
-        assert_includes(&convert(input), "A\nB\nC\nC");
+        assert_eq!(convert(input), "A\nB\nC\nC\n");
     }
 
     #[test]
@@ -2467,7 +2472,7 @@ mod intrinsic_attributes {
         );
 
         let input = "[subs=attributes]\n++++\n{counter:mycounter:é}\n{counter:mycounter}\n{counter:mycounter}\n{mycounter}\n++++\n";
-        assert_includes(&convert(input), "é\nê\në\në");
+        assert_eq!(convert(input), "é\nê\në\në\n");
     }
 
     #[test]
@@ -2493,7 +2498,7 @@ mod intrinsic_attributes {
         );
 
         let input = "[subs=attributes]\n++++\n{counter:smiley:😋}\n{counter:smiley}\n{counter:smiley}\n{smiley}\n++++\n";
-        assert_includes(&convert(input), "😋\n😌\n😍\n😍");
+        assert_eq!(convert(input), "😋\n😌\n😍\n😍\n");
     }
 
     #[test]
@@ -2519,7 +2524,7 @@ mod intrinsic_attributes {
         );
 
         let input = "[subs=attributes]\n++++\n{counter:math:1x}\n{counter:math}\n{counter:math}\n{math}\n++++\n";
-        assert_includes(&convert(input), "1x\n1y\n1z\n1z");
+        assert_eq!(convert(input), "1x\n1y\n1z\n1z\n");
     }
 
     #[test]
@@ -2837,7 +2842,11 @@ mod block_attributes {
             r#"//div[@class="attribution"]/cite[text()="source"]"#,
             1,
         );
-        assert_includes(&output, "author");
+        assert_xpath(
+            &output,
+            r#"//div[@class="attribution"][contains(text(), "author")]"#,
+            1,
+        );
     }
 
     #[test]
@@ -2979,7 +2988,11 @@ mod block_attributes {
             r#"//div[@class="attribution"]/cite[text()="source"]"#,
             1,
         );
-        assert_includes(&output, "author");
+        assert_xpath(
+            &output,
+            r#"//div[@class="attribution"][contains(text(), "author")]"#,
+            1,
+        );
     }
 
     #[test]
