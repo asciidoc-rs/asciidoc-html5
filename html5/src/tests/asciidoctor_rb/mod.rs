@@ -22,6 +22,7 @@ mod lists_test;
 mod logger_test;
 mod manpage_test;
 mod paragraphs_test;
+mod parser_test;
 mod paths_test;
 mod preamble_test;
 mod reader_test;

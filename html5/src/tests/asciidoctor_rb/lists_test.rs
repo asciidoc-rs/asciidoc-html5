@@ -1506,12 +1506,10 @@ more text"]"#,
 
 "#
             );
-            // Ported with an ATX document title (`= List`) in place of the Ruby
-            // test's setext title (`List` / `====`): this crate does not treat the
-            // setext form as a level-0 title, so the setext variant would leave
-            // "List" a paragraph and mis-parse the trailing section. The behavior
-            // under test – a list terminating before the next lower section
-            // heading – is independent of the title's style.
+            // The Ruby fixture uses a setext (two-line) doctitle (`List\n====`),
+            // intentionally out of scope here; drive the same
+            // list-terminates-before-a-section behavior with an equivalent ATX
+            // doctitle (`= List`).
             let output =
                 convert_standalone("= List\n\n* first\nitem\n* second\nitem\n\n== Section\n");
             assert_xpath(&output, r#"//ul"#, 1);
@@ -1544,10 +1542,7 @@ more text"]"#,
 
 "#
             );
-            // Ported with an ATX document title (`= List`) in place of the Ruby
-            // test's setext title (`List` / `====`); see the sibling test without
-            // the implicit id. The list-termination behavior under test is
-            // independent of the title's style.
+            // Setext doctitle replaced with an ATX doctitle, as above.
             let output = convert_standalone(
                 "= List\n\n* first\nitem\n* second\nitem\n\n[[sec]]\n== Section\n",
             );
