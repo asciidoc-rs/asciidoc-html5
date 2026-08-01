@@ -25,10 +25,10 @@
 //!   covered by `sections_test`, `attribute_list_test`, and `blocks_test`;
 //! - the raw metadata-hash-shape assertion made without a document.
 //!
-//! One residual divergence remains: an indexed `:author_N:` override updates
-//! the `author_N` attribute but not the combined `authors` string / resolved
-//! author list (asciidoc-rs/asciidoc-parser#1013), so the override case
-//! verifies the individual attributes and skips the combined string.
+//! One minor divergence remains: the combined `authors` attribute is not
+//! derived from a single `:author:` attribute entry (only from the implicit
+//! author line), so the `:author:` formatting case asserts `author`, which
+//! carries the same value.
 
 use asciidoc_parser::{document::InterpretedValue, warnings::WarningType, Document};
 
@@ -968,18 +968,19 @@ fn allows_authors_to_be_overridden_using_explicit_author_attributes() {
 
     let doc = header("Kismet Chameleon; Johnny Bravo; Lazarus het_Draeke\n:author_2: Danger Mouse");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("3"));
+    // The explicit `:author_2:` entry overrides the second implicit author,
+    // and the override is reflected in the combined `authors` string.
+    assert_eq!(
+        attr(&doc, "authors").as_deref(),
+        Some("Kismet Chameleon, Danger Mouse, Lazarus het Draeke")
+    );
     assert_eq!(attr(&doc, "author_1").as_deref(), Some("Kismet Chameleon"));
-    // The explicit `:author_2:` entry overrides the second implicit author.
     assert_eq!(attr(&doc, "author_2").as_deref(), Some("Danger Mouse"));
     assert_eq!(
         attr(&doc, "author_3").as_deref(),
         Some("Lazarus het Draeke")
     );
     assert_eq!(attr(&doc, "lastname_3").as_deref(), Some("het Draeke"));
-    // Residual divergence (asciidoc-rs/asciidoc-parser#1013): the combined
-    // `authors` string is not recomputed for the indexed override, so it is
-    // not asserted here (Asciidoctor yields
-    // "Kismet Chameleon, Danger Mouse, Lazarus het Draeke").
 }
 
 #[test]
