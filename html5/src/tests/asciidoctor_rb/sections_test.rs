@@ -24,11 +24,9 @@
 //!   counterpart (`Section.new`, `sectnum`, `.numeral`/`.level`/`.context`,
 //!   `reindex_sections`, the `Compliance` globals) — reproduced but not
 //!   re-expressed;
-//! - parser divergences surfaced during the port — a `==` heading inside a
-//!   delimited block is treated as a section
-//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1024>), and a
-//!   `leveloffset` that would make a section level 0 is not coerced to the
-//!   doctitle (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
+//! - a parser divergence surfaced during the port — the trailing `@` soft-set
+//!   modifier on an API-provided attribute value (e.g. `leveloffset=-1@`) is not
+//!   stripped (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1033>).
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -1331,21 +1329,30 @@ mod levels {
             );
         }
 
-        // Not verified: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle
-        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
-        non_normative!(
-            r#"
+        #[test]
+        fn document_title_created_from_leveloffset_shift_defined_in_document() {
+            verifies!(
+                r#"
       test 'document title created from leveloffset shift defined in document' do
         assert_xpath "//h1[not(@id)][text() = 'Document Title']", convert_string(%(:leveloffset: -1\n== Document Title))
       end
 
 "#
-        );
+            );
 
-        // Not verified: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle
-        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
+            // A `:leveloffset: -1` entry shifts the `== Document Title` (level 1)
+            // to level 0, which is coerced to the doctitle.
+            assert_xpath(
+                &convert_standalone(":leveloffset: -1\n== Document Title"),
+                r#"//h1[not(@id)][text()="Document Title"]"#,
+                1,
+            );
+        }
+
+        // Not verified: the trailing `@` soft-set modifier on the API-provided
+        // `leveloffset` value (`-1@`) is not stripped, so the offset is not applied
+        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1033>). The
+        // coercion itself is verified by the document-defined sibling above.
         non_normative!(
             r#"
       test 'document title created from leveloffset shift defined in API' do
@@ -5931,11 +5938,10 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: the parser treats a `==` heading inside a delimited block as a
-    // section rather than content
-    // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1024>).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_match_a_heading_in_a_block() {
+        verifies!(
+            r#"
     test "should not match a heading in a block" do
       input = <<~'EOS'
       ====
@@ -5949,7 +5955,17 @@ mod heading_patterns_in_blocks {
       assert_xpath "//*[@class='exampleblock']//p[text() = '== not a heading']", output, 1
     end
 "#
-    );
+        );
+
+        // A `==` line inside a delimited block is literal content, not a section.
+        let output = convert_standalone("====\n\n== not a heading\n\n====\n");
+        assert_xpath(&output, "//h2", 0);
+        assert_xpath(
+            &output,
+            r#"//*[@class="exampleblock"]//p[text()="== not a heading"]"#,
+            1,
+        );
+    }
 
     non_normative!(
         r#"

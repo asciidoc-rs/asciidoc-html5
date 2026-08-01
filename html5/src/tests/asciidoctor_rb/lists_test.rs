@@ -1482,10 +1482,15 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
 
-        #[test]
-        fn list_should_terminate_before_next_lower_section_heading() {
-            verifies!(
-                r#"
+        // Not verified: the two-line (setext) title `List\n====` makes `List` the
+        // document title, which requires setext support — intentionally out of
+        // scope for this project. Without it, `====` opens an example block that
+        // runs to end-of-input and swallows the `== Section` heading as literal
+        // content, so the section heading the test asserts on is never produced.
+        // (This previously passed only because a since-fixed parser bug recognized
+        // a section heading inside a delimited block — asciidoc-parser#1030.)
+        non_normative!(
+            r#"
     test "list should terminate before next lower section heading" do
       input = <<~'EOS'
       List
@@ -1505,18 +1510,15 @@ more text"]"#,
     end
 
 "#
-            );
-            let output =
-                convert_standalone("List\n====\n\n* first\nitem\n* second\nitem\n\n== Section\n");
-            assert_xpath(&output, r#"//ul"#, 1);
-            assert_xpath(&output, r#"//ul/li"#, 2);
-            assert_xpath(&output, r#"//h2[text() = "Section"]"#, 1);
-        }
+        );
 
-        #[test]
-        fn list_should_terminate_before_next_lower_section_heading_with_implicit_id() {
-            verifies!(
-                r#"
+        // Not verified: same setext limitation as the preceding test — the
+        // two-line title `List\n====` requires setext support (out of scope), so
+        // `====` opens an example block that swallows the `== Section` heading as
+        // literal content. (Previously green only via the since-fixed delimited-
+        // block section bug — asciidoc-parser#1030.)
+        non_normative!(
+            r#"
     test "list should terminate before next lower section heading with implicit id" do
       input = <<~'EOS'
       List
@@ -1537,14 +1539,7 @@ more text"]"#,
     end
 
 "#
-            );
-            let output = convert_standalone(
-                "List\n====\n\n* first\nitem\n* second\nitem\n\n[[sec]]\n== Section\n",
-            );
-            assert_xpath(&output, r#"//ul"#, 1);
-            assert_xpath(&output, r#"//ul/li"#, 2);
-            assert_xpath(&output, r#"//h2[@id = "sec"][text() = "Section"]"#, 1);
-        }
+        );
 
         #[test]
         fn should_not_find_section_title_immediately_below_last_list_item() {
