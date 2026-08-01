@@ -15,7 +15,7 @@ use std::{
     io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
-    time::{Duration, Instant, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, ReferenceTime, SafeMode};
@@ -479,20 +479,40 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
+    // Resolve `SOURCE_DATE_EPOCH` before touching the input: a malformed value
+    // must fail the whole run (exit 1), matching Asciidoctor and the
+    // reproducible-builds spec, rather than silently converting with the wall
+    // clock. A valid value pins the whole clock (both the `local*` and `doc*`
+    // date/time families), so it overrides any input file's modification time.
+    let source_date_epoch = source_date_epoch_from_env()?;
+
+    run_with_streams_using(
+        cli,
+        source_date_epoch,
+        stdin_is_terminal,
+        stdin,
+        stdout,
+        stderr,
+    )
+}
+
+/// The core of [`run_with_streams`] with the reproducible clock already
+/// resolved into `source_date_epoch`, so tests can pin it without mutating the
+/// process environment. A `Some` value overrides each input file's modification
+/// time; `None` leaves the `doc*` attributes to follow that mtime.
+fn run_with_streams_using(
+    cli: &Cli,
+    source_date_epoch: Option<ReferenceTime>,
+    stdin_is_terminal: bool,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<bool> {
     // Reject an unsupported backend or doctype before reading or converting
     // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
     // touching the input.
     check_backend(cli)?;
     check_doctype(cli)?;
-
-    // Resolve `SOURCE_DATE_EPOCH` before touching the input: a malformed value
-    // must fail the whole run (exit 1), matching Asciidoctor and the
-    // reproducible-builds spec, rather than silently converting with the wall
-    // clock. A valid value pins the reference time – driving both the `local*`
-    // and `doc*` date/time attributes – so it overrides any input file's
-    // modification time; an unset or empty value leaves the `doc*` attributes to
-    // follow each input file's mtime (seeded per source below).
-    let source_date_epoch = resolve_source_date_epoch()?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
     // a standalone document – matching Asciidoctor's command, which writes a full
@@ -1078,15 +1098,29 @@ const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
 /// # Errors
 ///
 /// Returns an [`io::ErrorKind::InvalidInput`] error when the variable is set to
-/// a non-empty value that is not a valid integer (or is not valid Unicode).
-fn resolve_source_date_epoch() -> io::Result<Option<ReferenceTime>> {
-    match std::env::var(SOURCE_DATE_EPOCH) {
-        Ok(value) => parse_source_date_epoch(&value),
-        Err(std::env::VarError::NotPresent) => Ok(None),
+/// a non-empty value that is not a valid integer. A non-Unicode value is read
+/// lossily and so is rejected as malformed too.
+fn source_date_epoch_from_env() -> io::Result<Option<ReferenceTime>> {
+    resolve_source_date_epoch(std::env::var_os(SOURCE_DATE_EPOCH))
+}
 
-        // A non-Unicode value cannot be a valid integer, so treat it as
-        // malformed rather than ignoring it.
-        Err(std::env::VarError::NotUnicode(_)) => Err(source_date_epoch_error("<non-UTF-8>")),
+/// Resolves a raw `SOURCE_DATE_EPOCH` value (as read from the environment by
+/// [`source_date_epoch_from_env`]) into a pinned [`ReferenceTime`], independent
+/// of the process environment so the rules can be unit-tested without mutating
+/// shared state.
+///
+/// An absent, empty, or all-whitespace value yields `Ok(None)`; a valid integer
+/// count of seconds since the Unix epoch yields `Ok(Some(_))`; any other value
+/// (including non-Unicode, read lossily) is malformed and yields an error.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `raw` is a non-empty
+/// value that is not a valid integer.
+fn resolve_source_date_epoch(raw: Option<OsString>) -> io::Result<Option<ReferenceTime>> {
+    match raw {
+        Some(value) => parse_source_date_epoch(&value.to_string_lossy()),
+        None => Ok(None),
     }
 }
 
@@ -1138,14 +1172,19 @@ fn source_date_epoch_error(value: &str) -> io::Error {
 fn input_file_mtime(path: &Path) -> Option<ReferenceTime> {
     let modified = fs::metadata(path).ok()?.modified().ok()?;
 
-    let secs = match modified.duration_since(UNIX_EPOCH) {
+    Some(ReferenceTime::from_unix_timestamp(unix_seconds(modified)))
+}
+
+/// Whole seconds from the Unix epoch to `time`, negative for an instant before
+/// it (a source file whose modification time predates 1970). Split out from
+/// [`input_file_mtime`] so the sign handling can be unit-tested without a file.
+fn unix_seconds(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
         Ok(delta) => delta.as_secs() as i64,
 
-        // A modification time before the Unix epoch yields a negative count.
+        // A time before the Unix epoch yields a negative count.
         Err(err) => -(err.duration().as_secs() as i64),
-    };
-
-    Some(ReferenceTime::from_unix_timestamp(secs))
+    }
 }
 
 /// Returns the input file path when `adoc` reads from a single real file, or
