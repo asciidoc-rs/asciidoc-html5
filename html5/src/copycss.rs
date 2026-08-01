@@ -79,7 +79,10 @@ pub(crate) fn stylesheet_copy(
         // `stylesdir` it lands at the output root as `asciidoctor.css`).
         None => Some(StylesheetCopy {
             dest: relative_web_path(&normalize_web_path(DEFAULT_STYLESHEET_NAME, &stylesdir))?,
-            content: DEFAULT_STYLESHEET.to_string(),
+            // Match Asciidoctor's `Stylesheets#primary_stylesheet_data`, which
+            // `rstrip`s the embedded CSS, so the copied `asciidoctor.css` has no
+            // trailing newline — mirroring the `<style>` embed path.
+            content: DEFAULT_STYLESHEET.trim_end().to_string(),
         }),
 
         // A custom stylesheet: mirror its web path and read its bytes.
@@ -248,7 +251,8 @@ mod tests {
     const SOURCE_DOC: &str = "= Doc\n\n[source,ruby]\n----\nputs 1\n----";
 
     // With `linkcss` and `copycss` set, the default stylesheet is copied as
-    // `asciidoctor.css` with the embedded default CSS as its content.
+    // `asciidoctor.css` with the embedded default CSS as its content. Asciidoctor
+    // `rstrip`s that CSS, so the copy carries no trailing newline.
     #[test]
     fn default_stylesheet_is_copied_as_asciidoctor_css() {
         let options = Options::new()
@@ -257,7 +261,8 @@ mod tests {
             .set("copycss");
         let (dest, content) = plan("= Doc\n\nBody.", &options).expect("a copy");
         assert_eq!(dest, "asciidoctor.css");
-        assert_eq!(content, DEFAULT_STYLESHEET);
+        assert_eq!(content, DEFAULT_STYLESHEET.trim_end());
+        assert!(!content.ends_with('\n'));
     }
 
     // The default stylesheet is copied under `stylesdir`, mirroring the web path
@@ -271,7 +276,7 @@ mod tests {
             .attribute("stylesdir", "css");
         let (dest, content) = plan("= Doc\n\nBody.", &options).expect("a copy");
         assert_eq!(dest, "css/asciidoctor.css");
-        assert_eq!(content, DEFAULT_STYLESHEET);
+        assert_eq!(content, DEFAULT_STYLESHEET.trim_end());
     }
 
     // Under `secure` the stylesheet is linked but never copied, even though the
