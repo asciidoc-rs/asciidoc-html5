@@ -1506,8 +1506,12 @@ more text"]"#,
 
 "#
             );
+            // The Ruby fixture uses a setext (two-line) doctitle (`List\n====`),
+            // intentionally out of scope here; drive the same
+            // list-terminates-before-a-section behavior with an equivalent ATX
+            // doctitle (`= List`).
             let output =
-                convert_standalone("List\n====\n\n* first\nitem\n* second\nitem\n\n== Section\n");
+                convert_standalone("= List\n\n* first\nitem\n* second\nitem\n\n== Section\n");
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 2);
             assert_xpath(&output, r#"//h2[text() = "Section"]"#, 1);
@@ -1538,8 +1542,9 @@ more text"]"#,
 
 "#
             );
+            // Setext doctitle replaced with an ATX doctitle, as above.
             let output = convert_standalone(
-                "List\n====\n\n* first\nitem\n* second\nitem\n\n[[sec]]\n== Section\n",
+                "= List\n\n* first\nitem\n* second\nitem\n\n[[sec]]\n== Section\n",
             );
             assert_xpath(&output, r#"//ul"#, 1);
             assert_xpath(&output, r#"//ul/li"#, 2);

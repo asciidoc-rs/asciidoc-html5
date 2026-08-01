@@ -11,5 +11,5 @@ rust-version = "1.88.0"
 version = "0.1.4"
 
 [workspace.dependencies]
-asciidoc-parser = "0.29.1"
+asciidoc-parser = "0.29.3"
 scraper = "0.27"
