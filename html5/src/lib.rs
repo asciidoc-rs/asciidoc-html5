@@ -51,7 +51,7 @@ mod options;
 mod outline;
 mod renderer;
 
-pub use asciidoc_parser::{Document, SafeMode};
+pub use asciidoc_parser::{Document, ReferenceTime, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
 pub use options::Options;
 pub use outline::OutlineOptions;
