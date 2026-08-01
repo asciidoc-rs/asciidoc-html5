@@ -661,15 +661,19 @@ mod tests {
         );
     }
 
-    // windows-1252 agrees with ISO-8859-1 outside 0x80..=0x9F but carries
-    // printable characters within it.
+    // windows-1252 agrees with ISO-8859-1 outside 0x80..=0x9F but carries mostly
+    // printable characters within it. The whole 0x80..=0x9F range is checked
+    // against an independent transcription of the WHATWG windows-1252 glyphs
+    // (written as literal characters here, not the `\u{…}` escapes of the
+    // `WINDOWS_1252_C1` table itself), so a transcription slip in that table
+    // cannot pass unnoticed. The five positions WHATWG leaves undefined (0x81,
+    // 0x8D, 0x8F, 0x90, 0x9D) map to the C1 control of the same value.
     #[test]
-    fn windows_1252_decodes_the_c1_range_to_printable_characters() {
-        // 0x80 -> euro, 0x92 -> right single quote, 0x99 -> trademark.
-        assert_eq!(
-            LegacyEncoding::Windows1252.decode(&[0x80, 0x92, 0x99]),
-            "€’™"
-        );
+    fn windows_1252_decodes_the_entire_c1_range() {
+        let bytes: Vec<u8> = (0x80u8..=0x9f).collect();
+        let expected = "€\u{81}‚ƒ„…†‡ˆ‰Š‹Œ\u{8d}Ž\u{8f}\u{90}‘’“”•–—˜™š›œ\u{9d}žŸ";
+        assert_eq!(expected.chars().count(), 32, "expected covers 0x80..=0x9F");
+        assert_eq!(LegacyEncoding::Windows1252.decode(&bytes), expected);
 
         // ASCII and the high Latin-1 range decode the same as ISO-8859-1.
         assert_eq!(LegacyEncoding::Windows1252.decode(&[0x41, 0xe9]), "Aé");
