@@ -170,8 +170,14 @@ fn render(document: &Document<'_>, options: &Options) -> String {
     renderer::render_document(document, stylesheet.as_deref(), options.is_standalone())
 }
 
-/// Writes the `copycss` stylesheet copy through `writer`, when the document
-/// calls for one. A no-op otherwise.
+/// Writes the `copycss` stylesheet copies through `writer`, when the document
+/// calls for them: the primary stylesheet, and the active syntax highlighter's
+/// stylesheet (today, CodeRay's). A no-op when neither applies.
+///
+/// The two are independent — a document can copy the CodeRay stylesheet while
+/// its primary stylesheet is embedded or disabled, and vice versa — so each is
+/// planned and written on its own, matching Asciidoctor, which copies the
+/// primary and the syntax-highlighter stylesheets in separate steps.
 fn emit_stylesheet_copy(
     document: &Document<'_>,
     options: &Options,
@@ -180,6 +186,11 @@ fn emit_stylesheet_copy(
     if let Some(copy) = copycss::stylesheet_copy(document, options) {
         writer.write_asset(&copy.dest, copy.content.as_bytes())?;
     }
+
+    if let Some(copy) = copycss::syntax_highlighter_stylesheet_copy(document, options) {
+        writer.write_asset(&copy.dest, copy.content.as_bytes())?;
+    }
+
     Ok(())
 }
 
@@ -562,6 +573,35 @@ mod writer_tests {
         let (path, content) = &writer.written[0];
         assert_eq!(path, &PathBuf::from("asciidoctor.css"));
         assert!(content.starts_with(b"/*"));
+    }
+
+    // With coderay active, `linkcss`, and a source block, the writer receives
+    // both companion files: the primary stylesheet and the CodeRay one.
+    #[test]
+    fn writer_copies_both_the_primary_and_coderay_stylesheets() {
+        let source = "= Doc\n\n[source,ruby]\n----\nputs 1\n----";
+        let options = Options::new()
+            .standalone(true)
+            .safe_mode(SafeMode::Safe)
+            .set("linkcss")
+            .attribute("source-highlighter", "coderay");
+
+        let mut writer = RecordingAssetWriter::default();
+        convert_with_writer(source, &options, &mut writer).expect("convert");
+
+        let written: Vec<_> = writer
+            .written
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect();
+        assert!(
+            written.contains(&PathBuf::from("asciidoctor.css")),
+            "{written:?}"
+        );
+        assert!(
+            written.contains(&PathBuf::from("coderay-asciidoctor.css")),
+            "{written:?}"
+        );
     }
 
     // With no `linkcss` (the stylesheet is embedded), the writer is never
