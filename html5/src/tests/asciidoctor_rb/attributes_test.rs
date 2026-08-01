@@ -26,15 +26,13 @@
 //!   text verbatim, so the drop-line/assignment behavior these tests expect
 //!   does not occur.
 //! - **compat mode** (`compat-mode` set/unset mid-document, and the compat
-//!   `+...+` passthrough in a block title): permanently out of scope for this
-//!   crate, like the compat-mode tests in `links_test`.
+//!   `+...+` passthrough half of "substitutes inside block title"): permanently
+//!   out of scope for this crate, like the compat-mode tests in `links_test`.
+//!   That block-title test is split — its modern backtick half is verified.
 //! - the **DocBook backend** and **book doctype** (custom backend/doctype
 //!   attribute matrices, the docbook special-section test): this crate targets
 //!   only the `html5` backend, and non-article doctypes are out of scope for
 //!   1.0.
-//! - **setext** (two-line/underlined) titles, intentionally out of scope for
-//!   this project (the "collapses spaces in attribute names" input frames its
-//!   header that way).
 //! - the **intrinsic-attribute enumeration** test, which iterates
 //!   `Asciidoctor::INTRINSIC_ATTRIBUTES` (a parser-internal table with no
 //!   public equivalent here); representative intrinsics are still checked
@@ -50,6 +48,11 @@
 //! to `WarningType::SkippingReferenceToMissingAttribute` on the loaded
 //! document (asciidoc-parser 0.29.1 surfaces these for both header attribute
 //! values and body content).
+//!
+//! **setext** (two-line/underlined) titles are intentionally out of scope for
+//! this project, but "collapses spaces in attribute names" is still verified:
+//! its subject is the attribute-name space collapse, so the body swaps the
+//! setext doctitle for the equivalent ATX (`= …`) header.
 
 use asciidoc_parser::{document::InterpretedValue, warnings::WarningType};
 
@@ -1485,8 +1488,10 @@ mod interpolation {
         assert_xpath(&html, r#"//p[text()="R is for Ruby!"]"#, 1);
     }
 
-    non_normative!(
-        r#"
+    #[test]
+    fn collapses_spaces_in_attribute_names() {
+        verifies!(
+            r#"
     test "collapses spaces in attribute names" do
       input = <<~'EOS'
       Main Header
@@ -1500,7 +1505,15 @@ mod interpolation {
     end
 
 "#
-    );
+        );
+
+        // Asciidoctor's input frames the doctitle with a setext (underlined)
+        // header, which is out of scope for this crate; an ATX-style `= Main
+        // Header` exercises the same behavior under test — collapsing the spaces
+        // in the attribute name `:My frog:` down to `myfrog`.
+        let output = convert_standalone("= Main Header\n:My frog: Tanglefoot\n\nYo, {myfrog}!\n");
+        assert_xpath(&output, r#"(//p)[1][text()="Yo, Tanglefoot!"]"#, 1);
+    }
 
     #[test]
     fn ignores_lines_with_bad_attributes_if_attribute_missing_is_drop_line() {
@@ -1864,8 +1877,14 @@ mod interpolation {
             .any(|w| w.warning == WarningType::UnterminatedDelimitedBlock));
     }
 
-    non_normative!(
-        r#"
+    #[test]
+    fn substitutes_inside_block_title() {
+        // The first form frames the attribute reference with the compat-mode
+        // passthrough (`+{gem_name}+`), which this crate does not render (compat
+        // mode is a permanent non-goal); the modern backtick form below is
+        // verified.
+        non_normative!(
+            r#"
     test 'substitutes inside block title' do
       input = <<~'EOS'
       :gem_name: asciidoctor
@@ -1876,6 +1895,11 @@ mod interpolation {
       output = convert_string_to_embedded input, attributes: { 'compat-mode' => '' }
       assert_xpath '//*[@class="title"]/code[text()="asciidoctor"]', output, 1
 
+"#
+        );
+
+        verifies!(
+            r#"
       input = <<~'EOS'
       :gem_name: asciidoctor
 
@@ -1887,7 +1911,17 @@ mod interpolation {
     end
 
 "#
-    );
+        );
+
+        let output = convert(
+            ":gem_name: asciidoctor\n\n.Require the `{gem_name}` gem\nTo use {gem_name}, the first thing to do is to import it in your Ruby source file.\n",
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="title"]/code[text()="asciidoctor"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn sets_attribute_until_it_is_deleted() {
