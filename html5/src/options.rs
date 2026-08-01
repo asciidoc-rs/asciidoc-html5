@@ -52,7 +52,7 @@
 
 use std::path::{Path, PathBuf};
 
-use asciidoc_parser::{parser::ModificationContext, Parser, SafeMode};
+use asciidoc_parser::{parser::ModificationContext, Parser, ReferenceTime, SafeMode};
 
 use crate::{docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFileHandler};
 
@@ -131,6 +131,18 @@ pub struct Options {
     /// mode used to convert a fragment of inline markup. See
     /// [`doctype`](Self::doctype).
     doctype: Option<String>,
+
+    /// A pinned reference time (Asciidoctor's "now") that drives the `local*`
+    /// document attributes and, absent an [`input_mtime`](Self::input_mtime),
+    /// the `doc*` attributes too. `None` leaves the clock to the parser (the
+    /// `SOURCE_DATE_EPOCH` environment variable or the real wall clock). See
+    /// [`reference_time`](Self::reference_time).
+    reference_time: Option<ReferenceTime>,
+
+    /// A pinned source-modification time that drives the `doc*` attributes
+    /// (`docdate`, `doctime`, `docdatetime`, `docyear`). `None` leaves them to
+    /// follow the reference time. See [`input_mtime`](Self::input_mtime).
+    input_mtime: Option<ReferenceTime>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -376,6 +388,34 @@ impl Options {
     /// and docinfo resolve as they would for the file on disk.
     pub fn input_file<P: Into<PathBuf>>(mut self, path: P) -> Self {
         self.primary_file = Some(path.into());
+        self
+    }
+
+    /// Pins the reference time ("now") from which the time-dependent document
+    /// attributes are computed.
+    ///
+    /// This drives the `local*` family (`localdate`, `localtime`,
+    /// `localdatetime`, `localyear`) and, unless an
+    /// [`input_mtime`](Self::input_mtime) is also set, the `doc*` family too.
+    /// Pinning it makes the computed attributes – and any output derived from
+    /// them, such as the footer's "Last updated" line – reproducible, mirroring
+    /// Asciidoctor's handling of the `SOURCE_DATE_EPOCH` environment variable.
+    /// See [`ReferenceTime`].
+    pub fn reference_time(mut self, reference_time: ReferenceTime) -> Self {
+        self.reference_time = Some(reference_time);
+        self
+    }
+
+    /// Pins the source-modification time that drives the `doc*` document
+    /// attributes (`docdate`, `doctime`, `docdatetime`, `docyear`).
+    ///
+    /// This is Asciidoctor's `input_mtime` option: the `local*` attributes keep
+    /// following the reference time (the real clock, or a
+    /// [`reference_time`](Self::reference_time)), while the `doc*` attributes
+    /// reflect the given instant – normally the modification time of the source
+    /// file. See [`ReferenceTime`].
+    pub fn input_mtime(mut self, input_mtime: ReferenceTime) -> Self {
+        self.input_mtime = Some(input_mtime);
         self
     }
 
@@ -718,6 +758,18 @@ impl Options {
             parser = parser
                 .with_include_file_handler(FsIncludeFileHandler::new(base.clone(), mode))
                 .with_docinfo_file_handler(FsDocinfoFileHandler::new(base, mode));
+        }
+
+        // Pin the clock that drives the time-dependent document attributes, if
+        // the caller supplied one. A reference time fixes "now" (the `local*`
+        // family); a source-modification time fixes the `doc*` family. Absent
+        // both, the parser resolves the clock itself (the `SOURCE_DATE_EPOCH`
+        // environment variable, then the real wall clock).
+        if let Some(reference_time) = &self.reference_time {
+            parser = parser.with_reference_time(reference_time.clone());
+        }
+        if let Some(input_mtime) = &self.input_mtime {
+            parser = parser.with_input_mtime(input_mtime.clone());
         }
 
         parser

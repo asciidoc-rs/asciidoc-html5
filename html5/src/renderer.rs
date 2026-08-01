@@ -1376,10 +1376,16 @@ impl Renderer<'_> {
         self.line("<meta charset=\"UTF-8\">");
         self.line("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">");
         self.line("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-        self.line(&format!(
-            "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
-            env!("CARGO_PKG_VERSION")
-        ));
+
+        // The `generator` meta names the tool and its version, which changes
+        // from build to build; `reproducible` suppresses it (matching
+        // Asciidoctor) so reproducible builds emit byte-identical output.
+        if !document.is_attribute_set("reproducible") {
+            self.line(&format!(
+                "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
+                env!("CARGO_PKG_VERSION")
+            ));
+        }
 
         // The <title> is the plain-text doctitle. The parser's `doctitle()` has
         // had header substitutions applied (special characters escaped), which
@@ -1468,11 +1474,36 @@ impl Renderer<'_> {
         // Asciidoctor's standalone layout.
         self.footnotes(document);
 
-        // The footer is suppressed by `nofooter`. The "Last updated …" text is
-        // deferred until a docdatetime attribute is threaded in by the caller.
+        // The footer is suppressed by `nofooter`. Its text carries two optional
+        // lines, matching Asciidoctor's html5 footer: a "{version-label}
+        // {revnumber}" line when the document has a revision number, and a
+        // "{last-update-label} {docdatetime}" line (the "Last updated …" stamp)
+        // unless the document is `reproducible`.
         if !document.is_attribute_set("nofooter") {
             self.line("<div id=\"footer\">");
             self.line("<div id=\"footer-text\">");
+
+            // The version line, gated on `revnumber` like Asciidoctor. The
+            // `version-label` intrinsic defaults to "Version"; a trailing `<br>`
+            // separates it from the "Last updated" line that may follow.
+            if let Some(revnumber) = attribute_str(document, "revnumber") {
+                let version_label = attribute_str(document, "version-label").unwrap_or_default();
+                self.line(&format!("{version_label} {revnumber}<br>"));
+            }
+
+            // The "Last updated" line, gated on the `last-update-label`
+            // intrinsic (defaulting to "Last updated", unset to drop the line)
+            // and suppressed by `reproducible` so reproducible builds omit the
+            // volatile timestamp.
+            if !document.is_attribute_set("reproducible") {
+                if let (Some(label), Some(docdatetime)) = (
+                    attribute_str(document, "last-update-label"),
+                    attribute_str(document, "docdatetime"),
+                ) {
+                    self.line(&format!("{label} {docdatetime}"));
+                }
+            }
+
             self.line("</div>");
             self.line("</div>");
         }
@@ -4128,7 +4159,7 @@ fn render_cell_document<'s>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Options, SafeMode};
+    use crate::{Options, ReferenceTime, SafeMode};
 
     // These renderer tests assert the standalone document shell (the
     // `<!DOCTYPE>`/`<head>`/`<body>` frame, the header, and the footer), so they
@@ -5276,6 +5307,109 @@ mod tests {
     fn nofooter_suppresses_the_footer() {
         let html = convert("= Doc\n:nofooter:\n\nBody.");
         assert!(!html.contains("<div id=\"footer\">"));
+    }
+
+    #[test]
+    fn footer_stamps_last_updated_docdatetime() {
+        // A standalone document's footer stamps "{last-update-label}
+        // {docdatetime}". A pinned reference time makes the stamp deterministic:
+        // 2019-01-02 03:04:05 at a +06:00 offset.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_local(
+                2019,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6 * 3600,
+            )),
+        );
+
+        assert!(
+            html.contains("Last updated 2019-01-02 03:04:05 +0600"),
+            "footer should stamp the docdatetime: {html}"
+        );
+    }
+
+    #[test]
+    fn input_mtime_drives_the_footer_stamp_over_the_reference_time() {
+        // The footer's docdatetime belongs to the `doc*` family, which follows a
+        // pinned input mtime even as the reference time ("now", the `local*`
+        // family) differs – mirroring Asciidoctor's `input_mtime`.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .reference_time(ReferenceTime::from_unix_timestamp(0))
+                .input_mtime(ReferenceTime::from_local(2019, 1, 2, 3, 4, 5, 0)),
+        );
+
+        assert!(
+            html.contains("Last updated 2019-01-02 03:04:05 UTC"),
+            "footer docdatetime should follow the input mtime: {html}"
+        );
+        assert!(
+            !html.contains("1970"),
+            "the reference time should not leak in: {html}"
+        );
+    }
+
+    #[test]
+    fn reproducible_suppresses_the_footer_stamp_and_generator_meta() {
+        // `reproducible` drops the two build-volatile pieces – the "Last
+        // updated" stamp and the `generator` meta – so the output is stable
+        // across builds, matching Asciidoctor.
+        let html = convert_with(
+            "= Doc\n:reproducible:\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            !html.contains("Last updated"),
+            "the footer stamp should be suppressed: {html}"
+        );
+        assert!(
+            !html.contains("name=\"generator\""),
+            "the generator meta should be suppressed: {html}"
+        );
+
+        // Only the footer's text is dropped; the footer frame itself remains.
+        assert!(html.contains("<div id=\"footer\">"));
+    }
+
+    #[test]
+    fn footer_shows_version_label_and_revnumber() {
+        // A revision line's number drives the footer's "{version-label}
+        // {revnumber}" line; `version-label` defaults to "Version".
+        let html = convert_with(
+            "= Doc\nAuthor Name\nv2.0, 2020-01-01\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            html.contains("Version 2.0<br>"),
+            "footer should show the version line: {html}"
+        );
+    }
+
+    #[test]
+    fn unsetting_last_update_label_drops_the_footer_stamp() {
+        // Unsetting `last-update-label` removes the "Last updated" stamp while
+        // leaving the footer frame (and its now-empty text div) in place,
+        // matching Asciidoctor's `(attr? 'last-update-label')` gate.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .unset("last-update-label")
+                .reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            !html.contains("Last updated"),
+            "the footer stamp should be gone: {html}"
+        );
+        assert!(html.contains("<div id=\"footer-text\">"));
     }
 
     // Embedded, body-only output shows the doctitle `<h1>` only when the title
