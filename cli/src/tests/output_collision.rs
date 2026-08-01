@@ -220,3 +220,23 @@ fn write_output_writes_a_non_aliasing_destination() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// An input that can no longer be stat'd — removed after it was read, say —
+// cannot be aliased by the output, so `write_output` skips it and writes
+// normally rather than failing to resolve it.
+#[test]
+fn write_output_skips_an_input_that_cannot_be_stat_ed() {
+    let dir = tempdir("write-output-missing-input");
+    let out = dir.join("out.html");
+
+    // Never created, so `fs::metadata` on it fails; the guard must tolerate this.
+    let missing = dir.join("gone.adoc");
+
+    crate::write_output(&out, "<html>ok</html>", std::slice::from_ref(&missing))
+        .expect("a non-stat-able input is skipped and the write succeeds");
+
+    let written = std::fs::read_to_string(&out).expect("read output back");
+    assert_eq!(written, "<html>ok</html>");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
