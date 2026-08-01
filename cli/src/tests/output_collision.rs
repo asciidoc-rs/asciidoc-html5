@@ -8,11 +8,13 @@
 //! *sibling* input in a multi-file run — plus a non-colliding batch, to guard
 //! against false positives.
 //!
-//! The final group exercises `write_output` directly: it re-checks the *opened*
-//! output handle's identity against the inputs before truncating, so an alias
-//! swapped in after the up-front path check is still caught before any source
-//! is written. A real check-then-swap race is not deterministic, so an output
-//! that already aliases the input stands in for the swapped-in alias.
+//! The final group exercises `write_output` directly: it compares the *opened*
+//! output handle's identity against the inputs' identities *frozen before
+//! conversion* before truncating, so neither an alias swapped in at the output
+//! path nor an input's path renamed out from under the check can slip a source
+//! past it. A real check-then-swap race is not deterministic, so an output that
+//! already aliases the input stands in for the swapped-in alias, and one test
+//! swaps the input path directly to model the frozen-identity guarantee.
 
 use std::path::PathBuf;
 
@@ -156,11 +158,15 @@ fn write_output_rejects_a_hard_linked_output_without_truncating_the_input() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
+    // Freeze the input's identity up front, the way `run` snapshots inputs
+    // before any conversion.
+    let input_id = std::fs::metadata(&input).expect("stat input");
+
     // `out.html` is a second directory entry for the input's inode.
     let out = dir.join("out.html");
     std::fs::hard_link(&input, &out).expect("create hard link");
 
-    let err = crate::write_output(&out, "<html></html>", std::slice::from_ref(&input))
+    let err = crate::write_output(&out, "<html></html>", std::slice::from_ref(&input_id))
         .expect_err("an opened output aliasing an input is rejected");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 
@@ -183,10 +189,12 @@ fn write_output_rejects_a_symlinked_output_without_truncating_the_input() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
+    let input_id = std::fs::metadata(&input).expect("stat input");
+
     let link = dir.join("link.html");
     std::os::unix::fs::symlink(&input, &link).expect("create symlink");
 
-    let err = crate::write_output(&link, "<html></html>", std::slice::from_ref(&input))
+    let err = crate::write_output(&link, "<html></html>", std::slice::from_ref(&input_id))
         .expect_err("an opened output aliasing an input is rejected");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 
@@ -207,13 +215,16 @@ fn write_output_writes_a_non_aliasing_destination() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nSource.\n").expect("write input");
 
+    let input_id = std::fs::metadata(&input).expect("stat input");
+
     // Seed the output with content longer than the new HTML, so a stale tail
     // would survive a write that failed to truncate first.
     let out = dir.join("out.html");
     std::fs::write(&out, "stale contents that are longer than the new output")
         .expect("seed output");
 
-    crate::write_output(&out, "<html>ok</html>", &[input]).expect("non-aliasing write succeeds");
+    crate::write_output(&out, "<html>ok</html>", std::slice::from_ref(&input_id))
+        .expect("non-aliasing write succeeds");
 
     let written = std::fs::read_to_string(&out).expect("read output back");
     assert_eq!(written, "<html>ok</html>");
@@ -221,22 +232,41 @@ fn write_output_writes_a_non_aliasing_destination() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// An input that can no longer be stat'd — removed after it was read, say —
-// cannot be aliased by the output, so `write_output` skips it and writes
-// normally rather than failing to resolve it.
+// The identity check compares the opened output against inputs' identities
+// *frozen before conversion*, not against input paths re-resolved at write
+// time. So a racing process that renames an input's path — while keeping its
+// original inode reachable through the output — cannot fool the guard: here the
+// input path is unlinked and replaced by an unrelated file after its identity
+// is captured, yet the original inode (still reachable through `out`) is
+// recognized and left intact. Re-resolving the swapped path would instead stat
+// the decoy, miss the match, and truncate the source.
+#[cfg(unix)]
 #[test]
-fn write_output_skips_an_input_that_cannot_be_stat_ed() {
-    let dir = tempdir("write-output-missing-input");
+fn write_output_uses_frozen_input_identity_when_the_input_path_is_swapped() {
+    let dir = tempdir("write-output-frozen-id");
+    let input = dir.join("doc.adoc");
+    std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
+
+    // Capture the input's identity up front, as `run` does before any conversion.
+    let input_id = std::fs::metadata(&input).expect("stat input");
+
+    // Keep the original inode alive through `out.html`, then swap the `doc.adoc`
+    // path for an unrelated decoy file (a distinct inode).
     let out = dir.join("out.html");
+    std::fs::hard_link(&input, &out).expect("hard link out to the input inode");
+    std::fs::remove_file(&input).expect("unlink the original input path");
+    std::fs::write(&input, "= Decoy\n\nUnrelated.\n").expect("recreate a decoy at the path");
 
-    // Never created, so `fs::metadata` on it fails; the guard must tolerate this.
-    let missing = dir.join("gone.adoc");
+    let err = crate::write_output(&out, "<html></html>", std::slice::from_ref(&input_id))
+        .expect_err("the frozen identity still catches the original inode");
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 
-    crate::write_output(&out, "<html>ok</html>", std::slice::from_ref(&missing))
-        .expect("a non-stat-able input is skipped and the write succeeds");
-
-    let written = std::fs::read_to_string(&out).expect("read output back");
-    assert_eq!(written, "<html>ok</html>");
+    // The original source inode, reachable through `out`, keeps its contents.
+    let after = std::fs::read_to_string(&out).expect("read the original inode back");
+    assert!(
+        after.contains("Original source."),
+        "the original source inode was truncated despite the frozen identity: {after:?}"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

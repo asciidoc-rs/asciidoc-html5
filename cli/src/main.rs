@@ -523,6 +523,21 @@ fn run_with_streams(
         .map(Path::to_path_buf)
         .collect();
 
+    // Snapshot each input's file identity *now*, before any conversion, so the
+    // write-time collision check (see [`write_output`]) compares the opened
+    // output against identities frozen up front rather than against input paths
+    // re-resolved after conversion. A concurrent process that later renames an
+    // input's path — while keeping that input's original inode reachable through
+    // the output path — cannot slip the inode past the check: its identity was
+    // already captured here, so re-resolving the (now-changed) path can neither
+    // point the check at a replacement nor drop it. Inputs that cannot be stat'd
+    // are omitted (an unreadable input exposes no inode to protect); the identity
+    // comparison itself is Unix-only, matching [`same_inode`].
+    let input_ids: Vec<fs::Metadata> = input_paths
+        .iter()
+        .filter_map(|path| fs::metadata(path).ok())
+        .collect();
+
     // A single source reaching the failure level fails the whole invocation, but
     // every source is still converted first — matching Asciidoctor, which sets
     // its exit code from the highest severity seen across all inputs.
@@ -533,6 +548,7 @@ fn run_with_streams(
             &base_options,
             source,
             &input_paths,
+            &input_ids,
             &reporter,
             stdin,
             stdout,
@@ -551,6 +567,11 @@ fn run_with_streams(
 /// input file are applied, so a file's top-level `include::` targets resolve
 /// against its own directory and each file gets its own derived output name.
 ///
+/// `input_paths` and `input_ids` describe the same set of inputs two ways:
+/// `input_paths` drives the up-front, best-effort path check below, while
+/// `input_ids` holds those inputs' identities frozen before any conversion, for
+/// the race-free write-time check in [`write_output`].
+///
 /// Returns whether this source emitted a diagnostic at or above the reporter's
 /// failure level, so the caller can raise the invocation's exit code.
 #[allow(clippy::too_many_arguments)]
@@ -559,6 +580,7 @@ fn convert_source(
     base_options: &Options,
     source: &InputSource,
     input_paths: &[PathBuf],
+    input_ids: &[fs::Metadata],
     reporter: &WarningReporter,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
@@ -586,7 +608,8 @@ fn convert_source(
     // between (the identity checked here is not bound to the file finally
     // opened). That narrow TOCTOU window is closed at write time by
     // [`write_output`], which re-verifies the *opened* output handle's identity
-    // against the inputs before truncating (Unix only; see its platform note).
+    // against the inputs' identities frozen before conversion (`input_ids`)
+    // before truncating (Unix only; see its platform note).
     if let OutputTarget::File(path) = &target {
         if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
@@ -638,7 +661,7 @@ fn convert_source(
                 asciidoc_html5::convert_document_with_writer(&document, &options, &mut writer)?;
             let convert = convert_start.elapsed();
 
-            write_output(&path, &html, input_paths)?;
+            write_output(&path, &html, input_ids)?;
             convert
         }
 
@@ -874,18 +897,27 @@ impl AssetWriter for OutputGuard {
 }
 
 /// Writes `html` to `path`, binding the input/output collision check to the
-/// file actually opened rather than to a path checked earlier.
+/// file actually opened and to input identities frozen before conversion —
+/// rather than to paths re-resolved at either end after the fact.
 ///
-/// The up-front guard in [`convert_source`] compares a *path* before the input
+/// The up-front guard in [`convert_source`] compares *paths* before the input
 /// is read; between that check and this write a concurrent process could swap
 /// the output path for a symlink or hard link to an input, so the identity
 /// verified there need not be the file finally written (a TOCTOU race). Here
 /// the output is opened *without* truncating, its handle is `fstat`ed
 /// ([`std::fs::File::metadata`]), and its device and inode are compared against
-/// every input's identity. A substituted alias is therefore opened but left
-/// intact when it is caught, so no source is truncated; only once the handle
-/// matches no input is it truncated ([`std::fs::File::set_len`]) and written.
-/// This closes the window the path-based check cannot.
+/// `input_ids` — each input's identity as captured up front in
+/// [`run_with_streams`], before any conversion. A substituted alias is
+/// therefore opened but left intact when
+/// it is caught, so no source is truncated; only once the handle matches no
+/// input is it truncated ([`std::fs::File::set_len`]) and written.
+///
+/// Both ends of the comparison are pinned: the output to the descriptor just
+/// opened, and each input to an identity frozen before conversion. So neither
+/// swapping the *output* path for an alias nor renaming an *input's* path
+/// (while keeping its inode reachable through the output) can slip a source
+/// past the check — closing the window the path-based check cannot, on both
+/// sides.
 ///
 /// # Platform limitation
 ///
@@ -896,7 +928,7 @@ impl AssetWriter for OutputGuard {
 /// `windows_by_handle` limitation tracked in
 /// <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
 #[cfg(unix)]
-fn write_output(path: &Path, html: &str, input_paths: &[PathBuf]) -> io::Result<()> {
+fn write_output(path: &Path, html: &str, input_ids: &[fs::Metadata]) -> io::Result<()> {
     // Open (creating if absent) *without* `O_TRUNC`, so a substituted symlink or
     // hard link to an input is opened but its contents are left intact — the
     // fstat below can then reject it before any data is written.
@@ -908,18 +940,15 @@ fn write_output(path: &Path, html: &str, input_paths: &[PathBuf]) -> io::Result<
 
     let out_meta = file.metadata()?;
 
-    // Compare the *opened* file's identity — bound to the descriptor, not to a
-    // path resolved earlier — against each input. A match means the handle we are
-    // about to truncate is one of this invocation's sources.
-    for input in input_paths {
-        if let Ok(in_meta) = fs::metadata(input) {
-            if same_inode(&out_meta, &in_meta) {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "input file and output file cannot be the same",
-                ));
-            }
-        }
+    // Compare the *opened* file's identity — bound to the descriptor — against
+    // each input identity frozen before conversion. A match means the handle we
+    // are about to truncate is one of this invocation's sources, reached either
+    // directly or through an alias swapped in after the up-front path check.
+    if input_ids.iter().any(|input| same_inode(&out_meta, input)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "input file and output file cannot be the same",
+        ));
     }
 
     // The handle aliases no input; truncate the (possibly pre-existing) file now
@@ -929,7 +958,7 @@ fn write_output(path: &Path, html: &str, input_paths: &[PathBuf]) -> io::Result<
 }
 
 #[cfg(not(unix))]
-fn write_output(path: &Path, html: &str, _input_paths: &[PathBuf]) -> io::Result<()> {
+fn write_output(path: &Path, html: &str, _input_ids: &[fs::Metadata]) -> io::Result<()> {
     fs::write(path, html)
 }
 
