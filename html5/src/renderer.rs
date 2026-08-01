@@ -1081,6 +1081,7 @@ pub(crate) fn render_document<'a>(
         },
         sectlinks: document.is_attribute_set("sectlinks"),
         stem_type: resolve_stem_type(document),
+        cellbgcolor: attribute_str(document, "cellbgcolor"),
     };
     renderer.document(document);
     renderer.out
@@ -1233,6 +1234,7 @@ struct CellRenderConfig {
     section_anchors: SectionAnchors,
     sectlinks: bool,
     stem_type: StemType,
+    cellbgcolor: Option<String>,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1323,6 +1325,15 @@ struct Renderer<'a> {
     /// The document's default STEM notation (its `stem` attribute), the
     /// delimiter pair a bare `[stem]` block renders in.
     stem_type: StemType,
+
+    /// The document `cellbgcolor` attribute, when set to a value. Each table
+    /// cell (`<td>`/`<th>`) then carries a `style="background-color: …;"`
+    /// matching Asciidoctor. This crate honors only the document-attribute form
+    /// (`:cellbgcolor: …`), which colors every cell uniformly; Asciidoctor's
+    /// per-cell, order-dependent form set through inline attribute entries
+    /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
+    /// not implement inline attribute entries (asciidoc-html5#163).
+    cellbgcolor: Option<String>,
 }
 
 impl Renderer<'_> {
@@ -3060,6 +3071,7 @@ impl Renderer<'_> {
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
+                        cellbgcolor: self.cellbgcolor.clone(),
                     },
                 )
             ),
@@ -3105,8 +3117,18 @@ impl Renderer<'_> {
             String::new()
         };
 
+        // Asciidoctor stamps `style="background-color: …;"` on every cell when
+        // the `cellbgcolor` document attribute is set, reading its value as it
+        // renders each cell. This crate honors the document-attribute form
+        // (uniform across the table); see the `cellbgcolor` field for why the
+        // inline per-cell form is out of scope.
+        let style = match &self.cellbgcolor {
+            Some(color) => format!(" style=\"background-color: {color};\""),
+            None => String::new(),
+        };
+
         self.line(&format!(
-            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}>{content}</{tag}>"
+            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}{style}>{content}</{tag}>"
         ));
     }
 
@@ -4073,6 +4095,7 @@ fn render_cell_document<'s>(
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
+        cellbgcolor: config.cellbgcolor,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -6848,6 +6871,52 @@ mod tests {
         let html = crate::convert("[.myrole]\n|===\n|a |b\n|===\n");
         assert!(
             html.contains("<table class=\"tableblock frame-all grid-all stretch myrole\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_document_attribute_styles_every_cell() {
+        // The `cellbgcolor` document attribute stamps
+        // `style="background-color: …;"` on every cell – header (`<th>`) and
+        // body (`<td>`) alike – matching Asciidoctor 2.0.26.
+        let html = crate::convert(
+            ":cellbgcolor: red\n\n[cols=\"1,1\", options=\"header\"]\n|===\n|H1 |H2\n|a |b\n|===\n",
+        );
+        assert!(
+            html.contains(
+                "<th class=\"tableblock halign-left valign-top\" style=\"background-color: red;\">H1</th>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: red;\"><p class=\"tableblock\">a</p></td>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_styles_an_asciidoc_cell() {
+        // The style attribute lands on the outer cell tag regardless of the
+        // cell's content model, including an AsciiDoc (`a`) cell.
+        let html = crate::convert(":cellbgcolor: yellow\n\n|===\na|nested _content_\n|===\n");
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: yellow;\"><div class=\"content\">"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_absent_leaves_cells_unstyled() {
+        // With no `cellbgcolor` attribute, cells carry no `style`.
+        let html = crate::convert("|===\n|a\n|===\n");
+        assert!(!html.contains("style=\"background-color"), "{html}");
+        assert!(
+            html.contains("<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">a</p></td>"),
             "{html}"
         );
     }
