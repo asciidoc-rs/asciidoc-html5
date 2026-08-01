@@ -562,6 +562,10 @@ mod writer_tests {
         let (path, content) = &writer.written[0];
         assert_eq!(path, &PathBuf::from("asciidoctor.css"));
         assert!(content.starts_with(b"/*"));
+
+        // Asciidoctor `rstrip`s the stylesheet, so the copied `asciidoctor.css`
+        // ends without a trailing newline; the written bytes must match.
+        assert!(!content.ends_with(b"\n"));
     }
 
     // With no `linkcss` (the stylesheet is embedded), the writer is never
