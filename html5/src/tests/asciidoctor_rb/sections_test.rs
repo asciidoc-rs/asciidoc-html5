@@ -24,12 +24,11 @@
 //!   counterpart (`Section.new`, `sectnum`, `.numeral`/`.level`/`.context`,
 //!   `reindex_sections`, the `Compliance` globals) — reproduced but not
 //!   re-expressed;
-//! - parser divergences surfaced during the port — a `[float]`/`[discrete]`
-//!   level-0 heading is swallowed as the doctitle, special sections that don't
-//!   support subsections emit no warning
-//!   (<https://github.com/asciidoc-rs/asciidoc-html5/issues/189>), a `==` heading
-//!   inside a delimited block is treated as a section, and a `leveloffset` that
-//!   would make a section level 0 is not coerced to the doctitle.
+//! - parser divergences surfaced during the port — a `==` heading inside a
+//!   delimited block is treated as a section
+//!   (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1024>), and a
+//!   `leveloffset` that would make a section level 0 is not coerced to the
+//!   doctitle (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -1333,7 +1332,8 @@ mod levels {
         }
 
         // Not verified: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle (parser).
+        // to the doctitle
+        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
         non_normative!(
             r#"
       test 'document title created from leveloffset shift defined in document' do
@@ -1344,7 +1344,8 @@ mod levels {
         );
 
         // Not verified: a leveloffset that would make a section level 0 is not coerced
-        // to the doctitle (parser).
+        // to the doctitle
+        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1025>).
         non_normative!(
             r#"
       test 'document title created from leveloffset shift defined in API' do
@@ -2301,10 +2302,11 @@ mod nesting {
         let _ = convert_with(input, &opts);
     }
 
-    // Not verified: the parser emits no "...sections do not support nested
-    // sections" error (#189).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_log_error_if_subsections_are_found_in_special_sections_in_article_that_do_not_support_subsections(
+    ) {
+        verifies!(
+            r#"
     test 'should log error if subsections are found in special sections in article that do not support subsections' do
       input = <<~'EOS'
       = Document Title
@@ -2347,7 +2349,41 @@ mod nesting {
     end
 
 "#
-    );
+        );
+
+        let input = concat!(
+            "= Document Title\n\n",
+            "== Section\n\n=== Subsection of Section\n\nallowed\n\n",
+            "[appendix]\n== Appendix\n\n=== Subsection of Appendix\n\nallowed\n\n",
+            "[glossary]\n== Glossary\n\n=== Subsection of Glossary\n\nnot allowed\n\n",
+            "[bibliography]\n== Bibliography\n\n=== Subsection of Bibliography\n\nnot allowed\n",
+        );
+        // A `glossary` and a `bibliography` section do not support nested
+        // sections; the `appendix` (which does) and the ordinary section do not
+        // warn.
+        assert_eq!(
+            count_warnings(input, |w| matches!(
+                w,
+                WarningType::SpecialSectionCannotHaveNestedSections(_)
+            )),
+            2
+        );
+        assert_eq!(
+            count_warnings(input, |w| matches!(
+                w,
+                WarningType::SpecialSectionCannotHaveNestedSections(s) if s.as_str() == "glossary"
+            )),
+            1
+        );
+        assert_eq!(
+            count_warnings(input, |w| matches!(
+                w,
+                WarningType::SpecialSectionCannotHaveNestedSections(s) if s.as_str() == "bibliography"
+            )),
+            1
+        );
+        let _ = convert(input);
+    }
 
     // Not verified: non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
@@ -2564,10 +2600,10 @@ mod discrete_heading {
 "#
     );
 
-    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_create_discrete_heading_instead_of_section_if_style_is_float() {
+        verifies!(
+            r#"
     test 'should create discrete heading instead of section if style is float' do
       input = <<~'EOS'
       [float]
@@ -2586,7 +2622,32 @@ mod discrete_heading {
     end
 
 "#
-    );
+        );
+
+        let output = convert("[float]\n= Independent Heading!\n\nnot in section\n");
+        assert_xpath(&output, r#"/h1[@id="_independent_heading"]"#, 1);
+        assert_xpath(&output, r#"/h1[@class="float"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"/h1[@class="float"][text()="Independent Heading!"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p[text()="not in section"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn should_create_discrete_heading_instead_of_section_if_style_is_discrete() {
@@ -2670,10 +2731,10 @@ mod discrete_heading {
         );
     }
 
-    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_create_discrete_heading_if_style_is_float_with_shorthand_role_and_id() {
+        verifies!(
+            r#"
     test 'should create discrete heading if style is float with shorthand role and id' do
       input = <<~'EOS'
       [float.independent#first]
@@ -2692,12 +2753,38 @@ mod discrete_heading {
     end
 
 "#
-    );
+        );
 
-    // Not verified: a [float]/[discrete] level-0 `=` heading is swallowed as the
-    // doctitle (#189).
-    non_normative!(
-        r#"
+        let output =
+            convert("[float.independent#first]\n= Independent Heading!\n\nnot in section\n");
+        assert_xpath(&output, r#"/h1[@id="first"]"#, 1);
+        assert_xpath(&output, r#"/h1[@class="float independent"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"/h1[@class="float independent"][text()="Independent Heading!"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p[text()="not in section"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_create_discrete_heading_if_style_is_discrete_with_shorthand_role_and_id() {
+        verifies!(
+            r#"
     test 'should create discrete heading if style is discrete with shorthand role and id' do
       input = <<~'EOS'
       [discrete.independent#first]
@@ -2716,7 +2803,33 @@ mod discrete_heading {
     end
 
 "#
-    );
+        );
+
+        let output =
+            convert("[discrete.independent#first]\n= Independent Heading!\n\nnot in section\n");
+        assert_xpath(&output, r#"/h1[@id="first"]"#, 1);
+        assert_xpath(&output, r#"/h1[@class="discrete independent"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"/h1[@class="discrete independent"][text()="Independent Heading!"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"/h1/following-sibling::*[@class="paragraph"]/p[text()="not in section"]"#,
+            1,
+        );
+    }
 
     // Not verified: asserts the parser's internal block context is
     // :floating_title. The renderer keys discrete headings off `section_type()`
@@ -5819,7 +5932,8 @@ mod heading_patterns_in_blocks {
     );
 
     // Not verified: the parser treats a `==` heading inside a delimited block as a
-    // section rather than content (#189).
+    // section rather than content
+    // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1024>).
     non_normative!(
         r#"
     test "should not match a heading in a block" do
