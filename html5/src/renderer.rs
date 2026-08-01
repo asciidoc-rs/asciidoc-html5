@@ -1973,6 +1973,13 @@ impl Renderer<'_> {
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
                 "stem" => self.stem(block),
+                // The parser assigns a raw-delimited block one of exactly five
+                // contexts — `listing`, `literal`, `pass`, `stem`, `comment` —
+                // and a `comment` block is dropped by `renders_nothing` before
+                // it reaches here, so every value that arrives is matched above.
+                // This arm is the required catch-all on the `&str` match and is
+                // unreachable in practice (hence uncovered); it keeps the
+                // renderer well-formed should the parser ever add a context.
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -6996,5 +7003,47 @@ mod tests {
             renderer.out,
             "<!-- asciidoc-html5: unsupported block context 'mystery' -->\n"
         );
+    }
+
+    #[test]
+    fn dispatching_a_bare_list_item_takes_the_unsupported_fallback() {
+        // `block`'s final `other =>` arm is the forward-compat fallback for a
+        // block variant with no dedicated renderer. A document never presents
+        // one at top level — a `ListItem`, for instance, is only reached through
+        // its parent list — so dispatch one directly to exercise the arm, the
+        // same way `dlist_narrowing_helpers_handle_both_arms` drives a path a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("* bullet\n");
+        let list = doc.child_blocks().next().unwrap();
+        let item = list.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.block(item);
+        assert!(
+            renderer
+                .out
+                .contains("asciidoc-html5: unsupported block context"),
+            "{}",
+            renderer.out
+        );
+    }
+
+    #[test]
+    fn list_item_ignores_a_non_list_item_block() {
+        // `list_item` is only ever handed a `ListItem`; its narrowing guard
+        // returns without output for any other block. Hand it a paragraph to
+        // exercise that `else` branch directly.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("just a paragraph\n");
+        let paragraph = doc.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.list_item(paragraph, false, false);
+        assert!(renderer.out.is_empty(), "{}", renderer.out);
     }
 }
