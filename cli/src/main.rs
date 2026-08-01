@@ -15,10 +15,10 @@ use std::{
     io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, SafeMode};
+use asciidoc_html5::{AssetWriter, DirAssetWriter, Document, Options, ReferenceTime, SafeMode};
 use asciidoc_parser::{
     parser::SourceLine,
     warnings::{Warning, WarningType},
@@ -479,6 +479,35 @@ fn run_with_streams(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
+    // Resolve `SOURCE_DATE_EPOCH` before touching the input: a malformed value
+    // must fail the whole run (exit 1), matching Asciidoctor and the
+    // reproducible-builds spec, rather than silently converting with the wall
+    // clock. A valid value pins the whole clock (both the `local*` and `doc*`
+    // date/time families), so it overrides any input file's modification time.
+    let source_date_epoch = source_date_epoch_from_env()?;
+
+    run_with_streams_using(
+        cli,
+        source_date_epoch,
+        stdin_is_terminal,
+        stdin,
+        stdout,
+        stderr,
+    )
+}
+
+/// The core of [`run_with_streams`] with the reproducible clock already
+/// resolved into `source_date_epoch`, so tests can pin it without mutating the
+/// process environment. A `Some` value overrides each input file's modification
+/// time; `None` leaves the `doc*` attributes to follow that mtime.
+fn run_with_streams_using(
+    cli: &Cli,
+    source_date_epoch: Option<ReferenceTime>,
+    stdin_is_terminal: bool,
+    stdin: &mut dyn Read,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<bool> {
     // Reject an unsupported backend or doctype before reading or converting
     // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
     // touching the input.
@@ -486,13 +515,24 @@ fn run_with_streams(
     check_doctype(cli)?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
-    // a standalone document — matching Asciidoctor's command, which writes a full
+    // a standalone document – matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
-    let base_options = build_options(cli.section_numbers, &cli.attribute)?
+    let mut base_options = build_options(cli.section_numbers, &cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
+
+    // A valid `SOURCE_DATE_EPOCH` pins the reference time, so it drives every
+    // date/time attribute and overrides any input file's modification time.
+    if let Some(reference_time) = &source_date_epoch {
+        base_options = base_options.reference_time(reference_time.clone());
+    }
+
+    // Absent a pinned `SOURCE_DATE_EPOCH`, each file input's modification time
+    // seeds its `doc*` attributes; standard input has no mtime, so it falls
+    // through to the wall clock.
+    let seed_input_mtime = source_date_epoch.is_none();
 
     let reporter = WarningReporter::from_cli(cli)?;
 
@@ -523,6 +563,21 @@ fn run_with_streams(
         .map(Path::to_path_buf)
         .collect();
 
+    // Snapshot each input's file identity *now*, before any conversion, so the
+    // write-time collision check (see [`write_output`]) compares the opened
+    // output against identities frozen up front rather than against input paths
+    // re-resolved after conversion. A concurrent process that later renames an
+    // input's path — while keeping that input's original inode reachable through
+    // the output path — cannot slip the inode past the check: its identity was
+    // already captured here, so re-resolving the (now-changed) path can neither
+    // point the check at a replacement nor drop it. Inputs that cannot be stat'd
+    // are omitted (an unreadable input exposes no inode to protect); the identity
+    // comparison itself is Unix-only, matching [`same_inode`].
+    let input_ids: Vec<fs::Metadata> = input_paths
+        .iter()
+        .filter_map(|path| fs::metadata(path).ok())
+        .collect();
+
     // A single source reaching the failure level fails the whole invocation, but
     // every source is still converted first — matching Asciidoctor, which sets
     // its exit code from the highest severity seen across all inputs.
@@ -533,6 +588,8 @@ fn run_with_streams(
             &base_options,
             source,
             &input_paths,
+            &input_ids,
+            seed_input_mtime,
             &reporter,
             stdin,
             stdout,
@@ -550,6 +607,13 @@ fn run_with_streams(
 /// The shared `base_options` are cloned and the source's own base directory and
 /// input file are applied, so a file's top-level `include::` targets resolve
 /// against its own directory and each file gets its own derived output name.
+/// When `seed_input_mtime` is set (no `SOURCE_DATE_EPOCH` pinned the clock), a
+/// file source's modification time seeds its `doc*` date/time attributes.
+///
+/// `input_paths` and `input_ids` describe the same set of inputs two ways:
+/// `input_paths` drives the up-front, best-effort path check below, while
+/// `input_ids` holds those inputs' identities frozen before any conversion, for
+/// the race-free write-time check in [`write_output`].
 ///
 /// Returns whether this source emitted a diagnostic at or above the reporter's
 /// failure level, so the caller can raise the invocation's exit code.
@@ -559,13 +623,26 @@ fn convert_source(
     base_options: &Options,
     source: &InputSource,
     input_paths: &[PathBuf],
+    input_ids: &[fs::Metadata],
+    seed_input_mtime: bool,
     reporter: &WarningReporter,
     stdin: &mut dyn Read,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
     let input = source.file();
-    let options = apply_base_dir(cli, base_options.clone(), input)?;
+    let mut options = apply_base_dir(cli, base_options.clone(), input)?;
+
+    // Seed the `doc*` date/time attributes from the input file's modification
+    // time, matching Asciidoctor's `input_mtime`. Skipped when a
+    // `SOURCE_DATE_EPOCH` already pinned the clock (it takes precedence), and
+    // for standard input, which has no file to stat.
+    if seed_input_mtime {
+        if let Some(mtime) = input.and_then(input_file_mtime) {
+            options = options.input_mtime(mtime);
+        }
+    }
+
     let target = output_target_for(cli, input);
 
     // Refuse to write the output onto any input file in this invocation, matching
@@ -577,14 +654,17 @@ fn convert_source(
     // aliases an input through a symlink or a hard link is caught too. Fail
     // before reading or converting.
     //
-    // This check is best-effort against *accidental* clobbering, not a race-free
-    // atomic write: it runs here, but the actual write happens after the input is
-    // read and converted, so a concurrent process could swap the output path for
-    // an alias to an input in between (the identity checked is not bound to the
-    // file finally written). Matching Asciidoctor, which checks the same way, the
-    // TOCTOU race is left open; closing it would mean verifying the opened output
-    // handle's identity before truncating. Tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/170>.
+    // This up-front check is best-effort against *accidental* clobbering: it
+    // runs before the input is read, so a typo (`-o doc.adoc` on `doc.adoc`), an
+    // `outfilesuffix` landing on an input's extension, or a pre-existing alias
+    // fails fast, before any conversion work. It is not itself race-free — the
+    // actual write happens after the input is read and converted, so a
+    // concurrent process could swap the output path for an alias to an input in
+    // between (the identity checked here is not bound to the file finally
+    // opened). That narrow TOCTOU window is closed at write time by
+    // [`write_output`], which re-verifies the *opened* output handle's identity
+    // against the inputs' identities frozen before conversion (`input_ids`)
+    // before truncating (Unix only; see its platform note).
     if let OutputTarget::File(path) = &target {
         if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
@@ -636,7 +716,7 @@ fn convert_source(
                 asciidoc_html5::convert_document_with_writer(&document, &options, &mut writer)?;
             let convert = convert_start.elapsed();
 
-            fs::write(path, html)?;
+            write_output(&path, &html, input_ids)?;
             convert
         }
 
@@ -871,6 +951,72 @@ impl AssetWriter for OutputGuard {
     }
 }
 
+/// Writes `html` to `path`, binding the input/output collision check to the
+/// file actually opened and to input identities frozen before conversion —
+/// rather than to paths re-resolved at either end after the fact.
+///
+/// The up-front guard in [`convert_source`] compares *paths* before the input
+/// is read; between that check and this write a concurrent process could swap
+/// the output path for a symlink or hard link to an input, so the identity
+/// verified there need not be the file finally written (a TOCTOU race). Here
+/// the output is opened *without* truncating, its handle is `fstat`ed
+/// ([`std::fs::File::metadata`]), and its device and inode are compared against
+/// `input_ids` — each input's identity as captured up front in
+/// [`run_with_streams`], before any conversion. A substituted alias is
+/// therefore opened but left intact when
+/// it is caught, so no source is truncated; only once the handle matches no
+/// input is it truncated ([`std::fs::File::set_len`]) and written.
+///
+/// Both ends of the comparison are pinned: the output to the descriptor just
+/// opened, and each input to an identity frozen before conversion. So neither
+/// swapping the *output* path for an alias nor renaming an *input's* path
+/// (while keeping its inode reachable through the output) can slip a source
+/// past the check — closing the window the path-based check cannot, on both
+/// sides.
+///
+/// # Platform limitation
+///
+/// The file-descriptor identity comparison is Unix-only, for the same reason
+/// [`same_file`]'s is: std exposes the equivalent Windows file id only behind
+/// an unstable feature. On Windows this falls back to a plain [`fs::write`],
+/// which leaves the narrow race open there — the same nightly-gated
+/// `windows_by_handle` limitation tracked in
+/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
+#[cfg(unix)]
+fn write_output(path: &Path, html: &str, input_ids: &[fs::Metadata]) -> io::Result<()> {
+    // Open (creating if absent) *without* `O_TRUNC`, so a substituted symlink or
+    // hard link to an input is opened but its contents are left intact — the
+    // fstat below can then reject it before any data is written.
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(path)?;
+
+    let out_meta = file.metadata()?;
+
+    // Compare the *opened* file's identity — bound to the descriptor — against
+    // each input identity frozen before conversion. A match means the handle we
+    // are about to truncate is one of this invocation's sources, reached either
+    // directly or through an alias swapped in after the up-front path check.
+    if input_ids.iter().any(|input| same_inode(&out_meta, input)) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "input file and output file cannot be the same",
+        ));
+    }
+
+    // The handle aliases no input; truncate the (possibly pre-existing) file now
+    // and write the rendered HTML from the start.
+    file.set_len(0)?;
+    file.write_all(html.as_bytes())
+}
+
+#[cfg(not(unix))]
+fn write_output(path: &Path, html: &str, _input_ids: &[fs::Metadata]) -> io::Result<()> {
+    fs::write(path, html)
+}
+
 /// Whether `a` and `b` name the same file on disk.
 ///
 /// When both paths exist, compares their file identity — device and inode — so
@@ -1017,6 +1163,125 @@ fn has_explicit_docdir(cli: &Cli) -> bool {
             None => false,
         }
     })
+}
+
+/// The name of the reproducible-builds environment variable that pins the
+/// document's date/time attributes.
+const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
+
+/// Resolves the `SOURCE_DATE_EPOCH` environment variable into a pinned
+/// [`ReferenceTime`] for reproducible builds.
+///
+/// Per the [reproducible-builds specification], the variable holds a count of
+/// seconds since the Unix epoch (interpreted as UTC) that fixes the document's
+/// time-dependent attributes. `adoc` honors it the way Asciidoctor does: a
+/// valid value pins the whole clock – both the `local*` and `doc*` families –
+/// so it overrides any input file's modification time; an unset or empty value
+/// is ignored (`Ok(None)`); and a *malformed* value fails the run rather than
+/// silently falling back to the wall clock.
+///
+/// This is the CLI's own gate: `asciidoc-parser` reads the same variable but
+/// tolerates a malformed value (it has no error channel there), so `adoc`
+/// validates it up front and pins the resolved instant explicitly.
+///
+/// [reproducible-builds specification]: https://reproducible-builds.org/specs/source-date-epoch/
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when the variable is set to
+/// a non-empty value that is not a valid integer. A non-Unicode value is read
+/// lossily and so is rejected as malformed too.
+fn source_date_epoch_from_env() -> io::Result<Option<ReferenceTime>> {
+    resolve_source_date_epoch(std::env::var_os(SOURCE_DATE_EPOCH))
+}
+
+/// Resolves a raw `SOURCE_DATE_EPOCH` value (as read from the environment by
+/// [`source_date_epoch_from_env`]) into a pinned [`ReferenceTime`], independent
+/// of the process environment so the rules can be unit-tested without mutating
+/// shared state.
+///
+/// An absent, empty, or all-whitespace value yields `Ok(None)`; a valid integer
+/// count of seconds since the Unix epoch yields `Ok(Some(_))`; any other value
+/// (including non-Unicode, read lossily) is malformed and yields an error.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `raw` is a non-empty
+/// value that is not a valid integer.
+fn resolve_source_date_epoch(raw: Option<OsString>) -> io::Result<Option<ReferenceTime>> {
+    match raw {
+        Some(value) => parse_source_date_epoch(&value.to_string_lossy()),
+        None => Ok(None),
+    }
+}
+
+/// Parses a raw `SOURCE_DATE_EPOCH` value into a pinned [`ReferenceTime`],
+/// applying the reproducible-builds rules independently of the process
+/// environment (so the rules can be unit-tested without mutating shared state).
+///
+/// An empty or all-whitespace value yields `Ok(None)` (ignored, per
+/// Asciidoctor's `nil_or_empty?` guard); a valid integer count of seconds since
+/// the Unix epoch yields `Ok(Some(_))`; any other value is malformed and yields
+/// an error.
+///
+/// # Errors
+///
+/// Returns an [`io::ErrorKind::InvalidInput`] error when `raw` is non-empty but
+/// not a valid integer.
+fn parse_source_date_epoch(raw: &str) -> io::Result<Option<ReferenceTime>> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    match trimmed.parse::<i64>() {
+        Ok(secs) => Ok(Some(ReferenceTime::from_unix_timestamp(secs))),
+        Err(_) => Err(source_date_epoch_error(trimmed)),
+    }
+}
+
+/// Builds the error reported for a malformed `SOURCE_DATE_EPOCH` value.
+fn source_date_epoch_error(value: &str) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!(
+            "malformed SOURCE_DATE_EPOCH value '{value}': \
+             expected an integer count of seconds since the Unix epoch"
+        ),
+    )
+}
+
+/// Reads `path`'s modification time as a [`ReferenceTime`] that seeds the
+/// `doc*` document attributes (`docdate`, `doctime`, `docdatetime`, `docyear`),
+/// matching Asciidoctor's `input_mtime`.
+///
+/// The time is read as UTC: this toolchain carries no timezone database, so the
+/// computed `doctime`/`docdatetime` print a `UTC` zone rather than a local
+/// offset – the same convention `asciidoc-parser` uses for an unpinned clock.
+/// Returns `None` when the file's metadata or modification time is unavailable,
+/// leaving the `doc*` attributes to fall back to the wall clock.
+fn input_file_mtime(path: &Path) -> Option<ReferenceTime> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+
+    Some(ReferenceTime::from_unix_timestamp(unix_seconds(modified)))
+}
+
+/// Whole seconds from the Unix epoch to `time`, negative for an instant before
+/// it (a source file whose modification time predates 1970). Split out from
+/// [`input_file_mtime`] so the sign handling can be unit-tested without a file.
+fn unix_seconds(time: SystemTime) -> i64 {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(delta) => delta.as_secs() as i64,
+
+        // A time before the Unix epoch yields a negative count, floored toward
+        // the containing Unix second rather than truncated toward zero: a
+        // fractional pre-epoch instant belongs to the earlier second, so its
+        // sub-second remainder subtracts a further second.
+        Err(err) => {
+            let delta = err.duration();
+            -(delta.as_secs() as i64) - i64::from(delta.subsec_nanos() != 0)
+        }
+    }
 }
 
 /// Returns the input file path when `adoc` reads from a single real file, or

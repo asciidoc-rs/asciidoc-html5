@@ -29,11 +29,11 @@
 use asciidoc_parser::{
     attributes::Attrlist,
     blocks::{
-        AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
-        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
-        ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock, QuoteType, SectionBlock,
-        SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
-        TableColumn, TableRow, TocBlock, VerticalAlignment,
+        AdmonitionBlock, Block, BlockSelector, Break, BreakType, ColumnStyle,
+        CompoundDelimitedContext, ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment,
+        IsBlock, ListBlock, ListItem, ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock,
+        QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell,
+        TableCellContent, TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
     document::{DocinfoLocation, Footnote, Header, InterpretedValue, TocMode},
     Document, HasSpan, SafeMode,
@@ -53,6 +53,26 @@ pub(crate) const DEFAULT_STYLESHEET: &str = include_str!("../assets/asciidoctor-
 /// under — `Stylesheets::DEFAULT_STYLESHEET_NAME`. The linked reference and the
 /// `copycss` destination both use it.
 pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
+
+/// The CodeRay syntax-highlighter stylesheet, embedded verbatim. This is a copy
+/// of `ref/asciidoctor/data/stylesheets/coderay-asciidoctor.css` (Asciidoctor
+/// v2.0.26) — the CSS Asciidoctor's CodeRay adapter emits (or writes next to
+/// the output) when a source block is highlighted in `class` CSS mode, via
+/// `SyntaxHighlighter::CodeRayAdapter#read_stylesheet`. Like the default
+/// stylesheet it carries its own MIT license header, and a drift-guard test
+/// keeps this copy identical to the reference one.
+///
+/// This crate does not yet tokenize CodeRay's `<span>` markup (tracked in
+/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/223>), so the styled
+/// spans this stylesheet targets are not emitted; what *is* reproduced is
+/// Asciidoctor's stylesheet side of CodeRay — the `<head>` `<link>`/`<style>`
+/// and the `copycss` file copy — so a document's companion files match.
+pub(crate) const CODERAY_STYLESHEET: &str = include_str!("../assets/coderay-asciidoctor.css");
+
+/// The public file name Asciidoctor writes (and links) the CodeRay stylesheet
+/// under — `CodeRayAdapter#stylesheet_basename`. The linked reference and the
+/// `copycss` destination both use it.
+pub(crate) const CODERAY_STYLESHEET_NAME: &str = "coderay-asciidoctor.css";
 
 /// The `family` query string Asciidoctor uses for its Google Fonts `<link>`
 /// when the `webfonts` attribute carries no explicit value: Open Sans for
@@ -176,6 +196,73 @@ fn is_source_listing(block: &Block<'_>) -> bool {
             .attrlist()
             .and_then(|attrlist| attrlist.nth_attribute(2))
             .is_some()
+}
+
+/// Whether `block` is a source block — one the renderer dispatches to
+/// [`source`](Renderer::source): a source-styled simple block, or a
+/// source-styled `----` listing. This mirrors the two arms of
+/// [`Renderer::block`] that reach `source`, and is what a syntax highlighter
+/// runs over.
+fn is_source_block(block: &Block<'_>) -> bool {
+    match block {
+        Block::Simple(simple) => simple.style() == SimpleBlockStyle::Source,
+
+        Block::RawDelimited(_) => {
+            block.resolved_context().as_ref() == "listing" && is_source_listing(block)
+        }
+
+        _ => false,
+    }
+}
+
+/// Whether the document contains at least one source block, anywhere in the
+/// tree — including inside sections, compound blocks, list items, and the
+/// nested documents of AsciiDoc table cells (reached via
+/// [`BlockSelector::traverse_documents`]).
+///
+/// This is how the CodeRay stylesheet's "was anything highlighted?" gate is
+/// resolved statically. Asciidoctor sets its `@requires_stylesheet` flag while
+/// *rendering* each highlighted source block; because this crate assembles the
+/// `<head>` before the body, it answers the same question up front by scanning
+/// the parse tree instead.
+fn document_has_source_block(document: &Document<'_>) -> bool {
+    document
+        .find_blocks(&BlockSelector::new().traverse_documents(true))
+        .any(is_source_block)
+}
+
+/// Whether `source-highlighter` selects CodeRay.
+fn coderay_active(document: &Document<'_>) -> bool {
+    attribute_str(document, "source-highlighter").as_deref() == Some("coderay")
+}
+
+/// Whether CodeRay is in its class-based CSS mode — the mode that needs a
+/// stylesheet. Only `class` mode sets the adapter's `@requires_stylesheet`
+/// flag; `style` mode inlines the colors into each span.
+///
+/// Asciidoctor reads the mode as `attr('coderay-css', 'class')`: the `class`
+/// default holds unless an explicit value overrides it. The parser seeds that
+/// default, so an absent attribute already reads back as `class`, and an
+/// explicit `:coderay-css!:` (unset) falls back to the same `class` default —
+/// only a non-`class` value (such as `style`) turns the stylesheet off.
+fn coderay_css_is_class(document: &Document<'_>) -> bool {
+    !matches!(
+        attribute_str(document, "coderay-css").as_deref(),
+        Some(mode) if mode != "class"
+    )
+}
+
+/// Whether the CodeRay stylesheet (`coderay-asciidoctor.css`) applies to this
+/// document — CodeRay is the highlighter, it is in class CSS mode, and there is
+/// a source block to highlight. This is the single gate both the `<head>`
+/// docinfo ([`Renderer::highlighter_head`]) and the `copycss` copy
+/// ([`crate::copycss`]) key off, matching Asciidoctor's
+/// `SyntaxHighlighter#docinfo?`/`#write_stylesheet?` (both return the adapter's
+/// `@requires_stylesheet` flag).
+pub(crate) fn coderay_stylesheet_required(document: &Document<'_>) -> bool {
+    coderay_active(document)
+        && coderay_css_is_class(document)
+        && document_has_source_block(document)
 }
 
 /// Whether every non-blank line of a paragraph's `source` is an AsciiDoc line
@@ -444,6 +531,20 @@ pub(crate) fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     // separator on `stylesdir` is dropped so the join never doubles the `/`.
     let sheet = stylesheet.replace('\\', "/");
     let dir = stylesdir.replace('\\', "/");
+
+    // A URI styles directory joins into a URI href
+    // (`https://cdn/css` + `asciidoctor.css` -> `https://cdn/css/asciidoctor.css`)
+    // and is returned as-is rather than run through `web_normalize`, which would
+    // collapse the `//` in the scheme into `./https:/…`. This mirrors
+    // Asciidoctor's `web_path`, which lifts the URI prefix off before
+    // normalizing and restores it after. The resulting non-`./` path is also
+    // what makes `copycss` skip it — a URI stylesheet has no local file to copy,
+    // matching Asciidoctor's URI-`stylesdir` gate. A relative `stylesheet` joins
+    // under the URI; an absolute one still ignores `stylesdir` (handled below).
+    if !dir.is_empty() && !sheet.starts_with('/') && looks_like_uri(&dir) {
+        return format!("{}/{sheet}", dir.trim_end_matches('/'));
+    }
+
     let joined = if dir.is_empty() || sheet.starts_with('/') {
         sheet
     } else {
@@ -1081,6 +1182,7 @@ pub(crate) fn render_document<'a>(
         },
         sectlinks: document.is_attribute_set("sectlinks"),
         stem_type: resolve_stem_type(document),
+        cellbgcolor: attribute_str(document, "cellbgcolor"),
     };
     renderer.document(document);
     renderer.out
@@ -1233,6 +1335,7 @@ struct CellRenderConfig {
     section_anchors: SectionAnchors,
     sectlinks: bool,
     stem_type: StemType,
+    cellbgcolor: Option<String>,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1323,6 +1426,15 @@ struct Renderer<'a> {
     /// The document's default STEM notation (its `stem` attribute), the
     /// delimiter pair a bare `[stem]` block renders in.
     stem_type: StemType,
+
+    /// The document `cellbgcolor` attribute, when set to a value. Each table
+    /// cell (`<td>`/`<th>`) then carries a `style="background-color: …;"`
+    /// matching Asciidoctor. This crate honors only the document-attribute form
+    /// (`:cellbgcolor: …`), which colors every cell uniformly; Asciidoctor's
+    /// per-cell, order-dependent form set through inline attribute entries
+    /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
+    /// not implement inline attribute entries.
+    cellbgcolor: Option<String>,
 }
 
 impl Renderer<'_> {
@@ -1365,10 +1477,16 @@ impl Renderer<'_> {
         self.line("<meta charset=\"UTF-8\">");
         self.line("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">");
         self.line("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
-        self.line(&format!(
-            "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
-            env!("CARGO_PKG_VERSION")
-        ));
+
+        // The `generator` meta names the tool and its version, which changes
+        // from build to build; `reproducible` suppresses it (matching
+        // Asciidoctor) so reproducible builds emit byte-identical output.
+        if !document.is_attribute_set("reproducible") {
+            self.line(&format!(
+                "<meta name=\"generator\" content=\"asciidoc-html5 {}\">",
+                env!("CARGO_PKG_VERSION")
+            ));
+        }
 
         // The <title> is the plain-text doctitle. The parser's `doctitle()` has
         // had header substitutions applied (special characters escaped), which
@@ -1457,11 +1575,36 @@ impl Renderer<'_> {
         // Asciidoctor's standalone layout.
         self.footnotes(document);
 
-        // The footer is suppressed by `nofooter`. The "Last updated …" text is
-        // deferred until a docdatetime attribute is threaded in by the caller.
+        // The footer is suppressed by `nofooter`. Its text carries two optional
+        // lines, matching Asciidoctor's html5 footer: a "{version-label}
+        // {revnumber}" line when the document has a revision number, and a
+        // "{last-update-label} {docdatetime}" line (the "Last updated …" stamp)
+        // unless the document is `reproducible`.
         if !document.is_attribute_set("nofooter") {
             self.line("<div id=\"footer\">");
             self.line("<div id=\"footer-text\">");
+
+            // The version line, gated on `revnumber` like Asciidoctor. The
+            // `version-label` intrinsic defaults to "Version"; a trailing `<br>`
+            // separates it from the "Last updated" line that may follow.
+            if let Some(revnumber) = attribute_str(document, "revnumber") {
+                let version_label = attribute_str(document, "version-label").unwrap_or_default();
+                self.line(&format!("{version_label} {revnumber}<br>"));
+            }
+
+            // The "Last updated" line, gated on the `last-update-label`
+            // intrinsic (defaulting to "Last updated", unset to drop the line)
+            // and suppressed by `reproducible` so reproducible builds omit the
+            // volatile timestamp.
+            if !document.is_attribute_set("reproducible") {
+                if let (Some(label), Some(docdatetime)) = (
+                    attribute_str(document, "last-update-label"),
+                    attribute_str(document, "docdatetime"),
+                ) {
+                    self.line(&format!("{label} {docdatetime}"));
+                }
+            }
+
             self.line("</div>");
             self.line("</div>");
         }
@@ -1717,7 +1860,13 @@ impl Renderer<'_> {
     /// directly.
     fn highlighter_head(&mut self, document: &Document<'_>) {
         let href = match self.source_highlighter {
-            None => return,
+            // No *client-side* highlighter. A server-side CodeRay highlighter
+            // still contributes a stylesheet docinfo (its `<link>` or embedded
+            // `<style>`), so try that before bailing out.
+            None => {
+                self.coderay_stylesheet_head(document);
+                return;
+            }
 
             Some(Highlighter::HighlightJs) => {
                 let theme = attribute_str(document, "highlightjs-theme")
@@ -1747,6 +1896,38 @@ impl Renderer<'_> {
         };
 
         self.line(&format!("<link rel=\"stylesheet\" href=\"{href}\">"));
+    }
+
+    /// Emits the CodeRay stylesheet's `<head>` docinfo, when it applies (see
+    /// [`coderay_stylesheet_required`]) — matching the CodeRay adapter's
+    /// `docinfo :head`.
+    ///
+    /// Under `linkcss` the stylesheet is linked at its `stylesdir` web path
+    /// (`./coderay-asciidoctor.css`, or `./css/coderay-asciidoctor.css` under
+    /// `stylesdir=css`); otherwise it is embedded inline, right below the
+    /// primary stylesheet, using the same trailing-newline-chomped `<style>`
+    /// template as the default stylesheet.
+    fn coderay_stylesheet_head(&mut self, document: &Document<'_>) {
+        if !coderay_stylesheet_required(document) {
+            return;
+        }
+
+        if links_stylesheet(document) {
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+            let href = normalize_web_path(CODERAY_STYLESHEET_NAME, &stylesdir);
+            self.line(&format!(
+                "<link rel=\"stylesheet\" href=\"{}\">",
+                escape_attribute(&href)
+            ));
+        } else {
+            self.line("<style>");
+            self.line(
+                CODERAY_STYLESHEET
+                    .strip_suffix('\n')
+                    .unwrap_or(CODERAY_STYLESHEET),
+            );
+            self.line("</style>");
+        }
     }
 
     /// Emits the active client-side highlighter's `<footer>` docinfo — the
@@ -1962,6 +2143,13 @@ impl Renderer<'_> {
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
                 "stem" => self.stem(block),
+                // The parser assigns a raw-delimited block one of exactly five
+                // contexts — `listing`, `literal`, `pass`, `stem`, `comment` —
+                // and a `comment` block is dropped by `renders_nothing` before
+                // it reaches here, so every value that arrives is matched above.
+                // This arm is the required catch-all on the `&str` match and is
+                // unreachable in practice (hence uncovered); it keeps the
+                // renderer well-formed should the parser ever add a context.
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -3060,6 +3248,7 @@ impl Renderer<'_> {
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
+                        cellbgcolor: self.cellbgcolor.clone(),
                     },
                 )
             ),
@@ -3105,8 +3294,23 @@ impl Renderer<'_> {
             String::new()
         };
 
+        // Asciidoctor stamps `style="background-color: …;"` on every cell when
+        // the `cellbgcolor` document attribute is set, reading its value as it
+        // renders each cell. This crate honors the document-attribute form
+        // (uniform across the table); see the `cellbgcolor` field for why the
+        // inline per-cell form is out of scope. The value is document-controlled
+        // and lands inside a quoted attribute, so escape it to keep a stray `"`
+        // from breaking out and injecting markup (as we do for author fields).
+        // This is a deliberate divergence: Asciidoctor interpolates the value
+        // raw, but escaping only differs for values that would be malformed
+        // anyway, never for a real color.
+        let style = match &self.cellbgcolor {
+            Some(color) => format!(" style=\"background-color: {};\"", escape_attribute(color)),
+            None => String::new(),
+        };
+
         self.line(&format!(
-            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}>{content}</{tag}>"
+            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}{style}>{content}</{tag}>"
         ));
     }
 
@@ -4073,6 +4277,7 @@ fn render_cell_document<'s>(
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
+        cellbgcolor: config.cellbgcolor,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -4098,7 +4303,7 @@ fn render_cell_document<'s>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{Options, SafeMode};
+    use crate::{Options, ReferenceTime, SafeMode};
 
     // These renderer tests assert the standalone document shell (the
     // `<!DOCTYPE>`/`<head>`/`<body>` frame, the header, and the footer), so they
@@ -5248,6 +5453,109 @@ mod tests {
         assert!(!html.contains("<div id=\"footer\">"));
     }
 
+    #[test]
+    fn footer_stamps_last_updated_docdatetime() {
+        // A standalone document's footer stamps "{last-update-label}
+        // {docdatetime}". A pinned reference time makes the stamp deterministic:
+        // 2019-01-02 03:04:05 at a +06:00 offset.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_local(
+                2019,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6 * 3600,
+            )),
+        );
+
+        assert!(
+            html.contains("Last updated 2019-01-02 03:04:05 +0600"),
+            "footer should stamp the docdatetime: {html}"
+        );
+    }
+
+    #[test]
+    fn input_mtime_drives_the_footer_stamp_over_the_reference_time() {
+        // The footer's docdatetime belongs to the `doc*` family, which follows a
+        // pinned input mtime even as the reference time ("now", the `local*`
+        // family) differs – mirroring Asciidoctor's `input_mtime`.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .reference_time(ReferenceTime::from_unix_timestamp(0))
+                .input_mtime(ReferenceTime::from_local(2019, 1, 2, 3, 4, 5, 0)),
+        );
+
+        assert!(
+            html.contains("Last updated 2019-01-02 03:04:05 UTC"),
+            "footer docdatetime should follow the input mtime: {html}"
+        );
+        assert!(
+            !html.contains("1970"),
+            "the reference time should not leak in: {html}"
+        );
+    }
+
+    #[test]
+    fn reproducible_suppresses_the_footer_stamp_and_generator_meta() {
+        // `reproducible` drops the two build-volatile pieces – the "Last
+        // updated" stamp and the `generator` meta – so the output is stable
+        // across builds, matching Asciidoctor.
+        let html = convert_with(
+            "= Doc\n:reproducible:\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            !html.contains("Last updated"),
+            "the footer stamp should be suppressed: {html}"
+        );
+        assert!(
+            !html.contains("name=\"generator\""),
+            "the generator meta should be suppressed: {html}"
+        );
+
+        // Only the footer's text is dropped; the footer frame itself remains.
+        assert!(html.contains("<div id=\"footer\">"));
+    }
+
+    #[test]
+    fn footer_shows_version_label_and_revnumber() {
+        // A revision line's number drives the footer's "{version-label}
+        // {revnumber}" line; `version-label` defaults to "Version".
+        let html = convert_with(
+            "= Doc\nAuthor Name\nv2.0, 2020-01-01\n\nBody.",
+            &Options::new().reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            html.contains("Version 2.0<br>"),
+            "footer should show the version line: {html}"
+        );
+    }
+
+    #[test]
+    fn unsetting_last_update_label_drops_the_footer_stamp() {
+        // Unsetting `last-update-label` removes the "Last updated" stamp while
+        // leaving the footer frame (and its now-empty text div) in place,
+        // matching Asciidoctor's `(attr? 'last-update-label')` gate.
+        let html = convert_with(
+            "= Doc\n\nBody.",
+            &Options::new()
+                .unset("last-update-label")
+                .reference_time(ReferenceTime::from_unix_timestamp(0)),
+        );
+
+        assert!(
+            !html.contains("Last updated"),
+            "the footer stamp should be gone: {html}"
+        );
+        assert!(html.contains("<div id=\"footer-text\">"));
+    }
+
     // Embedded, body-only output shows the doctitle `<h1>` only when the title
     // toggle is enabled, and never emits the header or footer frame. The toggle
     // is the resolved `showtitle` attribute (off by default for embedded
@@ -5841,9 +6149,11 @@ mod tests {
 
     #[test]
     fn serverside_highlighter_keeps_the_default_shape() {
-        // A server-side highlighter this crate does not render (coderay, tracked
-        // in #223) leaves the source block in the default unhighlighted shape and
-        // adds no CDN assets – even when enabled through the trusted API.
+        // The coderay server-side highlighter does not (yet) tokenize the source
+        // into `<span>` markup — that is tracked in #223 — so the source block
+        // itself keeps its default unhighlighted shape and no CDN assets are
+        // added. The coderay *stylesheet* docinfo is a separate concern, verified
+        // below.
         let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -5853,6 +6163,127 @@ mod tests {
             "{html}"
         );
         assert!(!html.contains("cdnjs.cloudflare.com"), "{html}");
+    }
+
+    // With coderay active and a source block present, a standalone document
+    // links the coderay stylesheet in the `<head>`, right after the primary one
+    // (the `Secure` default links rather than embeds). This is the stylesheet
+    // side of coderay — its `docinfo :head` — even though the source spans are
+    // not yet tokenized (#223).
+    #[test]
+    fn coderay_links_its_stylesheet_after_the_primary_one() {
+        let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
+        let primary = html
+            .find("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">")
+            .expect("primary stylesheet link");
+        let coderay = html
+            .find("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">")
+            .expect("coderay stylesheet link");
+        assert!(
+            primary < coderay,
+            "coderay link should follow primary: {html}"
+        );
+    }
+
+    // Under `stylesdir`, the coderay stylesheet link mirrors that web path, the
+    // same way the primary stylesheet link does.
+    #[test]
+    fn coderay_stylesheet_link_honors_stylesdir() {
+        let html = convert_with(
+            "= Doc\n:stylesdir: css\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().attribute("source-highlighter", "coderay"),
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"./css/coderay-asciidoctor.css\">"),
+            "{html}"
+        );
+    }
+
+    // A URI `stylesdir` links the coderay stylesheet as a URI, not a mangled
+    // `./https:/…` local path — matching how the primary stylesheet link (and
+    // Asciidoctor) treats a URI styles directory.
+    #[test]
+    fn coderay_stylesheet_link_honors_a_uri_stylesdir() {
+        let html = convert_with(
+            "= Doc\n:stylesdir: https://cdn.example.com/css\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new().attribute("source-highlighter", "coderay"),
+        );
+        assert!(
+            html.contains(
+                "<link rel=\"stylesheet\" \
+                 href=\"https://cdn.example.com/css/coderay-asciidoctor.css\">"
+            ),
+            "{html}"
+        );
+        assert!(!html.contains("./https:/"), "{html}");
+    }
+
+    // Without `linkcss` (here via an `Unsafe` safe mode, which embeds), coderay
+    // embeds its stylesheet inline as a second `<style>` block below the primary
+    // one, rather than linking it.
+    #[test]
+    fn coderay_embeds_its_stylesheet_when_not_linking() {
+        let html = convert_with(
+            "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .safe_mode(SafeMode::Unsafe)
+                .attribute("source-highlighter", "coderay"),
+        );
+        assert!(html.contains("pre.CodeRay{background:#f7f7f8}"), "{html}");
+        assert!(
+            !html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
+            "{html}"
+        );
+    }
+
+    // No source block means coderay highlighted nothing, so no stylesheet
+    // docinfo is emitted — matching Asciidoctor's `@requires_stylesheet` gate.
+    #[test]
+    fn coderay_emits_no_stylesheet_without_a_source_block() {
+        let html = convert_hl("coderay", "Just a paragraph.");
+        assert!(!html.contains("coderay-asciidoctor.css"), "{html}");
+        assert!(!html.contains("pre.CodeRay"), "{html}");
+    }
+
+    // `coderay-css=style` inlines the colors into each span, so no stylesheet is
+    // required and none is emitted, even with a source block present.
+    #[test]
+    fn coderay_css_style_mode_emits_no_stylesheet() {
+        let html = convert_with(
+            "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
+            &Options::new()
+                .attribute("source-highlighter", "coderay")
+                .attribute("coderay-css", "style"),
+        );
+        assert!(!html.contains("coderay-asciidoctor.css"), "{html}");
+        assert!(!html.contains("pre.CodeRay"), "{html}");
+    }
+
+    // A source block nested in an AsciiDoc table cell still counts: the
+    // stylesheet scan enters cell documents, so coderay links its stylesheet.
+    #[test]
+    fn coderay_stylesheet_reaches_a_source_block_in_a_table_cell() {
+        let html = convert_hl(
+            "coderay",
+            "|===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
+        );
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
+            "{html}"
+        );
+    }
+
+    // A source *paragraph* (`[source,ruby]` with no `----` delimiters) is a
+    // `Simple` block carrying the `Source` style rather than a delimited
+    // listing. It is a source block all the same, so coderay links its
+    // stylesheet — exercising the `Block::Simple` arm of `is_source_block`.
+    #[test]
+    fn coderay_stylesheet_reaches_a_source_paragraph() {
+        let html = convert_hl("coderay", "[source,ruby]\nputs 1");
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
+            "{html}"
+        );
     }
 
     #[test]
@@ -6573,6 +7004,27 @@ mod tests {
             normalize_web_path("/abs/custom.css", "css"),
             "/abs/custom.css"
         );
+
+        // A URI `stylesdir` joins with a relative stylesheet into a URI href,
+        // preserving the scheme's `//` rather than collapsing it to `./https:/…`
+        // — matching Asciidoctor 2.0.26, which lifts the URI prefix off before
+        // normalizing and restores it afterward.
+        assert_eq!(
+            normalize_web_path("asciidoctor.css", "https://cdn.example.com/css"),
+            "https://cdn.example.com/css/asciidoctor.css"
+        );
+
+        // A trailing slash on the URI `stylesdir` is not doubled.
+        assert_eq!(
+            normalize_web_path("coderay-asciidoctor.css", "https://cdn.example.com/css/"),
+            "https://cdn.example.com/css/coderay-asciidoctor.css"
+        );
+
+        // An absolute stylesheet ignores `stylesdir`, even a URI one.
+        assert_eq!(
+            normalize_web_path("/abs/custom.css", "https://cdn.example.com/css"),
+            "/abs/custom.css"
+        );
     }
 
     /// Converts `source` with the given files (name → content) written to a
@@ -6853,6 +7305,65 @@ mod tests {
     }
 
     #[test]
+    fn cellbgcolor_document_attribute_styles_every_cell() {
+        // The `cellbgcolor` document attribute stamps
+        // `style="background-color: …;"` on every cell – header (`<th>`) and
+        // body (`<td>`) alike – matching Asciidoctor 2.0.26.
+        let html = crate::convert(
+            ":cellbgcolor: red\n\n[cols=\"1,1\", options=\"header\"]\n|===\n|H1 |H2\n|a |b\n|===\n",
+        );
+        assert!(
+            html.contains(
+                "<th class=\"tableblock halign-left valign-top\" style=\"background-color: red;\">H1</th>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: red;\"><p class=\"tableblock\">a</p></td>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_styles_an_asciidoc_cell() {
+        // The style attribute lands on the outer cell tag regardless of the
+        // cell's content model, including an AsciiDoc (`a`) cell.
+        let html = crate::convert(":cellbgcolor: yellow\n\n|===\na|nested _content_\n|===\n");
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: yellow;\"><div class=\"content\">"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_absent_leaves_cells_unstyled() {
+        // With no `cellbgcolor` attribute, cells carry no `style`.
+        let html = crate::convert("|===\n|a\n|===\n");
+        assert!(!html.contains("style=\"background-color"), "{html}");
+        assert!(
+            html.contains("<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">a</p></td>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_value_is_escaped() {
+        // `cellbgcolor` is document-controlled and lands inside a quoted
+        // attribute, so a stray `"` must be escaped rather than break out and
+        // inject markup (cf. `author_name_and_email_are_escaped`).
+        let html = crate::convert(":cellbgcolor: red\" onmouseover=\"alert(1)\n\n|===\n|a\n|===\n");
+        assert!(
+            html.contains("style=\"background-color: red&quot; onmouseover=&quot;alert(1);\""),
+            "{html}"
+        );
+        assert!(!html.contains("onmouseover=\"alert"), "{html}");
+    }
+
+    #[test]
     fn zero_width_column_specifier_keeps_the_default_width() {
         // `asciidoc-parser` clamps a `0` width specifier to the default width of
         // 1, so `cols="0,0"` behaves like `cols="1,1"` — an even 50/50 split.
@@ -6884,5 +7395,90 @@ mod tests {
             ),
             "{html}"
         );
+    }
+
+    /// A minimal, document-less [`Renderer`] for exercising a single helper in
+    /// isolation. Every field takes its neutral default; call the method under
+    /// test and inspect [`Renderer::out`].
+    fn bare_renderer() -> super::Renderer<'static> {
+        super::Renderer {
+            out: String::new(),
+            document: None,
+            custom_stylesheet: None,
+            standalone: false,
+            toc_mode: super::TocMode::Disabled,
+            toc_html: String::new(),
+            icons_set: false,
+            icons_font: false,
+            iconsdir: String::new(),
+            icontype: String::new(),
+            imagesdir: String::new(),
+            asset_uri_scheme: String::new(),
+            doc_tabsize: 0,
+            source_indent: None,
+            prewrap: false,
+            source_highlighter: None,
+            section_anchors: super::SectionAnchors::None,
+            sectlinks: false,
+            stem_type: super::StemType::AsciiMath,
+            cellbgcolor: None,
+        }
+    }
+
+    #[test]
+    fn unsupported_block_emits_a_visible_placeholder_comment() {
+        // `unsupported` is the documented forward-compat fallback for a
+        // construct the baseline does not yet render (see ARCHITECTURE.md). No
+        // document currently reaches it — every parser block context is either
+        // handled or dropped — so its contract is pinned here directly: a single
+        // well-formed HTML comment naming the offending context.
+        let mut renderer = bare_renderer();
+        renderer.unsupported("mystery");
+        assert_eq!(
+            renderer.out,
+            "<!-- asciidoc-html5: unsupported block context 'mystery' -->\n"
+        );
+    }
+
+    #[test]
+    fn dispatching_a_bare_list_item_takes_the_unsupported_fallback() {
+        // `block`'s final `other =>` arm is the forward-compat fallback for a
+        // block variant with no dedicated renderer. A document never presents
+        // one at top level — a `ListItem`, for instance, is only reached through
+        // its parent list — so dispatch one directly to exercise the arm, the
+        // same way `dlist_narrowing_helpers_handle_both_arms` drives a path a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("* bullet\n");
+        let list = doc.child_blocks().next().unwrap();
+        let item = list.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.block(item);
+        assert!(
+            renderer
+                .out
+                .contains("asciidoc-html5: unsupported block context"),
+            "{}",
+            renderer.out
+        );
+    }
+
+    #[test]
+    fn list_item_ignores_a_non_list_item_block() {
+        // `list_item` is only ever handed a `ListItem`; its narrowing guard
+        // returns without output for any other block. Hand it a paragraph to
+        // exercise that `else` branch directly.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("just a paragraph\n");
+        let paragraph = doc.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.list_item(paragraph, false, false);
+        assert!(renderer.out.is_empty(), "{}", renderer.out);
     }
 }
