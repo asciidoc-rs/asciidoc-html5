@@ -1,16 +1,21 @@
 //! Port of Asciidoctor's `blocks_test.rb` — the front half plus the
-//! `Passthrough Blocks` context (through source line 1841).
+//! `Passthrough Blocks` and `Math blocks` contexts (through source line 2208).
 //!
 //! This crate already renders the block types these contexts exercise — layout
 //! breaks, comments, sidebar/quote/verse/example/admonition/open blocks,
-//! verbatim (listing/literal/source) blocks, and passthrough blocks — so they
-//! port directly, driven through `convert` (embedded) /
-//! `convert_with(..standalone(true)..)`.
+//! verbatim (listing/literal/source) blocks, passthrough blocks, and STEM
+//! (`stem`/`latexmath`/`asciimath`) blocks — so they port directly, driven
+//! through `convert` (embedded) / `convert_with(..standalone(true)..)`.
 //!
-//! The remaining back half (Math, Images, Media, Admonition icons, Source code,
-//! Abstract/Part Intro, Substitutions, References — lines 1842+) hits block
-//! types this renderer does not implement yet and is deliberately not
-//! reproduced here; it is being sequenced as its own implement-then-port work.
+//! The remaining back half (Custom Blocks, Metadata, Images, Media, Admonition
+//! icons, Source code, Abstract/Part Intro, Substitutions, References — lines
+//! 2210+) is being sequenced as its own implement-then-port work.
+//!
+//! What stays `non_normative!` in the `Math blocks` context: the
+//! DocBook-backend equation tests, the `doc.blocks[0].content` parser-model
+//! check, and the four `eqnums`/`autoNumber` tests that assert on the MathJax
+//! docinfo config script this renderer does not emit yet (tracked in
+//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/250>).
 //!
 //! What stays `non_normative!` in the front half:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -3700,5 +3705,898 @@ mod passthrough_blocks {
         let expected = "line above\n  first line\n\nlast line\nline below\n";
 
         assert_eq!(convert(input), expected);
+    }
+}
+
+mod math_blocks {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Math blocks' do
+"#
+    );
+
+    #[test]
+    fn should_not_crash_when_converting_stem_block_that_has_no_lines() {
+        verifies!(
+            r#"
+    test 'should not crash when converting stem block that has no lines' do
+      input = <<~'EOS'
+      [stem]
+      ++++
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+    end
+
+"#
+        );
+
+        let html = convert("[stem]\n++++\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+    }
+
+    // `doc.blocks[0].content` inspects the parser's block model (verified in
+    // `asciidoc-parser`); an empty block's content string has no rendered form
+    // for a `convert`-driven test to re-express.
+    non_normative!(
+        r#"
+    test 'should return content as empty string for stem or pass block that has no lines' do
+      [%(++++\n++++), %([stem]\n++++\n++++)].each do |input|
+        doc = document_from_string input
+        assert_equal '', doc.blocks[0].content
+      end
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_add_latex_math_delimiters_around_latexmath_block_content() {
+        verifies!(
+            r#"
+    test 'should add LaTeX math delimiters around latexmath block content' do
+      input = <<~'EOS'
+      [latexmath]
+      ++++
+      \sqrt{3x-1}+(1+x)^2 < y
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+      assert_equal '\[\sqrt{3x-1}+(1+x)^2 &lt; y\]', nodes.first.to_s.strip
+    end
+
+"#
+        );
+
+        let html = convert("[latexmath]\n++++\n\\sqrt{3x-1}+(1+x)^2 < y\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains("<div class=\"content\">\n\\[\\sqrt{3x-1}+(1+x)^2 &lt; y\\]\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_not_add_latex_math_delimiters_around_latexmath_block_content_if_already_present() {
+        verifies!(
+            r#"
+    test 'should not add LaTeX math delimiters around latexmath block content if already present' do
+      input = <<~'EOS'
+      [latexmath]
+      ++++
+      \[\sqrt{3x-1}+(1+x)^2 < y\]
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+      assert_equal '\[\sqrt{3x-1}+(1+x)^2 &lt; y\]', nodes.first.to_s.strip
+    end
+
+"#
+        );
+
+        let html = convert("[latexmath]\n++++\n\\[\\sqrt{3x-1}+(1+x)^2 < y\\]\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains("<div class=\"content\">\n\\[\\sqrt{3x-1}+(1+x)^2 &lt; y\\]\n</div>"),
+            "{html}"
+        );
+    }
+
+    // The DocBook backend emits an `<informalequation>` with the raw equation in
+    // a CDATA `<alt>`/`<mathphrase>`; this crate targets only the `html5`
+    // backend, so there is no DocBook output to assert.
+    non_normative!(
+        r#"
+    test 'should display latexmath block in alt of equation in DocBook backend' do
+      input = <<~'EOS'
+      [latexmath]
+      ++++
+      \sqrt{3x-1}+(1+x)^2 < y
+      ++++
+      EOS
+
+      expect = <<~'EOS'
+      <informalequation>
+      <alt><![CDATA[\sqrt{3x-1}+(1+x)^2 < y]]></alt>
+      <mathphrase><![CDATA[\sqrt{3x-1}+(1+x)^2 < y]]></mathphrase>
+      </informalequation>
+      EOS
+
+      output = convert_string_to_embedded input, backend: :docbook
+      assert_equal expect.strip, output.strip
+    end
+
+"#
+    );
+
+    // The `autoNumber` option lives in the MathJax config `<script>` this
+    // renderer does not yet emit in standalone output
+    // (asciidoc-rs/asciidoc-html5#250); until that docinfo lands there is no
+    // rendered form of `eqnums` to assert.
+    non_normative!(
+        r#"
+    test 'should set autoNumber option for latexmath to none by default' do
+      input = <<~'EOS'
+      :stem: latexmath
+
+      [stem]
+      ++++
+      y = x^2
+      ++++
+      EOS
+
+      output = convert_string input
+      assert_includes output, 'TeX: { equationNumbers: { autoNumber: "none" } }'
+    end
+
+    test 'should set autoNumber option for latexmath to none if eqnums is set to none' do
+      input = <<~'EOS'
+      :stem: latexmath
+      :eqnums: none
+
+      [stem]
+      ++++
+      y = x^2
+      ++++
+      EOS
+
+      output = convert_string input
+      assert_includes output, 'TeX: { equationNumbers: { autoNumber: "none" } }'
+    end
+
+    test 'should set autoNumber option for latexmath to AMS if eqnums is set' do
+      input = <<~'EOS'
+      :stem: latexmath
+      :eqnums:
+
+      [stem]
+      ++++
+      \begin{equation}
+      y = x^2
+      \end{equation}
+      ++++
+      EOS
+
+      output = convert_string input
+      assert_includes output, 'TeX: { equationNumbers: { autoNumber: "AMS" } }'
+    end
+
+    test 'should set autoNumber option for latexmath to all if eqnums is set to all' do
+      input = <<~'EOS'
+      :stem: latexmath
+      :eqnums: all
+
+      [stem]
+      ++++
+      y = x^2
+      ++++
+      EOS
+
+      output = convert_string input
+      assert_includes output, 'TeX: { equationNumbers: { autoNumber: "all" } }'
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_not_split_equation_in_asciimath_block_at_single_newline() {
+        verifies!(
+            r#"
+    test 'should not split equation in AsciiMath block at single newline' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      f: bbb"N" -> bbb"N"
+      f: x |-> x + 1
+      ++++
+      EOS
+      expected = <<~'EOS'.chop
+      \$f: bbb"N" -&gt; bbb"N"
+      f: x |-&gt; x + 1\$
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]', output
+      assert_equal expected, nodes.first.inner_html.strip
+    end
+
+"#
+        );
+
+        let html = convert("[asciimath]\n++++\nf: bbb\"N\" -> bbb\"N\"\nf: x |-> x + 1\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains(
+                "<div class=\"content\">\n\\$f: bbb\"N\" -&gt; bbb\"N\"\nf: x |-&gt; x + 1\\$\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_split_equation_in_asciimath_block_at_escaped_newline() {
+        verifies!(
+            r#"
+    test 'should split equation in AsciiMath block at escaped newline' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      f: bbb"N" -> bbb"N" \
+      f: x |-> x + 1
+      ++++
+      EOS
+      expected = <<~'EOS'.chop
+      \$f: bbb"N" -&gt; bbb"N"\$
+      \$f: x |-&gt; x + 1\$
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]', output
+      assert_equal expected, nodes.first.inner_html.strip
+    end
+
+"#
+        );
+
+        let html = convert("[asciimath]\n++++\nf: bbb\"N\" -> bbb\"N\" \\\nf: x |-> x + 1\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains(
+                "<div class=\"content\">\n\\$f: bbb\"N\" -&gt; bbb\"N\"\\$\n\\$f: x |-&gt; x + 1\\$\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_split_equation_in_asciimath_block_at_sequence_of_escaped_newlines() {
+        verifies!(
+            r#"
+    test 'should split equation in AsciiMath block at sequence of escaped newlines' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      f: bbb"N" -> bbb"N" \
+      \
+      f: x |-> x + 1
+      ++++
+      EOS
+      expected = <<~'EOS'.chop
+      \$f: bbb"N" -&gt; bbb"N"\$
+      <br>
+      \$f: x |-&gt; x + 1\$
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]', output
+      assert_equal expected, nodes.first.inner_html.strip
+    end
+
+"#
+        );
+
+        let html =
+            convert("[asciimath]\n++++\nf: bbb\"N\" -> bbb\"N\" \\\n\\\nf: x |-> x + 1\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains(
+                "<div class=\"content\">\n\\$f: bbb\"N\" -&gt; bbb\"N\"\\$\n<br>\n\\$f: x |-&gt; x + 1\\$\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_split_equation_in_asciimath_block_at_newline_sequence_and_preserve_breaks() {
+        verifies!(
+            r#"
+    test 'should split equation in AsciiMath block at newline sequence and preserve breaks' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      f: bbb"N" -> bbb"N"
+
+
+      f: x |-> x + 1
+      ++++
+      EOS
+      expected = <<~'EOS'.chop
+      \$f: bbb"N" -&gt; bbb"N"\$
+      <br>
+      <br>
+      \$f: x |-&gt; x + 1\$
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]', output
+      assert_equal expected, nodes.first.inner_html.strip
+    end
+
+"#
+        );
+
+        let html =
+            convert("[asciimath]\n++++\nf: bbb\"N\" -> bbb\"N\"\n\n\nf: x |-> x + 1\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains(
+                "<div class=\"content\">\n\\$f: bbb\"N\" -&gt; bbb\"N\"\\$\n<br>\n<br>\n\\$f: x |-&gt; x + 1\\$\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_add_asciimath_delimiters_around_asciimath_block_content() {
+        verifies!(
+            r#"
+    test 'should add AsciiMath delimiters around asciimath block content' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      sqrt(3x-1)+(1+x)^2 < y
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+      assert_equal '\$sqrt(3x-1)+(1+x)^2 &lt; y\$', nodes.first.to_s.strip
+    end
+
+"#
+        );
+
+        let html = convert("[asciimath]\n++++\nsqrt(3x-1)+(1+x)^2 < y\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains("<div class=\"content\">\n\\$sqrt(3x-1)+(1+x)^2 &lt; y\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn should_not_add_asciimath_delimiters_around_asciimath_block_content_if_already_present() {
+        verifies!(
+            r#"
+    test 'should not add AsciiMath delimiters around asciimath block content if already present' do
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      \$sqrt(3x-1)+(1+x)^2 < y\$
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+      assert_equal '\$sqrt(3x-1)+(1+x)^2 &lt; y\$', nodes.first.to_s.strip
+    end
+
+"#
+        );
+
+        let html = convert("[asciimath]\n++++\n\\$sqrt(3x-1)+(1+x)^2 < y\\$\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains("<div class=\"content\">\n\\$sqrt(3x-1)+(1+x)^2 &lt; y\\$\n</div>"),
+            "{html}"
+        );
+    }
+
+    // MathML conversion of AsciiMath is a DocBook-backend feature gated on the
+    // optional `asciimath` Ruby gem; this crate targets only the `html5`
+    // backend and has no such conversion to assert.
+    non_normative!(
+        r#"
+    test 'should convert contents of asciimath block to MathML in DocBook output if asciimath gem is available' do
+      asciimath_available = !(Asciidoctor::Helpers.require_library 'asciimath', true, :ignore).nil?
+      input = <<~'EOS'
+      [asciimath]
+      ++++
+      x+b/(2a)<+-sqrt((b^2)/(4a^2)-c/a)
+      ++++
+
+      [asciimath]
+      ++++
+      ++++
+      EOS
+
+      expect = <<~'EOS'.chop
+      <informalequation>
+      <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"><mml:mi>x</mml:mi><mml:mo>+</mml:mo><mml:mfrac><mml:mi>b</mml:mi><mml:mrow><mml:mn>2</mml:mn><mml:mi>a</mml:mi></mml:mrow></mml:mfrac><mml:mo>&lt;</mml:mo><mml:mo>&#xB1;</mml:mo><mml:msqrt><mml:mrow><mml:mfrac><mml:msup><mml:mi>b</mml:mi><mml:mn>2</mml:mn></mml:msup><mml:mrow><mml:mn>4</mml:mn><mml:msup><mml:mi>a</mml:mi><mml:mn>2</mml:mn></mml:msup></mml:mrow></mml:mfrac><mml:mo>&#x2212;</mml:mo><mml:mfrac><mml:mi>c</mml:mi><mml:mi>a</mml:mi></mml:mfrac></mml:mrow></mml:msqrt></mml:math>
+      </informalequation>
+      <informalequation>
+      <mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"></mml:math>
+      </informalequation>
+      EOS
+
+      using_memory_logger do |logger|
+        doc = document_from_string input, backend: :docbook, standalone: false
+        actual = doc.convert
+        if asciimath_available
+          assert_equal expect, actual.strip
+          assert_equal :loaded, doc.converter.instance_variable_get(:@asciimath_status)
+        else
+          assert_message logger, :WARN, 'optional gem \'asciimath\' is not available. Functionality disabled.'
+          assert_equal :unavailable, doc.converter.instance_variable_get(:@asciimath_status)
+        end
+      end
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_output_title_for_latexmath_block_if_defined() {
+        verifies!(
+            r#"
+    test 'should output title for latexmath block if defined' do
+      input = <<~'EOS'
+      .The Lorenz Equations
+      [latexmath]
+      ++++
+      \begin{aligned}
+      \dot{x} & = \sigma(y-x) \\
+      \dot{y} & = \rho x - y - xz \\
+      \dot{z} & = -\beta z + xy
+      \end{aligned}
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      assert_css '.stemblock .title', output, 1
+      assert_xpath '//*[@class="title"][text()="The Lorenz Equations"]', output, 1
+    end
+
+"#
+        );
+
+        let html = convert(
+            ".The Lorenz Equations\n[latexmath]\n++++\n\\begin{aligned}\n\\dot{x} & = \\sigma(y-x) \\\\\n\\dot{y} & = \\rho x - y - xz \\\\\n\\dot{z} & = -\\beta z + xy\n\\end{aligned}\n++++\n",
+        );
+        assert_css(&html, ".stemblock", 1);
+        assert_css(&html, ".stemblock .title", 1);
+        assert_xpath(
+            &html,
+            r#"//*[@class="title"][text()="The Lorenz Equations"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_output_title_for_asciimath_block_if_defined() {
+        verifies!(
+            r#"
+    test 'should output title for asciimath block if defined' do
+      input = <<~'EOS'
+      .Simple fraction
+      [asciimath]
+      ++++
+      a//b
+      ++++
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.stemblock', output, 1
+      assert_css '.stemblock .title', output, 1
+      assert_xpath '//*[@class="title"][text()="Simple fraction"]', output, 1
+    end
+
+"#
+        );
+
+        let html = convert(".Simple fraction\n[asciimath]\n++++\na//b\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert_css(&html, ".stemblock .title", 1);
+        assert_xpath(&html, r#"//*[@class="title"][text()="Simple fraction"]"#, 1);
+    }
+
+    #[test]
+    fn should_add_asciimath_delimiters_around_stem_block_content_for_asciimath_empty_or_unset() {
+        verifies!(
+            r#"
+    test 'should add AsciiMath delimiters around stem block content if stem attribute is asciimath, empty, or not set' do
+      input = <<~'EOS'
+      [stem]
+      ++++
+      sqrt(3x-1)+(1+x)^2 < y
+      ++++
+      EOS
+
+      [
+        {},
+        { 'stem' => '' },
+        { 'stem' => 'asciimath' },
+        { 'stem' => 'bogus' },
+      ].each do |attributes|
+        output = convert_string_to_embedded input, attributes: attributes
+        assert_css '.stemblock', output, 1
+        nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+        assert_equal '\$sqrt(3x-1)+(1+x)^2 &lt; y\$', nodes.first.to_s.strip
+      end
+    end
+
+"#
+        );
+
+        let input = "[stem]\n++++\nsqrt(3x-1)+(1+x)^2 < y\n++++\n";
+
+        // A bare `[stem]` with the `stem` document attribute unset, empty,
+        // `asciimath`, or an unrecognized value (`bogus`) all render with the
+        // AsciiMath delimiter pair.
+        for html in [
+            convert(input),
+            convert_with(input, &Options::new().attribute("stem", "")),
+            convert_with(input, &Options::new().attribute("stem", "asciimath")),
+            convert_with(input, &Options::new().attribute("stem", "bogus")),
+        ] {
+            assert_css(&html, ".stemblock", 1);
+            assert!(
+                html.contains("<div class=\"content\">\n\\$sqrt(3x-1)+(1+x)^2 &lt; y\\$\n</div>"),
+                "{html}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_add_latex_math_delimiters_around_stem_block_content_for_latexmath_latex_or_tex() {
+        verifies!(
+            r#"
+    test 'should add LaTeX math delimiters around stem block content if stem attribute is latexmath, latex, or tex' do
+      input = <<~'EOS'
+      [stem]
+      ++++
+      \sqrt{3x-1}+(1+x)^2 < y
+      ++++
+      EOS
+
+      [
+        { 'stem' => 'latexmath' },
+        { 'stem' => 'latex' },
+        { 'stem' => 'tex' },
+      ].each do |attributes|
+        output = convert_string_to_embedded input, attributes: attributes
+        assert_css '.stemblock', output, 1
+        nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+        assert_equal '\[\sqrt{3x-1}+(1+x)^2 &lt; y\]', nodes.first.to_s.strip
+      end
+    end
+
+"#
+        );
+
+        let input = "[stem]\n++++\n\\sqrt{3x-1}+(1+x)^2 < y\n++++\n";
+
+        // The `latexmath`, `latex`, and `tex` aliases all select LaTeX notation.
+        for html in [
+            convert_with(input, &Options::new().attribute("stem", "latexmath")),
+            convert_with(input, &Options::new().attribute("stem", "latex")),
+            convert_with(input, &Options::new().attribute("stem", "tex")),
+        ] {
+            assert_css(&html, ".stemblock", 1);
+            assert!(
+                html.contains("<div class=\"content\">\n\\[\\sqrt{3x-1}+(1+x)^2 &lt; y\\]\n</div>"),
+                "{html}"
+            );
+        }
+    }
+
+    #[test]
+    fn should_allow_stem_style_to_be_set_using_second_positional_argument() {
+        verifies!(
+            r#"
+    test 'should allow stem style to be set using second positional argument of block attributes' do
+      input = <<~'EOS'
+      :stem: latexmath
+
+      [stem,asciimath]
+      ++++
+      sqrt(3x-1)+(1+x)^2 < y
+      ++++
+      EOS
+
+      doc = document_from_string input
+      stemblock = doc.blocks[0]
+      assert_equal :stem, stemblock.context
+      assert_equal 'asciimath', stemblock.attributes['style']
+      output = doc.convert standalone: false
+      assert_css '.stemblock', output, 1
+      nodes = xmlnodes_at_xpath '//*[@class="content"]/child::text()', output
+      assert_equal '\$sqrt(3x-1)+(1+x)^2 &lt; y\$', nodes.first.to_s.strip
+    end
+  end
+
+"#
+        );
+
+        // The `stemblock.context`/`attributes['style']` assertions are parser
+        // model (verified in `asciidoc-parser`); here we drive the rendered
+        // output. With `:stem: latexmath`, the block's second positional
+        // (`[stem,asciimath]`) still overrides the document default, so the
+        // equation renders with the AsciiMath delimiter pair.
+        let html =
+            convert(":stem: latexmath\n\n[stem,asciimath]\n++++\nsqrt(3x-1)+(1+x)^2 < y\n++++\n");
+        assert_css(&html, ".stemblock", 1);
+        assert!(
+            html.contains("<div class=\"content\">\n\\$sqrt(3x-1)+(1+x)^2 &lt; y\\$\n</div>"),
+            "{html}"
+        );
+    }
+}
+
+mod custom_blocks {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Custom Blocks' do
+"#
+    );
+
+    #[test]
+    fn should_not_warn_if_block_style_is_unknown() {
+        verifies!(
+            r#"
+    test 'should not warn if block style is unknown' do
+      input = <<~'EOS'
+      [foo]
+      --
+      bar
+      --
+      EOS
+      convert_string_to_embedded input
+      assert_empty @logger.messages
+    end
+
+"#
+        );
+
+        // An unknown block style falls back to a plain open block; loading it
+        // surfaces no warnings — the parse-model counterpart to Asciidoctor's
+        // `assert_empty @logger.messages` (a WARN-level diagnostic would appear
+        // in the document's warnings inventory).
+        let input = "[foo]\n--\nbar\n--\n";
+        assert_eq!(load(input).warnings().count(), 0);
+    }
+
+    // A DEBUG-level "unknown style for open block" message is logger output at a
+    // severity below WARN; `asciidoc-parser` models only WARN-level diagnostics
+    // in its warnings inventory, so there is no debug channel to assert on.
+    non_normative!(
+        r#"
+    test 'should log debug message if block style is unknown and debug level is enabled' do
+      input = <<~'EOS'
+      [foo]
+      --
+      bar
+      --
+      EOS
+      using_memory_logger Logger::Severity::DEBUG do |logger|
+        convert_string_to_embedded input
+        assert_message logger, :DEBUG, '<stdin>: line 2: unknown style for open block: foo', Hash
+      end
+    end
+  end
+
+"#
+    );
+}
+
+mod metadata {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Metadata' do
+"#
+    );
+
+    #[test]
+    fn block_title_above_section_gets_carried_over_to_first_block_in_section() {
+        verifies!(
+            r#"
+    test 'block title above section gets carried over to first block in section' do
+      input = <<~'EOS'
+      .Title
+      == Section
+
+      paragraph
+      EOS
+      output = convert_string input
+      assert_xpath '//*[@class="paragraph"]', output, 1
+      assert_xpath '//*[@class="paragraph"]/*[@class="title"][text()="Title"]', output, 1
+      assert_xpath '//*[@class="paragraph"]/p[text()="paragraph"]', output, 1
+    end
+
+"#
+        );
+
+        let html = convert(".Title\n== Section\n\nparagraph\n");
+        assert_xpath(&html, r#"//*[@class="paragraph"]"#, 1);
+        assert_xpath(
+            &html,
+            r#"//*[@class="paragraph"]/*[@class="title"][text()="Title"]"#,
+            1,
+        );
+        assert_xpath(&html, r#"//*[@class="paragraph"]/p[text()="paragraph"]"#, 1);
+    }
+
+    // A block title above the *document* title should demote that title to a
+    // level-0 section (rendered `<h1 class="sect0">` in the body) and carry the
+    // block title onto the following block. `asciidoc-parser` 0.29.3 added the
+    // block-title carryover (asciidoc-rs/asciidoc-parser#1022) but still reports
+    // the `= …` line as the document title rather than demoting it —
+    // `doctitle()` stays set, the header is not cleared, and the article-doctype
+    // ERROR is not logged — so these assertions cannot hold. Held until the
+    // demotion lands upstream.
+    non_normative!(
+        r#"
+    test 'block title above document title demotes document title to a section title' do
+      input = <<~'EOS'
+      .Block title
+      = Section Title
+
+      section paragraph
+      EOS
+      output = convert_string input
+      assert_xpath '//*[@id="header"]/*', output, 0
+      assert_xpath '//*[@id="preamble"]/*', output, 0
+      assert_xpath '//*[@id="content"]/h1[text()="Section Title"]', output, 1
+      assert_xpath '//*[@class="paragraph"]', output, 1
+      assert_xpath '//*[@class="paragraph"]/*[@class="title"][text()="Block title"]', output, 1
+      assert_message @logger, :ERROR, '<stdin>: line 2: level 0 sections can only be used when doctype is book', Hash
+    end
+
+    test 'block title above document title gets carried over to first block in first section if no preamble' do
+      input = <<~'EOS'
+      :doctype: book
+      .Block title
+      = Document Title
+
+      == First Section
+
+      paragraph
+      EOS
+      doc = document_from_string input
+      # NOTE block title demotes document title to level-0 section
+      refute doc.header?
+      output = doc.convert
+      assert_xpath '//*[@class="sect1"]//*[@class="paragraph"]/*[@class="title"][text()="Block title"]', output, 1
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_apply_substitutions_to_a_block_title_in_normal_order() {
+        verifies!(
+            r##"
+    test 'should apply substitutions to a block title in normal order' do
+      input = <<~'EOS'
+      .{link-url}[{link-text}]{tm}
+      The one and only!
+      EOS
+
+      output = convert_string_to_embedded input, attributes: {
+        'link-url' => 'https://acme.com',
+        'link-text' => 'ACME',
+        'tm' => '(TM)',
+      }
+      assert_css '.title', output, 1
+      assert_css '.title a[href="https://acme.com"]', output, 1
+      assert_xpath %(//*[@class="title"][contains(text(),"#{decode_char 8482}")]), output, 1
+    end
+
+"##
+        );
+
+        let html = convert_with(
+            ".{link-url}[{link-text}]{tm}\nThe one and only!\n",
+            &Options::new()
+                .attribute("link-url", "https://acme.com")
+                .attribute("link-text", "ACME")
+                .attribute("tm", "(TM)"),
+        );
+        assert_css(&html, ".title", 1);
+        assert_css(&html, ".title a[href=\"https://acme.com\"]", 1);
+
+        // `decode_char 8482` is the trademark sign (™); the `(TM)` replacement
+        // substitution produces it as a trailing text node of the title.
+        assert_xpath(
+            &html,
+            "//*[@class=\"title\"][contains(text(), \"\u{2122}\")]",
+            1,
+        );
+    }
+
+    #[test]
+    fn empty_attribute_list_should_not_appear_in_output() {
+        verifies!(
+            r#"
+    test 'empty attribute list should not appear in output' do
+      input = <<~'EOS'
+      []
+      --
+      Block content
+      --
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_includes output, 'Block content'
+      refute_includes output, '[]'
+    end
+
+"#
+        );
+
+        let html = convert("[]\n--\nBlock content\n--\n");
+        assert!(html.contains("Block content"), "{html}");
+        assert!(!html.contains("[]"), "{html}");
+    }
+
+    #[test]
+    fn empty_block_anchor_should_not_appear_in_output() {
+        verifies!(
+            r#"
+    test 'empty block anchor should not appear in output' do
+      input = <<~'EOS'
+      [[]]
+      --
+      Block content
+      --
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_includes output, 'Block content'
+      refute_includes output, '[[]]'
+    end
+  end
+
+"#
+        );
+
+        // `asciidoc-parser` 0.29.3 ignores an empty block anchor
+        // (asciidoc-rs/asciidoc-parser#1023), so `[[]]` no longer leaks into the
+        // rendered open block.
+        let html = convert("[[]]\n--\nBlock content\n--\n");
+        assert!(html.contains("Block content"), "{html}");
+        assert!(!html.contains("[[]]"), "{html}");
     }
 }
