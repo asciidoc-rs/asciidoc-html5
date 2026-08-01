@@ -26,8 +26,9 @@
 //! memory `remote-fetch-not-planned`), so the `allow-uri-read` cases stay
 //! `non_normative!`; the no-fetch link fallback for a remote target under a
 //! non-secure safe mode *is* verified, as it only links the target rather than
-//! reading it. The jruby/classloader and non-UTF-8-encoding cases and every
-//! test that asserts only on `Reader` internals stay `non_normative!`.
+//! reading it. The jruby/classloader cases and every test that asserts only on
+//! `Reader` internals (including the BOM/UTF-16 line-encoding checks) stay
+//! `non_normative!`.
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
 //! this crate diverges from the Asciidoctor oracle. One divergence is
@@ -39,13 +40,16 @@
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
 //! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
-//! - a non-UTF-8 include file cannot be read (this crate is UTF-8 only) —
-//!   [#138]
+//!
+//! An undeclared non-UTF-8 include file is a further, permanent divergence:
+//! Asciidoctor rejects it by raising `invalid byte sequence in UTF-8`, but this
+//! crate's include handlers cannot raise mid-parse, so the include is left
+//! unresolved instead (asserted directly below). A non-UTF-8 file named with a
+//! matching `encoding` attribute *is* transcoded and its content rendered.
 //!
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
-//! [#138]: https://github.com/asciidoc-rs/asciidoc-html5/issues/138
 
 use std::path::PathBuf;
 
@@ -1356,8 +1360,11 @@ mod preprocessor_reader {
             assert!(html.contains("1\t2\t\n"), "{html:?}");
         }
 
-        // Non-normative: reads a non-UTF-8 include file; this crate is UTF-8 only
-        // (#138).
+        // Non-normative: Asciidoctor rejects an undeclared non-UTF-8 include by
+        // raising `invalid byte sequence in UTF-8`. This crate's include handlers
+        // cannot raise mid-parse, so it diverges – the include is left unresolved
+        // rather than aborting the parse. That divergent behavior is asserted in
+        // `undeclared_non_utf8_include_is_left_unresolved` below.
         non_normative!(
             r#"
       test 'should fail to read include file if not UTF-8 encoded and encoding is not specified' do
@@ -1377,6 +1384,30 @@ mod preprocessor_reader {
 
 "#
         );
+
+        // The divergence documented above, asserted: an undeclared non-UTF-8
+        // include cannot be decoded as UTF-8, so it is left unresolved – the
+        // ISO-8859-1 content never appears, an "Unresolved directive" message
+        // takes the directive's place, and an include-file-not-decodable warning
+        // is raised (naming the real cause, rather than "not found"). A matching
+        // `encoding` attribute makes the same file resolve; see
+        // `should_use_encoding_specified_by_encoding_attribute_when_reading_include_file`.
+        #[test]
+        fn undeclared_non_utf8_include_is_left_unresolved() {
+            let src = "....\ninclude::fixtures/iso-8859-1.txt[]\n....";
+            let html = convert_safe_with_fixtures(src);
+
+            assert!(html.contains("Unresolved directive"), "{html}");
+            assert!(!html.contains("Où est l'hôpital ?"), "{html}");
+
+            let warnings = fixture_warnings(src);
+            assert!(
+                warnings
+                    .iter()
+                    .any(|(w, _)| matches!(w, WarningType::IncludeFileNotDecodable(_))),
+                "{warnings:?}"
+            );
+        }
 
         #[test]
         fn should_ignore_encoding_attribute_if_value_is_not_a_valid_encoding() {
@@ -1409,10 +1440,14 @@ mod preprocessor_reader {
             );
         }
 
-        // Non-normative: reads a non-UTF-8 include file per the encoding attribute;
-        // this crate is UTF-8 only (#138).
-        non_normative!(
-            r#"
+        // A non-UTF-8 include named with a matching `encoding` attribute is
+        // transcoded to UTF-8 by the filesystem handler and rendered in place of
+        // the directive. Because the handler reports the content as already
+        // transcoded, the parser raises no non-UTF-8 include-encoding warning.
+        #[test]
+        fn should_use_encoding_specified_by_encoding_attribute_when_reading_include_file() {
+            verifies!(
+                r#"
       test 'should use encoding specified by encoding attribute when reading include file' do
         input = <<~'EOS'
         ....
@@ -1427,7 +1462,17 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            let src = "....\ninclude::fixtures/iso-8859-1.txt[encoding=iso-8859-1]\n....";
+            let html = convert_safe_with_fixtures(src);
+            assert!(html.contains("Où est l'hôpital ?"), "{html}");
+
+            // The handler honored the requested encoding, so no non-UTF-8
+            // include-encoding warning (nor any other) is raised.
+            let warnings = fixture_warnings(src);
+            assert!(warnings.is_empty(), "{warnings:?}");
+        }
 
         #[test]
         fn unresolved_target_referenced_by_include_directive_is_skipped_when_optional_option_is_set(
