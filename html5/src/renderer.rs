@@ -1081,6 +1081,7 @@ pub(crate) fn render_document<'a>(
         },
         sectlinks: document.is_attribute_set("sectlinks"),
         stem_type: resolve_stem_type(document),
+        cellbgcolor: attribute_str(document, "cellbgcolor"),
     };
     renderer.document(document);
     renderer.out
@@ -1233,6 +1234,7 @@ struct CellRenderConfig {
     section_anchors: SectionAnchors,
     sectlinks: bool,
     stem_type: StemType,
+    cellbgcolor: Option<String>,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1323,6 +1325,15 @@ struct Renderer<'a> {
     /// The document's default STEM notation (its `stem` attribute), the
     /// delimiter pair a bare `[stem]` block renders in.
     stem_type: StemType,
+
+    /// The document `cellbgcolor` attribute, when set to a value. Each table
+    /// cell (`<td>`/`<th>`) then carries a `style="background-color: …;"`
+    /// matching Asciidoctor. This crate honors only the document-attribute form
+    /// (`:cellbgcolor: …`), which colors every cell uniformly; Asciidoctor's
+    /// per-cell, order-dependent form set through inline attribute entries
+    /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
+    /// not implement inline attribute entries.
+    cellbgcolor: Option<String>,
 }
 
 impl Renderer<'_> {
@@ -1993,6 +2004,13 @@ impl Renderer<'_> {
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
                 "stem" => self.stem(block),
+                // The parser assigns a raw-delimited block one of exactly five
+                // contexts — `listing`, `literal`, `pass`, `stem`, `comment` —
+                // and a `comment` block is dropped by `renders_nothing` before
+                // it reaches here, so every value that arrives is matched above.
+                // This arm is the required catch-all on the `&str` match and is
+                // unreachable in practice (hence uncovered); it keeps the
+                // renderer well-formed should the parser ever add a context.
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
@@ -3091,6 +3109,7 @@ impl Renderer<'_> {
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
+                        cellbgcolor: self.cellbgcolor.clone(),
                     },
                 )
             ),
@@ -3136,8 +3155,23 @@ impl Renderer<'_> {
             String::new()
         };
 
+        // Asciidoctor stamps `style="background-color: …;"` on every cell when
+        // the `cellbgcolor` document attribute is set, reading its value as it
+        // renders each cell. This crate honors the document-attribute form
+        // (uniform across the table); see the `cellbgcolor` field for why the
+        // inline per-cell form is out of scope. The value is document-controlled
+        // and lands inside a quoted attribute, so escape it to keep a stray `"`
+        // from breaking out and injecting markup (as we do for author fields).
+        // This is a deliberate divergence: Asciidoctor interpolates the value
+        // raw, but escaping only differs for values that would be malformed
+        // anyway, never for a real color.
+        let style = match &self.cellbgcolor {
+            Some(color) => format!(" style=\"background-color: {};\"", escape_attribute(color)),
+            None => String::new(),
+        };
+
         self.line(&format!(
-            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}>{content}</{tag}>"
+            "<{tag} class=\"tableblock halign-{h_align} valign-{v_align}\"{colspan}{rowspan}{style}>{content}</{tag}>"
         ));
     }
 
@@ -4104,6 +4138,7 @@ fn render_cell_document<'s>(
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
+        cellbgcolor: config.cellbgcolor,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -6987,6 +7022,65 @@ mod tests {
     }
 
     #[test]
+    fn cellbgcolor_document_attribute_styles_every_cell() {
+        // The `cellbgcolor` document attribute stamps
+        // `style="background-color: …;"` on every cell – header (`<th>`) and
+        // body (`<td>`) alike – matching Asciidoctor 2.0.26.
+        let html = crate::convert(
+            ":cellbgcolor: red\n\n[cols=\"1,1\", options=\"header\"]\n|===\n|H1 |H2\n|a |b\n|===\n",
+        );
+        assert!(
+            html.contains(
+                "<th class=\"tableblock halign-left valign-top\" style=\"background-color: red;\">H1</th>"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: red;\"><p class=\"tableblock\">a</p></td>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_styles_an_asciidoc_cell() {
+        // The style attribute lands on the outer cell tag regardless of the
+        // cell's content model, including an AsciiDoc (`a`) cell.
+        let html = crate::convert(":cellbgcolor: yellow\n\n|===\na|nested _content_\n|===\n");
+        assert!(
+            html.contains(
+                "<td class=\"tableblock halign-left valign-top\" style=\"background-color: yellow;\"><div class=\"content\">"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_absent_leaves_cells_unstyled() {
+        // With no `cellbgcolor` attribute, cells carry no `style`.
+        let html = crate::convert("|===\n|a\n|===\n");
+        assert!(!html.contains("style=\"background-color"), "{html}");
+        assert!(
+            html.contains("<td class=\"tableblock halign-left valign-top\"><p class=\"tableblock\">a</p></td>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn cellbgcolor_value_is_escaped() {
+        // `cellbgcolor` is document-controlled and lands inside a quoted
+        // attribute, so a stray `"` must be escaped rather than break out and
+        // inject markup (cf. `author_name_and_email_are_escaped`).
+        let html = crate::convert(":cellbgcolor: red\" onmouseover=\"alert(1)\n\n|===\n|a\n|===\n");
+        assert!(
+            html.contains("style=\"background-color: red&quot; onmouseover=&quot;alert(1);\""),
+            "{html}"
+        );
+        assert!(!html.contains("onmouseover=\"alert"), "{html}");
+    }
+
+    #[test]
     fn zero_width_column_specifier_keeps_the_default_width() {
         // `asciidoc-parser` clamps a `0` width specifier to the default width of
         // 1, so `cols="0,0"` behaves like `cols="1,1"` — an even 50/50 split.
@@ -7018,5 +7112,90 @@ mod tests {
             ),
             "{html}"
         );
+    }
+
+    /// A minimal, document-less [`Renderer`] for exercising a single helper in
+    /// isolation. Every field takes its neutral default; call the method under
+    /// test and inspect [`Renderer::out`].
+    fn bare_renderer() -> super::Renderer<'static> {
+        super::Renderer {
+            out: String::new(),
+            document: None,
+            custom_stylesheet: None,
+            standalone: false,
+            toc_mode: super::TocMode::Disabled,
+            toc_html: String::new(),
+            icons_set: false,
+            icons_font: false,
+            iconsdir: String::new(),
+            icontype: String::new(),
+            imagesdir: String::new(),
+            asset_uri_scheme: String::new(),
+            doc_tabsize: 0,
+            source_indent: None,
+            prewrap: false,
+            source_highlighter: None,
+            section_anchors: super::SectionAnchors::None,
+            sectlinks: false,
+            stem_type: super::StemType::AsciiMath,
+            cellbgcolor: None,
+        }
+    }
+
+    #[test]
+    fn unsupported_block_emits_a_visible_placeholder_comment() {
+        // `unsupported` is the documented forward-compat fallback for a
+        // construct the baseline does not yet render (see ARCHITECTURE.md). No
+        // document currently reaches it — every parser block context is either
+        // handled or dropped — so its contract is pinned here directly: a single
+        // well-formed HTML comment naming the offending context.
+        let mut renderer = bare_renderer();
+        renderer.unsupported("mystery");
+        assert_eq!(
+            renderer.out,
+            "<!-- asciidoc-html5: unsupported block context 'mystery' -->\n"
+        );
+    }
+
+    #[test]
+    fn dispatching_a_bare_list_item_takes_the_unsupported_fallback() {
+        // `block`'s final `other =>` arm is the forward-compat fallback for a
+        // block variant with no dedicated renderer. A document never presents
+        // one at top level — a `ListItem`, for instance, is only reached through
+        // its parent list — so dispatch one directly to exercise the arm, the
+        // same way `dlist_narrowing_helpers_handle_both_arms` drives a path a
+        // real document never reaches.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("* bullet\n");
+        let list = doc.child_blocks().next().unwrap();
+        let item = list.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.block(item);
+        assert!(
+            renderer
+                .out
+                .contains("asciidoc-html5: unsupported block context"),
+            "{}",
+            renderer.out
+        );
+    }
+
+    #[test]
+    fn list_item_ignores_a_non_list_item_block() {
+        // `list_item` is only ever handed a `ListItem`; its narrowing guard
+        // returns without output for any other block. Hand it a paragraph to
+        // exercise that `else` branch directly.
+        use asciidoc_parser::{blocks::FindBlocks, Parser};
+
+        let mut parser = Parser::default();
+        let doc = parser.parse("just a paragraph\n");
+        let paragraph = doc.child_blocks().next().unwrap();
+
+        let mut renderer = bare_renderer();
+        renderer.list_item(paragraph, false, false);
+        assert!(renderer.out.is_empty(), "{}", renderer.out);
     }
 }
