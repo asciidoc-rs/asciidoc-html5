@@ -23,10 +23,7 @@
 //! - `asciidoc-parser` parser-model assertions with no rendered-output
 //!   counterpart (`Section.new`, `sectnum`, `.numeral`/`.level`/`.context`,
 //!   `reindex_sections`, the `Compliance` globals) — reproduced but not
-//!   re-expressed;
-//! - a parser divergence surfaced during the port — the trailing `@` soft-set
-//!   modifier on an API-provided attribute value (e.g. `leveloffset=-1@`) is not
-//!   stripped (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1033>).
+//!   re-expressed.
 //!
 //! Warnings are checked against the document warnings inventory via
 //! [`count_warnings`]; catalog registration via `load(..).catalog()`.
@@ -1349,18 +1346,30 @@ mod levels {
             );
         }
 
-        // Not verified: the trailing `@` soft-set modifier on the API-provided
-        // `leveloffset` value (`-1@`) is not stripped, so the offset is not applied
-        // (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1033>). The
-        // coercion itself is verified by the document-defined sibling above.
-        non_normative!(
-            r#"
+        #[test]
+        fn document_title_created_from_leveloffset_shift_defined_in_api() {
+            verifies!(
+                r#"
       test 'document title created from leveloffset shift defined in API' do
         assert_xpath "//h1[not(@id)][text() = 'Document Title']", convert_string('== Document Title', attributes: { 'leveloffset' => '-1@' })
       end
 
 "#
-        );
+            );
+
+            // The API `leveloffset` value carries a trailing `@` soft-set modifier;
+            // it is stripped, leaving `-1`, which shifts the `== Document Title`
+            // (level 1) to level 0 and coerces it to the doctitle.
+            let opts = Options::new()
+                .standalone(true)
+                .attribute("leveloffset", "-1@");
+
+            assert_xpath(
+                &convert_with("== Document Title", &opts),
+                r#"//h1[not(@id)][text()="Document Title"]"#,
+                1,
+            );
+        }
 
         #[test]
         fn should_assign_id_on_document_title_to_body() {
