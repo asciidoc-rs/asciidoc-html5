@@ -6205,6 +6205,19 @@ mod tests {
         );
     }
 
+    // A source *paragraph* (`[source,ruby]` with no `----` delimiters) is a
+    // `Simple` block carrying the `Source` style rather than a delimited
+    // listing. It is a source block all the same, so coderay links its
+    // stylesheet — exercising the `Block::Simple` arm of `is_source_block`.
+    #[test]
+    fn coderay_stylesheet_reaches_a_source_paragraph() {
+        let html = convert_hl("coderay", "[source,ruby]\nputs 1");
+        assert!(
+            html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
+            "{html}"
+        );
+    }
+
     #[test]
     fn highlighter_reaches_a_source_block_in_a_table_cell() {
         // The highlighter is a document-level property, so a source block nested
