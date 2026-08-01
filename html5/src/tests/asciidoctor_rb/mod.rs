@@ -10,6 +10,7 @@
 //! Ruby tests for behavior out of scope here — other backends, or features not
 //! yet rendered — are tracked as `non_normative!`.
 
+mod api_test;
 mod attribute_list_test;
 mod attributes_test;
 mod blocks_test;
