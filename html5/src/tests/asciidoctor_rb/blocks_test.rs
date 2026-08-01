@@ -4396,9 +4396,10 @@ mod custom_blocks {
         assert_eq!(load(input).warnings().count(), 0);
     }
 
-    // A DEBUG-level "unknown style for open block" message is logger output at a
-    // severity below WARN; `asciidoc-parser` models only WARN-level diagnostics
-    // in its warnings inventory, so there is no debug channel to assert on.
+    // Asciidoctor logs "unknown style for open block: foo" at DEBUG severity.
+    // `asciidoc-parser` does not yet surface an unknown-block-style diagnostic in
+    // its warnings inventory (asciidoc-rs/asciidoc-parser#1036), so there is
+    // nothing to assert on. Held until the parser records it.
     non_normative!(
         r#"
     test 'should log debug message if block style is unknown and debug level is enabled' do
@@ -4463,9 +4464,9 @@ mod metadata {
     // block title onto the following block. `asciidoc-parser` 0.29.3 added the
     // block-title carryover (asciidoc-rs/asciidoc-parser#1022) but still reports
     // the `= …` line as the document title rather than demoting it —
-    // `doctitle()` stays set, the header is not cleared, and the article-doctype
-    // ERROR is not logged — so these assertions cannot hold. Held until the
-    // demotion lands upstream.
+    // `doctitle()` stays set, the header is not cleared, and the
+    // `Level0SectionHeadingNotSupported` warning is not raised. Tracked upstream
+    // in asciidoc-rs/asciidoc-parser#1037; held until the demotion lands.
     non_normative!(
         r#"
     test 'block title above document title demotes document title to a section title' do
