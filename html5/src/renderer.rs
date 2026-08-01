@@ -6954,4 +6954,47 @@ mod tests {
             "{html}"
         );
     }
+
+    /// A minimal, document-less [`Renderer`] for exercising a single helper in
+    /// isolation. Every field takes its neutral default; call the method under
+    /// test and inspect [`Renderer::out`].
+    fn bare_renderer() -> super::Renderer<'static> {
+        super::Renderer {
+            out: String::new(),
+            document: None,
+            custom_stylesheet: None,
+            standalone: false,
+            toc_mode: super::TocMode::Disabled,
+            toc_html: String::new(),
+            icons_set: false,
+            icons_font: false,
+            iconsdir: String::new(),
+            icontype: String::new(),
+            imagesdir: String::new(),
+            asset_uri_scheme: String::new(),
+            doc_tabsize: 0,
+            source_indent: None,
+            prewrap: false,
+            source_highlighter: None,
+            section_anchors: super::SectionAnchors::None,
+            sectlinks: false,
+            stem_type: super::StemType::AsciiMath,
+            cellbgcolor: None,
+        }
+    }
+
+    #[test]
+    fn unsupported_block_emits_a_visible_placeholder_comment() {
+        // `unsupported` is the documented forward-compat fallback for a
+        // construct the baseline does not yet render (see ARCHITECTURE.md). No
+        // document currently reaches it — every parser block context is either
+        // handled or dropped — so its contract is pinned here directly: a single
+        // well-formed HTML comment naming the offending context.
+        let mut renderer = bare_renderer();
+        renderer.unsupported("mystery");
+        assert_eq!(
+            renderer.out,
+            "<!-- asciidoc-html5: unsupported block context 'mystery' -->\n"
+        );
+    }
 }
