@@ -222,7 +222,11 @@ Many Asciidoctor API options do not apply to this library:
 * *Output writing.* `:to_file`, `:to_dir`, and `:mkdirs` do not apply because
   the library returns a `String`; the xref:cli:options.adoc[`adoc` CLI] handles
   output paths.
-* *Not yet implemented.* `:catalog_assets`, `:parse_header_only`, and `:parse`
-  (deferred parsing) are tracked for future work.
+* *Deferred parsing.* `:parse` has no counterpart. In Asciidoctor `:parse =>
+  false` returns an unparsed document to configure before an explicit `parse`
+  call; here all parse-time configuration is supplied up front through
+  `Options`, and `load`/`load_file` return a fully parsed, owned `Document`.
+* *Not yet implemented.* `:catalog_assets` and `:parse_header_only` are tracked
+  for future work.
 "#
 );
