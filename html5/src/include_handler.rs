@@ -321,26 +321,23 @@ fn read_file(path: &Path) -> ReadOutcome {
     }
 }
 
-/// Reads `path` as raw bytes, classifying failure exactly as [`read_file`]
-/// does – a path that is not a regular file is [`ReadBytesOutcome::NotFound`],
-/// a regular file whose read fails is [`ReadBytesOutcome::NotReadable`] – but
-/// without a decoding step, so nothing is rejected for invalid UTF-8. The
-/// caller transcodes the returned bytes per the requested `encoding`.
+/// Reads `path` as raw bytes for the transcoding path, mirroring
+/// [`read_file`]'s classification but without a decoding step, so nothing is
+/// rejected for invalid UTF-8. A path that is not a regular file is
+/// [`ReadBytesOutcome::NotFound`] (Asciidoctor's `File.file?` gate); a regular
+/// file whose read fails is [`ReadBytesOutcome::NotReadable`]. The caller
+/// transcodes the returned bytes per the requested `encoding`.
 fn read_file_bytes(path: &Path) -> ReadBytesOutcome {
     if !path.is_file() {
         return ReadBytesOutcome::NotFound;
     }
 
+    // The `is_file` gate already reports a missing or non-regular target as "not
+    // found", so any failure reading a path that just passed it is a genuine read
+    // failure – typically a permission error, or the rare race where the file is
+    // removed in between – and reads as "not readable".
     match fs::read(path) {
         Ok(bytes) => ReadBytesOutcome::Read(bytes),
-
-        // A file that vanished between the `is_file` check and the read – a race
-        // with concurrent file generation or cleanup – surfaces as `NotFound` and
-        // must not be mistaken for an unreadable file.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => ReadBytesOutcome::NotFound,
-
-        // Any other IO failure on a regular file (typically a permission error)
-        // is a genuine "not readable".
         Err(_) => ReadBytesOutcome::NotReadable,
     }
 }
@@ -1230,6 +1227,62 @@ mod tests {
                 .expect("rewrite main");
             let html = convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
             assert!(!html.contains("Où est l'hôpital ?"), "{html}");
+        }
+
+        // An `encoding` include whose target does not exist is left unresolved,
+        // just like a UTF-8 include of a missing file: the transcoding read
+        // reports "not found", so the directive is replaced with an "Unresolved
+        // directive" message.
+        #[test]
+        fn encoding_include_of_a_missing_file_is_unresolved() {
+            let main = project("encoding-missing");
+            fs::write(
+                &main,
+                "= Main\n\n....\ninclude::no-such.txt[encoding=iso-8859-1]\n....\n",
+            )
+            .expect("rewrite main");
+
+            let html = convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
+            assert!(html.contains("Unresolved directive"), "{html}");
+        }
+
+        // An `encoding` include of a present-but-unreadable file is left
+        // unresolved via the "not readable" outcome (distinct from "not found"),
+        // just like a UTF-8 include. Simulating an unreadable file relies on Unix
+        // permission bits and does not work as root, so this is Unix-only and
+        // skips under root.
+        #[cfg(unix)]
+        #[test]
+        fn encoding_include_of_an_unreadable_file_is_unresolved() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let main = project("encoding-unreadable");
+            let base = main.parent().expect("base dir");
+
+            // ISO-8859-1 bytes (`Où`), then strip permissions so the file exists
+            // but cannot be read.
+            let locked = base.join("locked.txt");
+            fs::write(&locked, [0x4f, 0xf9, 0x0a]).expect("write locked file");
+            fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod");
+
+            // Root bypasses permission bits, so the file stays readable; skip.
+            if fs::read(&locked).is_ok() {
+                let _ = fs::set_permissions(&locked, fs::Permissions::from_mode(0o644));
+                return;
+            }
+
+            fs::write(
+                &main,
+                "= Main\n\n....\ninclude::locked.txt[encoding=iso-8859-1]\n....\n",
+            )
+            .expect("rewrite main");
+
+            let html = convert_file_with(&main, &Options::new().safe_mode(SafeMode::Safe)).unwrap();
+
+            let _ = fs::set_permissions(&locked, fs::Permissions::from_mode(0o644));
+
+            assert!(html.contains("Unresolved directive"), "{html}");
+            assert!(!html.contains("Où"), "{html}");
         }
     }
 }
