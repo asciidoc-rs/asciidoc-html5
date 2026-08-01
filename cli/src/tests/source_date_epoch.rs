@@ -31,7 +31,9 @@ fn unix_seconds_counts_forward_from_the_epoch() {
 }
 
 // `unix_seconds` returns a negative count for an instant before the epoch – a
-// source file whose modification time predates 1970.
+// source file whose modification time predates 1970 – flooring a fractional
+// pre-epoch instant toward the earlier second rather than truncating toward
+// zero (which would round it up by a second).
 #[test]
 fn unix_seconds_is_negative_before_the_epoch() {
     assert_eq!(unix_seconds(UNIX_EPOCH - Duration::from_secs(1)), -1);
@@ -39,6 +41,10 @@ fn unix_seconds_is_negative_before_the_epoch() {
         unix_seconds(UNIX_EPOCH - Duration::from_secs(86_400)),
         -86_400
     );
+
+    // Fractional instants floor down: -0.5s -> -1, -1.5s -> -2.
+    assert_eq!(unix_seconds(UNIX_EPOCH - Duration::from_millis(500)), -1);
+    assert_eq!(unix_seconds(UNIX_EPOCH - Duration::from_millis(1_500)), -2);
 }
 
 // A valid raw value resolves to exactly its instant. `1234123412` is

@@ -1273,8 +1273,14 @@ fn unix_seconds(time: SystemTime) -> i64 {
     match time.duration_since(UNIX_EPOCH) {
         Ok(delta) => delta.as_secs() as i64,
 
-        // A time before the Unix epoch yields a negative count.
-        Err(err) => -(err.duration().as_secs() as i64),
+        // A time before the Unix epoch yields a negative count, floored toward
+        // the containing Unix second rather than truncated toward zero: a
+        // fractional pre-epoch instant belongs to the earlier second, so its
+        // sub-second remainder subtracts a further second.
+        Err(err) => {
+            let delta = err.duration();
+            -(delta.as_secs() as i64) - i64::from(delta.subsec_nanos() != 0)
+        }
     }
 }
 
