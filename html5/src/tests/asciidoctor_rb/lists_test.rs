@@ -1482,10 +1482,14 @@ more text"]"#,
             assert_xpath(&output, r#"(//ul)[2]/li"#, 1);
         }
 
-        #[test]
-        fn list_should_terminate_before_next_lower_section_heading() {
-            verifies!(
-                r#"
+        // Setext (two-line/underlined) titles are intentionally out of scope
+        // for this project. Here `List\n====` is a setext level-0 doctitle, so
+        // the parser reads `====` as an example-block delimiter and never sees
+        // the `== Section` heading. (asciidoc-parser 0.29.3 surfaced this; 0.29.2
+        // happened to render it. The list-terminates-before-a-section behavior
+        // is covered by the non-setext cases nearby.)
+        non_normative!(
+            r#"
     test "list should terminate before next lower section heading" do
       input = <<~'EOS'
       List
@@ -1505,18 +1509,12 @@ more text"]"#,
     end
 
 "#
-            );
-            let output =
-                convert_standalone("List\n====\n\n* first\nitem\n* second\nitem\n\n== Section\n");
-            assert_xpath(&output, r#"//ul"#, 1);
-            assert_xpath(&output, r#"//ul/li"#, 2);
-            assert_xpath(&output, r#"//h2[text() = "Section"]"#, 1);
-        }
+        );
 
-        #[test]
-        fn list_should_terminate_before_next_lower_section_heading_with_implicit_id() {
-            verifies!(
-                r#"
+        // Setext title out of scope, as above (`List\n====` is a setext
+        // doctitle, so the section heading is not recognized).
+        non_normative!(
+            r#"
     test "list should terminate before next lower section heading with implicit id" do
       input = <<~'EOS'
       List
@@ -1537,14 +1535,7 @@ more text"]"#,
     end
 
 "#
-            );
-            let output = convert_standalone(
-                "List\n====\n\n* first\nitem\n* second\nitem\n\n[[sec]]\n== Section\n",
-            );
-            assert_xpath(&output, r#"//ul"#, 1);
-            assert_xpath(&output, r#"//ul/li"#, 2);
-            assert_xpath(&output, r#"//h2[@id = "sec"][text() = "Section"]"#, 1);
-        }
+        );
 
         #[test]
         fn should_not_find_section_title_immediately_below_last_list_item() {

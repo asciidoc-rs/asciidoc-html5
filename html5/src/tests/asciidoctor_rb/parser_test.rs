@@ -24,11 +24,6 @@
 //!   recognition, block id/role/option rendering, verbatim indentation) are
 //!   covered by `sections_test`, `attribute_list_test`, and `blocks_test`;
 //! - the raw metadata-hash-shape assertion made without a document.
-//!
-//! One minor divergence remains (asciidoc-rs/asciidoc-parser#1027): the
-//! combined `authors` attribute is not derived from a single `:author:`
-//! attribute entry (only from the implicit author line), so the `:author:`
-//! formatting case asserts `author`, which carries the same value.
 
 use asciidoc_parser::{document::InterpretedValue, warnings::WarningType, Document};
 
@@ -1005,12 +1000,9 @@ fn removes_formatting_before_partitioning_author_defined_using_author_attribute(
         header(":author: pass:n[http://example.org/community/team.html[Ze_**Project** team]]");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("1"));
     // The `pass:[]` macro and inline formatting are resolved before the
-    // name is partitioned, and `Ze_Project` becomes `Ze Project`. The
-    // resolved value lands in `author`; `authors` is not derived from an
-    // `:author:` attribute entry (only from the implicit author line —
-    // asciidoc-rs/asciidoc-parser#1027), so this asserts `author`.
+    // name is partitioned, and `Ze_Project` becomes `Ze Project`.
     assert_eq!(
-            attr(&doc, "author").as_deref(),
+            attr(&doc, "authors").as_deref(),
             Some("<a href=\"http://example.org/community/team.html\">Ze <strong>Project</strong> team</a>")
         );
     assert_eq!(attr(&doc, "firstname").as_deref(), Some("Ze Project"));
