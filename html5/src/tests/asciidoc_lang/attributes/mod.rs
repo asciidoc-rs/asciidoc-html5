@@ -9,11 +9,20 @@
 //! that describe only parser-internal behavior, with no distinct rendering, are
 //! tracked as non-normative here and verified in `asciidoc-parser` instead.
 
+mod assignment_precedence;
+mod attribute_entries;
 mod attribute_entry_substitutions;
+mod boolean_attributes;
+mod built_in_attributes;
 mod character_replacement_ref;
 mod counters;
+mod custom_attributes;
+mod document_attributes;
+mod element_attributes;
 mod inline_attribute_entries;
+mod names_and_values;
 mod options;
+mod positional_and_named_attributes;
 mod reference_attributes;
 mod role;
 mod unresolved_references;
