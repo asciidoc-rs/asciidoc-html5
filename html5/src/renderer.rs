@@ -3374,6 +3374,21 @@ impl Renderer<'_> {
         // heading, keyed off the section's own id.
         let title = self.decorate_section_heading(&title, id);
 
+        if level == 0 {
+            // A level-0 section — a book part, or a document title demoted by
+            // block metadata above it — renders as a bare `<h1 class="sect0">`:
+            // Asciidoctor puts the class and id on the heading itself and emits
+            // the section's blocks directly after it, with no wrapping `<div>`
+            // and no `sectionbody`.
+            self.line(&format!(
+                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                id_attribute(id),
+                class_attribute("sect0", &block.roles())
+            ));
+            self.blocks(block.child_blocks());
+            return;
+        }
+
         self.line(&format!(
             "<div{}>",
             class_attribute(&format!("sect{level}"), &block.roles())
