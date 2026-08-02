@@ -7,6 +7,7 @@
 //! closest available API; the descriptive prose that surrounds each rule is
 //! tracked as non-normative. The `sdd` tool measures the coverage of each page.
 
+mod attributes;
 mod blocks;
 mod directives;
 mod pass;
