@@ -5,10 +5,12 @@
 //! table title: the document attribute `table-caption` (which applies to every
 //! titled table and is followed by an auto-incrementing number) and the block
 //! attribute `caption` (which sets the exact label text for a single table and
-//! is not numbered). Both rendering rules are verified through `convert`; the
-//! section headings, the introductory prose, the header-only syntax snippet,
-//! and the alternate caption-only forms built on `include::` directives carry
-//! no rule of their own and are tracked as non-normative.
+//! is not numbered). Those rendering rules – including that a later table
+//! without its own `caption` reverts to the `table-caption` label – are
+//! verified through `convert`; the section headings, the introductory prose,
+//! the header-only syntax snippet, and the alternate caption-only forms built
+//! on `include::` directives carry no rule of their own and are tracked as
+//! non-normative.
 
 use crate::{
     convert,
@@ -225,12 +227,42 @@ The table from <<ex-caption>> is displayed below.
     );
 }
 
-// Prose about reverting to `table-caption` and two alternate caption-only forms
-// built on `include::` directives, shown literally rather than rendered.
-non_normative!(
-    r#"
+#[test]
+fn subsequent_table_reverts_to_table_caption() {
+    verifies!(
+        r#"
 If you create any subsequent tables in your document and don't set `caption` on them, the title labels will revert to the value assigned to `table-caption`.
 
+"#
+    );
+
+    // The first table sets `caption`, so it shows that exact, unnumbered label.
+    // The second table doesn't set `caption`, so its label reverts to the
+    // document's `table-caption` value (`Data Set`) followed by the
+    // auto-incrementing table number.
+    let output = convert(
+        "= Document Title\n:table-caption: Data Set\n\n[caption=\"Custom Label. \"]\n.A table with a custom label\n|===\n|Null |A mystery\n|===\n\n.A subsequent table\n|===\n|Group |Climate\n|===",
+    );
+
+    assert_css(&output, "caption.title", 2);
+
+    assert_xpath(
+        &output,
+        r#"//caption[@class="title"][text()="Custom Label. A table with a custom label"]"#,
+        1,
+    );
+
+    assert_xpath(
+        &output,
+        r#"//caption[@class="title"][text()="Data Set 1. A subsequent table"]"#,
+        1,
+    );
+}
+
+// Two alternate caption-only forms built on `include::` directives, shown
+// literally rather than rendered.
+non_normative!(
+    r#"
 If you want the caption of the table to only consist of the caption label, use the following syntax:
 
 [source]
