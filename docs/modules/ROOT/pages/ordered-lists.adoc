@@ -1,0 +1,140 @@
+= Ordered Lists
+:navtitle: Ordered Lists
+:description: How asciidoc-html5 renders ordered (numbered) lists as HTML.
+
+An ordered list marks each item with a `.`, one dot per nesting level. The
+processor supplies the numerals, so you can omit them. `asciidoc-html5` renders
+the same `<div class="olist <style>"><ol class="<style>">` markup as
+Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Make an ordered list
+
+Start each item's line with `.` followed by a space:
+
+[,asciidoc]
+----
+. Protons
+. Electrons
+. Neutrons
+----
+
+The default `arabic` style names both the wrapper `<div>` and the `<ol>`:
+
+[,html]
+----
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Protons</p>
+</li>
+<li>
+<p>Electrons</p>
+</li>
+<li>
+<p>Neutrons</p>
+</li>
+</ol>
+</div>
+----
+
+Nesting works like unordered lists — add another dot — and each level takes a
+different number scheme (`arabic`, then `loweralpha`, and so on):
+
+[,asciidoc]
+----
+. Step 1
+.. Step 2a
+. Step 3
+----
+
+[,html]
+----
+<div class="olist arabic">
+<ol class="arabic">
+<li>
+<p>Step 1</p>
+<div class="olist loweralpha">
+<ol class="loweralpha" type="a">
+<li>
+<p>Step 2a</p>
+</li>
+</ol>
+</div>
+</li>
+<li>
+<p>Step 3</p>
+</li>
+</ol>
+</div>
+----
+
+== Set the starting number
+
+The `start` attribute sets the first numeral, emitted as `start` on the `<ol>`:
+
+[,asciidoc]
+----
+[start=4]
+. Step four
+. Step five
+----
+
+[,html]
+----
+<div class="olist arabic">
+<ol class="arabic" start="4">
+<li>
+<p>Step four</p>
+</li>
+<li>
+<p>Step five</p>
+</li>
+</ol>
+</div>
+----
+
+The `%reversed` option adds a boolean `reversed` attribute to the `<ol>`.
+
+== Choose a numeration style
+
+A block style picks the numbering: `arabic`, `decimal`, `loweralpha`,
+`upperalpha`, `lowerroman`, `upperroman`, or `lowergreek`. The style names the
+`<ol>` class, and the alphabetic and roman keywords also set the HTML `type`:
+
+[,asciidoc]
+----
+[loweralpha]
+. one
+. two
+----
+
+[,html]
+----
+<div class="olist loweralpha">
+<ol class="loweralpha" type="a">
+<li>
+<p>one</p>
+</li>
+<li>
+<p>two</p>
+</li>
+</ol>
+</div>
+----
+
+`start` is always a number, even for an alphabetic style: use `start=3` to begin
+a `loweralpha` list at "c".
+
+== Known limitations
+
+Ordered lists are fully supported: automatic and nested numbering, the `start`
+attribute, the `%reversed` option, and every numeration style match
+Asciidoctor's output. For unordered lists, see xref:unordered-lists.adoc[]; to
+attach blocks to a list item, see xref:list-continuation.adoc[].
