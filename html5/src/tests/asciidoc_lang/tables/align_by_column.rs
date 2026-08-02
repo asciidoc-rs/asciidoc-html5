@@ -16,7 +16,11 @@
 //! `halign-left valign-top` on header cells. This is a known limitation of
 //! `asciidoc-parser`, not of the renderer, which faithfully renders the
 //! alignment the parser resolves. The tests therefore assert the body-cell
-//! alignment, which is the behavior each example documents.
+//! alignment, which is the behavior each example documents. Tracked as
+//! asciidoc-parser issue #1061
+//! (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1061>); once it is
+//! fixed and the dependency bumped, these tests should also assert the
+//! header-cell alignment.
 
 use crate::{
     convert,
