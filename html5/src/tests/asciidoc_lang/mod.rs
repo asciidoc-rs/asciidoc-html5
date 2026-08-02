@@ -8,4 +8,5 @@
 //! tracked as non-normative. The `sdd` tool measures the coverage of each page.
 
 mod blocks;
+mod pass;
 mod root;
