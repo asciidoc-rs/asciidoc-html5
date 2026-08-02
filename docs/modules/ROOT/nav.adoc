@@ -1,6 +1,12 @@
 * xref:index.adoc[Introduction]
 * xref:convert-your-first-file.adoc[Convert Your First File]
 * xref:collapsible.adoc[Collapsible Blocks]
+* Lists
+** xref:unordered-lists.adoc[Unordered Lists]
+** xref:ordered-lists.adoc[Ordered Lists]
+** xref:description-lists.adoc[Description Lists]
+** xref:checklists.adoc[Checklists]
+** xref:list-continuation.adoc[List Continuations]
 * xref:passthroughs.adoc[Passthroughs]
 * xref:generate-html:index.adoc[Generate HTML]
 ** xref:generate-html:default-stylesheet.adoc[Default Stylesheet]

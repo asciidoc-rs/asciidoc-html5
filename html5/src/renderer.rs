@@ -760,6 +760,28 @@ fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &
         .unwrap_or("arabic")
 }
 
+/// Whether an ordered list's `<ol>` should carry an HTML `type` attribute for
+/// its alphabetic or roman numbering style.
+///
+/// Asciidoctor emits `type` only when the numbering style is a *string* in its
+/// model: a style set by a declared block attribute (`[loweralpha]`) or one
+/// derived from a dot marker (`.`, `..`, …, whose level indexes
+/// `ORDERED_LIST_STYLES` and is stored as a string). A style *inferred from an
+/// alphabetic marker* (`A.`, `a.`) is stored as a Symbol, which its
+/// `ORDERED_LIST_KEYWORDS` lookup (keyed by String) misses, so such a list
+/// names the class but carries no `type`. We mirror that: a declared style, or
+/// a first item marked with dots, earns the `type`; an alpha-marker-inferred
+/// style does not.
+fn olist_emits_type(block: &Block<'_>, list: &ListBlock<'_>) -> bool {
+    if block.declared_style().is_some() {
+        return true;
+    }
+
+    list.child_blocks()
+        .find_map(as_list_item)
+        .is_some_and(|item| matches!(item.list_item_marker(), ListItemMarker::Dots(_)))
+}
+
 /// One description-list entry: the terms sharing a single description (their
 /// already-rendered `<dt>` text), paired with the list item that carries that
 /// description — or `None` for a trailing run of terms with no description.
@@ -2698,13 +2720,18 @@ impl Renderer<'_> {
         self.block_title(block);
 
         // The HTML `type` mirrors Asciidoctor's `ORDERED_LIST_KEYWORDS`: arabic
-        // needs none, the others carry the matching numbering letter.
-        let type_attr = match style {
-            "loweralpha" => " type=\"a\"",
-            "lowerroman" => " type=\"i\"",
-            "upperalpha" => " type=\"A\"",
-            "upperroman" => " type=\"I\"",
-            _ => "",
+        // needs none, the others carry the matching numbering letter — but only
+        // for a declared or dot-derived style (see `olist_emits_type`).
+        let type_attr = if olist_emits_type(block, list) {
+            match style {
+                "loweralpha" => " type=\"a\"",
+                "lowerroman" => " type=\"i\"",
+                "upperalpha" => " type=\"A\"",
+                "upperroman" => " type=\"I\"",
+                _ => "",
+            }
+        } else {
+            ""
         };
 
         // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor emits
@@ -3058,12 +3085,20 @@ impl Renderer<'_> {
         self.line(&li_open);
 
         // The first attached block is the item's principal text, emitted as a
-        // bare `<p>`; the remainder render as ordinary nested blocks.
+        // bare `<p>`; the remainder render as ordinary nested blocks. When the
+        // principal text is present but renders empty (an `{empty}` reference),
+        // the parser drops that node from the child blocks and flags it here:
+        // Asciidoctor still emits the empty `<p></p>` ahead of the attached
+        // blocks, so the first child block stays an attached block.
         let mut blocks = list_item.child_blocks();
-        let principal = blocks
-            .next()
-            .and_then(|block| block.rendered_content())
-            .unwrap_or_default();
+        let principal = if list_item.has_empty_principal_text() {
+            ""
+        } else {
+            blocks
+                .next()
+                .and_then(|block| block.rendered_content())
+                .unwrap_or_default()
+        };
 
         match (checklist, list_item.checkbox()) {
             (true, Some(checked)) => {
