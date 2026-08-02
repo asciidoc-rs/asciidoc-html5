@@ -1,0 +1,138 @@
+= Passthroughs
+:navtitle: Passthroughs
+:description: How asciidoc-html5 renders block and inline passthroughs, which pass content to the output while controlling substitutions.
+
+A passthrough passes a chunk of content directly to the output, giving you
+control over which substitutions are applied to it. `asciidoc-html5` supports
+both the block form (the `pass` style and the delimited `++++` block) and the
+inline form (the `pass:[]` macro and the one-to-three plus shorthands),
+producing the same markup as Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Pass a block through
+
+A delimited passthrough block -- four plus signs (`pass:[++++]`) around the
+content -- emits its content raw, with no wrapping element and no substitutions
+applied:
+
+[,asciidoc]
+----
+++++
+<p class="verse">Roses are red.</p>
+++++
+----
+
+The markup reaches the output untouched:
+
+[,html]
+----
+<p class="verse">Roses are red.</p>
+----
+
+The `pass` style on a paragraph does the same thing without delimiters:
+
+[,asciidoc]
+----
+[pass]
+<del>strike this</del> is marked as deleted.
+----
+
+[,html]
+----
+<del>strike this</del> is marked as deleted.
+----
+
+Because the content is not wrapped in a paragraph, the `pass` style is a way to
+emit content with no enclosing `<div class="paragraph"><p>`.
+
+== Control the substitutions on a block
+
+Set the `subs` attribute to opt specific substitutions back in. They are applied
+to the content before it is passed to the output. Here only the `attributes`
+substitution runs, so the attribute reference is resolved while the raw markup
+is left alone:
+
+[,asciidoc]
+----
+:release: 2.0
+
+[subs=attributes]
+++++
+<span>v{release}</span>
+++++
+----
+
+[,html]
+----
+<span>v2.0</span>
+----
+
+WARNING: Passing raw content couples your document to a specific output format,
+such as HTML. Prefer to confine such content to an extension or a preprocessor
+conditional.
+
+== Pass content inline
+
+The inline `pass:[]` macro passes its target through. With no substitution
+values, none are applied:
+
+[,asciidoc]
+----
+The text pass:[<del>strike this</del>] is marked as deleted.
+----
+
+[,html]
+----
+<p>The text <del>strike this</del> is marked as deleted.</p>
+----
+
+Name substitution values in the macro target to apply them selectively. Here
+`q` (quotes) formats the enclosed text while the special-characters substitution
+stays off, so the `<del>` markup passes through raw:
+
+[,asciidoc]
+----
+The text pass:q[<del>strike *this*</del>] is marked as deleted.
+----
+
+[,html]
+----
+<p>The text <del>strike <strong>this</strong></del> is marked as deleted.</p>
+----
+
+== Escape formatting with the plus shorthands
+
+A pair of single pluses (`pass:[+]...pass:[+]`) prevents the enclosed text from
+being formatted, applying only the special-characters substitution. This is the
+common way to output characters that would otherwise be replaced:
+
+[,asciidoc]
+----
+The characters +<+ and +>+ are escaped, and +...+ is literal.
+----
+
+The angle brackets are escaped as entities, and the three periods stay literal
+instead of becoming an ellipsis:
+
+[,html]
+----
+<p>The characters &lt; and &gt; are escaped, and ... is literal.</p>
+----
+
+A pair of triple pluses (`pass:[+++]...pass:[+++]`) applies no substitutions at
+all, not even special characters, so it is the shorthand for passing raw HTML
+inline.
+
+== Known limitations
+
+The block and inline passthrough forms shown here all match Asciidoctor's
+output: the delimited block, the `pass` paragraph style, the `subs` attribute,
+the `pass:[]` macro with and without substitution values, and the single,
+double, and triple plus shorthands. To see which other markup the renderer
+supports today, see the xref:ROOT:index.adoc[introduction].

@@ -7,6 +7,7 @@
 ** xref:description-lists.adoc[Description Lists]
 ** xref:checklists.adoc[Checklists]
 ** xref:list-continuation.adoc[List Continuations]
+* xref:passthroughs.adoc[Passthroughs]
 * xref:generate-html:index.adoc[Generate HTML]
 ** xref:generate-html:default-stylesheet.adoc[Default Stylesheet]
 ** xref:generate-html:stylesheet-modes.adoc[Stylesheet Modes]

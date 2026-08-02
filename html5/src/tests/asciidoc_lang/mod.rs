@@ -9,3 +9,5 @@
 
 mod blocks;
 mod lists;
+mod pass;
+mod root;

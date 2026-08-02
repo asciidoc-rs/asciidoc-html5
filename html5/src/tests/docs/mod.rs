@@ -13,6 +13,7 @@ mod generate_html;
 mod index;
 mod list_continuation;
 mod ordered_lists;
+mod passthroughs;
 mod reference_safe_mode;
 mod safe_modes;
 mod unordered_lists;
