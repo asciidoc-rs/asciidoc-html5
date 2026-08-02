@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://asciidoc.rs"><img src="https://raw.githubusercontent.com/asciidoc-rs/asciidoc-html5/main/docs/images/asciidoc-rs-wordmark.png" alt="asciidoc.rs" width="440"></a>
+</p>
+
 # asciidoc-html5
 
 [![CI](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml/badge.svg)](https://github.com/asciidoc-rs/asciidoc-html5/actions/workflows/ci.yml)
