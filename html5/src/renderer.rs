@@ -3080,12 +3080,20 @@ impl Renderer<'_> {
         self.line(&li_open);
 
         // The first attached block is the item's principal text, emitted as a
-        // bare `<p>`; the remainder render as ordinary nested blocks.
+        // bare `<p>`; the remainder render as ordinary nested blocks. When the
+        // principal text is present but renders empty (an `{empty}` reference),
+        // the parser drops that node from the child blocks and flags it here:
+        // Asciidoctor still emits the empty `<p></p>` ahead of the attached
+        // blocks, so the first child block stays an attached block.
         let mut blocks = list_item.child_blocks();
-        let principal = blocks
-            .next()
-            .and_then(|block| block.rendered_content())
-            .unwrap_or_default();
+        let principal = if list_item.has_empty_principal_text() {
+            ""
+        } else {
+            blocks
+                .next()
+                .and_then(|block| block.rendered_content())
+                .unwrap_or_default()
+        };
 
         match (checklist, list_item.checkbox()) {
             (true, Some(checked)) => {
