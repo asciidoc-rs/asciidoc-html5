@@ -1,0 +1,3 @@
+    def names
+flush
+    end

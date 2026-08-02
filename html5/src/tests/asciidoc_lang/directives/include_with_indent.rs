@@ -1,15 +1,18 @@
 //! Coverage of the AsciiDoc language description's *Indent Included Content*
 //! page.
 //!
-//! The `indent` attribute normalizes the leading block indent of verbatim
-//! content: `indent=0` strips it, and a positive `indent` strips it and then
-//! re-adds that many columns. The page shows both with a Ruby source block (the
-//! indent applies to the block's verbatim content whether or not it came from
-//! an include, so it is verified directly on the block). The rule that the
+//! The `indent` attribute normalizes the leading block indent of included
+//! verbatim content: `indent=0` strips it, and a positive `indent` strips it
+//! and then re-adds that many columns. Because this page is about *included*
+//! content, every case is driven through an `include::` directive over an
+//! indented Ruby fixture — the `indent` attribute on the include directive
+//! itself (consumed during preprocessing) and the block `indent` applied to the
+//! included content (the form the worked examples show). The rule that the
 //! attribute is ignored when a line is not indented is verified too. The
 //! `tabsize` aside is non-normative.
 
-use crate::{convert, tests::sdd::*};
+use super::convert_including;
+use crate::tests::sdd::*;
 
 track_file!("ref/asciidoc-lang/docs/modules/directives/pages/include-with-indent.adoc");
 
@@ -46,9 +49,11 @@ However, once inside the documentation, this leading block indent is no longer n
 "#
 );
 
-// The `indent` attribute normalizes a verbatim block's leading indent:
-// `indent=0` strips it entirely, and a positive value strips it and then
-// re-adds that many columns.
+// The `indent` attribute normalizes the leading indent of an included verbatim
+// block: `indent=0` strips it entirely, and a positive value strips it and then
+// re-adds that many columns. Driven here as the `indent` attribute on the
+// include directive itself (the preprocessing-time form), over a Ruby fixture
+// padded with a four-column indent.
 #[test]
 fn indent_strips_and_optionally_re_adds_the_leading_block_indent() {
     verifies!(
@@ -61,15 +66,22 @@ The attribute `indent` allows the leading block indent to be stripped and, optio
 "#
     );
 
-    let stripped = convert("[listing,indent=0]\n----\n    first\n      second\n----\n");
-    assert_eq!(verbatim_text(&stripped), "first\n  second");
+    let stripped = convert_including("[source,ruby]\n----\ninclude::indented.rb[indent=0]\n----\n");
+    assert_eq!(
+        verbatim_text(&stripped),
+        "def names\n  @name.split ' '\nend"
+    );
 
-    let reindented = convert("[listing,indent=3]\n----\n    first\n      second\n----\n");
-    assert_eq!(verbatim_text(&reindented), "   first\n     second");
+    let reindented =
+        convert_including("[source,ruby]\n----\ninclude::indented.rb[indent=3]\n----\n");
+    assert_eq!(
+        verbatim_text(&reindented),
+        "   def names\n     @name.split ' '\n   end"
+    );
 }
 
-// If any line of the verbatim content is not indented, the common leading
-// indent is zero, so the `indent` attribute has no effect.
+// If any line of the included verbatim content is not indented, the common
+// leading indent is zero, so the `indent` attribute has no effect.
 #[test]
 fn indent_is_ignored_when_a_line_is_not_indented() {
     verifies!(
@@ -79,8 +91,10 @@ WARNING: If any line in the verbatim content is not indented, the `indent` attri
 "#
     );
 
-    let output = convert("[listing,indent=0]\n----\n    first\nflush\n    third\n----\n");
-    assert_eq!(verbatim_text(&output), "    first\nflush\n    third");
+    let output = convert_including(
+        "[source,ruby,indent=0]\n----\ninclude::indented-with-flush.rb[]\n----\n",
+    );
+    assert_eq!(verbatim_text(&output), "    def names\nflush\n    end");
 }
 
 // Non-normative: the `tabsize` interaction (a separate normalization applied to
@@ -125,9 +139,9 @@ end
 "#
     );
 
-    let output = convert(
-        "[source,ruby,indent=0]\n----\n    def names\n      @name.split ' '\n    end\n----\n",
-    );
+    // The indented Ruby lives in the `indented.rb` fixture; the include pulls it
+    // into the `indent=0` source block, which strips the leading indent.
+    let output = convert_including("[source,ruby,indent=0]\n----\ninclude::indented.rb[]\n----\n");
     assert_eq!(verbatim_text(&output), "def names\n  @name.split ' '\nend");
 }
 
@@ -166,9 +180,7 @@ Produces:
 "#
     );
 
-    let output = convert(
-        "[source,ruby,indent=2]\n----\n    def names\n      @name.split ' '\n    end\n----\n",
-    );
+    let output = convert_including("[source,ruby,indent=2]\n----\ninclude::indented.rb[]\n----\n");
     assert_eq!(
         verbatim_text(&output),
         "  def names\n    @name.split ' '\n  end"
