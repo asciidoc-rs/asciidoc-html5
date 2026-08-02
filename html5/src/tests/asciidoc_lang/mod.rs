@@ -13,3 +13,4 @@ mod directives;
 mod lists;
 mod pass;
 mod root;
+mod tables;

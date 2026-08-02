@@ -1,0 +1,102 @@
+= Table Titles and Captions
+:navtitle: Titles and Captions
+:description: Adding a title to a table and controlling its caption label.
+
+Give a table a title with the block-title syntax – a line beginning with `.`
+directly above the table. The processor renders it as a `<caption>` and, by
+default, prefixes it with an automatic label such as `Table 1.`, matching
+Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Add a title
+
+Put the title on the line above the table (or above its attribute line):
+
+[,asciidoc]
+----
+.Quarterly results
+[cols="1,1"]
+|===
+|Q |Revenue
+|Q1 |100
+|===
+----
+
+The title becomes a `<caption class="title">` with the automatic `Table 1.`
+label prepended:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<caption class="title">Table 1. Quarterly results</caption>
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Q</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Revenue</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Q1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">100</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+== Customize the label
+
+Set the `caption` attribute on the table to replace the automatic label with
+your own text (include the trailing space and punctuation you want):
+
+[,asciidoc]
+----
+[caption="Dataset 7. "]
+.Quarterly results
+[cols="1,1"]
+|===
+|Q |Revenue
+|===
+----
+
+[,html]
+----
+<caption class="title">Dataset 7. Quarterly results</caption>
+----
+
+== Turn off the label
+
+Assign an empty value to `caption` to drop the label on a single table, leaving
+just the title text:
+
+[,asciidoc]
+----
+[caption=]
+.Quarterly results
+[cols="1,1"]
+|===
+|Q |Revenue
+|===
+----
+
+[,html]
+----
+<caption class="title">Quarterly results</caption>
+----
+
+To drop the label for every table in a document, unset the `table-caption`
+document attribute (`:table-caption!:`) in the header instead.
+
+== Known limitations
+
+Table titles and captions are fully supported: the automatic `Table N.` label, a
+custom `caption` value, and turning the label off (per table or document-wide)
+all match Asciidoctor's output.

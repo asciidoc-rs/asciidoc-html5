@@ -1,0 +1,172 @@
+= Tables
+:navtitle: Tables
+:description: How asciidoc-html5 renders tables as HTML.
+
+A table is a delimited block bounded by `|===`. Inside it, each cell begins with
+a vertical bar (`|`), the `cols` attribute describes the columns, and blank lines
+group cells into rows. `asciidoc-html5` renders the same `<table
+class="tableblock">` markup as Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Columns and rows
+
+List one column specifier per column in `cols`, then enter the cells. Entering
+every cell of the first row on the line right after `|===` promotes that row to a
+header:
+
+[,asciidoc]
+----
+[cols="1,1,1"]
+|===
+|Name |Role |Location
+
+|Ada |Engineer |London
+|Grace |Admiral |New York
+|===
+----
+
+The header row becomes a `<thead>` of `<th>` cells and the remaining rows a
+`<tbody>`; equal specifiers give equal column widths:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Name</th>
+<th class="tableblock halign-left valign-top">Role</th>
+<th class="tableblock halign-left valign-top">Location</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Ada</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Engineer</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">London</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Grace</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Admiral</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">New York</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+Whether you enter each cell on its own line or several on one line makes no
+difference: the processor starts a new cell at every `|`.
+
+== Header and footer rows
+
+The `header` and `footer` options name the first and last rows explicitly. Use
+the shorthand (`%header%footer`), placing it before `cols`:
+
+[,asciidoc]
+----
+[%header%footer,cols="2,1"]
+|===
+|Item |Qty
+
+|Apples |3
+|Pears |5
+
+|Total |8
+|===
+----
+
+The last row moves into a `<tfoot>`:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 66.6666%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Item</th>
+<th class="tableblock halign-left valign-top">Qty</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Apples</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">3</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Pears</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">5</p></td>
+</tr>
+</tbody>
+<tfoot>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Total</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">8</p></td>
+</tr>
+</tfoot>
+</table>
+----
+
+== Data formats
+
+Besides the default bar-separated values, a table can hold comma-separated
+(`format=csv`) or delimiter-separated (`format=dsv`) data. Enter the rows without
+leading bars:
+
+[,asciidoc]
+----
+[%header,format=csv]
+|===
+Artist,Track,Genre
+Baauer,Harlem Shake,Hip Hop
+|===
+----
+
+Each comma starts a new cell, producing the same table markup as the bar syntax:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 33.3333%;">
+<col style="width: 33.3333%;">
+<col style="width: 33.3334%;">
+</colgroup>
+<thead>
+<tr>
+<th class="tableblock halign-left valign-top">Artist</th>
+<th class="tableblock halign-left valign-top">Track</th>
+<th class="tableblock halign-left valign-top">Genre</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Baauer</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Harlem Shake</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Hip Hop</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+== Known limitations
+
+Tables are fully supported: `cols` specifiers, implicit and explicit header
+rows, footer rows, and the CSV and DSV data formats all match Asciidoctor's
+output. For column widths and autowidth, see
+xref:table-column-widths.adoc[]; for cell styles, alignment, and spans, see
+xref:table-cell-formatting.adoc[]; for borders and striping, see
+xref:table-borders-and-striping.adoc[]; and for titles and caption labels, see
+xref:table-titles.adoc[].
