@@ -5,11 +5,11 @@
 //! `end::name[]` directives in the target. Every concrete selection the page
 //! demonstrates is verified through `convert` against Ruby-comment fixtures: a
 //! single tag, multiple tags, fine-grained regions nested inside larger ones,
-//! tags placed behind (and not behind) line comments, and the tag-filtering
-//! wildcards and exclusions (`*`, `**`, `!*`, `foo`, `foo;!bar`, `!foo`). The
-//! prose on tag-directive placement, and the finer points of the filter
-//! permutation table (the untested rows and the implied long-hand forms), are
-//! non-normative.
+//! tags placed behind (and not behind) line comments, the wildcard/negation
+//! ordering rules, and every row of the tag-filtering permutation table (`*`,
+//! `**`, `!*`, `foo`, `foo;!bar`, `foo;!*`, `*;!foo`, `!foo`, `!foo;!bar`,
+//! `!*;foo`). Only the prose on tag-directive placement and the sentence that
+//! sets up the permutation table are non-normative.
 
 use super::convert_including;
 use crate::tests::sdd::*;
@@ -309,24 +309,66 @@ Negate the wildcard or tag.
     assert!(!not_star.contains("foo start"), "{not_star}");
 }
 
-// Non-normative: the ordering rules for the double wildcard, and the framing of
-// the permutation table (a `foo` region with a nested `bar` region).
-non_normative!(
-    r#"
+// The ordering and negation rules for the wildcards: the double wildcard is
+// applied first regardless of where it sits in the list; a negated double
+// wildcard selects no lines; and a negated single wildcard means different
+// things before a tag name (`!*;foo`) versus after one (`foo;!*`).
+#[test]
+fn the_wildcard_ordering_and_negation_rules_hold() {
+    verifies!(
+        r#"
 The double wildcard is always applied first, regardless of where it appears in the list.
 If the double wildcard is not negated (i.e., `+**+`), it should only be combined with exclusions (e.g., `+**;!foo+`).
 A negated double wildcard (i.e., `+!**+`), which selects no lines, is usually implied as the starting point.
 A negated single wildcard has different meaning depending on whether it comes before tag names (e.g., `+!*;foo+`) or after at least one tag name (e.g., `+foo;!*+`).
 
+"#
+    );
+
+    // The double wildcard is applied first regardless of position: `!foo;**` and
+    // `**;!foo` select the same lines (all lines but the `foo` region, minus the
+    // tag-directive lines).
+    let leading = convert_including("....\ninclude::foo-bar.rb[tags=!foo;**]\n....\n");
+    let trailing = convert_including("....\ninclude::foo-bar.rb[tags=**;!foo]\n....\n");
+    for out in [&leading, &trailing] {
+        assert!(out.contains("outside before"), "{out}");
+        assert!(out.contains("outside after"), "{out}");
+        assert!(!out.contains("foo start"), "{out}");
+        assert!(!out.contains("tag::foo"), "{out}");
+    }
+
+    // A negated double wildcard selects no lines.
+    let negated = convert_including("....\ninclude::foo-bar.rb[tag=!**]\n....\n");
+    assert!(!negated.contains("outside before"), "{negated}");
+    assert!(!negated.contains("foo start"), "{negated}");
+
+    // A negated single wildcard means different things by position: before a tag
+    // name (`!*;foo`) it keeps the non-tagged regions and the `foo` region;
+    // after one (`foo;!*`) it keeps only `foo` minus its nested tagged regions.
+    let before = convert_including("....\ninclude::foo-bar.rb[tags=!*;foo]\n....\n");
+    assert!(before.contains("outside before"), "{before}");
+    assert!(before.contains("foo start"), "{before}");
+
+    let after = convert_including("....\ninclude::foo-bar.rb[tags=foo;!*]\n....\n");
+    assert!(!after.contains("outside before"), "{after}");
+    assert!(after.contains("foo start"), "{after}");
+    assert!(!after.contains("bar body"), "{after}");
+}
+
+// Non-normative: the sentence that sets up the permutation table (a `foo`
+// region with a nested `bar` region — the shape of the `foo-bar.rb` fixture
+// used below).
+non_normative!(
+    r#"
 Let's assume we have a region tagged `foo` with a nested region tagged `bar`.
 Here are some of the permutations you can use (along with their implied long-hand forms):
 
 "#
 );
 
-// The permutation table, verified against a `foo` region with a nested `bar`
-// region: the plain wildcards, selecting a named region (with its nested
-// region), and excluding a nested region from a named selection.
+// Every row of the permutation table, verified against a `foo` region with a
+// nested `bar` region and surrounding non-tagged lines (the `foo-bar.rb`
+// fixture).
 #[test]
 fn the_filter_permutations_select_the_documented_lines() {
     verifies!(
@@ -347,58 +389,15 @@ _(implies `+!**;foo+`)_
 `foo;!bar`:: Selects only regions tagged _foo_, but excludes any nested regions tagged _bar_.
 _(implies `+!**;foo;!bar+`)_
 
-"#
-    );
-
-    // `foo` selects the whole `foo` region, including its nested `bar` region.
-    let foo = convert_including("....\ninclude::foo-bar.rb[tag=foo]\n....\n");
-    assert!(foo.contains("foo start"), "{foo}");
-    assert!(foo.contains("bar body"), "{foo}");
-    assert!(foo.contains("foo end"), "{foo}");
-    assert!(!foo.contains("outside before"), "{foo}");
-
-    // `foo;!bar` selects the `foo` region but excludes the nested `bar` region.
-    let foo_not_bar = convert_including("....\ninclude::foo-bar.rb[tags=foo;!bar]\n....\n");
-    assert!(foo_not_bar.contains("foo start"), "{foo_not_bar}");
-    assert!(foo_not_bar.contains("foo end"), "{foo_not_bar}");
-    assert!(!foo_not_bar.contains("bar body"), "{foo_not_bar}");
-}
-
-// Non-normative: permutation rows this suite does not drive directly
-// (`foo;!*`, `*;!foo`).
-non_normative!(
-    r#"
 `+foo;!*+`:: Selects only regions tagged _foo_, but excludes any nested tagged regions.
 _(implies `+!**;foo;!*+`)_
 
 `+*;!foo+`:: Selects all tagged regions, but excludes any regions tagged _foo_ (nested or otherwise).
 _(implies `+!**;*;!foo+`)_
 
-"#
-);
-
-// Negating a named tag (`!foo`) selects every line except that tagged region.
-#[test]
-fn negating_a_tag_selects_everything_but_that_region() {
-    verifies!(
-        r#"
 `!foo`:: Selects all the lines in the document except for regions tagged _foo_.
 _(implies `+**;!foo+`)_
 
-"#
-    );
-
-    let output = convert_including("....\ninclude::foo-bar.rb[tag=!foo]\n....\n");
-    assert!(output.contains("outside before"), "{output}");
-    assert!(output.contains("outside after"), "{output}");
-    assert!(!output.contains("foo start"), "{output}");
-    assert!(!output.contains("bar body"), "{output}");
-}
-
-// Non-normative: the remaining permutation rows (`!foo;!bar`, `!*;foo`) and the
-// closing rules on how a filter's leading modifier implies its starting set.
-non_normative!(
-    r#"
 `!foo;!bar`:: Selects all the lines in the document except for regions tagged _foo_ or _bar_.
 _(implies `+**;!foo;!bar+`)_
 
@@ -406,9 +405,117 @@ _(implies `+**;!foo;!bar+`)_
 To include nested tagged regions, they each must be named explicitly.
 _(implies `+**;!*;foo+`)_
 
+"#
+    );
+
+    // Selects `foo-bar.rb` through the given tag filter and returns the output.
+    let select =
+        |spec: &str| convert_including(&format!("....\ninclude::foo-bar.rb[{spec}]\n....\n"));
+
+    // `**`: all lines except the tag-directive lines.
+    let double = select("tag=**");
+    assert!(double.contains("outside before"), "{double}");
+    assert!(double.contains("foo start"), "{double}");
+    assert!(double.contains("bar body"), "{double}");
+    assert!(double.contains("outside after"), "{double}");
+    assert!(!double.contains("tag::foo"), "{double}");
+
+    // `*`: all tagged regions, none of the surrounding lines.
+    let star = select("tag=*");
+    assert!(star.contains("foo start"), "{star}");
+    assert!(star.contains("bar body"), "{star}");
+    assert!(!star.contains("outside before"), "{star}");
+
+    // `!*`: only the non-tagged regions.
+    let not_star = select("tag=!*");
+    assert!(not_star.contains("outside before"), "{not_star}");
+    assert!(not_star.contains("outside after"), "{not_star}");
+    assert!(!not_star.contains("foo start"), "{not_star}");
+
+    // `foo`: the whole `foo` region, including its nested `bar` region.
+    let foo = select("tag=foo");
+    assert!(foo.contains("foo start"), "{foo}");
+    assert!(foo.contains("bar body"), "{foo}");
+    assert!(foo.contains("foo end"), "{foo}");
+    assert!(!foo.contains("outside before"), "{foo}");
+
+    // `foo;!bar`: the `foo` region, excluding the nested `bar` region.
+    let foo_not_bar = select("tags=foo;!bar");
+    assert!(foo_not_bar.contains("foo start"), "{foo_not_bar}");
+    assert!(foo_not_bar.contains("foo end"), "{foo_not_bar}");
+    assert!(!foo_not_bar.contains("bar body"), "{foo_not_bar}");
+
+    // `foo;!*`: the `foo` region, excluding every nested tagged region.
+    let foo_not_star = select("tags=foo;!*");
+    assert!(foo_not_star.contains("foo start"), "{foo_not_star}");
+    assert!(foo_not_star.contains("foo end"), "{foo_not_star}");
+    assert!(!foo_not_star.contains("bar body"), "{foo_not_star}");
+
+    // `*;!foo`: all tagged regions except `foo` (nested or otherwise) — nothing
+    // here, since `bar` is nested inside `foo`.
+    let star_not_foo = select("tags=*;!foo");
+    assert!(!star_not_foo.contains("foo start"), "{star_not_foo}");
+    assert!(!star_not_foo.contains("bar body"), "{star_not_foo}");
+    assert!(!star_not_foo.contains("outside before"), "{star_not_foo}");
+
+    // `!foo`: all lines except the `foo` region.
+    let not_foo = select("tag=!foo");
+    assert!(not_foo.contains("outside before"), "{not_foo}");
+    assert!(not_foo.contains("outside after"), "{not_foo}");
+    assert!(!not_foo.contains("foo start"), "{not_foo}");
+    assert!(!not_foo.contains("bar body"), "{not_foo}");
+
+    // `!foo;!bar`: all lines except the `foo` or `bar` regions.
+    let not_foo_bar = select("tags=!foo;!bar");
+    assert!(not_foo_bar.contains("outside before"), "{not_foo_bar}");
+    assert!(not_foo_bar.contains("outside after"), "{not_foo_bar}");
+    assert!(!not_foo_bar.contains("foo start"), "{not_foo_bar}");
+
+    // `!*;foo`: the non-tagged regions plus the `foo` region, excluding nested
+    // tagged regions (so `bar` is not included).
+    let not_star_foo = select("tags=!*;foo");
+    assert!(not_star_foo.contains("outside before"), "{not_star_foo}");
+    assert!(not_star_foo.contains("foo start"), "{not_star_foo}");
+    assert!(not_star_foo.contains("outside after"), "{not_star_foo}");
+    assert!(!not_star_foo.contains("bar body"), "{not_star_foo}");
+}
+
+// How a filter's leading modifier fixes its implied starting set: a leading
+// negated tag or single wildcard implies the pattern begins with `**` (all
+// non-tag-directive lines), while a leading inclusion implies it begins with
+// `!**` (no lines).
+#[test]
+fn the_leading_modifier_sets_the_implied_starting_set() {
+    verifies!(
+        r#"
 If the filter begins with a negated tag or single wildcard, it implies that the pattern begins with `+**+`.
 An exclusion not preceded by an inclusion implicitly starts by selecting all the lines that do not contain a tag directive.
 Otherwise, it implies that the pattern begins with `+!**+`.
 A leading inclusion implicitly starts by selecting no lines.
 "#
-);
+    );
+
+    // A leading exclusion (`!foo`) starts from all lines, so the non-tagged lines
+    // outside `foo` survive.
+    let leading_exclusion = convert_including("....\ninclude::foo-bar.rb[tag=!foo]\n....\n");
+    assert!(
+        leading_exclusion.contains("outside before"),
+        "{leading_exclusion}"
+    );
+    assert!(
+        leading_exclusion.contains("outside after"),
+        "{leading_exclusion}"
+    );
+
+    // A leading inclusion (`foo`) starts from no lines, so only the named region
+    // is selected — the non-tagged lines are not.
+    let leading_inclusion = convert_including("....\ninclude::foo-bar.rb[tag=foo]\n....\n");
+    assert!(
+        leading_inclusion.contains("foo start"),
+        "{leading_inclusion}"
+    );
+    assert!(
+        !leading_inclusion.contains("outside before"),
+        "{leading_inclusion}"
+    );
+}
