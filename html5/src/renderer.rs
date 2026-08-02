@@ -3337,6 +3337,12 @@ impl Renderer<'_> {
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
                         source_highlighter: self.source_highlighter,
+                        // The cell inherits the enclosing document's
+                        // `source-language`, matching Asciidoctor: a value the
+                        // parent set wins over a cell-local override or unset
+                        // (verified against 2.0.26). Like every other
+                        // document-scoped setting here, it is not re-resolved
+                        // from the cell's own attribute entries.
                         source_language: self.source_language.clone(),
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
