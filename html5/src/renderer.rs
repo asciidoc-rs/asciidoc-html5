@@ -198,17 +198,37 @@ fn is_source_listing(block: &Block<'_>) -> bool {
             .is_some()
 }
 
+/// Whether a `----` listing is rendered as a source block, given the document's
+/// `source-language` attribute.
+///
+/// A listing is already a source block when it declares the `source` style or
+/// uses the `[,lang]` comma shorthand ([`is_source_listing`]). Beyond that,
+/// when `source-language` is set, Asciidoctor's parser promotes a *bare*
+/// listing — one with no declared block style and no language of its own — to a
+/// source block, using `source-language` as the language. A listing that
+/// declares any style (e.g. `[listing]`) is never promoted.
+fn is_promoted_source_listing(block: &Block<'_>, source_language: Option<&str>) -> bool {
+    is_source_listing(block)
+        || (source_language.is_some()
+            && block.declared_style().is_none()
+            && block
+                .attrlist()
+                .and_then(|attrlist| attrlist.nth_attribute(2))
+                .is_none())
+}
+
 /// Whether `block` is a source block — one the renderer dispatches to
 /// [`source`](Renderer::source): a source-styled simple block, or a
-/// source-styled `----` listing. This mirrors the two arms of
-/// [`Renderer::block`] that reach `source`, and is what a syntax highlighter
-/// runs over.
-fn is_source_block(block: &Block<'_>) -> bool {
+/// source-styled `----` listing (including one promoted by `source-language`).
+/// This mirrors the two arms of [`Renderer::block`] that reach `source`, and is
+/// what a syntax highlighter runs over.
+fn is_source_block(block: &Block<'_>, source_language: Option<&str>) -> bool {
     match block {
         Block::Simple(simple) => simple.style() == SimpleBlockStyle::Source,
 
         Block::RawDelimited(_) => {
-            block.resolved_context().as_ref() == "listing" && is_source_listing(block)
+            block.resolved_context().as_ref() == "listing"
+                && is_promoted_source_listing(block, source_language)
         }
 
         _ => false,
@@ -226,9 +246,10 @@ fn is_source_block(block: &Block<'_>) -> bool {
 /// `<head>` before the body, it answers the same question up front by scanning
 /// the parse tree instead.
 fn document_has_source_block(document: &Document<'_>) -> bool {
+    let source_language = attribute_str(document, "source-language");
     document
         .find_blocks(&BlockSelector::new().traverse_documents(true))
-        .any(is_source_block)
+        .any(|block| is_source_block(block, source_language.as_deref()))
 }
 
 /// Whether `source-highlighter` selects CodeRay.
@@ -1195,6 +1216,7 @@ pub(crate) fn render_document<'a>(
         source_indent: attribute_str(document, "source-indent").map(|value| ruby_to_i(&value)),
         prewrap: document.is_attribute_set("prewrap"),
         source_highlighter: Highlighter::from_document(document),
+        source_language: attribute_str(document, "source-language"),
         section_anchors: if !document.is_attribute_set("sectanchors") {
             SectionAnchors::None
         } else if attribute_str(document, "sectanchors").as_deref() == Some("after") {
@@ -1354,6 +1376,7 @@ struct CellRenderConfig {
     source_indent: Option<i64>,
     prewrap: bool,
     source_highlighter: Option<Highlighter>,
+    source_language: Option<String>,
     section_anchors: SectionAnchors,
     sectlinks: bool,
     stem_type: StemType,
@@ -1436,6 +1459,12 @@ struct Renderer<'a> {
     /// selects the CSS classes on each source block's `<pre>`/`<code>` and
     /// drives the CDN `<link>`/`<script>` injected into the document shell.
     source_highlighter: Option<Highlighter>,
+
+    /// The document's `source-language` attribute, when set. It promotes a bare
+    /// `----` listing (no declared style, no language of its own) to a source
+    /// block and supplies the default language for any source block that does
+    /// not declare one of its own. See [`is_promoted_source_listing`].
+    source_language: Option<String>,
 
     /// How the `sectanchors` document attribute decorates non-discrete section
     /// headings with a self-anchor.
@@ -2163,9 +2192,12 @@ impl Renderer<'_> {
             Block::RawDelimited(_) => match block.resolved_context().as_ref() {
                 // A source-styled delimited listing renders like a source block
                 // (the `<pre class="highlight"><code …>` shape), matching
-                // Asciidoctor: `[source,ruby]` or the `[,ruby]` comma shorthand.
+                // Asciidoctor: `[source,ruby]` or the `[,ruby]` comma shorthand,
+                // or a bare `----` promoted by a document `source-language`.
                 // A plain `----` listing is a verbatim block.
-                "listing" if is_source_listing(block) => self.source(block),
+                "listing" if is_promoted_source_listing(block, self.source_language.as_deref()) => {
+                    self.source(block)
+                }
                 "listing" => self.verbatim(block, "listingblock"),
                 "literal" => self.verbatim(block, "literalblock"),
                 "pass" => self.pass_block(block),
@@ -2263,10 +2295,15 @@ impl Renderer<'_> {
 
         // The language is the second positional attribute of `[source, lang]`
         // (the first is the `source` style itself), or an explicit `language=`.
+        // When the block declares no language of its own, it falls back to the
+        // document's `source-language` attribute (Asciidoctor's default source
+        // language), which is also what promotes a bare listing to a source
+        // block.
         let language = block
             .attrlist()
             .and_then(|attrlist| attrlist.named_or_positional_attribute("language", 2))
-            .map(|attr| attr.value());
+            .map(|attr| attr.value())
+            .or(self.source_language.as_deref());
 
         let (pre_class, code_open) = self.source_pre_code(block, language);
         self.line(&format!(
@@ -3300,6 +3337,7 @@ impl Renderer<'_> {
                         source_indent: self.source_indent,
                         prewrap: self.prewrap,
                         source_highlighter: self.source_highlighter,
+                        source_language: self.source_language.clone(),
                         section_anchors: self.section_anchors,
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
@@ -4344,6 +4382,7 @@ fn render_cell_document<'s>(
         source_indent: config.source_indent,
         prewrap: config.prewrap,
         source_highlighter: config.source_highlighter,
+        source_language: config.source_language,
         section_anchors: config.section_anchors,
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
@@ -7499,6 +7538,7 @@ mod tests {
             source_indent: None,
             prewrap: false,
             source_highlighter: None,
+            source_language: None,
             section_anchors: super::SectionAnchors::None,
             sectlinks: false,
             stem_type: super::StemType::AsciiMath,
