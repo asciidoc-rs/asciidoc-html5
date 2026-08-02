@@ -12,12 +12,10 @@
 //! Abstract/Part Intro, Substitutions, References — lines 2326+) is being
 //! sequenced as its own implement-then-port work.
 //!
-//! What stays `non_normative!` through the ported back-half contexts: the
+//! What stays `non_normative!` through the ported back-half contexts: only the
 //! DocBook-backend equation tests and the four `eqnums`/`autoNumber` tests in
 //! `Math blocks` (the MathJax docinfo this renderer does not emit yet — html5
-//! #250); and the two block-title-above-document-title demotion tests in
-//! `Metadata` (0.29.5 demotes at the parse level but does not yet render the
-//! `sect0` heading — asciidoc-rs/asciidoc-parser#1042).
+//! #250).
 //!
 //! What stays `non_normative!` in the front half:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -31,7 +29,7 @@
 
 use asciidoc_parser::{
     blocks::{FindBlocks, IsBlock},
-    warnings::WarningType,
+    warnings::{WarningSeverity, WarningType},
 };
 
 use crate::{
@@ -4404,14 +4402,13 @@ mod custom_blocks {
         // diagnostic it raises is the low-severity `UnknownBlockStyle` recorded
         // by the debug-message test below — which Asciidoctor logs at DEBUG,
         // below the default WARN threshold that `assert_empty @logger.messages`
-        // checks. So the WARN-level counterpart is "no diagnostics other than
-        // that Debug one". (`WarningType::severity()` is `pub(crate)`, so this
-        // excludes the Debug variant by name; asciidoc-rs/asciidoc-parser#1041
-        // would let it filter by severity instead.)
+        // checks. So the WARN-level counterpart is "no `Warning`-severity
+        // diagnostics" (`WarningType::severity()` is public as of
+        // asciidoc-parser 0.29.6).
         let input = "[foo]\n--\nbar\n--\n";
         let warn_level = load(input)
             .warnings()
-            .filter(|w| !matches!(w.warning, WarningType::UnknownBlockStyle(..)))
+            .filter(|w| w.warning.severity() == WarningSeverity::Warning)
             .count();
 
         assert_eq!(warn_level, 0);
@@ -4438,25 +4435,18 @@ mod custom_blocks {
 "#
         );
 
-        // Asciidoctor logs this at DEBUG; `asciidoc-parser` 0.29.5 records it as
-        // a (Debug-severity) `UnknownBlockStyle` diagnostic carrying the block
-        // context ("open") and the unknown style ("foo"). The parser anchors it
-        // to the style line (line 1) rather than Asciidoctor's block-delimiter
-        // line (line 2, asciidoc-rs/asciidoc-parser#1043), so the substance — not
-        // the exact line — is what is re-expressed here.
-        let input = "[foo]\n--\nbar\n--\n";
-        let found = load(input)
-            .warnings()
-            .filter(|w| {
-                matches!(
-                    &w.warning,
-                    WarningType::UnknownBlockStyle(context, style)
-                        if context == "open" && style == "foo"
-                )
-            })
-            .count();
-
-        assert_eq!(found, 1);
+        // Asciidoctor logs this at DEBUG; `asciidoc-parser` records it as a
+        // (Debug-severity) `UnknownBlockStyle` diagnostic carrying the block
+        // context ("open") and the unknown style ("foo"), anchored to the block
+        // delimiter line (line 2) as Asciidoctor does (0.29.6,
+        // asciidoc-rs/asciidoc-parser#1043).
+        assert_warning("[foo]\n--\nbar\n--\n", 2, |w| {
+            matches!(
+                w,
+                WarningType::UnknownBlockStyle(context, style)
+                    if context == "open" && style == "foo"
+            )
+        });
     }
 }
 
@@ -4499,17 +4489,10 @@ mod metadata {
         assert_xpath(&html, r#"//*[@class="paragraph"]/p[text()="paragraph"]"#, 1);
     }
 
-    // A block title above the *document* title should demote that title to a
-    // level-0 section (rendered `<h1 class="sect0">` in the body) and carry the
-    // block title onto the following block. `asciidoc-parser` 0.29.5 now demotes
-    // it at the parse level — `doctitle()` is `None` and
-    // `Level0SectionHeadingNotSupported` is raised
-    // (asciidoc-rs/asciidoc-parser#1037) — but the `= …` line is still emitted
-    // as a literal paragraph rather than a `sect0` heading
-    // (asciidoc-rs/asciidoc-parser#1042), so these assertions cannot hold. Held
-    // until level-0 sections render.
-    non_normative!(
-        r#"
+    #[test]
+    fn block_title_above_document_title_demotes_document_title_to_a_section_title() {
+        verifies!(
+            r#"
     test 'block title above document title demotes document title to a section title' do
       input = <<~'EOS'
       .Block title
@@ -4526,6 +4509,36 @@ mod metadata {
       assert_message @logger, :ERROR, '<stdin>: line 2: level 0 sections can only be used when doctype is book', Hash
     end
 
+"#
+        );
+
+        // As of `asciidoc-parser` 0.29.6, a block title above the document title
+        // demotes it to a level-0 section: no document header, the title becomes
+        // an `<h1 class="sect0">` in the content, and the block title carries
+        // onto the following paragraph. The `:ERROR:` log maps to the parser's
+        // `Level0SectionHeadingNotSupported` warning at line 2.
+        let input = ".Block title\n= Section Title\n\nsection paragraph\n";
+        let html = convert_with(input, &Options::new().standalone(true));
+
+        assert_xpath(&html, r#"//*[@id="header"]/*"#, 0);
+        assert_xpath(&html, r#"//*[@id="preamble"]/*"#, 0);
+        assert_xpath(&html, r#"//*[@id="content"]/h1[text()="Section Title"]"#, 1);
+        assert_xpath(&html, r#"//*[@class="paragraph"]"#, 1);
+        assert_xpath(
+            &html,
+            r#"//*[@class="paragraph"]/*[@class="title"][text()="Block title"]"#,
+            1,
+        );
+
+        assert_warning(input, 2, |w| {
+            matches!(w, WarningType::Level0SectionHeadingNotSupported)
+        });
+    }
+
+    #[test]
+    fn block_title_above_document_title_carries_over_to_first_section_first_block() {
+        verifies!(
+            r#"
     test 'block title above document title gets carried over to first block in first section if no preamble' do
       input = <<~'EOS'
       :doctype: book
@@ -4544,7 +4557,22 @@ mod metadata {
     end
 
 "#
-    );
+        );
+
+        // The block title demotes the document title to a level-0 section, so
+        // there is no document title (`refute doc.header?`), and the block title
+        // carries onto the first block of the first section.
+        let input =
+            ":doctype: book\n.Block title\n= Document Title\n\n== First Section\n\nparagraph\n";
+        assert!(load(input).doctitle().is_none());
+
+        let html = convert_with(input, &Options::new().standalone(true));
+        assert_xpath(
+            &html,
+            r#"//*[@class="sect1"]//*[@class="paragraph"]/*[@class="title"][text()="Block title"]"#,
+            1,
+        );
+    }
 
     #[test]
     fn should_apply_substitutions_to_a_block_title_in_normal_order() {
