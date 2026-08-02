@@ -9,4 +9,5 @@
 
 mod attributes;
 mod blocks;
+mod pass;
 mod root;

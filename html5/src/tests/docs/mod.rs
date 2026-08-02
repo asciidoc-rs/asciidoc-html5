@@ -9,5 +9,6 @@ mod collapsible;
 mod convert_your_first_file;
 mod generate_html;
 mod index;
+mod passthroughs;
 mod reference_safe_mode;
 mod safe_modes;
