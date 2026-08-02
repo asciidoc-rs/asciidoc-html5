@@ -19,18 +19,14 @@ use crate::{
 
 track_file!("ref/asciidoc-lang/docs/modules/tables/pages/add-title.adoc");
 
-// Page header, the document attribute that names the caption label, and the
-// introductory prose: setup and description with no rendering rule to verify
-// here.
+// Page header and the document attribute that names the caption label: setup
+// with no rendering rule to verify here.
 non_normative!(
     r#"
 = Add a Title to a Table
 :navtitle: Add a Title
 // TODO/FIX: When soft unset is used from the Antora playbook, and then the attribute is reset in the document, it doesn't use the default value, so "Table" has to be explicitly assigned. Otherwise the label is simply the incremented number (i.e., "1.").
 :table-caption: Table
-
-A table can have an optional title (i.e., table caption).
-To add a title to a table, use the block title syntax.
 
 "#
 );
@@ -39,6 +35,9 @@ To add a title to a table, use the block title syntax.
 fn add_a_title() {
     verifies!(
         r#"
+A table can have an optional title (i.e., table caption).
+To add a title to a table, use the block title syntax.
+
 .Add an optional title to a table
 [source#ex-title]
 ----

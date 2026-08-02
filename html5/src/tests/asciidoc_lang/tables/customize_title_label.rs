@@ -35,12 +35,18 @@ It can also be xref:turn-off-title-label.adoc[deactivated].
 "#
 );
 
-// Section heading, prose about the `table-caption` attribute, and a source
-// snippet that only shows the document-header syntax (no table to render).
+// Section heading only.
 non_normative!(
     r#"
 == Modify the label using table-caption
 
+"#
+);
+
+#[test]
+fn modify_label_using_table_caption() {
+    verifies!(
+        r#"
 You can change the label for all titled tables using the document attribute `table-caption`.
 (Don't let the attribute's name mislead you.
 It's the attribute that controls the table title labels at the document level.)
@@ -56,13 +62,6 @@ In the document header, set the `table-caption` attribute and assign it your cus
 <.> Don't enter a number after the label text.
 The processor will automatically insert and increment the number.
 
-"#
-);
-
-#[test]
-fn modify_label_using_table_caption() {
-    verifies!(
-        r#"
 In <<ex-label>>, the first and third tables have a title, but the second table doesn't have a title.
 
 .Add two titled tables and one untitled table to a document
@@ -160,19 +159,10 @@ Therefore, the third table is assigned the label _Data Set 2._
     );
 }
 
-// Section heading, prose about the `caption` attribute, and a CAUTION about
-// trailing spaces: description whose rendering effect is verified below.
+// Section heading only.
 non_normative!(
     r#"
 == Modify the label of an individual table using caption
-
-You can customize the label on an individual table by setting the `caption` attribute.
-(Don't let the name of the attribute mislead you.
-The caption attribute only sets the caption's label, not the whole caption line).
-When using `caption`, assign it the exact value you want displayed (including trailing spaces).
-Labels assigned using `caption` don't get an automatically incremented number and only apply to the table they are set on.
-
-CAUTION: If you want a space between the label and the title, you must add a trailing space to the value of the caption attribute.
 
 "#
 );
@@ -181,6 +171,14 @@ CAUTION: If you want a space between the label and the title, you must add a tra
 fn modify_label_using_caption() {
     verifies!(
         r#"
+You can customize the label on an individual table by setting the `caption` attribute.
+(Don't let the name of the attribute mislead you.
+The caption attribute only sets the caption's label, not the whole caption line).
+When using `caption`, assign it the exact value you want displayed (including trailing spaces).
+Labels assigned using `caption` don't get an automatically incremented number and only apply to the table they are set on.
+
+CAUTION: If you want a space between the label and the title, you must add a trailing space to the value of the caption attribute.
+
 .Modify the label using caption
 [source#ex-caption]
 ----
