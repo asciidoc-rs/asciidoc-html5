@@ -4,7 +4,7 @@
 //! list (attrlist) — what they are, where they are placed, and how they are
 //! parsed. It shows attrlist *anatomy* rather than convertible examples with a
 //! rendered result, and the concrete rendered effects it alludes to (id, role,
-//! options) are verified on the dedicated pages ([`super::id`] is a sibling
+//! options) are verified on the dedicated pages (`id` is a sibling
 //! concern; see [`super::role`], [`super::options`], and
 //! [`super::positional_and_named_attributes`]). The whole page is therefore
 //! tracked as non-normative here; its parsing is verified in `asciidoc-parser`.

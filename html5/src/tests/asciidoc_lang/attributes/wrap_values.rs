@@ -18,7 +18,7 @@ fn first_paragraph(output: &str) -> &str {
         .split_once("<p>")
         .and_then(|(_, rest)| rest.split_once("</p>"))
         .map(|(inner, _)| inner)
-        .unwrap_or_default()
+        .expect("output should contain a paragraph")
 }
 
 non_normative!(

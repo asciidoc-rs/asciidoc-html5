@@ -24,7 +24,7 @@ fn rendered_reference(name: &str) -> String {
         .split_once("<p>")
         .and_then(|(_, rest)| rest.split_once("</p>"))
         .map(|(inner, _)| inner.to_string())
-        .unwrap_or_default()
+        .expect("output should contain a paragraph")
 }
 
 non_normative!(
