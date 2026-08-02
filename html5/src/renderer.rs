@@ -2124,6 +2124,11 @@ impl Renderer<'_> {
                     Some("open") => self.open_block(block),
                     Some("sidebar") => self.sidebar(block),
                     Some("example") => self.example(block),
+
+                    // The `pass` style over a paragraph emits its content raw,
+                    // with no paragraph wrapper — just like a delimited `++++`
+                    // block — matching Asciidoctor's `convert_pass`.
+                    Some("pass") => self.pass_block(block),
                     _ => self.paragraph(block),
                 },
                 SimpleBlockStyle::Listing => self.verbatim(block, "listingblock"),
@@ -5799,6 +5804,17 @@ mod tests {
         assert!(html.contains("<b>raw</b>"));
         assert!(!html.contains("&lt;b&gt;"));
         assert!(!html.contains("unsupported"));
+    }
+
+    #[test]
+    fn pass_style_paragraph_emits_raw_content() {
+        // A `[pass]` style over a paragraph emits its content unescaped, with no
+        // paragraph wrapper, just like a delimited `++++` block — matching
+        // Asciidoctor's `convert_pass`.
+        let html = crate::convert("[pass]\n<b>raw</b>\n");
+        assert!(html.contains("<b>raw</b>"));
+        assert!(!html.contains("&lt;b&gt;"));
+        assert!(!html.contains("<div class=\"paragraph\">"));
     }
 
     #[test]
