@@ -67,6 +67,13 @@ Italic c__hara__cter__s__ within a word.
     let unconstrained = convert("Italic c__hara__cter__s__ within a word.\n");
     assert!(unconstrained.contains("Italic c<em>hara</em>cter<em>s</em> within a word."));
     assert_css(&unconstrained, "em", 2);
+
+    // The single-underscore (constrained) form still applies when the italic
+    // word is directly followed by each common punctuation mark the page names:
+    // `;`, `"`, and `!`.
+    let punctuation = convert("An _word_; an _word_\" and an _word_!\n");
+    assert!(punctuation.contains("An <em>word</em>; an <em>word</em>\" and an <em>word</em>!"));
+    assert_css(&punctuation, "em", 3);
 }
 
 non_normative!(
