@@ -1,0 +1,9 @@
+outside before
+# tag::foo[]
+foo start
+# tag::bar[]
+bar body
+# end::bar[]
+foo end
+# end::foo[]
+outside after
