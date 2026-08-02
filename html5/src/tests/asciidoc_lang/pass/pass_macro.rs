@@ -493,6 +493,19 @@ non_normative!(
 When you're using passthroughs inside literal and listing blocks, it can be easy to forget that the single plus and triple plus passthroughs are xref:subs:macros.adoc[macros substitutions].
 To enable the passthroughs, assign the `macros` value to the `subs` attribute.
 
+"#
+);
+
+// The nesting example is shown twice. First a literal block displays the
+// `[source]` source verbatim — its `**…**` and `+++…+++` markup left
+// unprocessed. Then the same source is rendered as a real listing block with
+// `subs="+quotes,+macros"`, which runs both added substitutions: the `**…**`
+// quotes markup becomes `<strong>`, and the triple-plus passthrough (a macros
+// substitution) keeps the enclosed `**` literal instead of formatting it.
+#[test]
+fn nested_passthrough_in_listing_with_added_subs() {
+    verifies!(
+        r#"
 ....
 [source,java,subs="+quotes,+macros"]
 ----
@@ -510,17 +523,6 @@ protected void configure(HttpSecurity http) throws Exception {
 
 To learn more about applying substitutions to blocks, see xref:subs:apply-subs-to-blocks.adoc[].
 
-"#
-);
-
-// A listing block with `subs="+quotes,+macros"` runs both added substitutions:
-// the `**…**` quotes markup becomes `<strong>`, and the triple-plus passthrough
-// (a macros substitution) keeps the enclosed `**` literal instead of
-// formatting.
-#[test]
-fn nested_passthrough_in_listing_with_added_subs() {
-    verifies!(
-        r#"
 [source,java,subs="+quotes,+macros"]
 ----
 protected void configure(HttpSecurity http) throws Exception {
@@ -536,6 +538,23 @@ protected void configure(HttpSecurity http) throws Exception {
 "#
     );
 
+    // The literal block displays the source verbatim: it is a `literalblock`
+    // whose `<pre>` keeps the raw `[source]` header and the unprocessed `**…**`
+    // / `+++…+++` markup, with no substitutions run (no `<strong>`).
+    let display = convert(
+        "....\n[source,java,subs=\"+quotes,+macros\"]\n----\n\
+         protected void configure(HttpSecurity http) throws Exception {\n    http\n        \
+         .authorizeRequests()\n            \
+         **.antMatchers(\"/resources/+++**+++\").permitAll()**\n            \
+         .anyRequest().authenticated()\n            .and()\n        .formLogin()\n            \
+         .loginPage(\"/login\")\n            .permitAll();\n----\n....\n",
+    );
+    assert_css(&display, ".literalblock", 1);
+    assert!(display.contains("[source,java,subs=\"+quotes,+macros\"]"));
+    assert!(display.contains("**.antMatchers(\"/resources/+++**+++\").permitAll()**"));
+    assert_css(&display, ".literalblock strong", 0);
+
+    // The real listing block runs the added substitutions.
     let output = convert(
         "[source,java,subs=\"+quotes,+macros\"]\n----\n\
          protected void configure(HttpSecurity http) throws Exception {\n    http\n        \

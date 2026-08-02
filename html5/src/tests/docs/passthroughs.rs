@@ -149,9 +149,6 @@ conditional.
 
 == Pass content inline
 
-The inline `pass:[]` macro passes its target through. With no substitution
-values, none are applied:
-
 "#
 );
 
@@ -161,6 +158,9 @@ values, none are applied:
 fn pass_content_inline_macro() {
     verifies!(
         r#"
+The inline `pass:[]` macro passes its target through. With no substitution
+values, none are applied:
+
 [,asciidoc]
 ----
 The text pass:[<del>strike this</del>] is marked as deleted.
@@ -178,21 +178,16 @@ The text pass:[<del>strike this</del>] is marked as deleted.
     assert!(output.contains("<p>The text <del>strike this</del> is marked as deleted.</p>"));
 }
 
-non_normative!(
-    r#"
-Name substitution values in the macro target to apply them selectively. Here
-`q` (quotes) formats the enclosed text while the special-characters substitution
-stays off, so the `<del>` markup passes through raw:
-
-"#
-);
-
 // A named substitution value (`q`) applies the quotes substitution to the
 // target while special characters stay off, so `<del>` passes through raw.
 #[test]
 fn pass_content_inline_macro_with_value() {
     verifies!(
         r#"
+Name substitution values in the macro target to apply them selectively. Here
+`q` (quotes) formats the enclosed text while the special-characters substitution
+stays off, so the `<del>` markup passes through raw:
+
 [,asciidoc]
 ----
 The text pass:q[<del>strike *this*</del>] is marked as deleted.
@@ -215,10 +210,6 @@ non_normative!(
     r#"
 == Escape formatting with the plus shorthands
 
-A pair of single pluses (`pass:[+]...pass:[+]`) prevents the enclosed text from
-being formatted, applying only the special-characters substitution. This is the
-common way to output characters that would otherwise be replaced:
-
 "#
 );
 
@@ -228,6 +219,10 @@ common way to output characters that would otherwise be replaced:
 fn escape_formatting_with_the_plus_shorthands() {
     verifies!(
         r#"
+A pair of single pluses (`pass:[+]...pass:[+]`) prevents the enclosed text from
+being formatted, applying only the special-characters substitution. This is the
+common way to output characters that would otherwise be replaced:
+
 [,asciidoc]
 ----
 The characters +<+ and +>+ are escaped, and +...+ is literal.
