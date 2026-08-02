@@ -2340,16 +2340,31 @@ impl Renderer<'_> {
     ///
     /// A bare `[stem]` follows the document `stem` attribute default (see
     /// [`stem_type`](Self::stem_type)); an explicit `[asciimath]` /
-    /// `[latexmath]` style overrides it. The equation's special characters
-    /// have already been escaped by the parser; the delimiters are added
-    /// here unless the author wrote them, and a multi-line AsciiMath
-    /// equation has its internal breaks rewritten to `<br>`-separated
-    /// expressions.
+    /// `[latexmath]` style — or a notation named as the block's second
+    /// positional attribute (`[stem, asciimath]`) — overrides it. The
+    /// equation's special characters have already been escaped by the parser;
+    /// the delimiters are added here unless the author wrote them, and a
+    /// multi-line AsciiMath equation has its internal breaks rewritten to
+    /// `<br>`-separated expressions.
     fn stem<'src>(&mut self, block: &'src Block<'src>) {
         let stem_type = match block.declared_style() {
             Some("asciimath") => StemType::AsciiMath,
             Some("latexmath") => StemType::LatexMath,
-            _ => self.stem_type,
+
+            // A bare `[stem]` may still name its notation as the block's second
+            // positional attribute (`[stem, asciimath]`), which Asciidoctor
+            // promotes to the block style and which overrides the document
+            // `stem` default. An absent or unrecognized second positional falls
+            // back to that document default.
+            _ => match block
+                .attrlist()
+                .and_then(|attrlist| attrlist.nth_attribute(2))
+                .map(|attr| attr.value())
+            {
+                Some("latexmath" | "latex" | "tex") => StemType::LatexMath,
+                Some("asciimath") => StemType::AsciiMath,
+                _ => self.stem_type,
+            },
         };
 
         let (open, close) = stem_type.block_delimiters();
@@ -3358,6 +3373,21 @@ impl Renderer<'_> {
         // `sectlinks` / `sectanchors` inject `<a>` elements into a non-discrete
         // heading, keyed off the section's own id.
         let title = self.decorate_section_heading(&title, id);
+
+        if level == 0 {
+            // A level-0 section — a book part, or a document title demoted by
+            // block metadata above it — renders as a bare `<h1 class="sect0">`:
+            // Asciidoctor puts the class and id on the heading itself and emits
+            // the section's blocks directly after it, with no wrapping `<div>`
+            // and no `sectionbody`.
+            self.line(&format!(
+                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                id_attribute(id),
+                class_attribute("sect0", &block.roles())
+            ));
+            self.blocks(block.child_blocks());
+            return;
+        }
 
         self.line(&format!(
             "<div{}>",
