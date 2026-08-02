@@ -10,9 +10,10 @@
 //! every one of those forms, so each section's example and claims are verified
 //! through `convert`.
 //!
-//! A few points describe behavior outside the parity oracle (Asciidoctor
-//! 2.0.26) — explicit-numeral offsets (an Asciidoctor 2.1.0 feature),
-//! sequence-warning messaging, and custom-role numeration via CSS — and are
+//! A non-sequential explicit numeral raises a `ListItemOutOfSequence` warning,
+//! verified through `load`. A couple of points describe behavior outside the
+//! parity oracle (Asciidoctor 2.0.26) — explicit-numeral offsets (an
+//! Asciidoctor 2.1.0 feature) and custom-role numeration via CSS — and are
 //! tracked as non-normative with the reason noted inline.
 
 use crate::{
@@ -69,16 +70,39 @@ include::example$ordered.adoc[tag=base]
     assert_css(&numbered, "div.olist.arabic > ol.arabic > li", 3);
 }
 
-// Explicit-numeral offsets are an Asciidoctor 2.1.0 feature, and the
-// sequence-mismatch warning is logger behavior; neither is exercised against
-// the parity oracle (Asciidoctor 2.0.26) here. Tracked as non-normative.
-non_normative!(
-    r#"
+// Explicit numerals must be kept sequential: a numeral that skips ahead raises
+// a `ListItemOutOfSequence` warning naming the expected and actual index (here
+// a `5.` where `3.` was expected).
+#[test]
+fn explicit_numerals_must_be_kept_sequential() {
+    verifies!(
+        r#"
 If you number the ordered list explicitly, you have to manually keep the list numerals sequential.
 Otherwise, you will get a warning.
 This differs from other lightweight markup languages.
 But there's a reason for it.
 
+"#
+    );
+
+    let doc = crate::load("1. Protons\n2. Electrons\n5. Neutrons\n");
+    let out_of_sequence = doc.warnings().any(|w| {
+        matches!(
+            &w.warning,
+            asciidoc_parser::warnings::WarningType::ListItemOutOfSequence(expected, actual)
+                if expected == "3" && actual == "5"
+        )
+    });
+    assert!(
+        out_of_sequence,
+        "an explicit numeral of 5 after 2 should warn that index 3 was expected"
+    );
+}
+
+// Explicit-numeral offsets are an Asciidoctor 2.1.0 feature, not exercised
+// against the parity oracle (Asciidoctor 2.0.26). Tracked as non-normative.
+non_normative!(
+    r#"
 Using explicit numbering is one way to adjust the numbering offset of a list (only supported in Asciidoctor 2.1.0 or better).
 For instance, you can type:
 

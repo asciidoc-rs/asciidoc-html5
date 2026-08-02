@@ -12,11 +12,12 @@
 //! claims are verified through `convert`.
 
 use crate::{
-    convert,
+    convert, convert_with,
     tests::{
         assert_html::{assert_css, assert_xpath},
         sdd::*,
     },
+    Options, SafeMode,
 };
 
 track_file!("ref/asciidoc-lang/docs/modules/lists/pages/continuation.adoc");
@@ -296,8 +297,14 @@ include::example$complex.adoc[tag=complex-o]
     assert_css(&output, "div.openblock div.admonitionblock", 1);
 }
 
-non_normative!(
-    r#"
+// An `include::` directive wrapped in an open block attached to a list item
+// pulls the shared file's content into the item unmodified. Resolving the
+// include needs a base directory, so this drives `convert_with` against a temp
+// file under the `Safe` safe mode rather than the plain `convert`.
+#[test]
+fn an_included_file_can_be_wrapped_in_an_open_block() {
+    verifies!(
+        r#"
 The open block wrapper is also useful if you're including content from a shared file into a list item.
 For example:
 
@@ -311,6 +318,49 @@ For example:
 
 By wrapping the include directive in an open block, the content can be used unmodified.
 
+"#
+    );
+
+    // A temp directory holding the shared file the include resolves against.
+    let dir = std::env::temp_dir().join(format!(
+        "asciidoc-html5-lists-continuation-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).expect("create temp include dir");
+    std::fs::write(
+        dir.join("shared-content.adoc"),
+        "Shared content from the included file.\n",
+    )
+    .expect("write shared include file");
+
+    let output = convert_with(
+        "* list item\n+\n--\ninclude::shared-content.adoc[]\n--\n",
+        &Options::new()
+            .safe_mode(SafeMode::Safe)
+            .base_dir(dir.clone()),
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // The open block is attached to the item and holds the included content
+    // (a paragraph) unmodified.
+    assert_css(
+        &output,
+        ".ulist:root > ul > li > div.openblock > div.content > div.paragraph",
+        1,
+    );
+    assert_xpath(
+        &output,
+        r#"//li/div[@class="openblock"]//p[text()="Shared content from the included file."]"#,
+        1,
+    );
+}
+
+// The nesting limitation (open blocks cannot yet contain another open block) is
+// a syntax constraint rather than a rendering behavior to assert here. Tracked
+// as non-normative.
+non_normative!(
+    r#"
 The only limitation of this technique is that the content itself may not contain an open block since open blocks cannot (yet) be nested.
 
 "#
