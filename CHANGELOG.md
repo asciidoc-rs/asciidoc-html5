@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.4...asciidoc-html5-v0.1.5)
+_02 August 2026_
+
+### Added
+
+* *(html5)* Transcode a non-UTF-8 include file per the encoding attribute ([#138](https://github.com/asciidoc-rs/asciidoc-html5/pull/138)) ([#246](https://github.com/asciidoc-rs/asciidoc-html5/pull/246))
+* *(html5)* Copy and link the CodeRay stylesheet when highlighting source ([#247](https://github.com/asciidoc-rs/asciidoc-html5/pull/247))
+* *(html5)* Render the cellbgcolor document attribute on table cells ([#245](https://github.com/asciidoc-rs/asciidoc-html5/pull/245))
+* Wire document date/time attributes and SOURCE_DATE_EPOCH through adoc ([#248](https://github.com/asciidoc-rs/asciidoc-html5/pull/248))
+* *(html5)* Render the cell-local #footnotes block for AsciiDoc cells ([#235](https://github.com/asciidoc-rs/asciidoc-html5/pull/235))
+
+### Documented
+
+* *(html5)* Document that :parse has no counterpart ([#244](https://github.com/asciidoc-rs/asciidoc-html5/pull/244))
+
+### Fixed
+
+* Port the AsciiDoc lists module pages (reference coverage + docs) ([#263](https://github.com/asciidoc-rs/asciidoc-html5/pull/263))
+* Port asciidoc-lang directives pages for SDD coverage ([#262](https://github.com/asciidoc-rs/asciidoc-html5/pull/262))
+* Port 19 attributes-module spec pages for SDD coverage ([#261](https://github.com/asciidoc-rs/asciidoc-html5/pull/261))
+* Port the asciidoc-lang pass module pages and fix related issues ([#260](https://github.com/asciidoc-rs/asciidoc-html5/pull/260))
+* *(html5)* Chomp the trailing newline from the copied asciidoctor.css ([#249](https://github.com/asciidoc-rs/asciidoc-html5/pull/249))
+* *(html5)* Preserve a list-attached literal paragraph's leading indent ([#168](https://github.com/asciidoc-rs/asciidoc-html5/pull/168)) ([#236](https://github.com/asciidoc-rs/asciidoc-html5/pull/236))
+* Close the CLI output-collision TOCTOU window by binding the check to the opened file ([#243](https://github.com/asciidoc-rs/asciidoc-html5/pull/243))
+
+### Other
+
+* *(html5)* Add SDD coverage for five asciidoc-lang ROOT pages ([#258](https://github.com/asciidoc-rs/asciidoc-html5/pull/258))
+* *(html5)* Port Asciidoctor api_test.rb for SDD coverage ([#255](https://github.com/asciidoc-rs/asciidoc-html5/pull/255))
+* *(html5)* Port Asciidoctor attributes_test.rb (SDD) ([#241](https://github.com/asciidoc-rs/asciidoc-html5/pull/241))
+
 ## [0.1.4](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.3...asciidoc-html5-v0.1.4)
 _30 July 2026_
 
