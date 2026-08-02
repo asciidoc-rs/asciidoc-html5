@@ -5,22 +5,18 @@
 //! specifier in the `cols` attribute, applied to every cell in the column and
 //! combinable with a column width and a multiplier. Each rendered example is
 //! verified through `convert`, which emits the alignment as
-//! `halign-*`/`valign-*` classes on the body cells. The section headings, the
-//! operator-definition lists, and the operator-order bullet lists carry no
-//! rendering rule of their own and are tracked as non-normative.
+//! `halign-*`/`valign-*` classes on both the header (`<th>`) and body (`<td>`)
+//! cells. The section headings, the operator-definition lists, and the
+//! operator-order bullet lists carry no rendering rule of their own and are
+//! tracked as non-normative.
 //!
-//! Divergence from Asciidoctor 2.0.26: for header rows, Asciidoctor propagates
-//! the column's alignment to the `<th>` cells, but a header cell's resolved
-//! alignment defaults to `Left`/`Top` in `asciidoc-parser` (it falls back to
-//! the column alignment only for body cells), so this renderer emits
-//! `halign-left valign-top` on header cells. This is a known limitation of
-//! `asciidoc-parser`, not of the renderer, which faithfully renders the
-//! alignment the parser resolves. The tests therefore assert the body-cell
-//! alignment, which is the behavior each example documents. Tracked as
-//! asciidoc-parser issue #1061
-//! (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1061>); once it is
-//! fixed and the dependency bumped, these tests should also assert the
-//! header-cell alignment.
+//! A column's alignment propagates to its header cells as well as its body
+//! cells, matching Asciidoctor 2.0.26. This relies on the fix for
+//! asciidoc-parser issue #1061 (<https://github.com/asciidoc-rs/asciidoc-parser/issues/1061>),
+//! released in `asciidoc-parser` 0.29.8: before that fix a header cell's
+//! alignment defaulted to `Left`/`Top` regardless of the column's operator.
+//! The multiplier examples below therefore assert the header-cell alignment
+//! alongside the body-cell alignment.
 
 use crate::{
     convert,
@@ -142,7 +138,8 @@ Content is left-aligned by default.
     assert_css(&horizontal, "td.tableblock.halign-left.valign-top", 1);
 
     // With the columns declared via a multiplier, `2*^` center-aligns both
-    // columns' body cells.
+    // columns' cells; the alignment reaches the header cells too, not only the
+    // body cells.
     let multiplier = convert(
         r#"[cols="2*^",options=header]
 |===
@@ -154,6 +151,7 @@ Content is left-aligned by default.
 |==="#,
     );
 
+    assert_css(&multiplier, "th.tableblock.halign-center.valign-top", 2);
     assert_css(&multiplier, "td.tableblock.halign-center.valign-top", 2);
 }
 
@@ -231,7 +229,7 @@ Content is left-aligned by default.
     assert_css(&right, "td.tableblock.halign-left.valign-top", 1);
 
     // With the columns declared via a multiplier, `2*>` right-aligns both
-    // columns' body cells.
+    // columns' cells, including the header cells.
     let multiplier = convert(
         r#"[cols="2*>",options=header]
 |===
@@ -243,6 +241,7 @@ Content is left-aligned by default.
 |==="#,
     );
 
+    assert_css(&multiplier, "th.tableblock.halign-right.valign-top", 2);
     assert_css(&multiplier, "td.tableblock.halign-right.valign-top", 2);
 }
 
@@ -396,7 +395,7 @@ Content is top-aligned by default.
     assert_css(&vertical, "td.tableblock.halign-left.valign-top", 1);
 
     // With the columns declared via a multiplier, `2*.^` vertically centers both
-    // columns' body cells.
+    // columns' cells, header cells included.
     let multiplier = convert(
         r#"[cols="2*.^",options=header]
 |===
@@ -408,6 +407,7 @@ Content is top-aligned by default.
 |==="#,
     );
 
+    assert_css(&multiplier, "th.tableblock.halign-left.valign-middle", 2);
     assert_css(&multiplier, "td.tableblock.halign-left.valign-middle", 2);
 }
 
