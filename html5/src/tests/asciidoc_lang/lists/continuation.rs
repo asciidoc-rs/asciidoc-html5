@@ -405,9 +405,11 @@ include::example$complex.adoc[tag=complex-only]
     let output = convert(
         ". {empty}\n+\n----\nprint(\"one\")\n----\n. {empty}\n+\n----\nprint(\"one\")\n----\n",
     );
-    // Two items, each with the attached listing block as its own node (rather
-    // than the listing content folded into the principal paragraph).
+    // Two items, each with an empty principal `<p></p>` (the dropped `{empty}`
+    // principal) followed by the attached listing block as its own node, rather
+    // than the listing content folded into the principal paragraph.
     assert_css(&output, ".olist:root > ol > li", 2);
+    assert_css(&output, ".olist:root > ol > li > p:empty", 2);
     assert_css(&output, ".olist:root > ol > li > div.listingblock", 2);
     assert_css(
         &output,

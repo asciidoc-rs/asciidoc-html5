@@ -516,6 +516,10 @@ Now the paragraph will remain as a paragraph.
     // `P. O. Box` matches the upper-alpha marker and becomes a one-item list.
     let unescaped = convert("P. O. Box\n");
     assert_css(&unescaped, "div.olist ol > li", 1);
+    // The style is inferred from the `P.` marker, so the `<ol>` names the
+    // `upperalpha` class but carries no HTML `type` attribute (only a declared
+    // or dot-derived style does).
+    assert_css(&unescaped, "ol.upperalpha:not([type])", 1);
 
     // With `{empty}`, the marker pattern is broken and the line stays a
     // paragraph.
