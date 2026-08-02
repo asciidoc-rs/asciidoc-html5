@@ -14,3 +14,4 @@ mod lists;
 mod pass;
 mod root;
 mod text;
+mod verbatim;
