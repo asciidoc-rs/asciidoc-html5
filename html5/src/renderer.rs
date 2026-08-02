@@ -760,6 +760,28 @@ fn olist_style<'src>(block: &'src Block<'src>, list: &'src ListBlock<'src>) -> &
         .unwrap_or("arabic")
 }
 
+/// Whether an ordered list's `<ol>` should carry an HTML `type` attribute for
+/// its alphabetic or roman numbering style.
+///
+/// Asciidoctor emits `type` only when the numbering style is a *string* in its
+/// model: a style set by a declared block attribute (`[loweralpha]`) or one
+/// derived from a dot marker (`.`, `..`, …, whose level indexes
+/// `ORDERED_LIST_STYLES` and is stored as a string). A style *inferred from an
+/// alphabetic marker* (`A.`, `a.`) is stored as a Symbol, which its
+/// `ORDERED_LIST_KEYWORDS` lookup (keyed by String) misses, so such a list
+/// names the class but carries no `type`. We mirror that: a declared style, or
+/// a first item marked with dots, earns the `type`; an alpha-marker-inferred
+/// style does not.
+fn olist_emits_type(block: &Block<'_>, list: &ListBlock<'_>) -> bool {
+    if block.declared_style().is_some() {
+        return true;
+    }
+
+    list.child_blocks()
+        .find_map(as_list_item)
+        .is_some_and(|item| matches!(item.list_item_marker(), ListItemMarker::Dots(_)))
+}
+
 /// One description-list entry: the terms sharing a single description (their
 /// already-rendered `<dt>` text), paired with the list item that carries that
 /// description — or `None` for a trailing run of terms with no description.
@@ -2124,6 +2146,11 @@ impl Renderer<'_> {
                     Some("open") => self.open_block(block),
                     Some("sidebar") => self.sidebar(block),
                     Some("example") => self.example(block),
+
+                    // The `pass` style over a paragraph emits its content raw,
+                    // with no paragraph wrapper — just like a delimited `++++`
+                    // block — matching Asciidoctor's `convert_pass`.
+                    Some("pass") => self.pass_block(block),
                     _ => self.paragraph(block),
                 },
                 SimpleBlockStyle::Listing => self.verbatim(block, "listingblock"),
@@ -2340,16 +2367,31 @@ impl Renderer<'_> {
     ///
     /// A bare `[stem]` follows the document `stem` attribute default (see
     /// [`stem_type`](Self::stem_type)); an explicit `[asciimath]` /
-    /// `[latexmath]` style overrides it. The equation's special characters
-    /// have already been escaped by the parser; the delimiters are added
-    /// here unless the author wrote them, and a multi-line AsciiMath
-    /// equation has its internal breaks rewritten to `<br>`-separated
-    /// expressions.
+    /// `[latexmath]` style — or a notation named as the block's second
+    /// positional attribute (`[stem, asciimath]`) — overrides it. The
+    /// equation's special characters have already been escaped by the parser;
+    /// the delimiters are added here unless the author wrote them, and a
+    /// multi-line AsciiMath equation has its internal breaks rewritten to
+    /// `<br>`-separated expressions.
     fn stem<'src>(&mut self, block: &'src Block<'src>) {
         let stem_type = match block.declared_style() {
             Some("asciimath") => StemType::AsciiMath,
             Some("latexmath") => StemType::LatexMath,
-            _ => self.stem_type,
+
+            // A bare `[stem]` may still name its notation as the block's second
+            // positional attribute (`[stem, asciimath]`), which Asciidoctor
+            // promotes to the block style and which overrides the document
+            // `stem` default. An absent or unrecognized second positional falls
+            // back to that document default.
+            _ => match block
+                .attrlist()
+                .and_then(|attrlist| attrlist.nth_attribute(2))
+                .map(|attr| attr.value())
+            {
+                Some("latexmath" | "latex" | "tex") => StemType::LatexMath,
+                Some("asciimath") => StemType::AsciiMath,
+                _ => self.stem_type,
+            },
         };
 
         let (open, close) = stem_type.block_delimiters();
@@ -2678,13 +2720,18 @@ impl Renderer<'_> {
         self.block_title(block);
 
         // The HTML `type` mirrors Asciidoctor's `ORDERED_LIST_KEYWORDS`: arabic
-        // needs none, the others carry the matching numbering letter.
-        let type_attr = match style {
-            "loweralpha" => " type=\"a\"",
-            "lowerroman" => " type=\"i\"",
-            "upperalpha" => " type=\"A\"",
-            "upperroman" => " type=\"I\"",
-            _ => "",
+        // needs none, the others carry the matching numbering letter — but only
+        // for a declared or dot-derived style (see `olist_emits_type`).
+        let type_attr = if olist_emits_type(block, list) {
+            match style {
+                "loweralpha" => " type=\"a\"",
+                "lowerroman" => " type=\"i\"",
+                "upperalpha" => " type=\"A\"",
+                "upperroman" => " type=\"I\"",
+                _ => "",
+            }
+        } else {
+            ""
         };
 
         // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor emits
@@ -3038,12 +3085,20 @@ impl Renderer<'_> {
         self.line(&li_open);
 
         // The first attached block is the item's principal text, emitted as a
-        // bare `<p>`; the remainder render as ordinary nested blocks.
+        // bare `<p>`; the remainder render as ordinary nested blocks. When the
+        // principal text is present but renders empty (an `{empty}` reference),
+        // the parser drops that node from the child blocks and flags it here:
+        // Asciidoctor still emits the empty `<p></p>` ahead of the attached
+        // blocks, so the first child block stays an attached block.
         let mut blocks = list_item.child_blocks();
-        let principal = blocks
-            .next()
-            .and_then(|block| block.rendered_content())
-            .unwrap_or_default();
+        let principal = if list_item.has_empty_principal_text() {
+            ""
+        } else {
+            blocks
+                .next()
+                .and_then(|block| block.rendered_content())
+                .unwrap_or_default()
+        };
 
         match (checklist, list_item.checkbox()) {
             (true, Some(checked)) => {
@@ -3358,6 +3413,21 @@ impl Renderer<'_> {
         // `sectlinks` / `sectanchors` inject `<a>` elements into a non-discrete
         // heading, keyed off the section's own id.
         let title = self.decorate_section_heading(&title, id);
+
+        if level == 0 {
+            // A level-0 section — a book part, or a document title demoted by
+            // block metadata above it — renders as a bare `<h1 class="sect0">`:
+            // Asciidoctor puts the class and id on the heading itself and emits
+            // the section's blocks directly after it, with no wrapping `<div>`
+            // and no `sectionbody`.
+            self.line(&format!(
+                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                id_attribute(id),
+                class_attribute("sect0", &block.roles())
+            ));
+            self.blocks(block.child_blocks());
+            return;
+        }
 
         self.line(&format!(
             "<div{}>",
@@ -5769,6 +5839,17 @@ mod tests {
         assert!(html.contains("<b>raw</b>"));
         assert!(!html.contains("&lt;b&gt;"));
         assert!(!html.contains("unsupported"));
+    }
+
+    #[test]
+    fn pass_style_paragraph_emits_raw_content() {
+        // A `[pass]` style over a paragraph emits its content unescaped, with no
+        // paragraph wrapper, just like a delimited `++++` block — matching
+        // Asciidoctor's `convert_pass`.
+        let html = crate::convert("[pass]\n<b>raw</b>\n");
+        assert!(html.contains("<b>raw</b>"));
+        assert!(!html.contains("&lt;b&gt;"));
+        assert!(!html.contains("<div class=\"paragraph\">"));
     }
 
     #[test]

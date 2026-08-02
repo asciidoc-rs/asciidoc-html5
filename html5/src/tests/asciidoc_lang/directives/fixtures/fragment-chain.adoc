@@ -1,0 +1,4 @@
+[id=chain-{chapter}]
+=== Chain
+
+See xref:chain-{chapter}[].
