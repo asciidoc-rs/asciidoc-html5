@@ -6,13 +6,17 @@
 //! leaves the reference in place, `drop` removes the reference but keeps the
 //! line, `drop-line` discards the whole line, and `warn` leaves the line alone
 //! but emits a warning. Each is verified through `convert` (and, for `warn`,
-//! `load().warnings()`).
+//! `load().warnings()`). The "Forcing failure" section is likewise verified:
+//! its CLI `--failure-level=WARN` decides *when* to exit, but the library half
+//! it builds on — the whole document still converts while a `Warning`-severity
+//! diagnostic is surfaced for the caller to consult — is exercised through
+//! `convert_with`/`load_with` with an `Options`-supplied `attribute-missing`.
 //!
 //! The "Undefined attribute" section describes the `{set:name!}` inline
 //! undefine expression, which this renderer (like `asciidoc-parser`) does not
 //! implement — the expression is passed through as literal text — so that whole
-//! section, along with the CLI-focused "Forcing failure" prose and the
-//! not-strictly-honored include/ifeval cases, is tracked as non-normative.
+//! section, along with the not-strictly-honored include/ifeval cases, is
+//! tracked as non-normative.
 
 use crate::tests::sdd::*;
 
@@ -40,10 +44,10 @@ You'll want to think about how you want the processor to handle these situations
 );
 
 mod missing {
-    use asciidoc_parser::warnings::WarningType;
+    use asciidoc_parser::warnings::{WarningSeverity, WarningType};
 
     use super::*;
-    use crate::{convert, load};
+    use crate::{convert, convert_with, load, load_with, Options};
 
     non_normative!(
         r#"
@@ -139,6 +143,13 @@ If a missing attribute is found in the target of an include directive, the proce
 Another case is the `ifeval` directive.
 A missing attribute reference can safely be used in the clause of the `ifeval` directive without any side effects (i.e., `drop`) since the purpose of that statement is to determine whether an attribute resolves to a value.
 
+"#
+    );
+
+    #[test]
+    fn forcing_failure() {
+        verifies!(
+            r#"
 === Forcing failure
 
 If you want the processor to fail when the document contains a missing attribute, set the `attribute-missing` attribute to `warn` and pass the `--failure-level=WARN` option to the CLI.
@@ -151,7 +162,35 @@ When using the API, you can consult the logger for the max severity of all messa
 It's up to the application code to decide how and when to terminate the application.
 
 "#
-    );
+        );
+
+        // The library equivalent of the CLI's `-a attribute-missing=warn`: the
+        // `--failure-level=WARN` half is the CLI deciding *when to exit*, which
+        // this library leaves to the caller. What the library provides is what
+        // the caller consults — the whole document still converts, and a
+        // `Warning`-severity diagnostic is reported for the missing reference.
+        let src = "Hello, {name}!\n\nThe rest of the document is converted regardless.";
+        let options = Options::new().attribute("attribute-missing", "warn");
+
+        // The processor converts the entire document.
+        let output = convert_with(src, &options);
+        assert!(
+            output.contains("The rest of the document is converted regardless."),
+            "the entire document should still be converted",
+        );
+
+        // The application can consult the reported warnings for the max
+        // severity; the missing reference is surfaced at `Warning` severity —
+        // the level the CLI's `--failure-level=WARN` would act on.
+        let doc = load_with(src, &options);
+        assert!(
+            doc.warnings()
+                .any(|w| w.warning.severity() == WarningSeverity::Warning
+                    && w.warning
+                        == WarningType::SkippingReferenceToMissingAttribute("name".to_string())),
+            "a Warning-severity missing-attribute diagnostic should be reported",
+        );
+    }
 }
 
 mod undefined {
