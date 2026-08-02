@@ -9,3 +9,4 @@
 
 mod blocks;
 mod directives;
+mod root;
