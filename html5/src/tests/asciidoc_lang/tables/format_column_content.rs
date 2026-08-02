@@ -5,9 +5,9 @@
 //! a column specifier styles every cell in that column (`h` header, `m`
 //! monospace, `s` strong, `e` emphasis, `a` AsciiDoc block content); the header
 //! row is unaffected and inline markup still applies. Those rendering claims
-//! are verified through `convert`; the headings, the specifier-placement
-//! schematics, the `include`d operator table, and the cross-references carry no
-//! HTML rule of their own and are tracked as non-normative.
+//! are verified through `convert`; the headings, the `include`d operator table,
+//! and the cross-references carry no HTML rule of their own and are tracked as
+//! non-normative.
 
 use crate::{
     convert,
@@ -49,17 +49,10 @@ When a style operator isn't explicitly applied to a column specifier, the `d` st
 "#
 );
 
-// Section heading plus the placement rules, shown as inline pass-through
-// schematics of `cols` specifiers rather than rendered tables.
+// Section heading only.
 non_normative!(
     r#"
 == Apply a style operator to a column
-
-A style operator is always placed in the last position on a column's specifier or multiplier.
-
-* `[cols=">pass:q[#e#],.^3pass:q[#s#]"]` A style operator is placed directly after any other operators and the column width in the column's specifier.
-* `[cols="pass:q[#h#],pass:q[#e#]"]` When a column width isn't specified, the style operator can represent both the column and the column's content style.
-* `[cols="3*.>pass:q[#m#]"]` When a multiplier is present, the style operator is placed after any horizontal and vertical alignment operators.
 
 "#
 );
@@ -68,6 +61,12 @@ A style operator is always placed in the last position on a column's specifier o
 fn apply_a_style_operator_to_a_column() {
     verifies!(
         r#"
+A style operator is always placed in the last position on a column's specifier or multiplier.
+
+* `[cols=">pass:q[#e#],.^3pass:q[#s#]"]` A style operator is placed directly after any other operators and the column width in the column's specifier.
+* `[cols="pass:q[#h#],pass:q[#e#]"]` When a column width isn't specified, the style operator can represent both the column and the column's content style.
+* `[cols="3*.>pass:q[#m#]"]` When a multiplier is present, the style operator is placed after any horizontal and vertical alignment operators.
+
 Let's apply a different style to each column in <<ex-style>>.
 
 .Add a style operator to each column

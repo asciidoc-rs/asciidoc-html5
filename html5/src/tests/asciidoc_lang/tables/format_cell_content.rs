@@ -6,9 +6,9 @@
 //! the cell's content is rendered, a cell operator overrides the column's
 //! operator, and inline markup applies in addition to the operator. Each of
 //! those rendering claims is verified through `convert`; the headings, the
-//! specifier schematics, the `include`d operator table, and the prose about the
-//! nested-document semantics of an AsciiDoc (`a`) cell carry no HTML rule of
-//! their own and are tracked as non-normative.
+//! `include`d operator table, and the prose about the nested-document semantics
+//! of an AsciiDoc (`a`) cell carry no HTML rule of their own and are tracked as
+//! non-normative.
 
 use crate::{
     convert,
@@ -45,18 +45,10 @@ When a style operator isn't explicitly assigned to a cell specifier (or xref:for
 "#
 );
 
-// Section heading plus the schematic showing where the style operator sits in a
-// cell specifier; no rendered output to verify.
+// Section heading only.
 non_normative!(
     r#"
 == Apply a style to a table cell
-
-The style operator is always entered last in a xref:add-cells-and-rows.adoc#specifiers[cell specifier].
-Don't insert any spaces between the `|` and the operator.
-
-====
-<factor><span or duplication operator><horizontal alignment operator><vertical alignment operator><**style operator**>|<cell's content>
-====
 
 "#
 );
@@ -65,6 +57,13 @@ Don't insert any spaces between the `|` and the operator.
 fn apply_a_style_to_a_cell() {
     verifies!(
         r#"
+The style operator is always entered last in a xref:add-cells-and-rows.adoc#specifiers[cell specifier].
+Don't insert any spaces between the `|` and the operator.
+
+====
+<factor><span or duplication operator><horizontal alignment operator><vertical alignment operator><**style operator**>|<cell's content>
+====
+
 Let's apply a style operator to each cell in <<ex-cell-styles>>.
 
 .Apply a style operator to a cell
