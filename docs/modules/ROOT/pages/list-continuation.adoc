@@ -97,9 +97,8 @@ following block after it.
 == Known limitations
 
 List continuations are fully supported: attaching a single block, chaining
-several blocks, and wrapping compound content in an open block all match
-Asciidoctor's output, for unordered, ordered, and description lists. Two current
-gaps come from the parser: an empty (`{empty}`) principal followed by an attached
-block, and the ancestor list continuation's deeper multi-level escapes, are not
-yet handled. For the list types themselves, see xref:unordered-lists.adoc[],
+several blocks, wrapping compound content in an open block, dropping the
+principal text with `{empty}`, and attaching a block to an ancestor list item
+all match Asciidoctor's output, for unordered, ordered, and description lists.
+For the list types themselves, see xref:unordered-lists.adoc[],
 xref:ordered-lists.adoc[], and xref:description-lists.adoc[].

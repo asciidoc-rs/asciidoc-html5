@@ -7,14 +7,9 @@
 //! a block would end it. Wrapping several blocks in an open block needs only
 //! one continuation, and leading empty lines before the `+` attach the block to
 //! an ancestor list item instead of the current one. This crate renders every
-//! one of those forms, so each section's example and claims are verified
-//! through `convert`.
-//!
-//! The one exception is *Drop the principal text*: its `{empty}`-principal
-//! example relies on attaching a block to an emptied principal, which the
-//! parser currently folds into the principal paragraph
-//! (asciidoc-rs/asciidoc-parser#1053), so that section is tracked as
-//! non-normative with the reason noted inline.
+//! one of those forms — including dropping the principal text with `{empty}` so
+//! an attached block lines up with the marker — so each section's example and
+//! claims are verified through `convert`.
 
 use crate::{
     convert,
@@ -321,18 +316,21 @@ The only limitation of this technique is that the content itself may not contain
 "#
 );
 
-// The "Drop the principal text" example makes the principal empty with
-// `{empty}` and attaches a listing block via a continuation. The parser
-// currently folds that attached block's content into the (emptied) principal
-// paragraph rather than keeping it as a separate block
-// (asciidoc-rs/asciidoc-parser#1053), so this crate cannot yet reproduce the
-// rendered result. Tracked as non-normative until the parser divergence is
-// resolved.
 non_normative!(
     r#"
 [#drop-principal-text]
 == Drop the principal text
 
+"#
+);
+
+// Making the principal text empty with `{empty}` drops its node, so an attached
+// block (here a listing block) lines up with the list marker: each item renders
+// an empty `<p></p>` followed by its attached block.
+#[test]
+fn an_empty_principal_text_is_dropped() {
+    verifies!(
+        r#"
 If the principal text of a list item is empty, the node for the principal text is dropped.
 This is how you can get the first block (such as a listing block) to line up with the list marker.
 You can make the principal text empty by using the `+{empty}+` attribute reference.
@@ -351,6 +349,26 @@ Here's how the source is rendered:
 include::example$complex.adoc[tag=complex-only]
 ====
 
+"#
+    );
+
+    let output = convert(
+        ". {empty}\n+\n----\nprint(\"one\")\n----\n. {empty}\n+\n----\nprint(\"one\")\n----\n",
+    );
+    // Two items, each with the attached listing block as its own node (rather
+    // than the listing content folded into the principal paragraph).
+    assert_css(&output, ".olist:root > ol > li", 2);
+    assert_css(&output, ".olist:root > ol > li > div.listingblock", 2);
+    assert_css(
+        &output,
+        ".olist:root > ol > li > div.listingblock > div.content > pre",
+        2,
+    );
+    assert_xpath(&output, r#"//li//pre[contains(text(), "one")]"#, 2);
+}
+
+non_normative!(
+    r#"
 [#attach-to-ancestor-list]
 == Attach blocks to an ancestor list
 

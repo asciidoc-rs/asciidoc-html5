@@ -5,14 +5,10 @@
 //! wrapped in `<div class="dlist"><dl>`. The term delimiter (`::`, `:::`,
 //! `::::`, `;;`) sets the nesting level: changing the delimiter starts a nested
 //! description list, and a description may hold any block content (such as a
-//! nested unordered list). This crate renders those forms, so the anatomy,
-//! delimiter-nesting, and mixing examples are verified through `convert`.
-//!
-//! The page's final hybrid example (`3-mix`) nests ordered lists under a
-//! second-level (`:::`) term, which the parser currently folds into the
-//! description text (asciidoc-rs/asciidoc-parser#1052); the delimiter nesting
-//! it relies on is verified here directly, so that section is tracked as
-//! non-normative with the reason noted inline.
+//! nested unordered list). This crate renders those forms, so every section's
+//! example and claims — including the hybrid list that mixes all three list
+//! types under nested (`:::`) description terms — are verified through
+//! `convert`.
 
 use crate::{
     convert,
@@ -217,18 +213,20 @@ include::example$description.adoc[tag=base-mix-alt]
     assert_css(&output, "div.dlist > dl > dd > div.ulist", 3);
 }
 
-// The `3-mix` hybrid example nests ordered lists (`. Fedora`) under a
-// second-level (`:::`) description term. The parser currently folds such an
-// indented list into the term's description text rather than parsing it as a
-// nested list (asciidoc-rs/asciidoc-parser#1052), so this crate cannot yet
-// reproduce the rendered hybrid. The `::`-to-`:::` delimiter nesting the
-// section relies on is verified in
-// `changing_the_delimiter_nests_a_description_list`. Tracked as non-normative
-// until the parser divergence is resolved.
 non_normative!(
     r#"
 == Nested description list
 
+"#
+);
+
+// A hybrid list mixes all three list types: the `::` term holds a nested `:::`
+// description list, whose terms hold ordered lists, whose items hold nested
+// unordered lists.
+#[test]
+fn a_hybrid_list_mixes_all_three_list_types() {
+    verifies!(
+        r#"
 [#three-hybrid]
 Finally, you can mix and match the three list types within a single hybrid list.
 The AsciiDoc syntax tries hard to infer the relationships between the items that are most intuitive to us humans.
@@ -249,4 +247,33 @@ include::example$description.adoc[tag=3-mix]
 
 You can include more xref:continuation.adoc[compound content in a list item] as well.
 "#
-);
+    );
+
+    let output = convert(
+        "Operating Systems::\n  Linux:::\n    . Fedora\n      * Desktop\n    . Ubuntu\n      \
+         * Desktop\n      * Server\n  BSD:::\n    . FreeBSD\n    . NetBSD\n\n\
+         Cloud Providers::\n  PaaS:::\n    . OpenShift\n    . CloudBees\n  \
+         IaaS:::\n    . Amazon EC2\n    . Rackspace\n",
+    );
+
+    // Two top-level description terms.
+    assert_css(&output, ".dlist:root > dl > dt.hdlist1", 2);
+    // Each holds a nested (`:::`) description list.
+    assert_css(
+        &output,
+        ".dlist:root > dl > dd > div.dlist > dl > dt.hdlist1",
+        4,
+    );
+    // A `:::` term (Linux) holds an ordered list …
+    assert_xpath(
+        &output,
+        r#"//dt[text()="Linux"]/following-sibling::dd[1]/div[@class="olist arabic"]/ol/li/p[text()="Fedora"]"#,
+        1,
+    );
+    // … whose first item (Fedora) holds a nested unordered list.
+    assert_xpath(
+        &output,
+        r#"//dt[text()="Linux"]/following-sibling::dd[1]/div[@class="olist arabic"]/ol/li[1]/div[@class="ulist"]/ul/li/p[text()="Desktop"]"#,
+        1,
+    );
+}
