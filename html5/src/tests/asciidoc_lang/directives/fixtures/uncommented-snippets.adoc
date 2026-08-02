@@ -1,0 +1,7 @@
+text a
+
+tag::snippet-b[]
+snippet b
+end::snippet-b[]
+
+text c
