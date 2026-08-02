@@ -7,12 +7,11 @@
 //! that, and it honors the inline pass macro used to change which substitutions
 //! apply when a value is assigned (`pass:[]` for none, `pass:quotes[]` / its
 //! `q` alias for the quotes substitution), as well as reordering the
-//! substitutions at the point of reference. Each is verified through `convert`.
-//!
-//! The section on attributes defined *outside* the document is about CLI/API
-//! attribute passing (where substitutions are not applied), and the
-//! value-inspection trick relies on a passthrough block; both are tracked as
-//! non-normative here.
+//! substitutions at the point of reference. The value-inspection trick and the
+//! contrast between an externally-supplied attribute (used as is) and an
+//! in-document one (subject to substitutions) are likewise verified — the
+//! external case through [`convert_with`] with an [`Options`]-supplied
+//! attribute. Only the CLI syntax lines remain non-normative.
 
 use crate::tests::sdd::*;
 
@@ -104,11 +103,10 @@ Internally, the value is stored as `MyApp<sup>2</sup>`.
         );
     }
 
-    // The value-inspection trick relies on a `[subs=attributes+]` passthrough
-    // block to reveal the stored value; that display mechanism is incidental to
-    // the substitution behavior, so it is tracked as non-normative.
-    non_normative!(
-        r#"
+    #[test]
+    fn inspect_the_stored_value() {
+        verifies!(
+            r#"
 You can inspect the value stored in an attribute using this trick:
 
 [source]
@@ -120,7 +118,20 @@ You can inspect the value stored in an attribute using this trick:
 ----
 
 "#
-    );
+        );
+
+        // Re-running the attributes substitution over a verbatim block reveals
+        // the value stored for `app-name`: the quotes substitution having been
+        // applied when it was assigned, the stored value is `MyApp<sup>2</sup>`
+        // (which the verbatim block then escapes for display).
+        let output = convert(
+            ":app-name: pass:quotes[MyApp^2^]\n\n[subs=attributes+]\n------\n{app-name}\n------",
+        );
+        assert!(
+            output.contains("MyApp&lt;sup&gt;2&lt;/sup&gt;"),
+            "the inspection block should reveal the stored value `MyApp<sup>2</sup>`",
+        );
+    }
 
     #[test]
     fn pass_macro_q_alias() {
@@ -158,13 +169,14 @@ If the macro is absent, the value is processed with the header substitution grou
     );
 }
 
-// This section concerns attributes passed into the processor from the CLI
-// (`-a`) or API (`:attributes`), where substitutions are *not* applied to the
-// value. That external-attribute handling is exercised by the CLI/API layers
-// rather than this page's rendering, so the section is tracked as
-// non-normative.
-non_normative!(
-    r#"
+mod substitutions_for_attributes_defined_outside_the_document {
+    use super::*;
+    use crate::{convert, convert_with, Options};
+
+    #[test]
+    fn external_attributes_are_used_as_is() {
+        verifies!(
+            r#"
 == Substitutions for attributes defined outside the document
 
 Unlike attribute entries, substitutions are *not* applied to the value of an attribute passed in to the AsciiDoc processor.
@@ -196,7 +208,30 @@ If the attribute were to be defined in the document, this escaping would not be 
 That's because, in contrast, substitutions are applied to the value of an attribute entry.
 
 "#
-);
+        );
+
+        // An externally-supplied attribute (as from `-a equipment="a bat &amp;
+        // ball"`) is used as is: the pre-escaped ampersand is passed straight
+        // through rather than being escaped a second time.
+        let external = convert_with(
+            "To play, you'll need {equipment}.",
+            &Options::new().attribute("equipment", "a bat &amp; ball"),
+        );
+        assert_eq!(
+            first_paragraph(&external),
+            "To play, you&#8217;ll need a bat &amp; ball.",
+        );
+
+        // The same value defined *in* the document is subject to the header
+        // substitutions, so the bare ampersand is escaped for us — no
+        // pre-escaping required.
+        let in_doc = convert(":equipment: a bat & ball\n\nTo play, you'll need {equipment}.");
+        assert_eq!(
+            first_paragraph(&in_doc),
+            "To play, you&#8217;ll need a bat &amp; ball.",
+        );
+    }
+}
 
 mod change_substitutions_when_referencing_an_attribute {
     use super::*;
