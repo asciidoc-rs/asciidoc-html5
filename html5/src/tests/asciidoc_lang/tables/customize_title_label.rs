@@ -5,11 +5,12 @@
 //! table title: the document attribute `table-caption` (which applies to every
 //! titled table and is followed by an auto-incrementing number) and the block
 //! attribute `caption` (which sets the exact label text for a single table and
-//! is not numbered). Those rendering rules – including that a later table
-//! without its own `caption` reverts to the `table-caption` label – are
-//! verified through `convert`; the section headings, the introductory prose,
-//! the header-only syntax snippet, and the alternate caption-only forms built
-//! on `include::` directives carry no rule of their own and are tracked as
+//! is not numbered). Those rendering rules are verified through `convert`:
+//! setting each attribute, a later table without its own `caption` reverting to
+//! the `table-caption` label, and the two caption-only forms that combine
+//! `caption`, `title`, and the `{table-caption}`/`{counter:table-number}`
+//! references to make a caption of just the label. Only the section headings
+//! and the introductory prose carry no rule of their own and are tracked as
 //! non-normative.
 
 use crate::{
@@ -259,10 +260,10 @@ If you create any subsequent tables in your document and don't set `caption` on 
     );
 }
 
-// Two alternate caption-only forms built on `include::` directives, shown
-// literally rather than rendered.
-non_normative!(
-    r#"
+#[test]
+fn caption_only_via_title_attribute() {
+    verifies!(
+        r#"
 If you want the caption of the table to only consist of the caption label, use the following syntax:
 
 [source]
@@ -271,6 +272,43 @@ If you want the caption of the table to only consist of the caption label, use t
 include::example$table.adoc[tag=b-col-h]
 ----
 
+"#
+    );
+
+    // Emptying `caption` suppresses the automatic label prefix, and setting
+    // `title` to `{table-caption} {counter:table-number}` makes the whole caption
+    // read as just the label and its number, `Data Set 1`, with no title text.
+    let output = convert(
+        r#"= Document Title
+:table-caption: Data Set
+
+[caption=,title="{table-caption} {counter:table-number}"]
+[%header,cols=2*]
+|===
+|Name of Column 1
+|Name of Column 2
+
+|Cell in column 1, row 1
+|Cell in column 2, row 1
+
+|Cell in column 1, row 2
+|Cell in column 2, row 2
+|==="#,
+    );
+
+    assert_css(&output, "caption.title", 1);
+
+    assert_xpath(
+        &output,
+        r#"//caption[@class="title"][text()="Data Set 1"]"#,
+        1,
+    );
+}
+
+#[test]
+fn caption_only_via_empty_title() {
+    verifies!(
+        r#"
 Alternately, you can write is as follows:
 
 [source]
@@ -280,4 +318,35 @@ Alternately, you can write is as follows:
 include::example$table.adoc[tag=b-col-h]
 ----
 "#
-);
+    );
+
+    // The other way around: an empty block title (`.{empty}`) leaves no title
+    // text, and `caption` supplies the label and number directly, so the caption
+    // again reads as just `Data Set 1`.
+    let output = convert(
+        r#"= Document Title
+:table-caption: Data Set
+
+.{empty}
+[caption="{table-caption} {counter:table-number}"]
+[%header,cols=2*]
+|===
+|Name of Column 1
+|Name of Column 2
+
+|Cell in column 1, row 1
+|Cell in column 2, row 1
+
+|Cell in column 1, row 2
+|Cell in column 2, row 2
+|==="#,
+    );
+
+    assert_css(&output, "caption.title", 1);
+
+    assert_xpath(
+        &output,
+        r#"//caption[@class="title"][text()="Data Set 1"]"#,
+        1,
+    );
+}
