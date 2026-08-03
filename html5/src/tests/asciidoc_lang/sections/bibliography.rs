@@ -5,11 +5,12 @@
 //! directly to an unordered list produces `<div class="ulist bibliography">` /
 //! `<ul class="bibliography">`, and each `[[[label]]]` anchor converts to
 //! `<a id="label"></a>[label]` (or `[xreftext]` for `[[[label,xreftext]]]`).
-//! Those behaviors are verified here through `convert`, including the page's
-//! `base` example (its prose cross-references resolve to the entries' labels).
-//! The implicit section-to-list style propagation (asciidoc-parser #1066), the
-//! book-doctype level-0 variant, the table-cell re-display of the base example,
-//! and the escape TIP are tracked non-normatively.
+//! A `[bibliography]` section also propagates its style to each child unordered
+//! list (asciidoc-parser #1071), so those lists render `<ul
+//! class="bibliography">` too. Those behaviors are verified here through
+//! `convert`, including the page's `base` example. The book-doctype level-0
+//! variant, the table-cell re-display of the base example, and the escape TIP
+//! are tracked non-normatively.
 
 use crate::{
     convert,
@@ -53,17 +54,27 @@ The section must be assigned the `bibliography` section style.
 "#
 );
 
-// The parser does not propagate a bibliography SECTION's style to its child
-// unordered lists (the child <ul> lacks the "bibliography" class); this is a
-// parser-model gap tracked in asciidoc-parser #1066, so the
-// implicit-propagation claim is non-normative here. The explicit list style IS
-// verified below.
-non_normative!(
-    r#"
+/// A `[bibliography]` SECTION implicitly propagates its style to each top-level
+/// unordered list in the section, so the list renders `<div class="ulist
+/// bibliography">` / `<ul class="bibliography">` even though the list itself
+/// carries no declared style (asciidoc-parser #1071, surfaced via
+/// `resolved_style()`).
+#[test]
+fn bibliography_style_propagates_to_child_lists() {
+    verifies!(
+        r#"
 By adding the `bibliography` style to the section, you implicitly add it to each unordered list in that section.
 
 "#
-);
+    );
+
+    let html = convert(
+        "[bibliography]\n== References\n\n* [[[pp]]] Andy Hunt. 1999.\n* [[[gof]]] Erich Gamma. 1994.",
+    );
+
+    assert_css(&html, "div.ulist.bibliography", 1);
+    assert_css(&html, "ul.bibliography", 1);
+}
 
 /// A `[bibliography]` level-1 section renders as a plain section (the
 /// `bibliography` style has no section-level HTML effect).
@@ -144,12 +155,11 @@ Bibliography entries are declared as items in an unordered list.
 }
 
 /// The page's `base` example (the "Bibliography with references" listing),
-/// driven directly: prose cross-references to bibliography entries resolve to
-/// `[<label>]` (`<<pp>>` → `[pp]`, and `<<gof>>`, whose entry is
-/// `[[[gof,gang]]]`, → `[gang]`), and each entry renders its anchor. The child
-/// `<ul>` does not gain the `bibliography` class here (the parser does not
-/// propagate the section style to its lists, asciidoc-parser #1066); that
-/// propagation is tracked non-normatively above.
+/// driven directly: the `[bibliography]` section propagates its style to the
+/// child list (`<ul class="bibliography">`), prose cross-references to
+/// bibliography entries resolve to `[<label>]` (`<<pp>>` → `[pp]`, and
+/// `<<gof>>`, whose entry is `[[[gof,gang]]]`, → `[gang]`), and each entry
+/// renders its anchor.
 #[test]
 fn bibliography_with_references_example() {
     verifies!(
@@ -168,6 +178,9 @@ include::example$bibliography.adoc[tag=base]
     let html = convert(
         "_The Pragmatic Programmer_ <<pp>> should be required reading for all developers.\nTo learn all about design patterns, refer to the book by the \"`Gang of Four`\" <<gof>>.\n\n[bibliography]\n== References\n\n* [[[pp]]] Andy Hunt & Dave Thomas. The Pragmatic Programmer:\nFrom Journeyman to Master. Addison-Wesley. 1999.\n* [[[gof,gang]]] Erich Gamma, Richard Helm, Ralph Johnson & John Vlissides.\nDesign Patterns: Elements of Reusable Object-Oriented Software. Addison-Wesley. 1994.",
     );
+
+    // The section's `bibliography` style propagates to the child list.
+    assert_css(&html, "ul.bibliography", 1);
 
     // The prose cross-references resolve to the entries' labels.
     assert!(html.contains(r##"<a href="#pp">[pp]</a>"##), "{html}");
