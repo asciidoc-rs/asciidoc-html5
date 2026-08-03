@@ -13,6 +13,7 @@ mod directives;
 mod lists;
 mod pass;
 mod root;
+mod sections;
 mod tables;
 mod text;
 mod verbatim;
