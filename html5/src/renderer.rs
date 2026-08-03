@@ -1191,13 +1191,31 @@ pub(crate) fn render_document<'a>(
     // block instead (see [`toc_macro`](Renderer::toc_macro)), and `disabled`
     // produces none.
     let toc_mode = document.toc_mode();
+
+    // Choose the TOC's class once, so the block is built a single time. The
+    // header/preamble placements use the document's `toc-class` (which the
+    // side-column placements set to `toc2`). The one exception is the leading
+    // TOC of *embeddable* output: the side-column layout isn't available there,
+    // so it always uses the plain `toc` class, matching Asciidoctor's
+    // `convert_embedded` (its `preamble` placement still honors `toc-class`, via
+    // the same path as standalone output).
+    let toc_class = if !standalone
+        && matches!(
+            toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+        ) {
+        "toc"
+    } else {
+        document.toc_class()
+    };
+
     let toc_html = match toc_mode {
         TocMode::Auto
         | TocMode::Left
         | TocMode::Right
         | TocMode::Top
         | TocMode::Bottom
-        | TocMode::Preamble => render_toc(document, document.toc_class()),
+        | TocMode::Preamble => render_toc(document, toc_class),
 
         TocMode::Disabled | TocMode::Macro => String::new(),
     };
@@ -1707,17 +1725,17 @@ impl Renderer<'_> {
         //
         // The side-column placement (`left`/`right`) isn't available in
         // embeddable output, which lacks the standalone frame and CSS that
-        // layout needs, so the leading TOC always uses the plain `toc` class
-        // here, regardless of `toc-position` or a custom `toc-class`. This
-        // matches Asciidoctor's `convert_embedded`, which hardcodes
-        // `class="toc"`.
+        // layout needs, so this leading TOC uses the plain `toc` class,
+        // regardless of `toc-position` or a custom `toc-class` (matching
+        // Asciidoctor's `convert_embedded`, which hardcodes `class="toc"`). The
+        // class was already resolved when `toc_html` was built, so it is emitted
+        // as-is here.
         if matches!(
             self.toc_mode,
             TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
         ) && !self.toc_html.is_empty()
         {
-            let toc = render_toc(document, "toc");
-            self.line(&toc);
+            self.line(&self.toc_html.clone());
         }
 
         self.blocks(document.child_blocks());
