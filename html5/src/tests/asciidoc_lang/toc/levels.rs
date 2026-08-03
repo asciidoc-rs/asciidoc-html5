@@ -2,12 +2,12 @@
 //!
 //! The `toclevels` attribute controls how deep the table of contents goes.
 //! Matching Asciidoctor 2.0.26, this crate lists section titles up to the
-//! configured level (so `toclevels: 4` includes level-4 titles but excludes
-//! level-5 ones), and in a document without parts it coerces `toclevels: 0` to
-//! `1`. Those two behaviors are verified through `convert`; the definitional
-//! prose, the default depth (verified on the *Automatic Table of Contents*
-//! page), the multipart-book level-0 behavior (the book doctype is a known
-//! limitation here), and the screenshot are non-normative.
+//! configured level across the accepted range 0–5 (so `toclevels: 4` includes
+//! level-4 titles but excludes level-5 ones), defaults the depth to `2` when
+//! the attribute is unset, and in a document without parts coerces `toclevels:
+//! 0` to `1`. Those behaviors are verified through `convert`; the
+//! multipart-book level-0 behavior (the book doctype is a known limitation
+//! here) and the screenshot are non-normative.
 
 use crate::{
     convert_with,
@@ -35,25 +35,93 @@ You can adjust the depth of section levels displayed in the table of contents (T
 "#
 );
 
-// Definitional prose: the accepted `toclevels` values, what a section level is,
-// and the default (`2`, i.e. levels 1 and 2). The default depth is verified on
-// the *Automatic Table of Contents* page; the multipart-book level-0 behavior
-// relies on the book doctype, a known limitation of this crate, so this block
-// is non-normative.
 non_normative!(
     r#"
 == Set toclevels
 
+"#
+);
+
+// `toclevels` controls the TOC depth across its accepted range (the integers 0
+// through 5), each value naming the deepest section level shown. A section
+// level is one less than the number of leading `=` signs, so `==` is level 1
+// (listed under `ul.sectlevel1`), `===` is level 2, and so on: at `toclevels:
+// 5` all five levels appear, while at `toclevels: 1` only the level-1 titles
+// do. (The value `0` is exercised by
+// `toclevels_zero_without_parts_is_coerced_to_one`.)
+#[test]
+fn toclevels_controls_the_depth_across_the_accepted_range() {
+    verifies!(
+        r#"
 The `toclevels` document attribute controls the depth of the TOC.
 Accepted values are the integers 0 through 5.
 These values represent the section levels.
 (A section level is one less than the number of `=` signs the precede the title in the source.)
 
+"#
+    );
+
+    // Sections at every level 1 (`==`) through 5 (`======`).
+    let deep = "\
+= Document Title
+:toc:
+
+== Level 1
+
+=== Level 2
+
+==== Level 3
+
+===== Level 4
+
+====== Level 5
+";
+
+    // At the maximum, all five section levels are listed. The `==` heading (two
+    // `=` signs) is level 1 and lists under `ul.sectlevel1`, confirming the
+    // level-is-one-less-than-the-sign-count definition.
+    let five = convert(&deep.replace(":toc:", ":toc:\n:toclevels: 5"));
+    assert_css(&five, r#"ul.sectlevel1"#, 1);
+    assert_css(&five, r#"ul.sectlevel5"#, 1);
+
+    // At `toclevels: 1`, only the level-1 titles appear.
+    let one = convert(&deep.replace(":toc:", ":toc:\n:toclevels: 1"));
+    assert_css(&one, r#"ul.sectlevel1"#, 1);
+    assert_css(&one, r#"ul.sectlevel2"#, 0);
+}
+
+// When `toclevels` is unset it defaults to `2`, so the TOC lists level-1 (`==`)
+// and level-2 (`===`) titles and stops there – a level-3 (`====`) section is
+// omitted. (The line's multipart-book clause, level-0 part titles, relies on
+// the book doctype, a known limitation of this crate, and is not exercised
+// here.)
+#[test]
+fn toclevels_defaults_to_two() {
+    verifies!(
+        r#"
 If the `toclevels` attribute is not specified, it defaults to `2`.
 That means the TOC displays level 1 (`==`) and level 2 (`===`) section titles and, in the case of a multipart book, level 0 (`=`) section titles (parts).
 
 "#
-);
+    );
+
+    // No `toclevels`: a document with sections through level 3.
+    let source = "\
+= Document Title
+:toc:
+
+== Level 1
+
+=== Level 2
+
+==== Level 3
+";
+
+    let output = convert(source);
+    assert_css(&output, r#"ul.sectlevel1"#, 1);
+    assert_css(&output, r#"ul.sectlevel2"#, 1);
+    assert_css(&output, r#"ul.sectlevel3"#, 0);
+}
 
 // Raising `toclevels` deepens the TOC: with `:toclevels: 4`, the TOC lists
 // section titles up to level 4 (`====`) and no deeper. The example body reaches
