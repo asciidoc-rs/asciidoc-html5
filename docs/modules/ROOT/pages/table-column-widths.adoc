@@ -1,0 +1,155 @@
+= Table Column Widths
+:navtitle: Column Widths
+:description: How asciidoc-html5 sizes table columns and the whole table.
+
+Column widths come from the numbers in `cols`, and the table's own width comes
+from the `width` attribute or the `autowidth` option. `asciidoc-html5` computes
+the same percentages and emits the same `<colgroup>` and width classes as
+Asciidoctor's `html5` backend.
+
+[NOTE]
+====
+The prose on this page is non-normative documentation. The AsciiDoc conversions
+it shows are normative: they are verified against the implementation, so the
+documented behavior is guaranteed.
+====
+
+== Proportional widths
+
+Each number in `cols` is a proportion. A column's width is its share of the sum
+of all the numbers, so `cols="2,1,1"` splits the table 50/25/25:
+
+[,asciidoc]
+----
+[cols="2,1,1"]
+|===
+|Wide |Narrow |Narrow
+|===
+----
+
+The proportions become per-column percentages on the `<col>` elements:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 25%;">
+<col style="width: 25%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Wide</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Narrow</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">Narrow</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+By default the table stretches to the full width of the content area, marked by
+the `stretch` class.
+
+== Constrain the table width
+
+Set `width` to a percentage to constrain the whole table. The value becomes an
+inline `style` and the `stretch` class is dropped:
+
+[,asciidoc]
+----
+[width=50%,cols="1,1"]
+|===
+|A |B
+|===
+----
+
+[,html]
+----
+<table class="tableblock frame-all grid-all" style="width: 50%;">
+<colgroup>
+<col style="width: 50%;">
+<col style="width: 50%;">
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">A</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">B</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+== Size to content with autowidth
+
+The `autowidth` option sizes the table and its columns to their content. The
+table gains the `fit-content` class and each `<col>` is emitted bare, with no
+width:
+
+[,asciidoc]
+----
+[%autowidth]
+|===
+|A |B
+|1 |2
+|===
+----
+
+[,html]
+----
+<table class="tableblock frame-all grid-all fit-content">
+<colgroup>
+<col>
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">A</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">B</p></td>
+</tr>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">1</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">2</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+== Mix fixed and autowidth columns
+
+Give a single column the special width `~` to size just that column to its
+content while the others keep fixed percentages:
+
+[,asciidoc]
+----
+[cols="25,~,~"]
+|===
+|small |as big as needed |the rest
+|===
+----
+
+The fixed column carries its percentage; the `~` columns are emitted bare:
+
+[,html]
+----
+<table class="tableblock frame-all grid-all stretch">
+<colgroup>
+<col style="width: 25%;">
+<col>
+<col>
+</colgroup>
+<tbody>
+<tr>
+<td class="tableblock halign-left valign-top"><p class="tableblock">small</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">as big as needed</p></td>
+<td class="tableblock halign-left valign-top"><p class="tableblock">the rest</p></td>
+</tr>
+</tbody>
+</table>
+----
+
+== Known limitations
+
+Column sizing is fully supported: proportional `cols` widths, a fixed table
+`width`, the `autowidth` option, and per-column `~` autowidth all match
+Asciidoctor's output. To set the columns themselves – their alignment and style –
+see xref:table-cell-formatting.adoc[].
