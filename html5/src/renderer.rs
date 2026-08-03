@@ -702,6 +702,15 @@ fn media_uri(target: &str, imagesdir: &str) -> String {
     format!("{root}{}", segments.join("/")).replace(' ', "%20")
 }
 
+/// Whether `path`'s final segment carries a file extension, mirroring
+/// Asciidoctor's `Helpers.extname?` (a `.` in the basename that is not its
+/// leading character). Used by `icon_uri` to decide whether the `icontype`
+/// extension must be appended to a per-block `icon` value.
+fn has_file_extension(path: &str) -> bool {
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    matches!(basename.rfind('.'), Some(index) if index > 0)
+}
+
 /// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
 /// with each author-supplied role escaped — the inner text of `class="…"`.
 fn class_list(base: &str, roles: &[&str]) -> String {
@@ -2685,9 +2694,9 @@ impl Renderer<'_> {
         self.line("</div>");
     }
 
-    /// An admonition block: Asciidoctor's icon-less default renders a two-cell
-    /// table, the first cell holding the caption label and the second the
-    /// content, wrapped in `<div class="admonitionblock <name>">`.
+    /// An admonition block: Asciidoctor's two-cell table, the first cell
+    /// holding the icon (or, by default, the caption label) and the second
+    /// the content, wrapped in `<div class="admonitionblock <name>">`.
     fn admonition<'src>(
         &mut self,
         block: &'src Block<'src>,
@@ -2704,10 +2713,7 @@ impl Renderer<'_> {
         self.line("<table>");
         self.line("<tr>");
         self.line("<td class=\"icon\">");
-        self.line(&format!(
-            "<div class=\"title\">{}</div>",
-            admonition.label()
-        ));
+        self.line(&self.admonition_icon(block, admonition));
         self.line("</td>");
         self.line("<td class=\"content\">");
         self.block_title(block);
@@ -2716,6 +2722,48 @@ impl Renderer<'_> {
         self.line("</tr>");
         self.line("</table>");
         self.line("</div>");
+    }
+
+    /// The markup for an admonition's icon cell, mirroring Asciidoctor's
+    /// `convert_admonition`.
+    ///
+    /// With the `icons` document attribute unset (the default), the caption
+    /// label is shown as text (`<div class="title">Note</div>`). With `icons`
+    /// set to `font` – and no per-block `icon` attribute – a Font Awesome glyph
+    /// is emitted (`<i class="fa icon-note" title="Note">`). Otherwise (image
+    /// mode, or a per-block `icon` override) an `<img>` points at the resolved
+    /// icon URI. The image target is a port of `AbstractNode#icon_uri`: a
+    /// per-block `icon` value is used as-is (with the `icontype` extension
+    /// appended only when it has none), while the default target is
+    /// `<name>.<icontype>`, each resolved against `iconsdir`.
+    fn admonition_icon(&self, block: &Block<'_>, admonition: &AdmonitionBlock<'_>) -> String {
+        let label = admonition.label();
+
+        if !self.icons_set {
+            return format!("<div class=\"title\">{label}</div>");
+        }
+
+        let name = admonition.name();
+        let custom_icon = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("icon"))
+            .map(|attr| attr.value().to_string());
+
+        if self.icons_font && custom_icon.is_none() {
+            return format!(
+                "<i class=\"fa icon-{name}\" title=\"{}\"></i>",
+                escape_attribute(label)
+            );
+        }
+
+        let target = match custom_icon {
+            Some(icon) if has_file_extension(&icon) => icon,
+            Some(icon) => format!("{icon}.{}", self.icontype),
+            None => format!("{name}.{}", self.icontype),
+        };
+        let src = escape_attribute(&media_uri(&target, &self.iconsdir));
+
+        format!("<img src=\"{src}\" alt=\"{}\">", escape_attribute(label))
     }
 
     /// An unordered list: `<div class="ulist …"><ul …><li>…</li>…</ul></div>`,

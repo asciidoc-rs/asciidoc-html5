@@ -11,6 +11,7 @@ mod attributes;
 mod blocks;
 mod directives;
 mod lists;
+mod macros;
 mod pass;
 mod root;
 mod tables;
