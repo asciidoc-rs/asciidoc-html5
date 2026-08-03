@@ -325,27 +325,6 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     }
 }
 
-/// Removes every `<…>` run from `input`, mirroring Asciidoctor's
-/// `XmlSanitizeRx` (`</?[^>]+>`) scrub. Used to strip an email angle-bracket
-/// segment out of the `author` `<meta>` content.
-fn strip_xml_tags(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut depth = 0usize;
-    for ch in input.chars() {
-        match ch {
-            '<' => depth += 1,
-
-            '>' if depth > 0 => depth -= 1,
-
-            _ if depth == 0 => out.push(ch),
-
-            _ => {}
-        }
-    }
-
-    out
-}
-
 /// Asciidoctor's default `alt` for an image whose macro carries none: the
 /// target's basename (its final path segment, without extension) with each `_`
 /// and `-` turned into a space. Mirrors the `basename(target.tr('_-', ' '))`
@@ -1597,13 +1576,14 @@ impl Renderer<'_> {
             self.line(&format!("<meta name=\"keywords\" content=\"{keywords}\">"));
         }
         if let Some(authors) = attribute_str(document, "authors") {
-            let authors = if authors.contains('<') {
-                strip_xml_tags(&authors)
-            } else {
-                authors
-            };
-
-            self.line(&format!("<meta name=\"author\" content=\"{authors}\">"));
+            // Unlike the parser-escaped `description`/`keywords`, the `authors`
+            // value arrives raw, so escape it for the attribute context. This
+            // matches Asciidoctor, which escapes (rather than strips) any angle
+            // brackets that appear in the author `<meta>` content.
+            self.line(&format!(
+                "<meta name=\"author\" content=\"{}\">",
+                escape_attribute(&authors)
+            ));
         }
 
         // The <title> is the plain-text doctitle. The parser's `doctitle()` has
@@ -5831,6 +5811,18 @@ mod tests {
         assert!(html.contains(
             "<span id=\"email\" class=\"email\"><a href=\"mailto:a&quot;b@example.com\">a&quot;b@example.com</a></span>"
         ));
+    }
+
+    #[test]
+    fn author_meta_joins_and_escapes_the_authors() {
+        // The head `<meta name="author">` carries the comma-joined author names.
+        let html = convert("= Doc\nKismet Lee; Pax Draeke\n\nBody.");
+        assert!(html.contains("<meta name=\"author\" content=\"Kismet Lee, Pax Draeke\">"));
+
+        // The joined value is raw, so the renderer escapes it for the attribute
+        // context — Asciidoctor escapes (rather than strips) any angle brackets.
+        let html = convert("= Doc\n:author: Foo <bar> Baz\n\nBody.");
+        assert!(html.contains("<meta name=\"author\" content=\"Foo &lt;bar&gt; Baz\">"));
     }
 
     #[test]
