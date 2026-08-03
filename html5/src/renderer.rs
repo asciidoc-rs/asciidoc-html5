@@ -663,6 +663,17 @@ fn media_uri(target: &str, imagesdir: &str) -> String {
     // (`/…`), which ignores the asset directory.
     let target = target.replace('\\', "/");
     let dir = imagesdir.replace('\\', "/");
+
+    // A URI asset directory (e.g. an `imagesdir` set to `https://cdn/images`)
+    // joins into a URI reference and is returned as-is rather than run through
+    // the segment normalization below, which would collapse the `//` in the
+    // scheme into `https:/…`. This mirrors Asciidoctor's `web_path`, which lifts
+    // the URI prefix off before normalizing and restores it after. A relative
+    // target joins under the URI; a web-absolute one still ignores it (below).
+    if !dir.is_empty() && !target.starts_with('/') && looks_like_uri(&dir) {
+        return format!("{}/{target}", dir.trim_end_matches('/')).replace(' ', "%20");
+    }
+
     let joined = if dir.is_empty() || target.starts_with('/') {
         target
     } else {
