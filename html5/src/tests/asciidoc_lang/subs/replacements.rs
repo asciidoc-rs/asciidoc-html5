@@ -161,10 +161,11 @@ fn default_replacements_substitution() {
 
 // The `Headers | {n}` cell is a documentation/behavior divergence: the
 // asciidoc-lang table says replacements are *not* applied to the header, and
-// this crate follows that (the author line keeps `(C)` literal), but
-// Asciidoctor 2.0.26 does apply replacements there (rendering `&#169;`).
-// Because the two disagree, this cell is tracked as non-normative rather than
-// asserted.
+// this crate currently follows that (the author line keeps `(C)` literal),
+// whereas Asciidoctor 2.0.26 does apply replacements to the byline (rendering
+// `&#169;`). Because the two disagree — and because matching Asciidoctor here
+// awaits a public parser substitution API (asciidoc-parser #1077) — this cell
+// is tracked as non-normative rather than asserted.
 non_normative!(
     r#"
 |Headers |{n}

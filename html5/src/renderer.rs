@@ -1828,15 +1828,23 @@ impl Renderer<'_> {
                     } else {
                         (index + 1).to_string()
                     };
-                    // Author name and email arrive unsubstituted from the
-                    // parser (unlike the revision fields, which are already
-                    // escaped), so we escape them ourselves before placing them
-                    // in text and in the `mailto:` href.
+                    // The author name arrives already header-substituted from the
+                    // parser (special characters and attribute references
+                    // applied — asciidoc-parser #1068), so it is placed as-is:
+                    // re-escaping here would double-encode a name like
+                    // `Ben & Jerry`. Asciidoctor additionally runs the
+                    // replacements step on the byline name (so e.g. `O'Brien`
+                    // becomes `O&#8217;Brien`); this crate cannot yet reproduce
+                    // that without a public substitution API on the parser
+                    // (asciidoc-parser #1077), so a name containing replacement
+                    // characters is the one remaining divergence here.
                     self.line(&format!(
                         "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        escape_attribute(author.name())
+                        author.name()
                     ));
                     if let Some(email) = author.email() {
+                        // The email is raw and lands in a `mailto:` href, so it
+                        // is attribute-escaped to keep a `"` from breaking out.
                         let email = escape_attribute(email);
                         self.line(&format!(
                             "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
@@ -5741,8 +5749,9 @@ mod tests {
 
     #[test]
     fn author_name_and_email_are_escaped() {
-        // The parser hands these back unsubstituted, so the renderer must escape
-        // them itself — otherwise a `"` would break out of the `href`.
+        // The name arrives already header-substituted (`&` encoded to `&amp;`),
+        // so it is placed as-is. The email is raw and must be escaped by the
+        // renderer — otherwise a `"` would break out of the `mailto:` href.
         let html = convert("= Doc\nBen & Jerry <a\"b@example.com>\n\nBody.");
         assert!(html.contains("<span id=\"author\" class=\"author\">Ben &amp; Jerry</span>"));
         assert!(html.contains(
