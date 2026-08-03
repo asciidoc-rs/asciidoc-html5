@@ -10,10 +10,13 @@
 mod attributes;
 mod blocks;
 mod directives;
+mod docinfo;
+mod document;
 mod lists;
 mod pass;
 mod root;
 mod subs;
 mod tables;
 mod text;
+mod toc;
 mod verbatim;
