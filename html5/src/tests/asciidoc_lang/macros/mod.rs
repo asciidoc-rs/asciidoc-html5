@@ -1,5 +1,6 @@
 //! Coverage of the AsciiDoc language description's `macros` module pages.
 
+mod audio_and_video;
 mod autolinks;
 mod complex_urls;
 mod footnote;
