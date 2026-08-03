@@ -1828,16 +1828,19 @@ impl Renderer<'_> {
                     } else {
                         (index + 1).to_string()
                     };
-                    // Author name and email arrive unsubstituted from the
-                    // parser (unlike the revision fields, which are already
-                    // escaped), so we escape them ourselves before placing them
-                    // in text and in the `mailto:` href.
+                    // The parser applies the header substitution group
+                    // (specialchars: `&`, `<`, `>`) to the author name and email,
+                    // like the revision fields, so we place them directly rather
+                    // than escaping again.
                     self.line(&format!(
                         "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        escape_attribute(author.name())
+                        author.name()
                     ));
                     if let Some(email) = author.email() {
-                        let email = escape_attribute(email);
+                        // specialchars does not escape `"`; the email also lands
+                        // in the `mailto:` href, so escape any quote to keep a
+                        // stray `"` from breaking out of the attribute.
+                        let email = email.replace('"', "&quot;");
                         self.line(&format!(
                             "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
                         ));
@@ -2727,7 +2730,12 @@ impl Renderer<'_> {
     /// at all for a plain bullet list.
     fn ulist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
         let checklist = list.is_checklist();
-        let style = block.declared_style();
+
+        // Use the *resolved* style (Asciidoctor's `node.style`): a top-level list
+        // inside a `[bibliography]` section inherits the `bibliography` style even
+        // though it carries no declared style of its own, so it renders `<div
+        // class="ulist bibliography">` / `<ul class="bibliography">`.
+        let style = block.resolved_style();
 
         // `['ulist', ('checklist')?, style, *roles]` — the checklist class sits
         // right after `ulist`, ahead of the style and roles.
@@ -5771,8 +5779,9 @@ mod tests {
 
     #[test]
     fn author_name_and_email_are_escaped() {
-        // The parser hands these back unsubstituted, so the renderer must escape
-        // them itself — otherwise a `"` would break out of the `href`.
+        // The parser applies specialchars (`&` becomes `&amp;`) to the name and
+        // email; the renderer escapes the email's `"` on top of that so it can't
+        // break out of the `mailto:` href.
         let html = convert("= Doc\nBen & Jerry <a\"b@example.com>\n\nBody.");
         assert!(html.contains("<span id=\"author\" class=\"author\">Ben &amp; Jerry</span>"));
         assert!(html.contains(

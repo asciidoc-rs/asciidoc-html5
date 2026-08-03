@@ -667,16 +667,22 @@ fn parse_invalid_author_line_becomes_author() {
 
     let doc = header("   Stuart       Rackham, founder of AsciiDoc   <founder@asciidoc.org>");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("1"));
-    let a = &doc.authors()[0];
+
+    // Divergence from the Ruby oracle: since asciidoc-parser 0.29.9 (#1072) the
+    // author-line names carry the header substitution group (specialchars), so
+    // the `author` and `firstname` attributes read `&lt;founder@asciidoc.org&gt;`
+    // here. Asciidoctor keeps `metadata['author']`/`['firstname']` raw and
+    // substitutes at render time; the rendered author name is the same either
+    // way (see the renderer's `author_name_and_email_are_escaped`).
     assert_eq!(
-        a.name(),
-        "Stuart Rackham, founder of AsciiDoc <founder@asciidoc.org>"
+        attr(&doc, "author").as_deref(),
+        Some("Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;")
     );
     assert_eq!(
-        a.firstname(),
-        "Stuart Rackham, founder of AsciiDoc <founder@asciidoc.org>"
+        attr(&doc, "firstname").as_deref(),
+        Some("Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;")
     );
-    assert_eq!(a.initials(), "S");
+    assert_eq!(attr(&doc, "authorinitials").as_deref(), Some("S"));
     assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
