@@ -2176,6 +2176,11 @@ impl Renderer<'_> {
                     Some("sidebar") => self.sidebar(block),
                     Some("example") => self.example(block),
 
+                    // The `abstract` style over a paragraph renders through
+                    // Asciidoctor's quote template: a `<div class="quoteblock
+                    // abstract">` wrapping a `<blockquote>`.
+                    Some("abstract") => self.abstract_block(block),
+
                     // The `pass` style over a paragraph emits its content raw,
                     // with no paragraph wrapper — just like a delimited `++++`
                     // block — matching Asciidoctor's `convert_pass`.
@@ -2212,6 +2217,12 @@ impl Renderer<'_> {
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
+                // An `[abstract]`-styled open block renders as a quote-like
+                // abstract, matching Asciidoctor; a plain `--` open block does
+                // not.
+                CompoundDelimitedContext::Open if block.declared_style() == Some("abstract") => {
+                    self.abstract_block(block)
+                }
                 CompoundDelimitedContext::Open => self.open_block(block),
                 CompoundDelimitedContext::Sidebar => self.sidebar(block),
                 CompoundDelimitedContext::Example => self.example(block),
@@ -2629,6 +2640,25 @@ impl Renderer<'_> {
         }
 
         self.attribution(quote);
+        self.line("</div>");
+    }
+
+    /// An `[abstract]`-styled paragraph or open block: `<div class="quoteblock
+    /// abstract">[<div class="title">…</div>]<blockquote>…</blockquote></div>`.
+    ///
+    /// Asciidoctor routes the `abstract` block style through the same quote
+    /// template it uses for `[quote]`, so an abstract shares the quote block's
+    /// shape (minus the attribution footer, which an abstract never carries).
+    /// A styled paragraph places its inline content directly inside the
+    /// `<blockquote>` with no `<p>` wrapper, while a delimited open block
+    /// places its child blocks there — the split handled by
+    /// [`wrapped_content`](Self::wrapped_content).
+    fn abstract_block<'src>(&mut self, block: &'src Block<'src>) {
+        self.open_block_wrapper(block, "quoteblock abstract");
+        self.block_title(block);
+        self.line("<blockquote>");
+        self.wrapped_content(block);
+        self.line("</blockquote>");
         self.line("</div>");
     }
 
@@ -6739,6 +6769,41 @@ mod tests {
         let html = convert("[verse]\nFamous verse.");
         assert!(html.contains(
             "<div class=\"verseblock\">\n<pre class=\"content\">Famous verse.</pre>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn abstract_paragraph_renders_a_quoteblock_abstract() {
+        // An `[abstract]` paragraph shares the quote template: its inline
+        // content sits directly in the `<blockquote>` with no `<p>` wrapper.
+        let html = convert("[abstract]\nA concise overview.");
+        assert!(html.contains(
+            "<div class=\"quoteblock abstract\">\n<blockquote>\n\
+             A concise overview.\n</blockquote>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn abstract_paragraph_keeps_its_title() {
+        // A titled abstract paragraph emits its `<div class="title">` ahead of
+        // the blockquote.
+        let html = convert("[abstract]\n.Abstract\nA concise overview.");
+        assert!(html.contains(
+            "<div class=\"quoteblock abstract\">\n<div class=\"title\">Abstract</div>\n\
+             <blockquote>\nA concise overview.\n</blockquote>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn abstract_open_block_wraps_child_blocks() {
+        // An `[abstract]` open block places its child blocks inside the
+        // `<blockquote>`, unlike a plain `--` open block.
+        let html = convert("[abstract]\n--\nFirst paragraph.\n\nSecond paragraph.\n--");
+        assert!(html.contains(
+            "<div class=\"quoteblock abstract\">\n<blockquote>\n\
+             <div class=\"paragraph\">\n<p>First paragraph.</p>\n</div>\n\
+             <div class=\"paragraph\">\n<p>Second paragraph.</p>\n</div>\n\
+             </blockquote>\n</div>"
         ));
     }
 
