@@ -10,6 +10,7 @@
 mod attributes;
 mod blocks;
 mod directives;
+mod docinfo;
 mod lists;
 mod pass;
 mod root;
