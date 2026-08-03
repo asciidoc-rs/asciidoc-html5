@@ -1562,6 +1562,30 @@ impl Renderer<'_> {
             ));
         }
 
+        // Document metadata, matching Asciidoctor's `<head>` order: the
+        // `description` and `keywords` attribute values (already special-char
+        // escaped by the parser) and the joined `authors`. The author content
+        // has any `<…>` segment stripped, mirroring Asciidoctor's
+        // `XmlSanitizeRx` scrub of an email left in an author name.
+        if let Some(description) = attribute_str(document, "description") {
+            self.line(&format!(
+                "<meta name=\"description\" content=\"{description}\">"
+            ));
+        }
+        if let Some(keywords) = attribute_str(document, "keywords") {
+            self.line(&format!("<meta name=\"keywords\" content=\"{keywords}\">"));
+        }
+        if let Some(authors) = attribute_str(document, "authors") {
+            // Unlike the parser-escaped `description`/`keywords`, the `authors`
+            // value arrives raw, so escape it for the attribute context. This
+            // matches Asciidoctor, which escapes (rather than strips) any angle
+            // brackets that appear in the author `<meta>` content.
+            self.line(&format!(
+                "<meta name=\"author\" content=\"{}\">",
+                escape_attribute(&authors)
+            ));
+        }
+
         // The <title> is the plain-text doctitle. The parser's `doctitle()` has
         // had header substitutions applied (special characters escaped), which
         // is what we want inside <title>.
@@ -1821,14 +1845,30 @@ impl Renderer<'_> {
     fn header(&mut self, document: &Document<'_>) {
         let header: &Header<'_> = document.header();
 
-        // A standalone document shows its doctitle as the header `<h1>` by
-        // default; the `notitle` attribute suppresses it. (`noheader`, which
-        // drops the whole header, is handled by the caller.)
-        let title = document
-            .doctitle()
+        // A standalone document shows its title as the header `<h1>` by default;
+        // the `notitle` attribute suppresses it. (`noheader`, which drops the
+        // whole header, is handled by the caller.) This is the section title,
+        // matching Asciidoctor's `node.header.title` — not the effective
+        // `doctitle`, so a `title` attribute entry (which overrides only the
+        // HTML `<title>` element) does not change the `<h1>`.
+        let title = header
+            .title()
             .filter(|_| !document.is_attribute_set("notitle"));
-        let author_line = header.author_line();
-        let revision_line = header.revision_line();
+
+        // The byline is driven entirely by resolved attributes, matching
+        // Asciidoctor's `html5` backend: `authors` (from the author line *or*
+        // the `author`/`author_N` attribute entries) and the `revnumber`,
+        // `revdate`, and `revremark` document attributes (set by the revision
+        // line *or* by attribute entries).
+        // An empty revision field is treated as absent, matching Asciidoctor,
+        // whose Ruby parser leaves the attribute unset (rather than empty) when
+        // a revision line omits it.
+        let authors = header.authors();
+        let revnumber = attribute_str(document, "revnumber").filter(|s| !s.is_empty());
+        let revdate = attribute_str(document, "revdate").filter(|s| !s.is_empty());
+        let revremark = attribute_str(document, "revremark").filter(|s| !s.is_empty());
+        let has_details =
+            !authors.is_empty() || revnumber.is_some() || revdate.is_some() || revremark.is_some();
 
         // An `auto`/`left`/`right`/`top`/`bottom` TOC is emitted inside the
         // header, after the details, matching Asciidoctor's `html5` backend.
@@ -1837,7 +1877,7 @@ impl Renderer<'_> {
             TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
         ) && !self.toc_html.is_empty();
 
-        if title.is_none() && author_line.is_none() && revision_line.is_none() && !header_toc {
+        if title.is_none() && !has_details && !header_toc {
             return;
         }
 
@@ -1847,57 +1887,49 @@ impl Renderer<'_> {
             self.line(&format!("<h1>{title}</h1>"));
         }
 
-        let has_details =
-            author_line.is_some_and(|a| a.authors().len() > 0) || revision_line.is_some();
         if has_details {
             self.line("<div class=\"details\">");
 
-            if let Some(author_line) = author_line {
-                for (index, author) in author_line.authors().enumerate() {
-                    let suffix = if index == 0 {
-                        String::new()
-                    } else {
-                        (index + 1).to_string()
-                    };
-                    // Author name and email arrive unsubstituted from the
-                    // parser (unlike the revision fields, which are already
-                    // escaped), so we escape them ourselves before placing them
-                    // in text and in the `mailto:` href.
+            for (index, author) in authors.iter().enumerate() {
+                let suffix = if index == 0 {
+                    String::new()
+                } else {
+                    (index + 1).to_string()
+                };
+                // Author name and email arrive unsubstituted from the parser
+                // (unlike the revision fields, which are already escaped), so we
+                // escape them ourselves before placing them in text and in the
+                // `mailto:` href.
+                self.line(&format!(
+                    "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
+                    escape_attribute(author.name())
+                ));
+                if let Some(email) = author.email() {
+                    let email = escape_attribute(email);
                     self.line(&format!(
-                        "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        escape_attribute(author.name())
+                        "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
                     ));
-                    if let Some(email) = author.email() {
-                        let email = escape_attribute(email);
-                        self.line(&format!(
-                            "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
-                        ));
-                    }
                 }
             }
 
-            if let Some(revision) = revision_line {
-                if let Some(revnumber) = revision.revnumber() {
-                    // Asciidoctor prints "version <n>" and appends a comma when
-                    // a revision date follows.
-                    let comma = if revision.revdate().is_empty() {
-                        ""
-                    } else {
-                        ","
-                    };
-                    self.line(&format!(
-                        "<span id=\"revnumber\">version {revnumber}{comma}</span>"
-                    ));
-                }
-                if !revision.revdate().is_empty() {
-                    self.line(&format!(
-                        "<span id=\"revdate\">{}</span>",
-                        revision.revdate()
-                    ));
-                }
-                if let Some(revremark) = revision.revremark() {
-                    self.line(&format!("<br><span id=\"revremark\">{revremark}</span>"));
-                }
+            if let Some(revnumber) = &revnumber {
+                // Asciidoctor prefixes the revision number with the lowercased
+                // `version-label` (default "Version", empty when unset) and
+                // appends a comma when a revision date follows.
+                let version_label = attribute_str(document, "version-label")
+                    .unwrap_or_default()
+                    .to_lowercase();
+
+                let comma = if revdate.is_some() { "," } else { "" };
+                self.line(&format!(
+                    "<span id=\"revnumber\">{version_label} {revnumber}{comma}</span>"
+                ));
+            }
+            if let Some(revdate) = &revdate {
+                self.line(&format!("<span id=\"revdate\">{revdate}</span>"));
+            }
+            if let Some(revremark) = &revremark {
+                self.line(&format!("<br><span id=\"revremark\">{revremark}</span>"));
             }
 
             self.line("</div>");
@@ -5779,6 +5811,18 @@ mod tests {
         assert!(html.contains(
             "<span id=\"email\" class=\"email\"><a href=\"mailto:a&quot;b@example.com\">a&quot;b@example.com</a></span>"
         ));
+    }
+
+    #[test]
+    fn author_meta_joins_and_escapes_the_authors() {
+        // The head `<meta name="author">` carries the comma-joined author names.
+        let html = convert("= Doc\nKismet Lee; Pax Draeke\n\nBody.");
+        assert!(html.contains("<meta name=\"author\" content=\"Kismet Lee, Pax Draeke\">"));
+
+        // The joined value is raw, so the renderer escapes it for the attribute
+        // context — Asciidoctor escapes (rather than strips) any angle brackets.
+        let html = convert("= Doc\n:author: Foo <bar> Baz\n\nBody.");
+        assert!(html.contains("<meta name=\"author\" content=\"Foo &lt;bar&gt; Baz\">"));
     }
 
     #[test]
