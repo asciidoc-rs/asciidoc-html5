@@ -15,4 +15,5 @@ mod pass;
 mod root;
 mod tables;
 mod text;
+mod toc;
 mod verbatim;

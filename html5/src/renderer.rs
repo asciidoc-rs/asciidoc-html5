@@ -1139,23 +1139,28 @@ fn strip_surrounding_blank_lines(lines: &mut Vec<String>) {
 /// document whose `toc` attribute enables one, or an empty string when the
 /// document has no sections (the outline would be empty, and Asciidoctor emits
 /// no TOC). The nested section list comes from
-/// [`render_outline`](crate::outline::render_outline); the `class` is the
-/// resolved `toc-class` and the title the resolved `toc-title`.
+/// [`render_outline`](crate::outline::render_outline); `class` supplies the
+/// `<div id="toc">` class (normally the resolved `toc-class`) and the title is
+/// the resolved `toc-title`.
 ///
 /// The caller decides *where* to insert this block from the document's
-/// [`TocMode`]; this function only builds it.
-fn render_toc(document: &Document<'_>) -> String {
+/// [`TocMode`] and which `class` to give it: a standalone document uses the
+/// document's `toc-class` (which the side-column placements set to `toc2`),
+/// while embeddable output always passes `toc`, since the side-column layout
+/// isn't available there (matching Asciidoctor's `convert_embedded`, which
+/// hardcodes the class). This function only builds the block.
+fn render_toc(document: &Document<'_>, class: &str) -> String {
     let outline = crate::outline::render_outline(document, &crate::OutlineOptions::default());
     if outline.is_empty() {
         return String::new();
     }
 
-    // The `toc-class` is escaped defensively (a no-op for the `toc`/`toc2`
+    // The `class` is escaped defensively (a no-op for the `toc`/`toc2`
     // defaults); the `toc-title` is emitted verbatim, matching Asciidoctor's
     // `#{doc.attr 'toc-title'}`.
     format!(
         "<div id=\"toc\" class=\"{}\">\n<div id=\"toctitle\">{}</div>\n{outline}\n</div>",
-        escape_attribute(document.toc_class()),
+        escape_attribute(class),
         document.toc_title(),
     )
 }
@@ -1186,13 +1191,31 @@ pub(crate) fn render_document<'a>(
     // block instead (see [`toc_macro`](Renderer::toc_macro)), and `disabled`
     // produces none.
     let toc_mode = document.toc_mode();
+
+    // Choose the TOC's class once, so the block is built a single time. The
+    // header/preamble placements use the document's `toc-class` (which the
+    // side-column placements set to `toc2`). The one exception is the leading
+    // TOC of *embeddable* output: the side-column layout isn't available there,
+    // so it always uses the plain `toc` class, matching Asciidoctor's
+    // `convert_embedded` (its `preamble` placement still honors `toc-class`, via
+    // the same path as standalone output).
+    let toc_class = if !standalone
+        && matches!(
+            toc_mode,
+            TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+        ) {
+        "toc"
+    } else {
+        document.toc_class()
+    };
+
     let toc_html = match toc_mode {
         TocMode::Auto
         | TocMode::Left
         | TocMode::Right
         | TocMode::Top
         | TocMode::Bottom
-        | TocMode::Preamble => render_toc(document),
+        | TocMode::Preamble => render_toc(document, toc_class),
 
         TocMode::Disabled | TocMode::Macro => String::new(),
     };
@@ -1699,6 +1722,14 @@ impl Renderer<'_> {
         // ahead of the content, matching Asciidoctor's embeddable output. A
         // `preamble` TOC is instead emitted within the preamble itself (see
         // [`preamble`]), so it is excluded here.
+        //
+        // The side-column placement (`left`/`right`) isn't available in
+        // embeddable output, which lacks the standalone frame and CSS that
+        // layout needs, so this leading TOC uses the plain `toc` class,
+        // regardless of `toc-position` or a custom `toc-class` (matching
+        // Asciidoctor's `convert_embedded`, which hardcodes `class="toc"`). The
+        // class was already resolved when `toc_html` was built, so it is emitted
+        // as-is here.
         if matches!(
             self.toc_mode,
             TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
