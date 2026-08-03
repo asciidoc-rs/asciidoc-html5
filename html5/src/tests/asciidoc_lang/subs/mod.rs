@@ -1,0 +1,12 @@
+//! Coverage of the AsciiDoc language description's `subs` module pages.
+
+mod apply_subs_to_blocks;
+mod apply_subs_to_text;
+mod attributes;
+mod index;
+mod macros;
+mod post_replacements;
+mod prevent;
+mod quotes;
+mod replacements;
+mod special_characters;
