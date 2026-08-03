@@ -1828,21 +1828,16 @@ impl Renderer<'_> {
                     } else {
                         (index + 1).to_string()
                     };
-                    // The parser applies the header substitution group
-                    // (specialchars: `&`, `<`, `>`) to the author name and email,
-                    // like the revision fields, so we place them directly rather
-                    // than escaping again. (Unlike every other model value, which
-                    // arrives raw; the author accessors returning substituted
-                    // values is asciidoc-parser #1076.)
+                    // The `raw_*` accessors return the pre-substitution author
+                    // values (asciidoc-parser #1081), so — like every other model
+                    // value — the renderer escapes them itself, once, before
+                    // placing them in text and in the `mailto:` href.
                     self.line(&format!(
                         "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        author.name()
+                        escape_attribute(author.raw_name())
                     ));
-                    if let Some(email) = author.email() {
-                        // specialchars does not escape `"`; the email also lands
-                        // in the `mailto:` href, so escape any quote to keep a
-                        // stray `"` from breaking out of the attribute.
-                        let email = email.replace('"', "&quot;");
+                    if let Some(email) = author.raw_email() {
+                        let email = escape_attribute(email);
                         self.line(&format!(
                             "<span id=\"email{suffix}\" class=\"email\"><a href=\"mailto:{email}\">{email}</a></span><br>",
                         ));
@@ -5781,9 +5776,9 @@ mod tests {
 
     #[test]
     fn author_name_and_email_are_escaped() {
-        // The parser applies specialchars (`&` becomes `&amp;`) to the name and
-        // email; the renderer escapes the email's `"` on top of that so it can't
-        // break out of the `mailto:` href.
+        // The renderer reads the raw (pre-substitution) author accessors and
+        // escapes them itself, so `&` becomes `&amp;` exactly once and a `"` in
+        // the email can't break out of the `mailto:` href.
         let html = convert("= Doc\nBen & Jerry <a\"b@example.com>\n\nBody.");
         assert!(html.contains("<span id=\"author\" class=\"author\">Ben &amp; Jerry</span>"));
         assert!(html.contains(
