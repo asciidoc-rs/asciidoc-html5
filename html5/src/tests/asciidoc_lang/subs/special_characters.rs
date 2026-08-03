@@ -3,10 +3,12 @@
 //!
 //! The special characters step replaces `<`, `>`, and `&` with their named
 //! character references. This crate performs that replacement through
-//! `convert`, so the three replacement rules and the `specialchars`/`c`
-//! substitution values are verified. The applicability table and the CLI/API
-//! escaping note are descriptive, so they are tracked as non-normative.
+//! `convert`, so the three replacement rules, the applicability table (probed
+//! block by block), and the `specialchars`/`c` substitution values are all
+//! verified. Only the CLI/API escaping note is descriptive, so it is tracked as
+//! non-normative.
 
+use super::applicability::{ran, ran_in_header};
 use crate::{
     convert,
     tests::{assert_html::assert_css, sdd::*},
@@ -49,6 +51,16 @@ non_normative!(
     r#"
 == Default special characters substitution
 
+"#
+);
+
+// Each row of the applicability table, probed with `<x>`: the special
+// characters step is "applied" iff the output encodes it as `&lt;x&gt;` rather
+// than leaving `<x>` raw.
+#[test]
+fn default_specialchars_substitution() {
+    verifies!(
+        r#"
 <<table-special>> lists the specific blocks and inline elements the special characters substitution step applies to automatically.
 
 .Blocks and inline elements subject to the special characters substitution
@@ -84,6 +96,59 @@ non_normative!(
 |Titles |{y}
 |===
 
+"#
+    );
+
+    // `<x>` is encoded to `&lt;x&gt;` when the special characters step runs.
+    let applies = |body: &str| ran("", body, "&lt;");
+
+    // Attribute entry values (yes): the value is encoded when stored. Isolated
+    // with `[subs=attributes]` (which does not itself encode) so only the
+    // attribute-entry substitution can produce the entity.
+    assert!(convert(":v: <x>\n[subs=attributes]\n....\n{v}\n....\n").contains("&lt;x&gt;"));
+
+    // Comments (no): the comment block produces no output.
+    assert!(!applies("////\n<x>\n////\n\nsentinel\n"));
+
+    // Examples (yes).
+    assert!(applies("====\n<x>\n====\n"));
+
+    // Headers (yes): special characters in the author line are encoded.
+    assert!(ran_in_header("", "<x>", "&lt;"));
+
+    // Literal, listings, and source (yes — the verbatim group encodes them).
+    assert!(applies("....\n<x>\n....\n"));
+    assert!(applies("----\n<x>\n----\n"));
+    assert!(applies("[source]\n----\n<x>\n----\n"));
+
+    // Macros (yes): special characters in a macro's text are encoded.
+    assert!(applies("link:https://example.org[<x>]\n"));
+
+    // Open (yes).
+    assert!(applies("--\n<x>\n--\n"));
+
+    // Paragraphs (yes).
+    assert!(applies("<x>\n"));
+
+    // Passthrough blocks (no): the raw `<x>` passes straight through.
+    assert!(!applies("++++\n<x>\n++++\n"));
+
+    // Quotes and verses (yes).
+    assert!(applies("[quote]\n____\n<x>\n____\n"));
+    assert!(applies("[verse]\n____\n<x>\n____\n"));
+
+    // Sidebars (yes).
+    assert!(applies("****\n<x>\n****\n"));
+
+    // Tables (yes): a default table cell encodes special characters.
+    assert!(applies("[cols=1]\n|===\n|<x>\n|===\n"));
+
+    // Titles (yes): special characters in a block title are encoded.
+    assert!(applies(".<x>\n====\nbody\n====\n"));
+}
+
+non_normative!(
+    r#"
 == specialchars substitution value
 
 "#

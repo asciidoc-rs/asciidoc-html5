@@ -1,10 +1,12 @@
 //! Coverage of the AsciiDoc language description's *Macro Substitutions* page.
 //!
 //! The macros step processes inline and block macros. This crate processes
-//! macros through `convert`, so the behavioral claim and the block `macros`
-//! substitution value are verified. The applicability table is descriptive and
+//! macros through `convert`, so the behavioral claim, the applicability table
+//! (probed block by block), and the block `macros` substitution value are
+//! verified. Only the `Tables | Varies` row (which is not a simple yes/no) is
 //! tracked as non-normative.
 
+use super::applicability::{ran, ran_in_header};
 use crate::{convert, tests::sdd::*};
 
 track_file!("ref/asciidoc-lang/docs/modules/subs/pages/macros.adoc");
@@ -42,6 +44,15 @@ non_normative!(
     r#"
 == Default macros substitution
 
+"#
+);
+
+// Each row of the applicability table, probed with an inline link: the macros
+// step is "applied" iff the link renders as an anchor (`href` appears).
+#[test]
+fn default_macros_substitution() {
+    verifies!(
+        r#"
 <<table-macros>> lists the specific blocks and inline elements the macros substitution step applies to automatically.
 
 .Blocks and inline elements subject to the macros substitution
@@ -71,11 +82,91 @@ non_normative!(
 
 |Sidebars |{y}
 
+"#
+    );
+
+    // An inline link renders as `<a href=…>` when the macros step runs.
+    let applies = |body: &str| ran("", body, "href");
+
+    // Attribute entry values: only the inline pass macro is processed. A regular
+    // macro in an attribute value is left literal, while a pass macro is
+    // applied. Isolated with `[subs=attributes]` so the block adds no macros
+    // processing of its own.
+    assert!(
+        !convert(":v: link:https://example.org[t]\n[subs=attributes]\n....\n{v}\n....\n")
+            .contains("href")
+    );
+    assert!(
+        convert(":v: pass:[<raw-x>]\n[subs=attributes]\n....\n{v}\n....\n").contains("<raw-x>")
+    );
+
+    // Comments (no): the comment block produces no output.
+    assert!(!applies(
+        "////\nlink:https://example.org[t]\n////\n\nsentinel\n"
+    ));
+
+    // Examples (yes).
+    assert!(applies("====\nlink:https://example.org[t]\n====\n"));
+
+    // Headers (no): a macro in the author line is not processed.
+    assert!(!ran_in_header("", "link:https://example.org[t]", "href"));
+
+    // Literal, listings, and source (no).
+    assert!(!applies("....\nlink:https://example.org[t]\n....\n"));
+    assert!(!applies("----\nlink:https://example.org[t]\n----\n"));
+    assert!(!applies(
+        "[source]\n----\nlink:https://example.org[t]\n----\n"
+    ));
+
+    // Macros (yes): a block macro is processed by the macros step.
+    assert!(convert("image::x.png[Alt]\n").contains("<img src="));
+
+    // Open (yes).
+    assert!(applies("--\nlink:https://example.org[t]\n--\n"));
+
+    // Paragraphs (yes).
+    assert!(applies("link:https://example.org[t]\n"));
+
+    // Passthrough blocks (no): the raw macro text passes straight through.
+    assert!(!applies("++++\nlink:https://example.org[t]\n++++\n"));
+
+    // Quotes and verses (yes).
+    assert!(applies(
+        "[quote]\n____\nlink:https://example.org[t]\n____\n"
+    ));
+    assert!(applies(
+        "[verse]\n____\nlink:https://example.org[t]\n____\n"
+    ));
+
+    // Sidebars (yes).
+    assert!(applies("****\nlink:https://example.org[t]\n****\n"));
+}
+
+// The table's `Tables` cell is "Varies" (it depends on each cell's format
+// specifier), so it is not a single yes/no claim to verify here.
+non_normative!(
+    r#"
 |Tables |Varies
 
+"#
+);
+
+// Titles (yes): a macro in a block title is processed.
+#[test]
+fn default_macros_substitution_titles() {
+    verifies!(
+        r#"
 |Titles |{y}
 |===
 
+"#
+    );
+
+    assert!(convert(".link:https://example.org[t]\n====\nbody\n====\n").contains("href"));
+}
+
+non_normative!(
+    r#"
 == macros substitution value
 
 "#

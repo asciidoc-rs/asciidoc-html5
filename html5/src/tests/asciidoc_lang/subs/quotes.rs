@@ -6,6 +6,7 @@
 //! the `quotes`/`q` substitution values are verified. The applicability table
 //! is descriptive and tracked as non-normative.
 
+use super::applicability::ran;
 use crate::{convert, tests::sdd::*};
 
 track_file!("ref/asciidoc-lang/docs/modules/subs/pages/quotes.adoc");
@@ -110,6 +111,15 @@ non_normative!(
     r#"
 == Default quotes substitution
 
+"#
+);
+
+// Each row of the applicability table, probed with `*b*`: the quotes step is
+// "applied" iff the output wraps it in `<strong>` rather than leaving `*b*`.
+#[test]
+fn default_quotes_substitution() {
+    verifies!(
+        r#"
 <<table-quotes>> lists the specific blocks and inline elements the quotes substitution step applies to automatically.
 
 .Blocks and inline elements subject to the quotes substitution
@@ -138,11 +148,73 @@ non_normative!(
 
 |Sidebars |{y}
 
+"#
+    );
+
+    // `*b*` becomes `<strong>b</strong>` when the quotes step runs.
+    let applies = |body: &str| ran("", body, "<strong>");
+
+    // Attribute entry values (no): the value is stored without inline
+    // formatting. Isolated with `[subs=attributes]` so the block itself adds no
+    // formatting; the stored `*b*` stays literal.
+    assert!(!convert(":v: *b*\n[subs=attributes]\n....\n{v}\n....\n").contains("<strong>"));
+
+    // Comments (no): the comment block produces no output.
+    assert!(!applies("////\n*b*\n////\n\nsentinel\n"));
+
+    // Examples (yes).
+    assert!(applies("====\n*b*\n====\n"));
+
+    // Literal, listings, and source (no).
+    assert!(!applies("....\n*b*\n....\n"));
+    assert!(!applies("----\n*b*\n----\n"));
+    assert!(!applies("[source]\n----\n*b*\n----\n"));
+
+    // Macros (yes): formatting in a macro's text is applied.
+    assert!(applies("link:https://example.org[*b*]\n"));
+
+    // Open (yes).
+    assert!(applies("--\n*b*\n--\n"));
+
+    // Paragraphs (yes).
+    assert!(applies("*b*\n"));
+
+    // Passthrough blocks (no): the raw `*b*` passes straight through.
+    assert!(!applies("++++\n*b*\n++++\n"));
+
+    // Quotes and verses (yes).
+    assert!(applies("[quote]\n____\n*b*\n____\n"));
+    assert!(applies("[verse]\n____\n*b*\n____\n"));
+
+    // Sidebars (yes).
+    assert!(applies("****\n*b*\n****\n"));
+}
+
+// The table's `Tables` cell is "Varies" (it depends on each cell's format
+// specifier), so it is not a single yes/no claim to verify here.
+non_normative!(
+    r#"
 |Tables |Varies
 
+"#
+);
+
+// Titles (yes): inline formatting in a block title is applied.
+#[test]
+fn default_quotes_substitution_titles() {
+    verifies!(
+        r#"
 |Titles |{y}
 |===
 
+"#
+    );
+
+    assert!(convert(".*b*\n====\nbody\n====\n").contains("<strong>"));
+}
+
+non_normative!(
+    r#"
 [#quotes-value]
 == quotes substitution value
 

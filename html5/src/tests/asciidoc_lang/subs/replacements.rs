@@ -9,6 +9,7 @@
 //! character reference" sidebar is definitional, and the applicability table
 //! and advisory notes are descriptive, so they are tracked as non-normative.
 
+use super::applicability::ran;
 use crate::{convert, tests::sdd::*};
 
 track_file!("ref/asciidoc-lang/docs/modules/subs/pages/replacements.adoc");
@@ -118,6 +119,16 @@ These attributes and their corresponding output are listed in xref:attributes:ch
 
 == Default replacements substitution
 
+"#
+);
+
+// The applicability table, probed with `(C)`: the replacements step is
+// "applied" iff the copyright ligature becomes `&#169;`. (Rows above the
+// Headers row.)
+#[test]
+fn default_replacements_substitution() {
+    verifies!(
+        r#"
 <<table-replace>> lists the specific blocks and inline elements the replacements substitution step applies to automatically.
 
 .Blocks and inline elements subject to the replacements substitution
@@ -131,8 +142,41 @@ These attributes and their corresponding output are listed in xref:attributes:ch
 
 |Examples |{y}
 
+"#
+    );
+
+    // `(C)` becomes `&#169;` when the replacements step runs.
+    let applies = |body: &str| ran("", body, "&#169;");
+
+    // Attribute entry values (no): the stored value keeps `(C)` literal.
+    // Isolated with `[subs=attributes]` so the block adds no replacements.
+    assert!(!convert(":v: (C)\n[subs=attributes]\n....\n{v}\n....\n").contains("&#169;"));
+
+    // Comments (no): the comment block produces no output.
+    assert!(!applies("////\n(C)\n////\n\nsentinel\n"));
+
+    // Examples (yes).
+    assert!(applies("====\n(C)\n====\n"));
+}
+
+// The `Headers | {n}` cell is a documentation/behavior divergence: the
+// asciidoc-lang table says replacements are *not* applied to the header, and
+// this crate follows that (the author line keeps `(C)` literal), but
+// Asciidoctor 2.0.26 does apply replacements there (rendering `&#169;`).
+// Because the two disagree, this cell is tracked as non-normative rather than
+// asserted.
+non_normative!(
+    r#"
 |Headers |{n}
 
+"#
+);
+
+// The applicability table, continued: rows from Literal through Sidebars.
+#[test]
+fn default_replacements_substitution_body_blocks() {
+    verifies!(
+        r#"
 |Literal, listings, and source |{n}
 
 |Macros |{y} +
@@ -148,11 +192,61 @@ These attributes and their corresponding output are listed in xref:attributes:ch
 
 |Sidebars |{y}
 
+"#
+    );
+
+    let applies = |body: &str| ran("", body, "&#169;");
+
+    // Literal, listings, and source (no).
+    assert!(!applies("....\n(C)\n....\n"));
+    assert!(!applies("----\n(C)\n----\n"));
+    assert!(!applies("[source]\n----\n(C)\n----\n"));
+
+    // Macros (yes): replacements run on a macro's text.
+    assert!(applies("link:https://example.org[(C)]\n"));
+
+    // Open (yes).
+    assert!(applies("--\n(C)\n--\n"));
+
+    // Paragraphs (yes).
+    assert!(applies("(C)\n"));
+
+    // Passthrough blocks (no): the raw `(C)` passes straight through.
+    assert!(!applies("++++\n(C)\n++++\n"));
+
+    // Quotes and verses (yes).
+    assert!(applies("[quote]\n____\n(C)\n____\n"));
+    assert!(applies("[verse]\n____\n(C)\n____\n"));
+
+    // Sidebars (yes).
+    assert!(applies("****\n(C)\n****\n"));
+}
+
+// The table's `Tables` cell is "Varies" (it depends on each cell's format
+// specifier), so it is not a single yes/no claim to verify here.
+non_normative!(
+    r#"
 |Tables |Varies
 
+"#
+);
+
+// Titles (yes): replacements run on a block title.
+#[test]
+fn default_replacements_substitution_titles() {
+    verifies!(
+        r#"
 |Titles |{y}
 |===
 
+"#
+    );
+
+    assert!(convert(".(C)\n====\nbody\n====\n").contains("&#169;"));
+}
+
+non_normative!(
+    r#"
 == replacements substitution value
 
 "#
