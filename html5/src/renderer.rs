@@ -1831,7 +1831,9 @@ impl Renderer<'_> {
                     // The parser applies the header substitution group
                     // (specialchars: `&`, `<`, `>`) to the author name and email,
                     // like the revision fields, so we place them directly rather
-                    // than escaping again.
+                    // than escaping again. (Unlike every other model value, which
+                    // arrives raw; the author accessors returning substituted
+                    // values is asciidoc-parser #1076.)
                     self.line(&format!(
                         "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
                         author.name()

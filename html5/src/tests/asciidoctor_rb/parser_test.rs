@@ -673,7 +673,8 @@ fn parse_invalid_author_line_becomes_author() {
     // the `author` and `firstname` attributes read `&lt;founder@asciidoc.org&gt;`
     // here. Asciidoctor keeps `metadata['author']`/`['firstname']` raw and
     // substitutes at render time; the rendered author name is the same either
-    // way (see the renderer's `author_name_and_email_are_escaped`).
+    // way (see the renderer's `author_name_and_email_are_escaped`). Tracked as
+    // asciidoc-parser #1076.
     assert_eq!(
         attr(&doc, "author").as_deref(),
         Some("Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;")
