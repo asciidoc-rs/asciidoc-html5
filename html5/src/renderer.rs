@@ -635,6 +635,21 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
+/// Whether the document's safe mode is below `Secure`, the threshold under
+/// which Asciidoctor enables the security-sensitive SVG `interactive`/`inline`
+/// image referencing (embedding a live `<object>`, or the file's contents). At
+/// `Secure` or above — including the API default — an SVG renders as a plain
+/// `<img>`, matching Asciidoctor.
+///
+/// The parser seeds the `safe-mode-level` intrinsic attribute on every
+/// document; a document with none (or an unparseable level) is treated as
+/// `Secure`.
+fn safe_mode_below_secure(document: &Document<'_>) -> bool {
+    attribute_str(document, "safe-mode-level")
+        .and_then(|level| level.parse::<u32>().ok())
+        .is_some_and(|level| level < SafeMode::Secure as u32)
+}
+
 /// Builds the URI reference a media block's `target` resolves to, mirroring
 /// Asciidoctor's `AbstractNode#media_uri` (whose asset directory key is
 /// `imagesdir`).
@@ -1270,6 +1285,7 @@ pub(crate) fn render_document<'a>(
         sectlinks: document.is_attribute_set("sectlinks"),
         stem_type: resolve_stem_type(document),
         cellbgcolor: attribute_str(document, "cellbgcolor"),
+        svg_below_secure: safe_mode_below_secure(document),
     };
     renderer.document(document);
     renderer.out
@@ -1424,6 +1440,9 @@ struct CellRenderConfig {
     sectlinks: bool,
     stem_type: StemType,
     cellbgcolor: Option<String>,
+    /// Inherited from the enclosing document so an AsciiDoc cell's images honor
+    /// the same SVG safe-mode gate (see [`Renderer::svg_below_secure`]).
+    svg_below_secure: bool,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1529,6 +1548,14 @@ struct Renderer<'a> {
     /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
     /// not implement inline attribute entries.
     cellbgcolor: Option<String>,
+
+    /// Whether the document's safe mode is below `Secure` (see
+    /// [`safe_mode_below_secure`]). It gates the SVG `interactive` referencing
+    /// of a block image: an `opts=interactive` SVG renders as an `<object>`
+    /// only below `Secure`, and as a plain `<img>` at `Secure` or above
+    /// (the API default), matching Asciidoctor. A document-less
+    /// sub-renderer (an AsciiDoc table cell) inherits this from its parent.
+    svg_below_secure: bool,
 }
 
 impl Renderer<'_> {
@@ -3438,6 +3465,7 @@ impl Renderer<'_> {
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
                         cellbgcolor: self.cellbgcolor.clone(),
+                        svg_below_secure: self.svg_below_secure,
                     },
                 )
             ),
@@ -3824,11 +3852,46 @@ impl Renderer<'_> {
             dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
         }
 
-        let mut img = format!(
-            "<img src=\"{}\" alt=\"{}\"{dimensions}>",
-            escape_attribute(&src),
-            escape_attribute(&alt),
-        );
+        // An SVG target (by `.svg` extension or `format=svg`) referenced with
+        // `opts=interactive` renders as an `<object>` so its embedded scripting
+        // and links stay live — but only below the `Secure` safe mode, matching
+        // Asciidoctor's `convert_image`. At `Secure` or above (the API default)
+        // it falls through to a plain `<img>`. The `inline` option (embedding the
+        // SVG file's contents as `<svg>`) is not yet implemented for block images
+        // here, so such an SVG also renders as `<img>` for now (see
+        // https://github.com/asciidoc-rs/asciidoc-html5/issues/275).
+        let is_svg = named("format") == Some("svg") || target.contains(".svg");
+
+        let interactive = macro_attrs.has_option("interactive")
+            || block
+                .attrlist()
+                .is_some_and(|a| a.has_option("interactive"));
+
+        let mut img = if is_svg && self.svg_below_secure && interactive {
+            // The content nested inside the `<object>`, shown when a user agent
+            // can't render it: a `fallback` image if one is supplied, otherwise
+            // the alt text (emitted raw, as Asciidoctor does).
+            let fallback = match named("fallback") {
+                Some(fallback) => format!(
+                    "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                    escape_attribute(&media_uri(fallback, &self.imagesdir)),
+                    escape_attribute(&alt),
+                ),
+
+                None => format!("<span class=\"alt\">{alt}</span>"),
+            };
+
+            format!(
+                "<object type=\"image/svg+xml\" data=\"{}\"{dimensions}>{fallback}</object>",
+                escape_attribute(&src),
+            )
+        } else {
+            format!(
+                "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                escape_attribute(&src),
+                escape_attribute(&alt),
+            )
+        };
 
         // A `link` wraps the image in an anchor whose `href` is the link value
         // verbatim (Asciidoctor 2.0.26 does not resolve `link=self` to the
@@ -4483,6 +4546,7 @@ fn render_cell_document<'s>(
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
         cellbgcolor: config.cellbgcolor,
+        svg_below_secure: config.svg_below_secure,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -4918,6 +4982,45 @@ mod tests {
             "<a class=\"image\" href=\"https://example.com\">\
              <img src=\"e.png\" alt=\"e\"></a>"
         ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_renders_object() {
+        // Below `Secure`, an SVG block image with `opts=interactive` renders as
+        // an `<object>` (its alt text nested as the fallback), matching
+        // Asciidoctor's `convert_image`.
+        let html = convert_with(
+            "image::diagram.svg[Diagram,300,opts=interactive]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(content(&html).contains(
+            "<object type=\"image/svg+xml\" data=\"diagram.svg\" width=\"300\">\
+             <span class=\"alt\">Diagram</span></object>"
+        ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_uses_fallback_image() {
+        // A `fallback` image is nested inside the `<object>` instead of the alt
+        // text, resolved under `imagesdir` like any other relative target.
+        let html = convert_with(
+            ":imagesdir: img\n\nimage::diagram.svg[Diagram,opts=interactive,fallback=fallback.png]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains(
+            "<object type=\"image/svg+xml\" data=\"img/diagram.svg\">\
+             <img src=\"img/fallback.png\" alt=\"Diagram\"></object>"
+        ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_is_plain_img_at_secure() {
+        // The interactive referencing is security-sensitive: at `Secure` (the
+        // default safe mode) the same SVG renders as a plain `<img>`, matching
+        // Asciidoctor.
+        let html = convert("image::diagram.svg[Diagram,opts=interactive]");
+        assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
+        assert!(!html.contains("<object"));
     }
 
     #[test]
@@ -7639,6 +7742,7 @@ mod tests {
             sectlinks: false,
             stem_type: super::StemType::AsciiMath,
             cellbgcolor: None,
+            svg_below_secure: false,
         }
     }
 

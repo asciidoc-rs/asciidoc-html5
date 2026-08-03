@@ -2,18 +2,25 @@
 //!
 //! An SVG image target accepts an `opts` value controlling how the SVG is
 //! referenced: `none` (the default, an `<img>`), `interactive` (an `<object>`),
-//! or `inline` (an embedded `<svg>`). This crate's HTML5 backend implements
-//! only the default `none` behavior — it renders every SVG as an `<img>`
-//! regardless of `opts` — which matches Asciidoctor's own output under the
-//! default `Secure` safe mode (interactive/inline are disabled there). The
-//! interactive and inline behaviors (available only below `Secure`, and needing
-//! filesystem access) are not implemented here, so that material is
-//! non-normative; the `viewBox`/dimensions authoring guidance is likewise
-//! descriptive.
+//! or `inline` (an embedded `<svg>`). The `none` and `interactive` referencing
+//! (including the `<object>`'s `fallback`) are implemented and verified through
+//! `convert`; the security-sensitive `interactive` behavior takes effect only
+//! below the `Secure` safe mode, matching Asciidoctor. The `inline` option
+//! embeds the SVG file's contents and is not yet implemented for block images
+//! (tracked as <https://github.com/asciidoc-rs/asciidoc-html5/issues/275>), so
+//! that material — and the `viewBox`/dimensions authoring guidance — is
+//! non-normative.
 
-use crate::{convert, tests::sdd::*};
+use crate::{convert, convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoc-lang/docs/modules/macros/pages/image-svg.adoc");
+
+// Renders below the `Secure` safe mode, where the interactive SVG referencing
+// is enabled (at `Secure`, the API default, an SVG always renders as an
+// `<img>`).
+fn convert_unsafe(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Unsafe))
+}
 
 non_normative!(
     r#"
@@ -45,9 +52,7 @@ If you do specify a width and height, at least make sure the values are fixed an
 "#
 );
 
-// The default (`none`) SVG referencing renders an ordinary `<img>` — the only
-// one of the three options this crate's HTML5 backend implements (and what
-// Asciidoctor also emits under the default `Secure` safe mode).
+// The default (`none`) SVG referencing renders an ordinary `<img>`.
 #[test]
 fn default_none_renders_img() {
     verifies!(
@@ -69,11 +74,8 @@ The following table demonstrates the impact these options have.
         .contains(r#"<img src="sample.svg" alt="Static" width="300">"#));
 }
 
-// The interactive (`<object>`) and inline (`<svg>`) referencing options — and
-// the `fallback` attribute and viewBox/namespace requirements that go with them
-// — are not implemented by this crate's HTML5 backend (it renders every SVG as
-// an `<img>`), so the demonstration table, the option-values table, and the
-// accompanying notes are non-normative.
+// The demonstration table illustrates the runtime hover behavior of each option
+// (a visual, stylesheet-driven effect), so it is non-normative.
 non_normative!(
     r#"
 
@@ -95,6 +97,16 @@ a|image::sample.svg[Embedded,300,opts=interactive]
 The SVG also inherits CSS from the document stylesheets.
 |===
 
+"#
+);
+
+// `none` renders an `<img>` and `interactive` renders an `<object>`. The
+// `inline` (`<svg>`) referencing embeds the SVG file's contents and is not yet
+// implemented for block images (issue #275); it still renders an `<img>` here.
+#[test]
+fn svg_referencing_options() {
+    verifies!(
+        r#"
 How these options values work and when each should be used is described below:
 
 .Option values that control how an SVG image is referenced in the HTML output
@@ -120,10 +132,61 @@ How these options values work and when each should be used is described below:
 To allow SVG content reachable by JavaScript in the main DOM or to inherit styles from the main DOM
 |===
 
+"#
+    );
+
+    // `none` (default): an `<img>`.
+    assert!(convert_unsafe("image::sample.svg[Diagram,300]")
+        .contains(r#"<img src="sample.svg" alt="Diagram" width="300">"#));
+
+    // `interactive`: an `<object>` (block image, below Secure), with the alt text
+    // nested as the fallback.
+    assert!(convert_unsafe("image::sample.svg[Diagram,300,opts=interactive]").contains(
+        r#"<object type="image/svg+xml" data="sample.svg" width="300"><span class="alt">Diagram</span></object>"#
+    ));
+
+    // The inline image macro's `interactive` option likewise renders an
+    // `<object>` (this path is handled by the parser's inline substitution).
+    assert!(convert_unsafe("See image:sample.svg[Diagram,opts=interactive] here.").contains(
+        r#"<span class="image"><object type="image/svg+xml" data="sample.svg"><span class="alt">Diagram</span></object></span>"#
+    ));
+}
+
+// The `interactive` `<object>` accepts a `fallback` image (nested for user
+// agents that can't render the object); a relative fallback path is resolved
+// under `imagesdir`.
+#[test]
+fn interactive_fallback() {
+    verifies!(
+        r#"
 When using the `interactive` option, you can specify a fallback image using the `fallback` attribute.
 The fallback image is used if the browser does not support the `<object>` tag.
 If the value of the fallback attribute is a relative path, it will be prefixed with the value of the `imagesdir` document attribute.
 
+"#
+    );
+
+    // The `fallback` image is nested inside the `<object>` instead of the alt
+    // text.
+    assert!(convert_unsafe("image::sample.svg[Diagram,opts=interactive,fallback=fallback.png]")
+        .contains(
+            r#"<object type="image/svg+xml" data="sample.svg"><img src="fallback.png" alt="Diagram"></object>"#
+        ));
+
+    // A relative `fallback` path (and the target) are resolved under `imagesdir`.
+    assert!(
+        convert_unsafe(":imagesdir: img\n\nimage::sample.svg[Diagram,opts=interactive,fallback=fallback.png]")
+            .contains(
+                r#"<object type="image/svg+xml" data="img/sample.svg"><img src="img/fallback.png" alt="Diagram"></object>"#
+            )
+    );
+}
+
+// The `viewBox`/namespace requirements and the `inline`-option dimension
+// stripping concern the embedded `<svg>` (issue #275) or its authoring, and the
+// closing links are descriptive.
+non_normative!(
+    r#"
 When using the `inline` or `interactive` options, the `viewBox` attribute must be defined on the root `<svg>` element in order for scaling to work properly.
 
 When using the `inline` option, if you specify a width or height on the image macro in AsciiDoc, the `width`, `height` and `style` attributes on the `<svg>` element will be removed. Additionally, when using `inline` the primary SVG elements (e.g., `<svg>`) cannot have a namespace.
