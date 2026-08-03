@@ -7,6 +7,7 @@ mod icon_macro;
 mod icons;
 mod icons_font;
 mod icons_image;
+mod image_link;
 mod image_url;
 mod images_directory;
 mod keyboard_macro;
