@@ -159,13 +159,15 @@ fn default_replacements_substitution() {
     assert!(applies("====\n(C)\n====\n"));
 }
 
-// The `Headers | {n}` cell is a documentation/behavior divergence: the
-// asciidoc-lang table says replacements are *not* applied to the header, and
-// this crate currently follows that (the author line keeps `(C)` literal),
-// whereas Asciidoctor 2.0.26 does apply replacements to the byline (rendering
-// `&#169;`). Because the two disagree — and because matching Asciidoctor here
-// awaits a public parser substitution API (asciidoc-parser #1077) — this cell
-// is tracked as non-normative rather than asserted.
+// The `Headers | {n}` cell is a documentation/behavior inconsistency: the
+// asciidoc-lang table says replacements are *not* applied to the header, but
+// Asciidoctor 2.0.26 *does* apply them to the rendered byline author name
+// (`(C)` becomes `&#169;`, `O'Brien` becomes `O&#8217;Brien`), and this crate
+// now matches that (see
+// `renderer::tests::byline_author_name_gets_replacements`,
+// using asciidoc-parser #1077's per-string substitution API). Because the
+// rendered behavior contradicts the table's `{n}`, this cell is tracked as
+// non-normative rather than asserted.
 non_normative!(
     r#"
 |Headers |{n}

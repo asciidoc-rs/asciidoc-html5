@@ -35,8 +35,9 @@ use asciidoc_parser::{
         QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell,
         TableCellContent, TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
+    content::{SubstitutionGroup, SubstitutionStep},
     document::{DocinfoLocation, Footnote, Header, InterpretedValue, TocMode},
-    Document, HasSpan, SafeMode,
+    Document, HasSpan, Parser, SafeMode,
 };
 
 use crate::html::{class_attribute, escape_attribute, id_attribute};
@@ -1822,25 +1823,29 @@ impl Renderer<'_> {
             self.line("<div class=\"details\">");
 
             if let Some(author_line) = author_line {
+                // The author name arrives already header-substituted from the
+                // parser (special characters and attribute references applied —
+                // asciidoc-parser #1068), so it must not be re-escaped, which
+                // would double-encode a name like `Ben & Jerry`. Asciidoctor's
+                // byline additionally runs the replacements step on the name
+                // (its `sub_replacements` helper), so e.g. `O'Brien` becomes
+                // `O&#8217;Brien` and `(C)` becomes `&#169;`; mirror that with
+                // the parser's per-string substitution API (asciidoc-parser
+                // #1077).
+                let replacements =
+                    SubstitutionGroup::Custom(vec![SubstitutionStep::CharacterReplacements]);
+                let byline_parser = Parser::default();
+
                 for (index, author) in author_line.authors().enumerate() {
                     let suffix = if index == 0 {
                         String::new()
                     } else {
                         (index + 1).to_string()
                     };
-                    // The author name arrives already header-substituted from the
-                    // parser (special characters and attribute references
-                    // applied — asciidoc-parser #1068), so it is placed as-is:
-                    // re-escaping here would double-encode a name like
-                    // `Ben & Jerry`. Asciidoctor additionally runs the
-                    // replacements step on the byline name (so e.g. `O'Brien`
-                    // becomes `O&#8217;Brien`); this crate cannot yet reproduce
-                    // that without a public substitution API on the parser
-                    // (asciidoc-parser #1077), so a name containing replacement
-                    // characters is the one remaining divergence here.
+
+                    let name = byline_parser.apply_substitutions(author.name(), &replacements);
                     self.line(&format!(
-                        "<span id=\"author{suffix}\" class=\"author\">{}</span><br>",
-                        author.name()
+                        "<span id=\"author{suffix}\" class=\"author\">{name}</span><br>",
                     ));
                     if let Some(email) = author.email() {
                         // The email is raw and lands in a `mailto:` href, so it
@@ -5757,6 +5762,17 @@ mod tests {
         assert!(html.contains(
             "<span id=\"email\" class=\"email\"><a href=\"mailto:a&quot;b@example.com\">a&quot;b@example.com</a></span>"
         ));
+    }
+
+    #[test]
+    fn byline_author_name_gets_replacements() {
+        // Asciidoctor runs the replacements step on the byline author name, so a
+        // typewriter apostrophe becomes typographic and `(C)` the copyright
+        // sign — matching `asciidoctor`'s output exactly.
+        let html = convert("= Doc\nJoan O'Brien (C)\n\nBody.");
+        assert!(
+            html.contains("<span id=\"author\" class=\"author\">Joan O&#8217;Brien &#169;</span>")
+        );
     }
 
     #[test]
