@@ -103,12 +103,14 @@ To turn section numbering back on midstream, reset the attribute above the secti
     assert!(html.contains(">2. Numbered Section<"));
 }
 
-// The `num-off` listing is a build-time `include::` of the example file, and
-// the `num-out` `....` block is a literal illustration of the resulting
-// numbering; neither is convertible source. The non-increment rule they
-// illustrate is verified below.
-non_normative!(
-    r#"
+// Within an off region the section number is not incremented, so after
+// numbering resumes the next numbered section is `2.` (not `4.`), even though
+// three sections appeared while numbering was off. Driving the page's `num-off`
+// example reproduces the `num-out` numbering illustration exactly.
+#[test]
+fn number_does_not_increment_in_off_regions() {
+    verifies!(
+        r#"
 [source]
 ----
 include::example$section.adoc[tag=num-off]
@@ -121,16 +123,6 @@ Given the above example, the sections will be numbered as follows:
 include::example$section.adoc[tag=num-out]
 ....
 
-"#
-);
-
-// Within an off region the section number is not incremented, so after
-// numbering resumes the next numbered section is `2.` (not `4.`), even though
-// three sections appeared while numbering was off.
-#[test]
-fn number_does_not_increment_in_off_regions() {
-    verifies!(
-        r#"
 The section number does not increment in regions of the document where section numbers are turned off.
 
 "#
@@ -138,8 +130,13 @@ The section number does not increment in regions of the document where section n
 
     let html = convert(NUM_OFF);
 
-    assert!(html.contains(">2. Numbered Section<"));
-    assert!(!html.contains(">4. Numbered Section<"));
+    // The `num-out` illustration: the first section is `1.`, the three sections
+    // in the off region carry no number, and numbering resumes at `2.` (not `4.`).
+    assert!(html.contains(">1. Numbered Section<"), "{html}");
+    assert!(html.contains(">Unnumbered Section<"), "{html}");
+    assert!(html.contains(">2. Numbered Section<"), "{html}");
+    assert!(!html.contains(">3. "), "{html}");
+    assert!(!html.contains(">4. Numbered Section<"), "{html}");
 }
 
 // The order-of-precedence rules concern how a CLI/API `sectnums` value
@@ -166,8 +163,9 @@ non_normative!(
 );
 
 // With `sectnums` set, levels 1 through 3 are numbered by default; setting
-// `sectnumlevels` raises or lowers that limit. Driving `sectnumlevels: 2`
-// confirms a level-2 title is still numbered (`1.1.`).
+// `sectnumlevels` raises or lowers that limit. The `sectnuml` example header
+// (`:sectnumlevels: 2`) is driven with sections added, confirming a level-2
+// title is still numbered (`1.1.`).
 #[test]
 fn sectnumlevels_sets_the_numbered_level_limit() {
     verifies!(
@@ -176,6 +174,10 @@ When `sectnums` is set, level 1 (`==`) through level 3 (`====`) section titles a
 You can increase or reduce the section level limit by setting the `sectnumlevels` attribute and assigning it the section level you want it to number.
 The `sectnumlevels` attribute accepts a value of 0 through 5, and it can only be set in the document header.
 
+[source]
+----
+include::example$section.adoc[tag=sectnuml]
+----
 "#
     );
 
@@ -183,17 +185,6 @@ The `sectnumlevels` attribute accepts a value of 0 through 5, and it can only be
 
     assert!(html.contains(">1.1. Two<"));
 }
-
-// The `sectnuml` listing is a build-time `include::` of the example file, not
-// convertible source; the level-limit rule it introduces is verified below.
-non_normative!(
-    r#"
-[source]
-----
-include::example$section.adoc[tag=sectnuml]
-----
-"#
-);
 
 // With `sectnumlevels` set to `2`, level 3 through 5 section titles are not
 // numbered: a level-3 title renders with no numeric prefix.

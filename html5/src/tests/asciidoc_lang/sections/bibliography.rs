@@ -5,9 +5,11 @@
 //! directly to an unordered list produces `<div class="ulist bibliography">` /
 //! `<ul class="bibliography">`, and each `[[[label]]]` anchor converts to
 //! `<a id="label"></a>[label]` (or `[xreftext]` for `[[[label,xreftext]]]`).
-//! Those behaviors are verified here through `convert`. The implicit
-//! section-to-list style propagation, the book-doctype level-0 variant, the
-//! `include::` listings, and the escape TIP are tracked non-normatively.
+//! Those behaviors are verified here through `convert`, including the page's
+//! `base` example (its prose cross-references resolve to the entries' labels).
+//! The implicit section-to-list style propagation (asciidoc-parser #1066), the
+//! book-doctype level-0 variant, the table-cell re-display of the base example,
+//! and the escape TIP are tracked non-normatively.
 
 use crate::{
     convert,
@@ -141,10 +143,17 @@ Bibliography entries are declared as items in an unordered list.
     assert_css(&html, "ul.bibliography", 1);
 }
 
-// The `include::` listing is a build-time include, not literal source that this
-// crate runs through `convert`.
-non_normative!(
-    r#"
+/// The page's `base` example (the "Bibliography with references" listing),
+/// driven directly: prose cross-references to bibliography entries resolve to
+/// `[<label>]` (`<<pp>>` → `[pp]`, and `<<gof>>`, whose entry is
+/// `[[[gof,gang]]]`, → `[gang]`), and each entry renders its anchor. The child
+/// `<ul>` does not gain the `bibliography` class here (the parser does not
+/// propagate the section style to its lists, asciidoc-parser #1066); that
+/// propagation is tracked non-normatively above.
+#[test]
+fn bibliography_with_references_example() {
+    verifies!(
+        r#"
 .Bibliography with references
 [source]
 ----
@@ -152,7 +161,28 @@ include::example$bibliography.adoc[tag=base]
 ----
 
 "#
-);
+    );
+
+    // The `base` tag of `examples/bibliography.adoc`, run through the renderer
+    // directly (the page shows it via an `include::` directive).
+    let html = convert(
+        "_The Pragmatic Programmer_ <<pp>> should be required reading for all developers.\nTo learn all about design patterns, refer to the book by the \"`Gang of Four`\" <<gof>>.\n\n[bibliography]\n== References\n\n* [[[pp]]] Andy Hunt & Dave Thomas. The Pragmatic Programmer:\nFrom Journeyman to Master. Addison-Wesley. 1999.\n* [[[gof,gang]]] Erich Gamma, Richard Helm, Ralph Johnson & John Vlissides.\nDesign Patterns: Elements of Reusable Object-Oriented Software. Addison-Wesley. 1994.",
+    );
+
+    // The prose cross-references resolve to the entries' labels.
+    assert!(html.contains(r##"<a href="#pp">[pp]</a>"##), "{html}");
+    assert!(html.contains(r##"<a href="#gof">[gang]</a>"##), "{html}");
+
+    // Each entry renders its bibliography anchor.
+    assert!(
+        html.contains(r##"<a id="pp"></a>[pp] Andy Hunt"##),
+        "{html}"
+    );
+    assert!(
+        html.contains(r##"<a id="gof"></a>[gang] Erich Gamma"##),
+        "{html}"
+    );
+}
 
 /// A bibliography entry's `[[[label]]]` anchor converts to
 /// `<a id="label"></a>[label]`.
@@ -173,8 +203,9 @@ Using this label, you can then reference the entry from anywhere above the bibli
     assert!(html.contains(r#"<a id="pp"></a>[pp] Andy Hunt"#));
 }
 
-// The `|===` cell re-embeds the base example through an `include::` directive;
-// it is a build-time include, not literal source run through `convert`.
+// The `|===` cell re-displays the same base example through an `include::`
+// directive inside a table cell (a build-time include); its rendered behavior
+// is already verified by `bibliography_with_references_example` above.
 non_normative!(
     r#"
 |===

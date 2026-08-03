@@ -5,10 +5,12 @@
 //! whose number is one greater than the section level, so a level 1 section
 //! (`==`) renders as `<h2>` and a level 5 section as `<h6>`, and that a
 //! Markdown `#`-style heading converts identically to the `=`-style marker.
-//! Both rules are verified through `convert`. The introduction, the
-//! section-level syntax prose, the nesting rules, and the
-//! `include::example$section.adoc` build-time listings (which cannot be run
-//! through `convert`) are tracked as non-normative.
+//! Both rules are verified through `convert`. The page's example documents
+//! (`base`, `b-base`, and `content`, shown on the page via `include::`
+//! directives) are also driven directly, since their content is ordinary
+//! article source. The introduction, the section-level syntax prose, the
+//! nesting rules, and the level-skipping anti-example are tracked as
+//! non-normative.
 
 use crate::{convert, tests::sdd::*};
 
@@ -92,12 +94,14 @@ This limit was established primarily due to the fact that HTML only provides hea
     );
 }
 
-// The `[source]` listing and the `====`-delimited "rendered as" block are
-// build-time `include::example$section.adoc[tag=...]` directives, not literal
-// source we can run through `convert`, so they are tracked non-normatively (the
-// heading-tag rule they illustrate is verified above).
-non_normative!(
-    r#"
+/// The page's `base` example (section titles spanning levels 0–5) and its
+/// `b-base` "rendered as" counterpart (the same titles as standalone `[float]`
+/// headings): each level maps to its heading tag, and the float form keeps that
+/// tag with `class="float"`.
+#[test]
+fn section_titles_example_renders_as_headings() {
+    verifies!(
+        r#"
 .Section titles available in an article doctype
 [source]
 ----
@@ -111,11 +115,45 @@ include::example$section.adoc[tag=b-base]
 ====
 
 "#
-);
+    );
 
-// The section-nesting rules and the illustrative `include::example$` listings
-// (the "illegal syntax" and preamble/content examples) are descriptive prose
-// and build-time includes with no distinct HTML rule to drive here.
+    // The `base` tag: a document whose section titles span levels 0 through 5.
+    let base = convert(
+        "= Document Title (Level 0)\n\n== Level 1 Section Title\n\n=== Level 2 Section Title\n\n==== Level 3 Section Title\n\n===== Level 4 Section Title\n\n====== Level 5 Section Title\n\n== Another Level 1 Section Title",
+    );
+
+    assert!(
+        base.contains(r#"<h2 id="_level_1_section_title">Level 1 Section Title</h2>"#),
+        "{base}"
+    );
+    assert!(
+        base.contains(r#"<h6 id="_level_5_section_title">Level 5 Section Title</h6>"#),
+        "{base}"
+    );
+
+    // The `b-base` tag renders those same titles as standalone `[float]`
+    // headings, so each keeps the heading tag for its level and gains
+    // `class="float"`.
+    let b_base = convert(
+        "[float]\n= Document Title (Level 0)\n\n[float]\n== Level 1 Section Title\n\n[float]\n=== Level 2 Section Title\n\n[float]\n==== Level 3 Section Title\n\n[float]\n===== Level 4 Section Title\n\n[float]\n====== Level 5 Section Title\n\n[float]\n== Another Level 1 Section Title",
+    );
+
+    assert!(
+        b_base.contains(
+            r#"<h1 id="_document_title_level_0" class="float">Document Title (Level 0)</h1>"#
+        ),
+        "{b_base}"
+    );
+    assert!(
+        b_base.contains(
+            r#"<h6 id="_level_5_section_title" class="float">Level 5 Section Title</h6>"#
+        ),
+        "{b_base}"
+    );
+}
+
+// The section-nesting rules are descriptive framing for the anti-example that
+// follows.
 non_normative!(
     r#"
 Section levels must be nested logically.
@@ -125,6 +163,18 @@ There are two rules you must follow:
  ** The first level 0 section is the document title; subsequent level 0 sections represent parts.
 . Section levels cannot be skipped when nesting sections (e.g., you can't nest a level 5 section directly inside a level 3 section; an intermediary level 4 section is required).
 
+"#
+);
+
+/// The page's `bad` anti-example (a second level-0 section and a level-skipping
+/// nested section): the renderer handles this rule-violating input exactly as
+/// Asciidoctor does, demoting the extra `=` to `<h1 class="sect0">` and
+/// rendering the skipped `====` as a `sect3`/`<h4>` (with no intervening
+/// `sect2`).
+#[test]
+fn illegal_nesting_matches_asciidoctor() {
+    verifies!(
+        r#"
 For example, the following syntax is illegal:
 
 [source]
@@ -132,6 +182,37 @@ For example, the following syntax is illegal:
 include::example$section.adoc[tag=bad]
 ----
 
+"#
+    );
+
+    let html = convert(
+        "= Document Title\n\n= Illegal Level 0 Section (violates rule #1)\n\n== First Section\n\n==== Illegal Nested Section (violates rule #2)",
+    );
+
+    // The second level-0 title is demoted to a standalone `sect0` heading.
+    assert!(
+        html.contains(
+            r#"<h1 id="_illegal_level_0_section_violates_rule_1" class="sect0">Illegal Level 0 Section (violates rule #1)</h1>"#
+        ),
+        "{html}"
+    );
+
+    // The level-skipping nested section still renders, as a `sect3`/`<h4>`.
+    assert!(
+        html.contains(
+            "<div class=\"sect3\">\n<h4 id=\"_illegal_nested_section_violates_rule_2\">Illegal Nested Section (violates rule #2)</h4>"
+        ),
+        "{html}"
+    );
+}
+
+/// Content before the first section title is the document's preamble, and
+/// content after a section title is nested inside that section — verified by
+/// driving the page's `content` example (and a preamble variant).
+#[test]
+fn content_is_associated_with_its_section() {
+    verifies!(
+        r#"
 Content above the first section title is designated as the document's preamble.
 Once the first section title is reached, content is associated with the section it is nested in.
 
@@ -141,7 +222,36 @@ include::example$section.adoc[tag=content]
 ----
 
 "#
-);
+    );
+
+    // The `content` tag: each paragraph lands inside the section it follows.
+    let html = convert(
+        "== First Section\n\nContent of first section\n\n=== Nested Section\n\nContent of nested section\n\n== Second Section\n\nContent of second section",
+    );
+
+    assert!(
+        html.contains(
+            "<h2 id=\"_first_section\">First Section</h2>\n<div class=\"sectionbody\">\n\
+             <div class=\"paragraph\">\n<p>Content of first section</p>"
+        ),
+        "{html}"
+    );
+    assert!(
+        html.contains(
+            "<h3 id=\"_nested_section\">Nested Section</h3>\n\
+             <div class=\"paragraph\">\n<p>Content of nested section</p>"
+        ),
+        "{html}"
+    );
+
+    // Content above the first section title is instead placed in the preamble.
+    let with_preamble = convert("= Doc\n\nPreamble paragraph.\n\n== First Section\n\nBody.");
+
+    assert!(
+        with_preamble.contains(r#"<div id="preamble">"#),
+        "{with_preamble}"
+    );
+}
 
 // Asciidoctor recognizes the Markdown `#` heading marker, so a Markdown outline
 // converts identically to the `=` marker: `## Section` produces the same `<h2>`

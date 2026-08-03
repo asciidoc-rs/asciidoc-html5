@@ -4,12 +4,17 @@
 //! `[appendix]` level-1 section renders lettered and captioned even without
 //! `sectnums` (for example, `Appendix A: First Appendix`), the label comes from
 //! the `appendix-caption` attribute (which can be changed or unset), and those
-//! behaviors are verified here through `convert`. The multi-part book examples,
-//! the `include::` listings, and the rendered table-of-contents blocks are
-//! build-time includes and/or book-doctype content, so they are tracked
+//! behaviors are verified here through `convert`. The page's article example is
+//! also driven directly (the page shows it via an `include::` directive): its
+//! appendices are lettered and captioned, its regular sections numbered, and
+//! its generated table of contents matches the documented illustration. The
+//! multi-part book examples require the book doctype, so they are tracked
 //! non-normatively.
 
-use crate::{convert, tests::sdd::*};
+use crate::{
+    convert,
+    tests::{assert_html::assert_css, sdd::*},
+};
 
 track_file!("ref/asciidoc-lang/docs/modules/sections/pages/appendix.adoc");
 
@@ -54,11 +59,14 @@ For articles, the appendix must be defined as a level 1 section (`==`).
     assert!(html.contains(r#"<h2 id="_second_appendix">Appendix B: Second Appendix</h2>"#));
 }
 
-// The `include::` listing and the rendered article table-of-contents block are
-// build-time includes, not literal source that this crate runs through
-// `convert`.
-non_normative!(
-    r#"
+/// The article example the page includes: every appendix is lettered and
+/// captioned (with the `appendix-caption` override `Exhibit`) while the regular
+/// sections are numbered, and the generated table of contents lists exactly the
+/// entries shown in the `appx-article-out` illustration.
+#[test]
+fn appendix_example_letters_captions_and_lists_in_the_toc() {
+    verifies!(
+        r#"
 For example:
 
 [source]
@@ -73,12 +81,34 @@ include::example$appendix.adoc[tag=appx-article-out]
 ----
 
 "#
-);
+    );
 
-// Book-doctype behavior (parts, chapters, part/chapter numbering, book special
-// sections) is out of scope for 1.0 (article is the only structural doctype
-// modeled – see issue #188), and the listing plus rendered table of contents
-// are build-time includes, so this is tracked non-normatively.
+    // The `appx-article` tag of `examples/appendix.adoc`, run through the
+    // renderer directly (the page shows it via an `include::` directive).
+    let html = convert(
+        "= Article Title\n:appendix-caption: Exhibit\n:sectnums:\n:toc:\n\n== Section\n\n=== Subsection\n\n[appendix]\n== First Appendix\n\n=== First Subsection\n\n=== Second Subsection\n\n[appendix]\n== Second Appendix",
+    );
+
+    assert_css(&html, "div#toc.toc", 1);
+
+    // Each line of the `appx-article-out` table-of-contents illustration: the
+    // regular sections are numbered, the appendices are lettered and captioned,
+    // and the appendix subsections carry the appendix letter.
+    for entry in [
+        "1. Section",
+        "1.1. Subsection",
+        "Exhibit A: First Appendix",
+        "A.1. First Subsection",
+        "A.2. Second Subsection",
+        "Exhibit B: Second Appendix",
+    ] {
+        assert!(html.contains(entry), "missing {entry:?} in {html}");
+    }
+}
+
+// The book (and multi-part book) appendix examples require the book doctype,
+// which is out of scope for 1.0 (article is the only structural doctype modeled
+// – see issue #188), so this is tracked non-normatively.
 non_normative!(
     r#"
 For books, the appendix must be defined as a level 1 section (`==`) if you want the appendix to be a adjacent to the chapters.
