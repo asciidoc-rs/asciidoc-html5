@@ -5024,6 +5024,36 @@ mod tests {
     }
 
     #[test]
+    fn image_block_svg_inline_falls_back_to_img() {
+        // The `inline` (embedded `<svg>`) referencing is not yet implemented for
+        // block images (needs to read the SVG file — issue #275), so even below
+        // `Secure` an `opts=inline` block image renders a plain `<img>` rather
+        // than embedding the SVG. This locks that interim behavior.
+        let html = convert_with(
+            "image::diagram.svg[Diagram,opts=inline]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
+        assert!(!html.contains("<object"));
+        assert!(!html.contains("<svg"));
+    }
+
+    #[test]
+    fn image_svg_interactive_in_asciidoc_table_cell() {
+        // An interactive SVG inside an AsciiDoc (`a|`) table cell renders as an
+        // `<object>`: the cell's document-less sub-renderer inherits the enclosing
+        // document's below-`Secure` safe mode through `CellRenderConfig`.
+        let html = convert_with(
+            "|===\na|image::diagram.svg[Diagram,opts=interactive]\n|===",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains(
+            "<object type=\"image/svg+xml\" data=\"diagram.svg\">\
+             <span class=\"alt\">Diagram</span></object>"
+        ));
+    }
+
+    #[test]
     fn image_block_prefixes_imagesdir() {
         let html = convert(":imagesdir: assets/img\n\nimage::a.png[]");
         assert!(html.contains("<img src=\"assets/img/a.png\" alt=\"a\">"));
