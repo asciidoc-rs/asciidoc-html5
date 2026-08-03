@@ -6,7 +6,10 @@
 //! partition is still available through the parser API (`Header::main_title`
 //! and `Header::subtitle`), which honors the final colon-space separator and an
 //! overridden separator. The HTML rendering is verified through `convert` and
-//! the partition through `load`; the Ruby API prose is non-normative.
+//! the partition through `load` — including the page's worked
+//! `example$title.adoc` snippets, whose stated main titles are stale but whose
+//! subtitles and partition structure the tests confirm against the model. The
+//! Ruby API prose is non-normative.
 
 use crate::{
     convert_with, load,
@@ -153,9 +156,10 @@ You can also assign a separator using a document attribute `title-separator` in 
     assert_eq!(attr.header().subtitle(), Some("Subtitle"));
 }
 
-// Assigning the separator via the CLI, and the Ruby API for partitioning the
-// title (plus a large commented-out block of alternative examples).
-// Ruby-specific; non-normative here.
+// Assigning the separator via the CLI and the Ruby API for partitioning the
+// title. The Ruby snippets are non-normative here; the commented-out block that
+// follows carries the worked `example$title.adoc` snippets, which the tests
+// below drive through the document model.
 non_normative!(
     r#"
 `title-separator` can also be assigned via the CLI.
@@ -188,6 +192,15 @@ puts title_parts.subtitle
 ----
 
 ////
+"#
+);
+
+// The `sub-1` example: a plain colon-space separator. The document model
+// partitions the title into the main title and the subtitle.
+#[test]
+fn subtitle_example_one_partitions_at_the_colon_space() {
+    verifies!(
+        r#"
 .Document with a subtitle
 [source]
 ----
@@ -196,9 +209,45 @@ include::example$title.adoc[tag=sub-1]
 
 In this example, the following is true:
 
+"#
+    );
+
+    // The page's stated main title is stale — the example was later renamed to
+    // "The Intrepid Chronicles" — so this line stays non-normative while the
+    // (correct) subtitle line below is verified against the document model.
+    non_normative!(
+        r#"
 Main title:: The Dangerous and Thrilling Documentation Chronicles
+"#
+    );
+
+    verifies!(
+        r#"
 Subtitle:: A Tale of Caffeine and Words
 
+"#
+    );
+
+    // The `tag=sub-1` snippet from `example$title.adoc`.
+    let document = load(
+        "= The Intrepid Chronicles: A Tale of Caffeine and Words\n\nIt began on a bleary Monday morning.\n",
+    );
+    assert_eq!(
+        document.header().main_title(),
+        Some("The Intrepid Chronicles")
+    );
+    assert_eq!(
+        document.header().subtitle(),
+        Some("A Tale of Caffeine and Words")
+    );
+}
+
+// The `sub-2` example: two colon-space sequences. Only the final one is the
+// separator, so the earlier colon stays in the main title.
+#[test]
+fn subtitle_example_two_splits_only_at_the_final_colon_space() {
+    verifies!(
+        r#"
 .Document with a subtitle and multiple colons
 [source]
 ----
@@ -207,9 +256,44 @@ include::example$title.adoc[tag=sub-2]
 
 In this example, the following is true:
 
+"#
+    );
+
+    // Stale for the same reason as sub-1; the subtitle line below is verified.
+    non_normative!(
+        r#"
 Main title:: A Cautionary Tale: The Dangerous and Thrilling Documentation Chronicles
+"#
+    );
+
+    verifies!(
+        r#"
 Subtitle:: A Tale of Caffeine and Words
 
+"#
+    );
+
+    // The `tag=sub-2` snippet from `example$title.adoc`. The first colon-space
+    // is kept in the main title; only the final one separates the subtitle.
+    let document = load(
+        "= A Cautionary Tale: The Intrepid Chronicles: A Tale of Caffeine and Words\n\nIt began on a bleary Monday morning.\n",
+    );
+    assert_eq!(
+        document.header().main_title(),
+        Some("A Cautionary Tale: The Intrepid Chronicles")
+    );
+    assert_eq!(
+        document.header().subtitle(),
+        Some("A Tale of Caffeine and Words")
+    );
+}
+
+// The `sub-3` example: a custom `title-separator` of `{sp}|`. A space is always
+// appended to the separator value, so the title splits at ` | `.
+#[test]
+fn subtitle_example_three_uses_a_custom_separator() {
+    verifies!(
+        r#"
 Instead of using a colon followed by a space as the separator characters between the main title and the subtitle, you can specify a custom separator using the `title-separator` attribute.
 
 .Document with a subtitle using a custom separator
@@ -220,6 +304,29 @@ include::example$title.adoc[tag=sub-3]
 
 Note that a space is always appended to the value of the `title-separator` (making the default value of the `title-separator` effectively a single colon).
 
+"#
+    );
+
+    // The `tag=sub-3` snippet from `example$title.adoc`. The `{sp}|` separator
+    // (a space plus a pipe) gains a trailing space, so the title splits at
+    // ` | `.
+    let document = load(
+        ":title-separator: {sp}|\n= The Intrepid Chronicles | A Tale of Caffeine and Words\n\nIt began on a bleary Monday morning.\n",
+    );
+    assert_eq!(
+        document.header().main_title(),
+        Some("The Intrepid Chronicles")
+    );
+    assert_eq!(
+        document.header().subtitle(),
+        Some("A Tale of Caffeine and Words")
+    );
+}
+
+// The closing note that this parked content needs to be reconsidered, and the
+// end of the commented-out block. Descriptive prose.
+non_normative!(
+    r#"
 This content needs to be moved or reconsidered:
 
 Asciidoctor also provides an API for extracting the title and subtitle.
