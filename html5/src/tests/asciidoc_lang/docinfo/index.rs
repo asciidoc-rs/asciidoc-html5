@@ -899,11 +899,12 @@ non_normative!(
 "#
 );
 
-// Docinfo files may include attribute references; by default (`docinfosubs`
-// unset) the `attributes` substitution applies, so those references are
-// resolved.
+// Docinfo files may include attribute references. Which substitutions apply is
+// controlled by `docinfosubs`: unset, it defaults to `attributes` (references
+// are resolved); an explicit list that omits `attributes` leaves them
+// unresolved.
 #[test]
-fn docinfosubs_resolves_attribute_references_by_default() {
+fn docinfosubs_controls_the_applied_substitutions() {
     verifies!(
         r#"
 Docinfo files may include attribute references.
@@ -913,16 +914,32 @@ If this attribute is not set, it has an implied default value of `attributes` (i
 "#
     );
 
-    let html = with_docinfo(
+    let docinfo = &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")];
+
+    // Unset: the implied default `attributes` applies, so the reference resolves.
+    let default = with_docinfo(
         "subs-default",
         "= Doc\n:docinfo: shared\n:project: Widgets\n\nBody.",
         SafeMode::Safe,
-        &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")],
+        docinfo,
+    );
+    assert!(
+        default.contains("<meta name=\"app\" content=\"Widgets\">"),
+        "{default}"
     );
 
+    // An explicit `docinfosubs` list controls which substitutions apply: naming
+    // only `replacements` (which omits `attributes`) leaves the attribute
+    // reference unresolved.
+    let explicit = with_docinfo(
+        "subs-explicit",
+        "= Doc\n:docinfo: shared\n:docinfosubs: replacements\n:project: Widgets\n\nBody.",
+        SafeMode::Safe,
+        docinfo,
+    );
     assert!(
-        html.contains("<meta name=\"app\" content=\"Widgets\">"),
-        "{html}"
+        explicit.contains("<meta name=\"app\" content=\"{project}\">"),
+        "{explicit}"
     );
 }
 
