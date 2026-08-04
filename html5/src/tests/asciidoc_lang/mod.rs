@@ -16,6 +16,7 @@ mod lists;
 mod pass;
 mod root;
 mod sections;
+mod subs;
 mod tables;
 mod text;
 mod toc;

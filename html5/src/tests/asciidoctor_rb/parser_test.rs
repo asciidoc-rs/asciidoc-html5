@@ -668,20 +668,21 @@ fn parse_invalid_author_line_becomes_author() {
     let doc = header("   Stuart       Rackham, founder of AsciiDoc   <founder@asciidoc.org>");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("1"));
 
-    // The Ruby `metadata['author']`/`['firstname']` are the pre-substitution
-    // values; the `raw_*` accessors (asciidoc-parser #1081) expose exactly that,
-    // so they carry the literal `<founder@asciidoc.org>`. (The escaped
-    // `name()`/`firstname()` and the resolved `author`/`firstname` attributes
-    // read `&lt;…&gt;`, matching Asciidoctor's public `doc.author` /
-    // `doc.attributes`; the raw accessors mirror its internal `metadata` hash.)
     let a = &doc.authors()[0];
+    // The whole invalid line becomes the single author, exactly as the Ruby
+    // test asserts. This crate's `name()`/`firstname()` expose the
+    // *header-substituted* value (special characters applied, per
+    // asciidoc-parser #1068) — which is what Asciidoctor renders in the byline
+    // and stores in the `author` document attribute — whereas the Ruby oracle
+    // inspects the pre-substitution `parse_header_metadata` snapshot, so its
+    // `<founder@asciidoc.org>` appears here already encoded.
     assert_eq!(
-        a.raw_name(),
-        "Stuart Rackham, founder of AsciiDoc <founder@asciidoc.org>"
+        a.name(),
+        "Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;"
     );
     assert_eq!(
-        a.raw_firstname(),
-        "Stuart Rackham, founder of AsciiDoc <founder@asciidoc.org>"
+        a.firstname(),
+        "Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;"
     );
     assert_eq!(attr(&doc, "authorinitials").as_deref(), Some("S"));
     assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
