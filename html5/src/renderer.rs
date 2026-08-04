@@ -636,6 +636,21 @@ pub(crate) fn looks_like_uri(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '+' | '-'))
 }
 
+/// Whether the document's safe mode is below `Secure`, the threshold under
+/// which Asciidoctor enables the security-sensitive SVG `interactive`/`inline`
+/// image referencing (embedding a live `<object>`, or the file's contents). At
+/// `Secure` or above — including the API default — an SVG renders as a plain
+/// `<img>`, matching Asciidoctor.
+///
+/// The parser seeds the `safe-mode-level` intrinsic attribute on every
+/// document; a document with none (or an unparseable level) is treated as
+/// `Secure`.
+fn safe_mode_below_secure(document: &Document<'_>) -> bool {
+    attribute_str(document, "safe-mode-level")
+        .and_then(|level| level.parse::<u32>().ok())
+        .is_some_and(|level| level < SafeMode::Secure as u32)
+}
+
 /// Builds the URI reference a media block's `target` resolves to, mirroring
 /// Asciidoctor's `AbstractNode#media_uri` (whose asset directory key is
 /// `imagesdir`).
@@ -664,6 +679,17 @@ fn media_uri(target: &str, imagesdir: &str) -> String {
     // (`/…`), which ignores the asset directory.
     let target = target.replace('\\', "/");
     let dir = imagesdir.replace('\\', "/");
+
+    // A URI asset directory (e.g. an `imagesdir` set to `https://cdn/images`)
+    // joins into a URI reference and is returned as-is rather than run through
+    // the segment normalization below, which would collapse the `//` in the
+    // scheme into `https:/…`. This mirrors Asciidoctor's `web_path`, which lifts
+    // the URI prefix off before normalizing and restores it after. A relative
+    // target joins under the URI; a web-absolute one still ignores it (below).
+    if !dir.is_empty() && !target.starts_with('/') && looks_like_uri(&dir) {
+        return format!("{}/{target}", dir.trim_end_matches('/')).replace(' ', "%20");
+    }
+
     let joined = if dir.is_empty() || target.starts_with('/') {
         target
     } else {
@@ -701,6 +727,15 @@ fn media_uri(target: &str, imagesdir: &str) -> String {
 
     // Spaces in the resolved path are percent-encoded, matching `web_path`.
     format!("{root}{}", segments.join("/")).replace(' ', "%20")
+}
+
+/// Whether `path`'s final segment carries a file extension, mirroring
+/// Asciidoctor's `Helpers.extname?` (a `.` in the basename that is not its
+/// leading character). Used by `icon_uri` to decide whether the `icontype`
+/// extension must be appended to a per-block `icon` value.
+fn has_file_extension(path: &str) -> bool {
+    let basename = path.rsplit('/').next().unwrap_or(path);
+    matches!(basename.rfind('.'), Some(index) if index > 0)
 }
 
 /// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
@@ -1251,6 +1286,7 @@ pub(crate) fn render_document<'a>(
         sectlinks: document.is_attribute_set("sectlinks"),
         stem_type: resolve_stem_type(document),
         cellbgcolor: attribute_str(document, "cellbgcolor"),
+        svg_below_secure: safe_mode_below_secure(document),
     };
     renderer.document(document);
     renderer.out
@@ -1405,6 +1441,9 @@ struct CellRenderConfig {
     sectlinks: bool,
     stem_type: StemType,
     cellbgcolor: Option<String>,
+    /// Inherited from the enclosing document so an AsciiDoc cell's images honor
+    /// the same SVG safe-mode gate (see [`Renderer::svg_below_secure`]).
+    svg_below_secure: bool,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1510,6 +1549,14 @@ struct Renderer<'a> {
     /// (`{set:cellbgcolor:…}`) is not supported, because `asciidoc-parser` does
     /// not implement inline attribute entries.
     cellbgcolor: Option<String>,
+
+    /// Whether the document's safe mode is below `Secure` (see
+    /// [`safe_mode_below_secure`]). It gates the SVG `interactive` referencing
+    /// of a block image: an `opts=interactive` SVG renders as an `<object>`
+    /// only below `Secure`, and as a plain `<img>` at `Secure` or above
+    /// (the API default), matching Asciidoctor. A document-less
+    /// sub-renderer (an AsciiDoc table cell) inherits this from its parent.
+    svg_below_secure: bool,
 }
 
 impl Renderer<'_> {
@@ -2767,9 +2814,9 @@ impl Renderer<'_> {
         self.line("</div>");
     }
 
-    /// An admonition block: Asciidoctor's icon-less default renders a two-cell
-    /// table, the first cell holding the caption label and the second the
-    /// content, wrapped in `<div class="admonitionblock <name>">`.
+    /// An admonition block: Asciidoctor's two-cell table, the first cell
+    /// holding the icon (or, by default, the caption label) and the second
+    /// the content, wrapped in `<div class="admonitionblock <name>">`.
     fn admonition<'src>(
         &mut self,
         block: &'src Block<'src>,
@@ -2786,31 +2833,7 @@ impl Renderer<'_> {
         self.line("<table>");
         self.line("<tr>");
         self.line("<td class=\"icon\">");
-
-        // The icon cell mirrors Asciidoctor's `convert_admonition`: a Font
-        // Awesome `<i>` under `:icons: font`, an `<img>` of the icon file when
-        // `icons` is set to anything else, or the plain text label otherwise.
-        if self.icons_font {
-            self.line(&format!(
-                "<i class=\"fa icon-{}\" title=\"{}\"></i>",
-                admonition.name(),
-                admonition.label()
-            ));
-        } else if self.icons_set {
-            self.line(&format!(
-                "<img src=\"{}/{}.{}\" alt=\"{}\">",
-                self.iconsdir,
-                admonition.name(),
-                self.icontype,
-                admonition.label()
-            ));
-        } else {
-            self.line(&format!(
-                "<div class=\"title\">{}</div>",
-                admonition.label()
-            ));
-        }
-
+        self.line(&self.admonition_icon(block, admonition));
         self.line("</td>");
         self.line("<td class=\"content\">");
         self.block_title(block);
@@ -2819,6 +2842,48 @@ impl Renderer<'_> {
         self.line("</tr>");
         self.line("</table>");
         self.line("</div>");
+    }
+
+    /// The markup for an admonition's icon cell, mirroring Asciidoctor's
+    /// `convert_admonition`.
+    ///
+    /// With the `icons` document attribute unset (the default), the caption
+    /// label is shown as text (`<div class="title">Note</div>`). With `icons`
+    /// set to `font` – and no per-block `icon` attribute – a Font Awesome glyph
+    /// is emitted (`<i class="fa icon-note" title="Note">`). Otherwise (image
+    /// mode, or a per-block `icon` override) an `<img>` points at the resolved
+    /// icon URI. The image target is a port of `AbstractNode#icon_uri`: a
+    /// per-block `icon` value is used as-is (with the `icontype` extension
+    /// appended only when it has none), while the default target is
+    /// `<name>.<icontype>`, each resolved against `iconsdir`.
+    fn admonition_icon(&self, block: &Block<'_>, admonition: &AdmonitionBlock<'_>) -> String {
+        let label = admonition.label();
+
+        if !self.icons_set {
+            return format!("<div class=\"title\">{label}</div>");
+        }
+
+        let name = admonition.name();
+        let custom_icon = block
+            .attrlist()
+            .and_then(|attrlist| attrlist.named_attribute("icon"))
+            .map(|attr| attr.value().to_string());
+
+        if self.icons_font && custom_icon.is_none() {
+            return format!(
+                "<i class=\"fa icon-{name}\" title=\"{}\"></i>",
+                escape_attribute(label)
+            );
+        }
+
+        let target = match custom_icon {
+            Some(icon) if has_file_extension(&icon) => icon,
+            Some(icon) => format!("{icon}.{}", self.icontype),
+            None => format!("{name}.{}", self.icontype),
+        };
+        let src = escape_attribute(&media_uri(&target, &self.iconsdir));
+
+        format!("<img src=\"{src}\" alt=\"{}\">", escape_attribute(label))
     }
 
     /// An unordered list: `<div class="ulist …"><ul …><li>…</li>…</ul></div>`,
@@ -3487,6 +3552,7 @@ impl Renderer<'_> {
                         sectlinks: self.sectlinks,
                         stem_type: self.stem_type,
                         cellbgcolor: self.cellbgcolor.clone(),
+                        svg_below_secure: self.svg_below_secure,
                     },
                 )
             ),
@@ -3873,11 +3939,53 @@ impl Renderer<'_> {
             dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
         }
 
-        let mut img = format!(
-            "<img src=\"{}\" alt=\"{}\"{dimensions}>",
-            escape_attribute(&src),
-            escape_attribute(&alt),
-        );
+        // An SVG target (`format=svg`, or a target *containing* `.svg`)
+        // referenced with `opts=interactive` renders as an `<object>` so its
+        // embedded scripting and links stay live — but only below the `Secure`
+        // safe mode, matching Asciidoctor's `convert_image`. At `Secure` or above
+        // (the API default) it falls through to a plain `<img>`. The `inline`
+        // option (embedding the SVG file's contents as `<svg>`) is not yet
+        // implemented for block images here, so such an SVG also renders as
+        // `<img>` for now (see
+        // https://github.com/asciidoc-rs/asciidoc-html5/issues/275).
+        //
+        // The target test is a deliberate port of Asciidoctor's case-sensitive
+        // substring check (`target.include? '.svg'`), quirks included: a
+        // `.contains` (not an extension match) treats `chart.svg.png` as an SVG,
+        // and an uppercase `.SVG` is *not* matched. Both are verified to match
+        // Asciidoctor 2.0.26, so they are kept rather than "corrected".
+        let is_svg = named("format") == Some("svg") || target.contains(".svg");
+
+        let interactive = macro_attrs.has_option("interactive")
+            || block
+                .attrlist()
+                .is_some_and(|a| a.has_option("interactive"));
+
+        let mut img = if is_svg && self.svg_below_secure && interactive {
+            // The content nested inside the `<object>`, shown when a user agent
+            // can't render it: a `fallback` image if one is supplied, otherwise
+            // the alt text (emitted raw, as Asciidoctor does).
+            let fallback = match named("fallback") {
+                Some(fallback) => format!(
+                    "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                    escape_attribute(&media_uri(fallback, &self.imagesdir)),
+                    escape_attribute(&alt),
+                ),
+
+                None => format!("<span class=\"alt\">{alt}</span>"),
+            };
+
+            format!(
+                "<object type=\"image/svg+xml\" data=\"{}\"{dimensions}>{fallback}</object>",
+                escape_attribute(&src),
+            )
+        } else {
+            format!(
+                "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                escape_attribute(&src),
+                escape_attribute(&alt),
+            )
+        };
 
         // A `link` wraps the image in an anchor whose `href` is the link value
         // verbatim (Asciidoctor 2.0.26 does not resolve `link=self` to the
@@ -4532,6 +4640,7 @@ fn render_cell_document<'s>(
         sectlinks: config.sectlinks,
         stem_type: config.stem_type,
         cellbgcolor: config.cellbgcolor,
+        svg_below_secure: config.svg_below_secure,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -4966,6 +5075,95 @@ mod tests {
         assert!(html.contains(
             "<a class=\"image\" href=\"https://example.com\">\
              <img src=\"e.png\" alt=\"e\"></a>"
+        ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_renders_object() {
+        // Below `Secure`, an SVG block image with `opts=interactive` renders as
+        // an `<object>` (its alt text nested as the fallback), matching
+        // Asciidoctor's `convert_image`.
+        let html = convert_with(
+            "image::diagram.svg[Diagram,300,opts=interactive]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(content(&html).contains(
+            "<object type=\"image/svg+xml\" data=\"diagram.svg\" width=\"300\">\
+             <span class=\"alt\">Diagram</span></object>"
+        ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_uses_fallback_image() {
+        // A `fallback` image is nested inside the `<object>` instead of the alt
+        // text, resolved under `imagesdir` like any other relative target.
+        let html = convert_with(
+            ":imagesdir: img\n\nimage::diagram.svg[Diagram,opts=interactive,fallback=fallback.png]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains(
+            "<object type=\"image/svg+xml\" data=\"img/diagram.svg\">\
+             <img src=\"img/fallback.png\" alt=\"Diagram\"></object>"
+        ));
+    }
+
+    #[test]
+    fn image_block_svg_interactive_is_plain_img_at_secure() {
+        // The interactive referencing is security-sensitive: at `Secure` (the
+        // default safe mode) the same SVG renders as a plain `<img>`, matching
+        // Asciidoctor.
+        let html = convert("image::diagram.svg[Diagram,opts=interactive]");
+        assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
+        assert!(!html.contains("<object"));
+    }
+
+    #[test]
+    fn image_block_svg_detection_matches_asciidoctor_substring_quirks() {
+        // The SVG target test is a case-sensitive substring match ported from
+        // Asciidoctor's `target.include? '.svg'`, quirks and all. These are
+        // verified against Asciidoctor 2.0.26; they are intentional parity, not
+        // bugs to "fix" (fixing them would diverge from the oracle).
+        let opts = Options::new().safe_mode(SafeMode::Unsafe);
+
+        // A non-SVG target that merely *contains* `.svg` is still treated as an
+        // SVG `<object>` (Asciidoctor does the same).
+        let double_ext = convert_with("image::chart.svg.png[C,opts=interactive]", &opts);
+        assert!(double_ext.contains("<object type=\"image/svg+xml\" data=\"chart.svg.png\">"));
+
+        // An uppercase `.SVG` extension is *not* matched, so it renders a plain
+        // `<img>` (the check is case-sensitive, matching Asciidoctor).
+        let upper = convert_with("image::diagram.SVG[D,opts=interactive]", &opts);
+        assert!(content(&upper).contains("<img src=\"diagram.SVG\" alt=\"D\">"));
+        assert!(!upper.contains("<object"));
+    }
+
+    #[test]
+    fn image_block_svg_inline_falls_back_to_img() {
+        // The `inline` (embedded `<svg>`) referencing is not yet implemented for
+        // block images (needs to read the SVG file — issue #275), so even below
+        // `Secure` an `opts=inline` block image renders a plain `<img>` rather
+        // than embedding the SVG. This locks that interim behavior.
+        let html = convert_with(
+            "image::diagram.svg[Diagram,opts=inline]",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
+        assert!(!html.contains("<object"));
+        assert!(!html.contains("<svg"));
+    }
+
+    #[test]
+    fn image_svg_interactive_in_asciidoc_table_cell() {
+        // An interactive SVG inside an AsciiDoc (`a|`) table cell renders as an
+        // `<object>`: the cell's document-less sub-renderer inherits the enclosing
+        // document's below-`Secure` safe mode through `CellRenderConfig`.
+        let html = convert_with(
+            "|===\na|image::diagram.svg[Diagram,opts=interactive]\n|===",
+            &Options::new().safe_mode(SafeMode::Unsafe),
+        );
+        assert!(html.contains(
+            "<object type=\"image/svg+xml\" data=\"diagram.svg\">\
+             <span class=\"alt\">Diagram</span></object>"
         ));
     }
 
@@ -6959,6 +7157,29 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn admonition_custom_icon_with_extension_is_used_as_is() {
+        // In image-icon mode, a per-block `icon` value that already has a file
+        // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
+        // appends the `icontype` only when the value has no extension).
+        let html = convert(":icons:\n\n[NOTE,icon=tip.png]\nSave often.");
+        assert!(html.contains(
+            "<td class=\"icon\">\n\
+             <img src=\"./images/icons/tip.png\" alt=\"Note\">\n</td>"
+        ));
+    }
+
+    #[test]
+    fn admonition_custom_icon_without_extension_gets_icontype() {
+        // A per-block `icon` value with no extension gains the document's
+        // `icontype` extension.
+        let html = convert(":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.");
+        assert!(html.contains(
+            "<td class=\"icon\">\n\
+             <img src=\"./images/icons/hint.svg\" alt=\"Note\">\n</td>"
+        ));
+    }
+
     // A sidebar block places its title *inside* the content div (before the
     // content), unlike most blocks; the delimited `****` form nests its
     // children, while the `[sidebar]` styled paragraph drops its text into the
@@ -7747,6 +7968,7 @@ mod tests {
             sectlinks: false,
             stem_type: super::StemType::AsciiMath,
             cellbgcolor: None,
+            svg_below_secure: false,
         }
     }
 
