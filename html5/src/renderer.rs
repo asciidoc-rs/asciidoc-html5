@@ -2287,7 +2287,19 @@ impl Renderer<'_> {
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
-                CompoundDelimitedContext::Open => self.open_block(block),
+                // An open block (`--`) can masquerade as another structural
+                // container via its declared style. The parser already remaps
+                // the styles that change the block's *type* — `source`, `quote`,
+                // `verse`, `listing`, `literal`, and the admonition styles — into
+                // their own block kinds, so those never arrive here. The two that
+                // keep the compound-open shape but still swap the wrapper class,
+                // `sidebar` and `example`, are resolved from the declared style.
+                CompoundDelimitedContext::Open => match block.declared_style() {
+                    Some("sidebar") => self.sidebar(block),
+                    Some("example") => self.example(block),
+                    _ => self.open_block(block),
+                },
+
                 CompoundDelimitedContext::Sidebar => self.sidebar(block),
                 CompoundDelimitedContext::Example => self.example(block),
             },
