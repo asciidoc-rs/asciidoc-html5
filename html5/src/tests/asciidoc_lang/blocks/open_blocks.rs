@@ -92,6 +92,17 @@ include::example$open.adoc[tag=sb]
     assert_css(&output, "div.openblock", 0);
 }
 
+// An open block masquerading as an example: the `[example]` style on a `--`
+// block changes the wrapper to `exampleblock`. The *Block Masquerading* page
+// lists this permutation in its reference table (which is non-normative), so it
+// is exercised here as a regression test rather than tied to a page line.
+#[test]
+fn open_block_can_masquerade_as_an_example() {
+    let output = convert("[example]\n--\nThis open block is acting as an example.\n--\n");
+    assert_css(&output, "div.exampleblock > div.content > div.paragraph", 1);
+    assert_css(&output, "div.openblock", 0);
+}
+
 // An open block masquerading as a source block: the `[source]` style on a `--`
 // block changes it to a `listingblock` with the highlighted `<pre>`/`<code>`
 // shape of a source block.

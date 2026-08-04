@@ -193,6 +193,27 @@ include::example$admonition.adoc[tag=para]
     assert_css(&output, "td.icon div.title", 0);
 }
 
+// Enabling image icons: with `icons` set to a value other than `font` (here the
+// bare `:icons:`), the icon cell holds an `<img>` of the icon file, built from
+// `iconsdir` and `icontype` (defaults `./images/icons` and `png`), instead of
+// the text label or a font glyph. The page only shows the `font` mode, so this
+// image mode is exercised here as a regression test rather than tied to a page
+// line.
+#[test]
+fn icons_image_mode_renders_an_img_icon() {
+    let output = convert(
+        "= Document Title\n:icons:\n\n\
+         WARNING: Wolpertingers are known to nest in server racks.\n",
+    );
+    assert_xpath(
+        &output,
+        r#"//td[@class="icon"]/img[@src="./images/icons/warning.png"][@alt="Warning"]"#,
+        1,
+    );
+    assert_css(&output, "td.icon div.title", 0);
+    assert_css(&output, "td.icon i.fa", 0);
+}
+
 non_normative!(
     r#"
 Learn more about using Font Awesome or custom icons with admonitions in xref:macros:icons-font.adoc[].
