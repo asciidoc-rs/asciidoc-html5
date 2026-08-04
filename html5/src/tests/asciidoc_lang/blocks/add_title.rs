@@ -263,6 +263,22 @@ The number is sequential, computed automatically, and stored in a corresponding 
 "#
 );
 
+// Every block context the table above lists as supporting a captioned title is
+// verified. The `example` row is verified immediately below; the other four are
+// verified in the module that owns each block type:
+//
+// - `table` (`table-caption` / `table-number`): its `Table N.` caption is
+//   verified by `tables::add_title::add_a_title`.
+// - `image` (`figure-caption` / `figure-number`): its `Figure N.` caption is
+//   verified by
+//   `asciidoctor_rb::attributes_test::nested_document_should_use_counter_from_parent_document`.
+// - `listing` and `source` (`listing-caption` / `listing-number`): their
+//   `Listing N.` caption is verified by `asciidoctor_rb::blocks_test`'s
+//   `should_prepend_caption_specified_by_listing_caption_attribute_and_number_to_title_of_listing_block_with_title`.
+// - `appendix` (`appendix-caption` / `appendix-number`): its `Appendix A:`
+//   caption is verified by
+//   `sections::appendix::appendix_is_lettered_and_captioned`.
+
 // A captioned title: when the `example-caption` attribute is set, an example
 // block's title is prefixed with the caption label and the (auto-incremented)
 // number — "Example 1. …". Unsetting `example-caption` drops the prefix and the
