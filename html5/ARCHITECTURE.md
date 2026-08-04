@@ -74,12 +74,12 @@ render_document(&Document) -> String
         ├── header()        <div id="header"> — <h1>, authors, revision
         ├── blocks(Iter)    for each sibling block → block()
         └── block(&Block)   ── THE DISPATCH POINT ──
-              ├── Simple  → paragraph() | open_block()/sidebar()/example() | source() | verbatim()
+              ├── Simple  → paragraph() | open_block()/sidebar()/example()/abstract_block() | source() | verbatim()
               ├── Section → section()   → recurses via blocks(nested_blocks())
               ├── Preamble→ preamble()  → recurses
               ├── Break   → break_block()
               ├── RawDelimited → verbatim() (by resolved_context)
-              ├── CompoundDelimited → open_block()/sidebar()/example() (by context_kind) → recurses
+              ├── CompoundDelimited → open_block()/sidebar()/example()/abstract_block() (by context_kind + style) → recurses
               ├── Quote   → quote()     → quote/verse, recurses (compound quotes)
               ├── Admonition → admonition() → recurses (compound admonitions)
               ├── Toc     → toc_macro()  (the toc::[] macro placement)
@@ -115,6 +115,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 |---|---|---|---|
 | `Block::Simple` (Paragraph) | `paragraph` | `<div class="paragraph"><p>…</p></div>` | ✅ |
 | `Block::Simple` (Paragraph, `[open]`) | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
+| `Block::Simple` (Paragraph, `[abstract]`) | `paragraph` | `<div class="quoteblock abstract">[<div class="title">…</div>]<blockquote>…</blockquote></div>` | ✅ |
 | `Block::Simple` (Listing) | `listing` | `<div class="listingblock"><div class="content"><pre>…</pre></div></div>` | ✅ |
 | `Block::Simple` (Source) | `listing` | `<div class="listingblock"><div class="content"><pre class="highlight"><code class="language-…">…</code></pre></div></div>` | ✅ |
 | `Block::Simple` (Literal) | `literal` | `<div class="literalblock"><div class="content"><pre>…</pre></div></div>` | ✅ |
@@ -131,6 +132,7 @@ the working map; **✅ = wired up in the baseline**, ⬜ = next phases.
 | `Block::CompoundDelimited` | `example` | `<div class="exampleblock">[<div class="title">Example N. …</div>]<div class="content">…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `sidebar` | `<div class="sidebarblock"><div class="content">[<div class="title">…</div>]…</div></div>` | ✅ |
 | `Block::CompoundDelimited` | `open` | `<div class="openblock"><div class="content">…</div></div>` | ✅ |
+| `Block::CompoundDelimited` (`[abstract]`) | `open` | `<div class="quoteblock abstract">[<div class="title">…</div>]<blockquote>…</blockquote></div>` | ✅ |
 | `Block::Admonition` | `admonition` | `<div class="admonitionblock note"><table><tr><td class="icon">…</td><td class="content">…</td></tr></table></div>` | ✅ |
 | `Block::Quote` | `quote` | `<div class="quoteblock"><blockquote>…</blockquote><div class="attribution">…</div></div>` | ✅ |
 | `Block::Quote` | `verse` | `<div class="verseblock"><pre class="content">…</pre><div class="attribution">…</div></div>` | ✅ |
