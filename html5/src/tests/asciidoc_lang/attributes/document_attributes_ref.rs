@@ -916,12 +916,10 @@ _Book doctype only_.
     );
 }
 
-// Document metadata: the `<head>` metas these attributes emit
-// (`description`, `keywords`, `author`, …) and the author/revision lines are
-// verified on the `document` module pages; the DocBook-only rows (`orgname`)
-// target a backend this renderer does not implement.
-non_normative!(
-    r#"
+#[test]
+fn document_metadata_header_attributes() {
+    verifies!(
+        r#"
 == Document metadata attributes
 
 [cols="30m,20,^10,^10,30"]
@@ -1010,12 +1008,73 @@ See xref:document:author-information.adoc[].
 |{y}
 |See xref:document:author-information.adoc[].
 
+"#
+    );
+
+    // The head-meta attributes render as `<meta>` elements in a standalone
+    // document's `<head>`, in Asciidoctor's order: `app-name` as
+    // `application-name`, then `description`, `keywords`, the joined `author`,
+    // and `copyright`. `doctitle` drives the `<title>` element.
+    let head = convert_with(
+        "= Doc Title\nKismet R. Lee <kismet@example.com>\n:app-name: Widgets\n:description: A guide.\n:keywords: alpha, beta\n:copyright: ACME 2020\n\nbody",
+        &Options::new().standalone(true),
+    );
+
+    for meta in [
+        r#"<meta name="application-name" content="Widgets">"#,
+        r#"<meta name="description" content="A guide.">"#,
+        r#"<meta name="keywords" content="alpha, beta">"#,
+        r#"<meta name="author" content="Kismet R. Lee">"#,
+        r#"<meta name="copyright" content="ACME 2020">"#,
+        r#"<title>Doc Title</title>"#,
+    ] {
+        assert!(head.contains(meta), "head should contain {meta}:\n{head}");
+    }
+
+    // `author`, `authors`, the name-part attributes (`authorinitials`,
+    // `firstname`, `middlename`, `lastname`), and `doctitle` are extracted from
+    // the author info line and the document title.
+    assert_eq!(
+        para(
+            "= Doc Title\nKismet R. Lee <kismet@example.com>\n\n\
+             [{doctitle}|{author}|{authors}|{authorinitials}|{firstname}|{middlename}|{lastname}]"
+        ),
+        "[Doc Title|Kismet R. Lee|Kismet R. Lee|KRL|Kismet|R.|Lee]",
+    );
+
+    // `email` may be any inline macro, so an email address renders as a mailto
+    // link.
+    assert!(para("= Doc\nKismet R. Lee <kismet@example.com>\n\n{email}")
+        .contains(r#"<a href="mailto:kismet@example.com">"#));
+
+    // `front-matter` is populated only when `skip-front-matter` consumes a
+    // leading YAML block (its capture is verified in full on the compliance
+    // table above).
+    assert!(load_with(
+        "---\nkey: val\n---\n= T\n\nbody\n",
+        &Options::new().set("skip-front-matter")
+    )
+    .is_attribute_set("front-matter"));
+}
+
+// `orgname` targets the DocBook `<info>` element; this renderer emits html5,
+// which has no equivalent, so the attribute has no rendered effect to verify
+// here.
+non_normative!(
+    r#"
 |orgname
 |_any_
 |{n}
 |{y}
 |Adds `<orgname>` element value to DocBook info element.
 
+"#
+);
+
+#[test]
+fn document_metadata_revision_and_title_attributes() {
+    verifies!(
+        r#"
 |revdate
 |_any_
 |Extracted from revision info line
@@ -1044,7 +1103,19 @@ See xref:document:title.adoc#title-attr[title attribute].
 |===
 
 "#
-);
+    );
+
+    // The revision attributes are extracted from the revision info line.
+    assert_eq!(
+        para("= Doc\nAuthor Name\nv2.0, 2020-01-15: First release\n\n[{revnumber}|{revdate}|{revremark}]"),
+        "[2.0|2020-01-15|First release]",
+    );
+
+    // `title` supplies the `<title>` element's text; a pinned standalone
+    // conversion with no document title shows it filling in as the fallback.
+    let titled = convert_with(":title: Fallback\n\nbody", &Options::new().standalone(true));
+    assert!(titled.contains("<title>Fallback</title>"), "{titled}");
+}
 
 // Section title and table-of-contents attributes: `idprefix`/`idseparator`,
 // `sectnums`/`sectlinks`/`sectanchors`, and `toc`/`toclevels` are verified on

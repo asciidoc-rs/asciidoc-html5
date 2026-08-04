@@ -1610,11 +1610,17 @@ impl Renderer<'_> {
             ));
         }
 
-        // Document metadata, matching Asciidoctor's `<head>` order: the
-        // `description` and `keywords` attribute values (already special-char
-        // escaped by the parser) and the joined `authors`. The author content
-        // has any `<…>` segment stripped, mirroring Asciidoctor's
-        // `XmlSanitizeRx` scrub of an email left in an author name.
+        // Document metadata, matching Asciidoctor's `<head>` order: `app-name`
+        // (as `application-name`), then the `description` and `keywords`
+        // attribute values (already special-char escaped by the parser), the
+        // joined `authors`, and finally `copyright`. The author content has any
+        // `<…>` segment stripped, mirroring Asciidoctor's `XmlSanitizeRx` scrub
+        // of an email left in an author name.
+        if let Some(app_name) = attribute_str(document, "app-name") {
+            self.line(&format!(
+                "<meta name=\"application-name\" content=\"{app_name}\">"
+            ));
+        }
         if let Some(description) = attribute_str(document, "description") {
             self.line(&format!(
                 "<meta name=\"description\" content=\"{description}\">"
@@ -1631,6 +1637,11 @@ impl Renderer<'_> {
             self.line(&format!(
                 "<meta name=\"author\" content=\"{}\">",
                 escape_attribute(&authors)
+            ));
+        }
+        if let Some(copyright) = attribute_str(document, "copyright") {
+            self.line(&format!(
+                "<meta name=\"copyright\" content=\"{copyright}\">"
             ));
         }
 
