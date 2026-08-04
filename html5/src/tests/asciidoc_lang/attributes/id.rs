@@ -652,23 +652,29 @@ include::example$id.adoc[tag=anchor-dlist-item]
         verifies!(
             r#"
 You can add multiple anchors to a list item or description list term.
-However, only the first anchor is registered for use as an xref within the document.
-The remaining anchors are auxiliary and are used for making deep links (i.e., accessible from a URL fragment).
-
 "#
         );
 
-        // Each anchor renders as its own invisible anchor point, and both are
-        // registered so either can be the target of a deep link.
+        // Each anchor renders as its own invisible anchor point.
         let output = convert("* [[a1]][[a2]]Item");
 
         assert_css(&output, r#"li a[id="a1"]"#, 1);
         assert_css(&output, r#"li a[id="a2"]"#, 1);
-
-        let doc = load("* [[a1]][[a2]]Item");
-        assert!(doc.catalog().contains_id("a1"));
-        assert!(doc.catalog().contains_id("a2"));
     }
+
+    // The "only the first anchor is registered for use as an xref" distinction
+    // produces no distinct HTML5 rendering: both anchor points carry an `id` and
+    // are equally addressable as URL fragments, and a cross reference to either
+    // resolves identically (`<<a2>>` renders the same `<a href="#a2">` link as
+    // `<<a1>>`), matching the Asciidoctor 2.0.26 oracle. The registration
+    // distinction is a catalog-level fact, verified in `asciidoc-parser`.
+    non_normative!(
+        r#"
+However, only the first anchor is registered for use as an xref within the document.
+The remaining anchors are auxiliary and are used for making deep links (i.e., accessible from a URL fragment).
+
+"#
+    );
 
     #[test]
     fn anchor_on_table_cell() {
