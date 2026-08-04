@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 
-use crate::{convert, convert_with, tests::sdd::*, Options, ReferenceTime, SafeMode};
+use crate::{convert, convert_with, load_with, tests::sdd::*, Options, ReferenceTime, SafeMode};
 
 track_file!("ref/asciidoc-lang/docs/modules/attributes/pages/document-attributes-ref.adoc");
 
@@ -560,10 +560,9 @@ fn compliance_attribute_missing_and_undefined_defaults() {
     );
 }
 
-// The rest of the compliance table configures parser/loader features —
-// `compat-mode`, `experimental`, and `skip-front-matter` are exercised by
-// `asciidoc-parser`, and `reproducible`'s footer suppression by this
-// renderer's footer tests — none has a distinct value to resolve here.
+// `compat-mode` and `experimental` configure parser/loader features that are
+// exercised by `asciidoc-parser`; neither has a distinct rendered effect to
+// resolve here.
 non_normative!(
     r#"
 |compat-mode
@@ -578,6 +577,13 @@ non_normative!(
 |{y}
 |Enables xref:macros:ui-macros.adoc[] and the xref:macros:keyboard-macro.adoc[].
 
+"#
+);
+
+#[test]
+fn reproducible_and_skip_front_matter_take_effect() {
+    verifies!(
+        r#"
 |reproducible
 |_empty_
 |{n}
@@ -594,7 +600,52 @@ Alternately, you can use the SOURCE_DATE_EPOCH environment variable, which sets 
 //<<front-matter-added-for-static-site-generators>>
 |===
 "#
-);
+    );
+
+    // `reproducible` prevents the last-updated date – and the equally
+    // build-volatile `generator` meta – from being added to the HTML output. A
+    // pinned reference time keeps the comparison deterministic and standalone
+    // output exposes the head and footer: without the attribute the footer
+    // stamps "Last updated …" and the head carries the `generator` meta;
+    // setting it removes both.
+    let standalone = || {
+        Options::new()
+            .standalone(true)
+            .reference_time(ReferenceTime::from_unix_timestamp(0))
+    };
+
+    let default_html = convert_with("= Doc\n\nBody.", &standalone());
+    assert!(default_html.contains("Last updated "));
+    assert!(default_html.contains("name=\"generator\""));
+
+    let reproducible_html = convert_with("= Doc\n:reproducible:\n\nBody.", &standalone());
+    assert!(!reproducible_html.contains("Last updated"));
+    assert!(!reproducible_html.contains("name=\"generator\""));
+
+    // `skip-front-matter` (an API/CLI-only attribute) consumes a `---`-fenced
+    // YAML-style block at the very top of the document. With it set, the block
+    // is removed, so the following `= Real Title` line is recognized as the
+    // document title; without it, the `---` and YAML lines keep their ordinary
+    // meaning as body content and no title is found.
+    let src = "---\nlayout: post\ntitle: FM Title\n---\n= Real Title\n\nBody.\n";
+
+    let skipped = convert_with(src, &standalone().set("skip-front-matter"));
+    assert!(skipped.contains("<h1>Real Title</h1>"));
+    assert!(!skipped.contains("layout: post"));
+
+    let kept = convert_with(src, &standalone());
+    assert!(!kept.contains("<h1>Real Title</h1>"));
+    assert!(kept.contains("layout: post"));
+
+    // The consumed front matter is stored verbatim (delimiters excluded, lines
+    // joined by LF) in the `front-matter` attribute.
+    assert_eq!(
+        load_with(src, &Options::new().set("skip-front-matter")).attribute_value("front-matter"),
+        asciidoc_parser::document::InterpretedValue::Value(
+            "layout: post\ntitle: FM Title".to_string()
+        ),
+    );
+}
 
 #[test]
 fn i18n_caption_label_and_signifier_defaults() {
