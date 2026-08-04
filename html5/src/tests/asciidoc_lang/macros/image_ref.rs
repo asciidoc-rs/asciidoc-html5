@@ -5,9 +5,14 @@
 //! `id`, `alt`, `title`, `width`/`height`, `link`/`window`, `align`/`float`/
 //! `role`, and the link `opts` — are verified through `convert`. The
 //! DocBook/PDF-only attributes (`scale`, `scaledwidth`, `pdfwidth`), the
-//! per-image `imagesdir` override (unsupported before Asciidoctor 2.1), the
-//! `format` attribute (a no-op for a plain `<img>`), and the SVG `fallback` /
-//! inline options (not implemented here) are non-normative.
+//! per-image `imagesdir` override (unsupported before Asciidoctor 2.1), and the
+//! `format` attribute (a no-op for a plain `<img>`) are non-normative, as is
+//! the SVG `inline` option — embedding the SVG file's contents, which is not
+//! yet implemented (see
+//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/275>). The `fallback`
+//! row's recap example carries no `opts=interactive`, so it too renders a plain
+//! `<img>`; the interactive `<object>` and its `fallback` are verified on the
+//! *SVG Images* page.
 
 use crate::{convert, tests::sdd::*};
 
@@ -81,9 +86,10 @@ fn id_and_alt() {
         .contains(r#"<img src="sunset.jpg" alt="Brilliant sunset">"#));
 }
 
-// The `fallback` image applies only to an interactive SVG `<object>`, which
-// this crate does not render (see the *SVG Images* page), so it is
-// non-normative.
+// The `fallback` image applies only to an interactive SVG `<object>`. This
+// recap example carries no `opts=interactive`, so it renders a plain `<img>`
+// with no fallback; the interactive `<object>` and its `fallback` are verified
+// on the *SVG Images* page, so this row is non-normative here.
 non_normative!(
     r#"
 |`fallback`
@@ -264,9 +270,11 @@ If not specified, the `imagesdir` from the document is used.
 "#
 );
 
-// The link `opts` (`nofollow`, `noopener`) apply to an image link; the SVG-only
-// `inline`/`interactive` options are covered on the *SVG Images* page and are
-// not implemented here.
+// The link `opts` (`nofollow`, `noopener`) apply to an image link and are
+// verified below. The SVG-only options are covered on the *SVG Images* page:
+// `interactive` renders an `<object>`, while `inline` (embedding the SVG file's
+// contents) is not yet implemented — see
+// https://github.com/asciidoc-rs/asciidoc-html5/issues/275.
 #[test]
 fn opts_attribute() {
     verifies!(
