@@ -3931,14 +3931,21 @@ impl Renderer<'_> {
             dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
         }
 
-        // An SVG target (by `.svg` extension or `format=svg`) referenced with
-        // `opts=interactive` renders as an `<object>` so its embedded scripting
-        // and links stay live — but only below the `Secure` safe mode, matching
-        // Asciidoctor's `convert_image`. At `Secure` or above (the API default)
-        // it falls through to a plain `<img>`. The `inline` option (embedding the
-        // SVG file's contents as `<svg>`) is not yet implemented for block images
-        // here, so such an SVG also renders as `<img>` for now (see
+        // An SVG target (`format=svg`, or a target *containing* `.svg`)
+        // referenced with `opts=interactive` renders as an `<object>` so its
+        // embedded scripting and links stay live — but only below the `Secure`
+        // safe mode, matching Asciidoctor's `convert_image`. At `Secure` or above
+        // (the API default) it falls through to a plain `<img>`. The `inline`
+        // option (embedding the SVG file's contents as `<svg>`) is not yet
+        // implemented for block images here, so such an SVG also renders as
+        // `<img>` for now (see
         // https://github.com/asciidoc-rs/asciidoc-html5/issues/275).
+        //
+        // The target test is a deliberate port of Asciidoctor's case-sensitive
+        // substring check (`target.include? '.svg'`), quirks included: a
+        // `.contains` (not an extension match) treats `chart.svg.png` as an SVG,
+        // and an uppercase `.SVG` is *not* matched. Both are verified to match
+        // Asciidoctor 2.0.26, so they are kept rather than "corrected".
         let is_svg = named("format") == Some("svg") || target.contains(".svg");
 
         let interactive = macro_attrs.has_option("interactive")
@@ -5100,6 +5107,26 @@ mod tests {
         let html = convert("image::diagram.svg[Diagram,opts=interactive]");
         assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
         assert!(!html.contains("<object"));
+    }
+
+    #[test]
+    fn image_block_svg_detection_matches_asciidoctor_substring_quirks() {
+        // The SVG target test is a case-sensitive substring match ported from
+        // Asciidoctor's `target.include? '.svg'`, quirks and all. These are
+        // verified against Asciidoctor 2.0.26; they are intentional parity, not
+        // bugs to "fix" (fixing them would diverge from the oracle).
+        let opts = Options::new().safe_mode(SafeMode::Unsafe);
+
+        // A non-SVG target that merely *contains* `.svg` is still treated as an
+        // SVG `<object>` (Asciidoctor does the same).
+        let double_ext = convert_with("image::chart.svg.png[C,opts=interactive]", &opts);
+        assert!(double_ext.contains("<object type=\"image/svg+xml\" data=\"chart.svg.png\">"));
+
+        // An uppercase `.SVG` extension is *not* matched, so it renders a plain
+        // `<img>` (the check is case-sensitive, matching Asciidoctor).
+        let upper = convert_with("image::diagram.SVG[D,opts=interactive]", &opts);
+        assert!(content(&upper).contains("<img src=\"diagram.SVG\" alt=\"D\">"));
+        assert!(!upper.contains("<object"));
     }
 
     #[test]
