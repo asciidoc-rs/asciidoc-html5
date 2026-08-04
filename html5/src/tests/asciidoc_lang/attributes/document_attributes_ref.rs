@@ -596,13 +596,10 @@ Alternately, you can use the SOURCE_DATE_EPOCH environment variable, which sets 
 "#
 );
 
-// Localization and numbering: the caption/label defaults (e.g.,
-// `note-caption`, `example-caption`, `toc-title`) are exercised where those
-// captions are rendered (the macros/admonition and toc pages), the `-number`
-// seeds and refsig/signifier labels are numbering/cross-reference concerns
-// verified in `asciidoc-parser`, and several rows are book-doctype only.
-non_normative!(
-    r#"
+#[test]
+fn i18n_caption_label_and_signifier_defaults() {
+    verifies!(
+        r#"
 
 [#builtin-attributes-i18n]
 == Localization and numbering attributes
@@ -831,7 +828,42 @@ _Book doctype only_.
 |===
 
 "#
-);
+    );
+
+    // The caption, label, and refsig attributes the table marks "Set By Default
+    // = Yes" resolve to their documented default value (shown in bold on the
+    // page). `chapter-refsig` and `part-refsig` carry a value even in the
+    // default (article) doctype; their "book doctype only" note governs where
+    // the signifier is *used*, not whether the attribute is set.
+    assert_eq!(
+        para(
+            "[{appendix-caption}][{appendix-refsig}][{caution-caption}][{chapter-refsig}]\
+             [{example-caption}][{figure-caption}][{important-caption}][{last-update-label}]\
+             [{note-caption}][{part-refsig}][{section-refsig}][{table-caption}][{tip-caption}]\
+             [{toc-title}][{untitled-label}][{version-label}][{warning-caption}]"
+        ),
+        "[Appendix][Appendix][Caution][Chapter][Example][Figure][Important][Last updated]\
+         [Note][Part][Section][Table][Tip][Table of Contents][Untitled][Version][Warning]",
+    );
+
+    // Every row marked "Set By Default = No" is genuinely unset for a default
+    // (article-doctype) conversion, so a reference to it is left untouched
+    // (`attribute-missing` defaults to `skip`). This covers the numbering seeds
+    // (`*-number`), the caption/title/signifier rows that opt out by default
+    // (`listing-caption`, `chapter-signifier`, `part-signifier`, `preface-title`),
+    // and the localization toggles whose rendered effect lives elsewhere (`lang`,
+    // `nolang`, and the manpage-only `manname-title`).
+    assert_eq!(
+        para(
+            "[{appendix-number}][{chapter-number}][{chapter-signifier}][{example-number}]\
+             [{figure-number}][{footnote-number}][{lang}][{listing-caption}][{listing-number}]\
+             [{manname-title}][{nolang}][{part-signifier}][{preface-title}][{table-number}]"
+        ),
+        "[{appendix-number}][{chapter-number}][{chapter-signifier}][{example-number}]\
+         [{figure-number}][{footnote-number}][{lang}][{listing-caption}][{listing-number}]\
+         [{manname-title}][{nolang}][{part-signifier}][{preface-title}][{table-number}]",
+    );
+}
 
 // Document metadata: the `<head>` metas these attributes emit
 // (`description`, `keywords`, `author`, …) and the author/revision lines are
