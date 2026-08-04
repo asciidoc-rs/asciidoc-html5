@@ -2339,13 +2339,21 @@ impl Renderer<'_> {
                 other => self.unsupported(other),
             },
             Block::CompoundDelimited(compound) => match compound.context_kind() {
-                // An `[abstract]`-styled open block renders as a quote-like
-                // abstract, matching Asciidoctor; a plain `--` open block does
-                // not.
-                CompoundDelimitedContext::Open if block.declared_style() == Some("abstract") => {
-                    self.abstract_block(block)
-                }
-                CompoundDelimitedContext::Open => self.open_block(block),
+                // An open block (`--`) can masquerade as another structural
+                // container via its declared style. The parser already remaps
+                // the styles that change the block's *type* — `source`, `quote`,
+                // `verse`, `listing`, `literal`, and the admonition styles — into
+                // their own block kinds, so those never arrive here. The styles
+                // that keep the compound-open shape but still change the output —
+                // `sidebar`, `example`, and `abstract` (a quote-like abstract,
+                // matching Asciidoctor) — are resolved from the declared style.
+                CompoundDelimitedContext::Open => match block.declared_style() {
+                    Some("sidebar") => self.sidebar(block),
+                    Some("example") => self.example(block),
+                    Some("abstract") => self.abstract_block(block),
+                    _ => self.open_block(block),
+                },
+
                 CompoundDelimitedContext::Sidebar => self.sidebar(block),
                 CompoundDelimitedContext::Example => self.example(block),
             },

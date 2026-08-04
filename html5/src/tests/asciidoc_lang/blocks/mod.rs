@@ -1,3 +1,24 @@
 //! Coverage of the AsciiDoc language description's `blocks` module pages.
 
+mod add_title;
+mod admonitions;
+mod assign_id;
+mod blockquotes;
+mod breaks;
+mod build_basic_block;
 mod collapsible;
+mod delimited;
+mod discrete_headings;
+mod example_blocks;
+mod hard_line_breaks;
+mod index;
+mod masquerading;
+mod nest;
+mod open_blocks;
+mod paragraph_alignment;
+mod paragraphs;
+mod preamble_and_lead;
+mod sidebars;
+mod styles;
+mod troubleshoot_blocks;
+mod verses;
