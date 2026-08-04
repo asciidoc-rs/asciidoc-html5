@@ -1,6 +1,8 @@
 //! Coverage of the AsciiDoc language description's `blocks` module pages.
 
+mod admonitions;
 mod assign_id;
+mod blockquotes;
 mod breaks;
 mod collapsible;
 mod discrete_headings;

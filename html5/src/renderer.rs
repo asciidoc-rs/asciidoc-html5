@@ -2760,10 +2760,31 @@ impl Renderer<'_> {
         self.line("<table>");
         self.line("<tr>");
         self.line("<td class=\"icon\">");
-        self.line(&format!(
-            "<div class=\"title\">{}</div>",
-            admonition.label()
-        ));
+
+        // The icon cell mirrors Asciidoctor's `convert_admonition`: a Font
+        // Awesome `<i>` under `:icons: font`, an `<img>` of the icon file when
+        // `icons` is set to anything else, or the plain text label otherwise.
+        if self.icons_font {
+            self.line(&format!(
+                "<i class=\"fa icon-{}\" title=\"{}\"></i>",
+                admonition.name(),
+                admonition.label()
+            ));
+        } else if self.icons_set {
+            self.line(&format!(
+                "<img src=\"{}/{}.{}\" alt=\"{}\">",
+                self.iconsdir,
+                admonition.name(),
+                self.icontype,
+                admonition.label()
+            ));
+        } else {
+            self.line(&format!(
+                "<div class=\"title\">{}</div>",
+                admonition.label()
+            ));
+        }
+
         self.line("</td>");
         self.line("<td class=\"content\">");
         self.block_title(block);
