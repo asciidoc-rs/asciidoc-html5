@@ -6984,6 +6984,29 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn admonition_custom_icon_with_extension_is_used_as_is() {
+        // In image-icon mode, a per-block `icon` value that already has a file
+        // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
+        // appends the `icontype` only when the value has no extension).
+        let html = convert(":icons:\n\n[NOTE,icon=tip.png]\nSave often.");
+        assert!(html.contains(
+            "<td class=\"icon\">\n\
+             <img src=\"./images/icons/tip.png\" alt=\"Note\">\n</td>"
+        ));
+    }
+
+    #[test]
+    fn admonition_custom_icon_without_extension_gets_icontype() {
+        // A per-block `icon` value with no extension gains the document's
+        // `icontype` extension.
+        let html = convert(":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.");
+        assert!(html.contains(
+            "<td class=\"icon\">\n\
+             <img src=\"./images/icons/hint.svg\" alt=\"Note\">\n</td>"
+        ));
+    }
+
     // A sidebar block places its title *inside* the content div (before the
     // content), unlike most blocks; the delimited `****` form nests its
     // children, while the `[sidebar]` styled paragraph drops its text into the
