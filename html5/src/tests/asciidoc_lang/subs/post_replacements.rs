@@ -161,9 +161,8 @@ non_normative!(
 "#
 );
 
-// Titles (yes): a trailing-`+` line break in a block title is applied. (This
-// now matches Asciidoctor after the parser fix for a line break at the end of a
-// block's content — asciidoc-parser #1067, was html5#271.)
+// Titles (yes): a trailing-`+` line break in a block title is applied,
+// matching Asciidoctor.
 #[test]
 fn default_post_replacements_titles() {
     verifies!(
