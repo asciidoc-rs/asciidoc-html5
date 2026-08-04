@@ -667,6 +667,7 @@ fn parse_invalid_author_line_becomes_author() {
 
     let doc = header("   Stuart       Rackham, founder of AsciiDoc   <founder@asciidoc.org>");
     assert_eq!(attr(&doc, "authorcount").as_deref(), Some("1"));
+
     let a = &doc.authors()[0];
     // The whole invalid line becomes the single author, exactly as the Ruby
     // test asserts. This crate's `name()`/`firstname()` expose the
@@ -683,7 +684,7 @@ fn parse_invalid_author_line_becomes_author() {
         a.firstname(),
         "Stuart Rackham, founder of AsciiDoc &lt;founder@asciidoc.org&gt;"
     );
-    assert_eq!(a.initials(), "S");
+    assert_eq!(attr(&doc, "authorinitials").as_deref(), Some("S"));
     assert_eq!(attr(&doc, "authors"), attr(&doc, "author"));
 }
 
