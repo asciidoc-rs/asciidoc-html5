@@ -19,6 +19,7 @@ mod counters;
 mod custom_attributes;
 mod document_attributes;
 mod element_attributes;
+mod id;
 mod inline_attribute_entries;
 mod names_and_values;
 mod options;
