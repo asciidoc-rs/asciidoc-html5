@@ -1,0 +1,31 @@
+//! Coverage of the AsciiDoc language description's `macros` module pages.
+
+mod audio_and_video;
+mod autolinks;
+mod complex_urls;
+mod footnote;
+mod icon_macro;
+mod icons;
+mod icons_font;
+mod icons_image;
+mod image_format;
+mod image_link;
+mod image_position;
+mod image_ref;
+mod image_size;
+mod image_svg;
+mod image_url;
+mod images;
+mod images_directory;
+mod inter_document_xref;
+mod keyboard_macro;
+mod link_macro;
+mod link_macro_attribute_parsing;
+mod link_macro_ref;
+mod links;
+mod mailto_macro;
+mod ui_macros;
+mod url_macro;
+mod xref;
+mod xref_text_and_style;
+mod xref_validate;

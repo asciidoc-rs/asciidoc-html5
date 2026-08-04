@@ -13,6 +13,7 @@ mod directives;
 mod docinfo;
 mod document;
 mod lists;
+mod macros;
 mod pass;
 mod root;
 mod sections;

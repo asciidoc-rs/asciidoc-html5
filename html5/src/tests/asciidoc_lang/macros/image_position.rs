@@ -1,0 +1,285 @@
+//! Coverage of the AsciiDoc language description's *Position and Frame Images*
+//! page.
+//!
+//! An image can be positioned with the `float`/`align` named attributes or with
+//! positioning roles (`left`, `right`, `text-center`, …). In this crate's HTML
+//! output — matching Asciidoctor 2.0.26 — both forms add CSS classes to the
+//! image wrapper (the page's "inline CSS `style`" description does not reflect
+//! the actual html5 backend). The `thumb`/framing roles and the `float-group`
+//! role are likewise classes. All verified through `convert`.
+//!
+//! The examples are pulled in with `include::example$image.adoc[tag=…]`; the
+//! tests reproduce those tagged snippets inline. The roles reference table and
+//! the stylesheet/margins guidance are non-normative.
+
+use crate::{convert, tests::sdd::*};
+
+track_file!("ref/asciidoc-lang/docs/modules/macros/pages/image-position.adoc");
+
+non_normative!(
+    r#"
+= Position and Frame Images
+:y: Yes
+:n: No
+
+Images are a great way to enhance the text, whether to illustrate an idea, show rather than tell, or just help the reader connect with the text.
+
+Out of the box, images and text behave like oil and water.
+Images don't like to share space with text.
+They are kind of "`pushy`" about it.
+That's why we focused on tuning the controls in the image macros so you can get the images and the text to flow together.
+
+There are two approaches you can take when positioning your images:
+
+. Named attributes
+. Roles
+
+== Positioning attributes
+
+AsciiDoc supports the `align` attribute on block images to align the image within the block (e.g., left, right or center).
+The named attribute `float` can be applied to both the block and inline image macros.
+Float pulls the image to one side of the page or the other and wraps block or inline content around it, respectively.
+
+Here's an example of a floating block image.
+The paragraphs or other blocks that follow the image will float up into the available space next to the image.
+The image will also be positioned horizontally in the center of the image block.
+
+"#
+);
+
+// The `float` and `align` named attributes add positioning classes to the image
+// wrapper (block: `imageblock <float> <align>`; inline: `image <float>`).
+#[test]
+fn float_named_attributes() {
+    verifies!(
+        r#"
+.A block image pulled to the right and centered within the block
+[source]
+----
+include::example$image.adoc[tag=float]
+----
+
+Here's an example of a floating inline image.
+The image will float into the upper-right corner of the paragraph text.
+
+.An inline image pulled to the right of the paragraph text
+[source]
+----
+include::example$image.adoc[tag=in-float]
+----
+
+"#
+    );
+
+    // The `tag=float` block image: `float="right"` and `align="center"` become
+    // the `right` and `text-center` classes.
+    assert!(
+        convert(r#"image::tiger.png[Tiger,200,200,float="right",align="center"]"#)
+            .contains(r#"<div class="imageblock right text-center">"#)
+    );
+
+    // The `tag=in-float` inline image: `float="right"` becomes the `right` class.
+    assert!(convert(
+        "image:linux.png[Linux,150,150,float=\"right\"]\nYou can find Linux everywhere these days!"
+    )
+    .contains(r#"<span class="image right">"#));
+}
+
+non_normative!(
+    r#"
+When you use the named attributes, CSS gets added inline (e.g., `style="float: left"`).
+That's bad practice because it can make the page harder to style when you want to customize the theme.
+It's far better to use CSS classes for these sorts of things, which map to roles in AsciiDoc terminology.
+
+== Positioning roles
+
+Here are the examples from above, now configured to use roles that map to CSS classes in the default Asciidoctor stylesheet:
+
+"#
+);
+
+// Positioning roles add the same classes as the named attributes, via the block
+// role shorthand (`[.right.text-center]`) or the inline `role=` attribute.
+#[test]
+fn positioning_roles() {
+    verifies!(
+        r#"
+.Block image macro using positioning roles
+[source]
+----
+include::example$image.adoc[tag=role]
+----
+
+.Inline image macro using positioning role
+[source]
+----
+include::example$image.adoc[tag=in-role]
+----
+
+"#
+    );
+
+    // The `tag=role` block image: `[.right.text-center]` above the macro.
+    assert!(
+        convert("[.right.text-center]\nimage::tiger.png[Tiger,200,200]")
+            .contains(r#"<div class="imageblock right text-center">"#)
+    );
+
+    // The `tag=in-role` inline image: `role=right`.
+    assert!(
+        convert("image:sunset.jpg[Sunset,150,150,role=right] What a beautiful sunset!")
+            .contains(r#"<span class="image right">"#)
+    );
+}
+
+non_normative!(
+    r#"
+The following table lists all the roles available out of the box for positioning images.
+
+.Roles for positioning images
+[cols="1h,5*^"]
+|===
+|{empty} 2+|Float 3+|Align
+
+|Role
+|left
+|right
+|text-left
+|text-right
+|text-center
+
+|Block Image
+|{y}
+|{y}
+|{y}
+|{y}
+|{y}
+
+|Inline Image
+|{y}
+|{y}
+|{n}
+|{n}
+|{n}
+|===
+
+Merely setting the float direction on an image is not sufficient for proper positioning.
+That's because, by default, no space is left between the image and the text.
+To alleviate this problem, we've added sensible margins to images that use either the positioning named attributes or roles.
+
+If you want to customize the image styles, perhaps to customize the margins, you can provide your own additions to the stylesheet (either by using your own stylesheet that builds on the default stylesheet or by adding the styles to a docinfo file).
+
+WARNING: The shorthand syntax for a role (`.`) can not yet be used with image styles.
+
+== Framing roles
+
+It's common to frame the image in a border to further offset it from the text.
+You can style any block or inline image to appear as a thumbnail using the `thumb` role (or `th` for short).
+
+NOTE: The `thumb` role doesn't alter the dimensions of the image.
+For that, you need to assign the image a height and width.
+
+"#
+);
+
+// Framing roles (`related thumb right`) are added as classes on the image span.
+#[test]
+fn framing_role() {
+    verifies!(
+        r#"
+Here's a common example for adding an image to a blog post.
+The image floats to the right and is framed to make it stand out more from the text.
+
+[source]
+----
+include::example$image.adoc[tag=frame]
+----
+
+"#
+    );
+
+    // The `tag=frame` inline image with a multi-token role.
+    assert!(
+        convert("image:logo.png[role=\"related thumb right\"] Here's text that will wrap around the image to the left.")
+            .contains(r#"<span class="image related thumb right">"#)
+    );
+}
+
+non_normative!(
+    r#"
+////
+====
+image:logo.png[role="related thumb right"] Here's text that will wrap around the image to the left.
+====
+////
+
+Notice we added the `related` role to the image.
+This role isn't technically required, but it gives the image semantic meaning.
+
+[#control-float]
+== Control the float
+
+When you start floating images, you may discover that too much content is floating around the image.
+What you need is a way to clear the float.
+That is provided using another role, `float-group`.
+
+Let's assume that we've floated two images so that they are positioned next to each other and we want the next paragraph to appear below them.
+
+[source]
+----
+[.left]
+.Image A
+image::a.png[A,240,180]
+
+[.left]
+.Image B
+image::b.png[B,240,180,title=Image B]
+
+Text below images.
+----
+
+When this example is converted, then viewed in a browser, the paragraph text appears to the right of the images.
+To fix this behavior, you just need to "`group`" the images together in a block with self-contained floats.
+Here's how it's done:
+
+"#
+);
+
+// The `float-group` role wraps the images in an open block that self-contains
+// their floats.
+#[test]
+fn control_float_group() {
+    verifies!(
+        r#"
+[source]
+----
+[.float-group]
+--
+[.left]
+.Image A
+image::a.png[A,240,180]
+
+[.left]
+.Image B
+image::b.png[B,240,180]
+--
+
+Text below images.
+----
+
+This time, the text will appear below the images where we want it.
+"#
+    );
+
+    let output = convert(
+        "[.float-group]\n--\n\
+         [.left]\n.Image A\nimage::a.png[A,240,180]\n\n\
+         [.left]\n.Image B\nimage::b.png[B,240,180]\n--\n\n\
+         Text below images.",
+    );
+
+    // The `float-group` role is a class on the open block wrapping the images.
+    assert!(output.contains(r#"<div class="openblock float-group">"#));
+    // Both floated images render inside it.
+    assert!(output.contains(r#"<div class="imageblock left">"#));
+}
