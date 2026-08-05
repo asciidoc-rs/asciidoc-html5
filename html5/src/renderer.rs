@@ -3903,10 +3903,13 @@ impl Renderer<'_> {
     /// (unlike most blocks, whose title precedes their content).
     ///
     /// The advanced image modes build on this baseline in their own issues: the
-    /// `data-uri` embed (#51), interactive/inline SVG (#52), and icons (#50).
-    /// An SVG target therefore renders as a plain `<img>` here. A `title=`
-    /// given *inside* the macro is not yet promoted to the figure caption
-    /// (the parser surfaces it only as a macro attribute); use the `.Title`
+    /// `data-uri` embed (#51) and icons (#50). An interactive SVG target
+    /// (`opts=interactive`) renders as an `<object>` below `Secure` (see
+    /// below); the `inline` embedding of an SVG's contents as `<svg>` is
+    /// not yet implemented for *block* images (#275), so an `opts=inline`
+    /// SVG target still renders a plain `<img>` here. A `title=` given
+    /// *inside* the macro is not yet promoted to the figure caption (the
+    /// parser surfaces it only as a macro attribute); use the `.Title`
     /// block line.
     fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
         let macro_attrs = media.macro_attrlist();

@@ -50,6 +50,7 @@ mod include_handler;
 mod options;
 mod outline;
 mod renderer;
+mod svg_file_handler;
 
 pub use asciidoc_parser::{Document, ReferenceTime, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
@@ -432,7 +433,10 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// `<!-- asciidoc-html5: unsupported … -->` comment so the output stays
 /// well-formed and the gap is easy to see. The aim, as coverage grows, is
 /// parity with Asciidoctor's `html5` backend; the advanced image modes
-/// (`data-uri`, interactive/inline SVG, icons) are the main remaining gap.
+/// (`data-uri`, block-image inline SVG embedding, icons) are the main remaining
+/// gap. (Interactive SVG renders as an `<object>`, and inline-image
+/// `opts=inline` SVG embeds the file's `<svg>` contents, both honoring the safe
+/// mode.)
 ///
 /// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
