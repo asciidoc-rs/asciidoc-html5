@@ -26,7 +26,7 @@
 //! coverage gaps are obvious. Adding a construct means adding one arm and one
 //! `render_*` method.
 
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 use asciidoc_parser::{
     attributes::Attrlist,
@@ -1265,16 +1265,26 @@ fn restore_list_principal_indent(lines: &mut [String], raw_span: &str, has_inlin
 /// the principal carries inline marker/term text exactly when its own first
 /// line sits on that line, the signal `restore_list_principal_indent` needs to
 /// tell inline text from a folded first line.
-fn list_principal_content(block: &Block<'_>, item_line: usize) -> String {
+///
+/// Only a *wrapped* (multi-line) principal can have lost indentation — a single
+/// line has no continuation to reindent, so the parser's rendered content is
+/// already correct. The single-line case (the overwhelming majority of list
+/// items) and any non-paragraph block therefore borrow the content untouched,
+/// keeping this allocation-free off the hot path; only a multi-line paragraph
+/// pays for the split/restore/join.
+fn list_principal_content<'src>(block: &'src Block<'src>, item_line: usize) -> Cow<'src, str> {
     let content = block.rendered_content().unwrap_or_default();
-    if !matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph) {
-        return content.to_string();
+
+    if !content.contains('\n')
+        || !matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
+    {
+        return Cow::Borrowed(content);
     }
 
     let has_inline_text = block.span().line() == item_line;
     let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
     restore_list_principal_indent(&mut lines, block.span().data(), has_inline_text);
-    lines.join("\n")
+    Cow::Owned(lines.join("\n"))
 }
 
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
@@ -3674,7 +3684,7 @@ impl Renderer<'_> {
         // blocks, so the first child block stays an attached block.
         let mut blocks = list_item.child_blocks();
         let principal = if list_item.has_empty_principal_text() {
-            String::new()
+            Cow::Borrowed("")
         } else {
             let item_line = item.span().line();
             blocks
