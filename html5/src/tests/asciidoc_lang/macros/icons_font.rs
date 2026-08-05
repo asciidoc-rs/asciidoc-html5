@@ -16,7 +16,7 @@ track_file!("ref/asciidoc-lang/docs/modules/macros/pages/icons-font.adoc");
 // These examples enable icons from the *document* header (`:icons: font`),
 // which only takes effect below the `Secure` safe mode: under `Secure` (the API
 // default) Asciidoctor drops a document-set `icons` so an untrusted document
-// cannot steer icon image sources through `iconsdir` (see #56). They therefore
+// cannot steer icon image sources through `iconsdir` (see #50). They therefore
 // convert under `Server` — the highest mode that still lets the document enable
 // icons — matching the font-icon output the page documents.
 fn convert(source: &str) -> String {

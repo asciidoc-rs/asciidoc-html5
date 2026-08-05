@@ -34,7 +34,7 @@ fn para_with(source: &str, options: &Options) -> String {
 /// Converts `source` under the `Server` safe mode. A document-set `:icons:`
 /// only takes effect below `Secure` — under `Secure` (the API default)
 /// Asciidoctor drops it so an untrusted document cannot steer icon image
-/// sources through `iconsdir` (see #56) — so the icon examples convert here.
+/// sources through `iconsdir` (see #50) — so the icon examples convert here.
 fn convert_icons(source: &str) -> String {
     convert_with(source, &Options::new().safe_mode(SafeMode::Server))
 }
@@ -1790,7 +1790,7 @@ Only relevant used when value of `icons` attribute is `font`.
 
     // The Font Awesome `<link>` lives in the standalone document's `<head>`.
     // Each example enables icons from the *document* header (`:icons: font`),
-    // which only takes effect below `Secure` (#56), so these convert under
+    // which only takes effect below `Secure` (#50), so these convert under
     // `Server`.
     let standalone = |source: &str| {
         convert_with(
@@ -1876,7 +1876,7 @@ _url_
     // label: `font` emits a Font Awesome `<i>`, while the empty/`image` value
     // uses an `<img>` from `iconsdir` (default `./images/icons`) with the
     // `icontype` extension (default `png`). A document-set `:icons:` only takes
-    // effect below `Secure` (#56), so these convert under `Server`.
+    // effect below `Secure` (#50), so these convert under `Server`.
     assert!(convert_icons("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====")
         .contains(r#"<i class="fa icon-note" title="Note">"#));
     assert!(convert_icons("= T\n:icons:\n\n[NOTE]\n====\nhi\n====")

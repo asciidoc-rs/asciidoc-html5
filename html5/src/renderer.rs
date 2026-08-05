@@ -2091,12 +2091,11 @@ impl Renderer<'_> {
     /// [`normalize_web_path`], so no remote resource is referenced.
     ///
     /// Following the resolved `icons` value keeps this consistent with the icon
-    /// markup: this crate honors a document-set `:icons:` in every safe mode
-    /// (unlike Asciidoctor, which locks `icons` against the document at
-    /// `Secure`), so the link, like the markup, is attribute-driven rather than
-    /// gated a second time in the renderer — mirroring how the syntax
-    /// highlighter's CDN `<link>` follows its (safe-mode-locked) attribute
-    /// (html5#56).
+    /// markup: `icons` is locked against the document at `Secure` (in
+    /// `Options::apply`, matching Asciidoctor), so the link, like the markup,
+    /// is attribute-driven rather than gated a second time in the renderer
+    /// — mirroring how the syntax highlighter's CDN `<link>` follows its
+    /// (safe-mode-locked) attribute.
     fn iconfont_head(&mut self, document: &Document<'_>) {
         if !self.icons_font {
             return;
@@ -7287,7 +7286,7 @@ mod tests {
         // In image-icon mode, a per-block `icon` value that already has a file
         // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
         // appends the `icontype` only when the value has no extension). A
-        // document-set `:icons:` only takes effect below `Secure` (#56), so this
+        // document-set `:icons:` only takes effect below `Secure` (#50), so this
         // converts under `Server`.
         let html = convert_with(
             ":icons:\n\n[NOTE,icon=tip.png]\nSave often.",
@@ -7303,7 +7302,7 @@ mod tests {
     fn admonition_custom_icon_without_extension_gets_icontype() {
         // A per-block `icon` value with no extension gains the document's
         // `icontype` extension. A document-set `:icons:` only takes effect below
-        // `Secure` (#56), so this converts under `Server`.
+        // `Secure` (#50), so this converts under `Server`.
         let html = convert_with(
             ":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.",
             &Options::new().safe_mode(SafeMode::Server),

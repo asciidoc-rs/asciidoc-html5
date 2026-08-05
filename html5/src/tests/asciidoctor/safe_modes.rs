@@ -123,7 +123,7 @@ Its integer value is `1`.
 // SERVER's restriction rather than merely matching it. Docinfo, backend,
 // doctype, source-highlighter, docfile, and docdir are all covered by unit
 // tests in `options.rs`; the source-highlighter lock (#215, the renderer half
-// of #56) is also verified from the `setting …` bullet just below.
+// of #45) is also verified from the `setting …` bullet just below.
 non_normative!(
     r#"
 [#server]
@@ -242,8 +242,8 @@ Its integer value is `10`.
 // document must not be able to steer icon image sources through `iconsdir`),
 // each locked against the document — the icons lock verified just below, the
 // rest covered by unit tests in `options.rs`. SECURE also disables the
-// interactive (`opts=interactive`) and inline (`opts=inline`) SVG modes — an SVG
-// image renders as a plain `<img>` — surfaced and covered by unit tests (in
+// interactive (`opts=interactive`) and inline (`opts=inline`) SVG modes — an
+// SVG image renders as a plain `<img>` — surfaced and covered by unit tests (in
 // `substitutions_test.rs` and the renderer's block-image tests). The remaining
 // SECURE restrictions are not surfaced by this renderer yet, each tracked for
 // later implementation: `data-uri`

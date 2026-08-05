@@ -27,7 +27,7 @@ track_file!("ref/asciidoc-lang/docs/modules/blocks/pages/admonitions.adoc");
 // font` / `:icons:`), which only takes effect below the `Secure` safe mode:
 // under `Secure` (the API default) Asciidoctor drops a document-set `icons` so
 // an untrusted document cannot steer icon image sources through `iconsdir` (see
-// #56). They therefore convert under `Server` — the highest mode that still
+// #50). They therefore convert under `Server` — the highest mode that still
 // lets the document enable icons — while every other example on this page uses
 // the plain `Secure`-default `convert`.
 fn convert_icons_enabled(source: &str) -> String {

@@ -574,8 +574,8 @@ impl Options {
         // API did not touch it – so a document `:source-highlighter:` is dropped
         // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
         // opt-in) is still honored, even under `Secure`. This adds the
-        // `source-highlighter` piece of the SERVER attribute lock (#56, the
-        // renderer half of #45); note Asciidoctor 2.0.26 does *not* additionally
+        // `source-highlighter` piece of the SERVER attribute lock (the renderer
+        // half of #45); note Asciidoctor 2.0.26 does *not* additionally
         // disable an API-set highlighter under `Secure` (verified against the
         // oracle), so neither does this crate.
         if mode >= SafeMode::Server {
@@ -605,7 +605,7 @@ impl Options {
         // API did not touch it – so a document `:icons:`/`:icons: font` is dropped
         // with no warning while an API/CLI `-a icons=…` (a trusted opt-in) is
         // still honored. This is the `icons` piece of the SECURE attribute lock
-        // (#56, the renderer half of #50). Unlike `source-highlighter`, the icons
+        // (#50). Unlike `source-highlighter`, the icons
         // restriction begins at `Secure`, not `Server` — `Server` still allows
         // the document to enable icons, matching the oracle.
         if mode >= SafeMode::Secure {
@@ -1496,8 +1496,8 @@ mod tests {
     // Under `Secure`, the document cannot enable `icons`: an icon-mode admonition
     // or callout list draws its images from `{iconsdir}`, whose origin a document
     // `:iconsdir:` can steer, so an untrusted document must not turn icons on.
-    // Mirrors Asciidoctor's `attr_overrides['icons'] ||= nil` under SECURE (#56,
-    // the renderer half of #50). A NOTE admonition renders a font glyph
+    // Mirrors Asciidoctor's `attr_overrides['icons'] ||= nil` under SECURE
+    // (#50). A NOTE admonition renders a font glyph
     // (`<i class="fa icon-note">`) with icons on and a text label
     // (`<div class="title">Note</div>`) with icons off, so it is the observable
     // probe for whether icons took effect. Unlike `source-highlighter`, the
@@ -1523,6 +1523,26 @@ mod tests {
         );
 
         assert!(html.contains("<i class=\"fa icon-note\""), "{html}");
+    }
+
+    #[test]
+    fn api_bare_set_icons_locks_out_the_document_under_secure() {
+        // A *bare* API `icons` (a set with no value, `Action::Set`) enables
+        // image icons under `Secure` and locks the attribute, so the document's
+        // own `:icons: font` is dropped rather than switching to font mode. This
+        // exercises the `Some(Action::Set)` arm, distinct from the valued
+        // `attribute("icons", …)` path above.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\nNOTE: Heed this.",
+            &Options::new().set("icons"),
+        );
+
+        // Image mode (a bare set), not font mode: an `<img>` icon and no glyph.
+        assert!(
+            html.contains(r#"<img src="./images/icons/note.png" alt="Note">"#),
+            "{html}"
+        );
+        assert!(!html.contains("icon-note"), "{html}");
     }
 
     #[test]
