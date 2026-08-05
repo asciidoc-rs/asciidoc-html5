@@ -7978,6 +7978,20 @@ mod tests {
     }
 
     #[test]
+    fn common_leading_indent_skips_empty_lines_and_finds_the_minimum() {
+        // An empty line is skipped (Asciidoctor's `next if line.empty?`), so it
+        // does not count as a flush-left line that would force `None`; the common
+        // indent is the minimum of the two non-empty lines.
+        assert_eq!(super::common_leading_indent(&["    a", "", "  b"]), Some(2));
+
+        // A genuinely flush-left non-empty line does force `None` (no dedent).
+        assert_eq!(super::common_leading_indent(&["  a", "b"]), None);
+
+        // No lines (all folded content skipped) removes nothing.
+        assert_eq!(super::common_leading_indent(&[]), None);
+    }
+
+    #[test]
     fn is_line_comment_matches_only_a_column_zero_double_slash() {
         assert!(super::is_line_comment("// comment"));
         assert!(super::is_line_comment("//"));
