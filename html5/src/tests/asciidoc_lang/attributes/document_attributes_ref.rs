@@ -2187,12 +2187,10 @@ The attribute in this section are only relevant when using the manpage doctype a
 "#
 );
 
-// Security attributes are API/CLI-only. `allow-uri-read` enables reading data
-// from URLs, which neither client does — remote fetch is a deliberate non-goal.
-// `max-include-depth` is enforced by `asciidoc-parser`'s preprocessor (its
-// limit and warning are verified in that crate), and `max-attribute-value-size`
-// is a parser-level attribute-resolution limit. None resolves to a value
-// observable in this renderer's rendered output.
+// `allow-uri-read` enables reading data from URLs, which neither client does —
+// remote fetch is a deliberate non-goal — so its row stays non_normative, but
+// the attribute is still settable via the API (see
+// `allow_uri_read_is_settable_via_api`).
 non_normative!(
     r#"
 == Security attributes
@@ -2210,6 +2208,13 @@ Since these attributes deal with security, they can only be set from the API or 
 |Allows data to be read from URLs.
 //<<include-uri>>
 
+"#
+);
+
+#[test]
+fn security_max_attribute_value_size_limits_resolved_values() {
+    verifies!(
+        r#"
 |max-attribute-value-size
 |_integer_ (≥ 0) +
 `*4096*`
@@ -2219,6 +2224,30 @@ Since these attributes deal with security, they can only be set from the API or 
 Default value is only set in SECURE mode.
 Since attributes can reference attributes, it's possible to create an output document disproportionately larger than the input document without this limit in place.
 
+"#
+    );
+
+    // Set via the API, `max-attribute-value-size` caps the size (in bytes) of a
+    // resolved attribute value: a reference to a longer value yields only its
+    // first N bytes.
+    let limited = Options::new().attribute("max-attribute-value-size", "5");
+    assert_eq!(
+        para_with("= T\n:long: abcdefghijklmnop\n\n[{long}]", &limited),
+        "[abcde]"
+    );
+
+    // Without a tighter limit the value resolves in full (the SECURE-mode
+    // default of 4096 is far larger than this value).
+    assert_eq!(
+        para("= T\n:long: abcdefghijklmnop\n\n[{long}]"),
+        "[abcdefghijklmnop]"
+    );
+}
+
+#[test]
+fn security_max_include_depth_curtails_nested_includes() {
+    verifies!(
+        r#"
 |max-include-depth
 |_integer_ (≥ 0) +
 `*64*`
@@ -2229,7 +2258,44 @@ Since attributes can reference attributes, it's possible to create an output doc
 |===
 
 "#
-);
+    );
+
+    // Set via the API, `max-include-depth` caps how deeply include directives
+    // nest. With a chain main -> a -> b and a depth of 1, the second-level
+    // include is refused: its content is dropped and a warning is recorded.
+    let dir = std::env::temp_dir().join(format!("adoc-maxinc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create include dir");
+    std::fs::write(dir.join("a.adoc"), "a-content\n\ninclude::b.adoc[]\n").expect("write a");
+    std::fs::write(dir.join("b.adoc"), "b-content\n").expect("write b");
+    let main = "= T\n\ninclude::a.adoc[]\n";
+
+    // Includes are only processed below SECURE safe mode; SAFE resolves them
+    // while confining reads to the base directory.
+    let opts = Options::new()
+        .safe_mode(SafeMode::Safe)
+        .base_dir(&dir)
+        .attribute("max-include-depth", "1");
+
+    let html = convert_with(main, &opts);
+    assert!(html.contains("a-content"), "{html}");
+    assert!(!html.contains("b-content"), "{html}");
+
+    let doc = load_with(main, &opts);
+    assert!(doc.warnings().any(|w| matches!(
+        w.warning,
+        asciidoc_parser::warnings::WarningType::MaxIncludeDepthExceeded(_)
+    )));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// `allow-uri-read` is a deliberate non-goal (remote fetch), but the attribute
+// itself is accepted when set through the API.
+#[test]
+fn allow_uri_read_is_settable_via_api() {
+    let doc = load_with("body", &Options::new().set("allow-uri-read"));
+    assert!(doc.is_attribute_set("allow-uri-read"));
+}
 
 // The closing `-number` footnote is descriptive prose.
 non_normative!(
