@@ -326,6 +326,23 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     }
 }
 
+/// The ` style="max-width: <value>;"` fragment Asciidoctor adds to each of the
+/// standalone layout's container divs (`#header`, `#content`, `#footnotes`,
+/// `#footer`) when the `max-width` attribute is set, or an empty string when it
+/// is not. The value is emitted whenever the attribute is *present* — matching
+/// Asciidoctor's `node.attr? 'max-width'` gate, which treats a bare
+/// `:max-width:` (no value) as present, yielding an empty length.
+fn max_width_style(document: &Document<'_>) -> String {
+    match document.attribute_value("max-width") {
+        InterpretedValue::Value(value) => {
+            format!(" style=\"max-width: {};\"", escape_attribute(&value))
+        }
+
+        InterpretedValue::Set => " style=\"max-width: ;\"".to_string(),
+        InterpretedValue::Unset => String::new(),
+    }
+}
+
 /// Asciidoctor's default `alt` for an image whose macro carries none: the
 /// target's basename (its final path segment, without extension) with each `_`
 /// and `-` turned into a space. Mirrors the `basename(target.tr('_-', ' '))`
@@ -1722,12 +1739,18 @@ impl Renderer<'_> {
         // is what lets a docinfo header replace the default one.
         self.docinfo(document, DocinfoLocation::Header);
 
+        // The `max-width` attribute constrains the body width by adding an
+        // inline `style="max-width: …;"` to each of the standalone layout's
+        // container divs (`#header`, `#content`, `#footnotes`, `#footer`),
+        // matching Asciidoctor's `html5` backend.
+        let max_width = max_width_style(document);
+
         // The header is suppressed by `noheader`.
         if !document.is_attribute_set("noheader") {
-            self.header(document);
+            self.header(document, &max_width);
         }
 
-        self.line("<div id=\"content\">");
+        self.line(&format!("<div id=\"content\"{max_width}>"));
         self.blocks(document.child_blocks());
         self.line("</div>");
 
@@ -1741,7 +1764,7 @@ impl Renderer<'_> {
         // "{last-update-label} {docdatetime}" line (the "Last updated …" stamp)
         // unless the document is `reproducible`.
         if !document.is_attribute_set("nofooter") {
-            self.line("<div id=\"footer\">");
+            self.line(&format!("<div id=\"footer\"{max_width}>"));
             self.line("<div id=\"footer-text\">");
 
             // The version line, gated on `revnumber` like Asciidoctor. The
@@ -1846,7 +1869,10 @@ impl Renderer<'_> {
             return;
         }
 
-        self.footnotes_block(footnotes);
+        // The document-level footnotes block picks up the `max-width` constraint
+        // like the other standalone container divs; the cell-local block (which
+        // has no document to read the attribute from) never does.
+        self.footnotes_block(footnotes, &max_width_style(document));
     }
 
     /// Emits the `#footnotes` block for the given footnotes — the `<div
@@ -1858,9 +1884,10 @@ impl Renderer<'_> {
     /// block and the cell-local block an AsciiDoc (`a`) table cell renders from
     /// its own footnote registry. The caller is responsible for the emptiness
     /// and `nofootnotes` checks; this assumes there is at least one footnote to
-    /// list.
-    fn footnotes_block(&mut self, footnotes: &[Footnote]) {
-        self.line("<div id=\"footnotes\">");
+    /// list. `max_width` is the ` style="max-width: …;"` fragment for the
+    /// standalone `#footnotes` div (empty for the cell-local block).
+    fn footnotes_block(&mut self, footnotes: &[Footnote], max_width: &str) {
+        self.line(&format!("<div id=\"footnotes\"{max_width}>"));
         self.line("<hr>");
 
         for footnote in footnotes {
@@ -1903,8 +1930,10 @@ impl Renderer<'_> {
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
     /// the author and revision details block and an automatically placed table
-    /// of contents.
-    fn header(&mut self, document: &Document<'_>) {
+    /// of contents. `max_width` is the ` style="max-width: …;"` fragment
+    /// applied to the opening `<div id="header">` when the `max-width`
+    /// attribute is set.
+    fn header(&mut self, document: &Document<'_>, max_width: &str) {
         let header: &Header<'_> = document.header();
 
         // A standalone document shows its title as the header `<h1>` by default;
@@ -1943,7 +1972,7 @@ impl Renderer<'_> {
             return;
         }
 
-        self.line("<div id=\"header\">");
+        self.line(&format!("<div id=\"header\"{max_width}>"));
 
         if let Some(title) = title {
             self.line(&format!("<h1>{title}</h1>"));
@@ -4667,7 +4696,7 @@ fn render_cell_document<'s>(
     // `footnote-number` counter is document-wide, so the indices (and thus the
     // `_footnotedef_N` ids) stay globally unique.
     if !footnotes.is_empty() {
-        renderer.footnotes_block(footnotes);
+        renderer.footnotes_block(footnotes, "");
     }
 
     // `convert` joins its lines with no trailing newline; drop the one the
