@@ -1097,17 +1097,55 @@ mod tests {
     // exercising `convert_file_with` (which anchors the base directory at the
     // primary file's directory) across safe modes.
     mod end_to_end {
-        use std::{fs, path::PathBuf};
+        use std::{
+            fs,
+            ops::Deref,
+            path::{Path, PathBuf},
+        };
 
         use crate::{convert_file_with, Options, SafeMode};
+
+        /// A temporary project directory that removes itself on drop. Derefs to
+        /// the `main.adoc` path, so callers can use it directly as the primary
+        /// file while the guard keeps the directory alive.
+        struct Project {
+            root: PathBuf,
+            main: PathBuf,
+        }
+
+        impl Deref for Project {
+            type Target = Path;
+
+            fn deref(&self) -> &Path {
+                &self.main
+            }
+        }
+
+        impl AsRef<Path> for Project {
+            fn as_ref(&self) -> &Path {
+                &self.main
+            }
+        }
+
+        impl Drop for Project {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.root);
+            }
+        }
 
         /// Creates a fresh temporary directory named for `label`, holding a
         /// `main.adoc` that includes `part.adoc`, a `part.adoc` inside the
         /// directory, and a `secret.adoc` in the *parent* directory (outside
-        /// the base). Returns the path to `main.adoc`.
-        fn project(label: &str) -> PathBuf {
+        /// the base). Returns a guard that derefs to the path of `main.adoc`
+        /// and deletes the directory when dropped.
+        fn project(label: &str) -> Project {
             let root =
                 std::env::temp_dir().join(format!("ahtml5-include-{label}-{}", std::process::id()));
+
+            // Clear any leftovers from an earlier run whose PID was reused, so
+            // non-idempotent fixtures (e.g. symlinks) start from a clean slate.
+            let _ = fs::remove_dir_all(&root);
+
             let base = root.join("base");
             fs::create_dir_all(&base).expect("create base dir");
 
@@ -1119,7 +1157,9 @@ mod tests {
             fs::write(base.join("part.adoc"), "Included from part.\n").expect("write part");
             fs::write(root.join("secret.adoc"), "Included from secret.\n").expect("write secret");
 
-            base.join("main.adoc")
+            let main = base.join("main.adoc");
+
+            Project { root, main }
         }
 
         // Below `secure`, a relative include is read from disk and its content
