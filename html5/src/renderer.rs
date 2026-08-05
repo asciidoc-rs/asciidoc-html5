@@ -280,6 +280,36 @@ fn default_alt(target: &str) -> String {
     }
 }
 
+/// The substituted `alt` text for a block image, matching Asciidoctor's
+/// `AbstractBlock#alt`. An *explicit* alt (from the macro, or the block
+/// attribute line's style) has both the special-character and replacement
+/// substitutions applied, so `A tiger's "roar"` becomes
+/// `A tiger&#8217;s "roar"`; an auto-generated alt (derived from the target's
+/// basename) has only the special-character substitution applied. The `"` in
+/// the result is left as-is here — the caller attribute-encodes it when the
+/// value lands in an `alt="…"` attribute (Asciidoctor's
+/// `encode_attribute_value`), but leaves it raw inside a `<span class="alt">`.
+fn subbed_alt(explicit: Option<&str>, target: &str) -> String {
+    let parser = Parser::default();
+
+    match explicit {
+        Some(text) => {
+            let group = SubstitutionGroup::Custom(vec![
+                SubstitutionStep::SpecialCharacters,
+                SubstitutionStep::CharacterReplacements,
+            ]);
+
+            parser.apply_substitutions(text, &group)
+        }
+
+        None => {
+            let group = SubstitutionGroup::Custom(vec![SubstitutionStep::SpecialCharacters]);
+
+            parser.apply_substitutions(&default_alt(target), &group)
+        }
+    }
+}
+
 /// The ` target="…"`/` rel="…"` fragment Asciidoctor's
 /// `append_link_constraint_attrs` adds to an image link: a `window` sets
 /// `target` (and, for `_blank` or an explicit `noopener` option, `rel`), while
@@ -4322,14 +4352,18 @@ impl Renderer<'_> {
         let target = media.resolved_target();
         let src = self.image_uri(target, &self.imagesdir);
 
-        // An explicit `alt` wins; otherwise Asciidoctor derives it from the
-        // target's basename with `_`/`-` turned into spaces. The value is a raw
-        // source string (the block macro attribute list is parsed without the
-        // inline special-character pass), so it is attribute-escaped here to
-        // match Asciidoctor's `encode_attribute_value node.alt`.
-        let alt = positional("alt", 1)
-            .map(str::to_string)
-            .unwrap_or_else(|| default_alt(target));
+        // Asciidoctor's `attributes['alt'] ||= style || default-alt`: an explicit
+        // alt from the macro (or block attribute line) wins; failing that, the
+        // block attribute line's *style* (its first positional, e.g. `[Tiger]`)
+        // stands in as the alt; failing that, the alt is auto-derived from the
+        // target's basename. [`subbed_alt`] applies the special-character (and,
+        // for an explicit alt, replacement) substitutions; `alt_attr`
+        // additionally attribute-encodes the `"` for use inside `alt="…"`, while
+        // `alt_span` stays raw for a `<span class="alt">` (matching
+        // Asciidoctor's `encode_attribute_value node.alt` vs. bare `node.alt`).
+        let explicit_alt = positional("alt", 1).or_else(|| block.declared_style());
+        let alt_span = subbed_alt(explicit_alt, target);
+        let alt_attr = alt_span.replace('"', "&quot;");
 
         let mut dimensions = String::new();
 
@@ -4383,19 +4417,18 @@ impl Renderer<'_> {
                 positional("width", 2),
                 positional("height", 3),
             )
-            .unwrap_or_else(|| format!("<span class=\"alt\">{alt}</span>"))
+            .unwrap_or_else(|| format!("<span class=\"alt\">{alt_span}</span>"))
         } else if is_svg && self.svg_below_secure && interactive {
             // The content nested inside the `<object>`, shown when a user agent
             // can't render it: a `fallback` image if one is supplied, otherwise
             // the alt text (emitted raw, as Asciidoctor does).
             let fallback = match named("fallback") {
                 Some(fallback) => format!(
-                    "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                    "<img src=\"{}\" alt=\"{alt_attr}\"{dimensions}>",
                     escape_attribute(&self.image_uri(fallback, &self.imagesdir)),
-                    escape_attribute(&alt),
                 ),
 
-                None => format!("<span class=\"alt\">{alt}</span>"),
+                None => format!("<span class=\"alt\">{alt_span}</span>"),
             };
 
             format!(
@@ -4404,9 +4437,8 @@ impl Renderer<'_> {
             )
         } else {
             format!(
-                "<img src=\"{}\" alt=\"{}\"{dimensions}>",
+                "<img src=\"{}\" alt=\"{alt_attr}\"{dimensions}>",
                 escape_attribute(&src),
-                escape_attribute(&alt),
             )
         };
 
@@ -5610,6 +5642,33 @@ mod tests {
         // with `_`/`-` turned into spaces.
         let html = convert("image::my_cool-pic.png[]");
         assert!(html.contains("<img src=\"my_cool-pic.png\" alt=\"my cool pic\">"));
+    }
+
+    #[test]
+    fn image_block_alt_gets_specialchars_and_replacements() {
+        // An explicit alt runs both the special-character and replacement
+        // substitutions (Asciidoctor's `AbstractBlock#alt`), so an apostrophe
+        // becomes `&#8217;` and `<` becomes `&lt;`, then the `"` is
+        // attribute-encoded for the `alt="…"` slot.
+        let html = convert(r#"image::t.png[A tiger's "roar" is < a bear's "growl"]"#);
+        assert!(
+            html.contains(
+                r#"alt="A tiger&#8217;s &quot;roar&quot; is &lt; a bear&#8217;s &quot;growl&quot;""#
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn image_block_style_stands_in_as_alt() {
+        // Asciidoctor's `attributes['alt'] ||= style`: the block attribute line's
+        // style (its first positional) becomes the alt when the macro carries
+        // none — and as an explicit alt it, too, gets the replacement subs.
+        let html = convert("[Tiger]\nimage::images/tiger.png[]\n");
+        assert!(
+            html.contains("<img src=\"images/tiger.png\" alt=\"Tiger\">"),
+            "{html}"
+        );
     }
 
     #[test]
