@@ -50,6 +50,7 @@ mod include_handler;
 mod options;
 mod outline;
 mod renderer;
+mod svg_handler;
 
 pub use asciidoc_parser::{Document, ReferenceTime, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
@@ -167,7 +168,20 @@ fn render(document: &Document<'_>, options: &Options) -> String {
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
-    renderer::render_document(document, stylesheet.as_deref(), options.is_standalone())
+    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`) read
+    // at the same base directory and safe mode the include/docinfo handlers use;
+    // with no base directory (the plain string `convert`), such an SVG is left
+    // unreadable and falls back to its alt text.
+    let svg_source = options
+        .effective_base_dir()
+        .map(|base| renderer::SvgSource::new(base, options.safe_mode_or_default()));
+
+    renderer::render_document(
+        document,
+        stylesheet.as_deref(),
+        options.is_standalone(),
+        svg_source,
+    )
 }
 
 /// Writes the `copycss` stylesheet copies through `writer`, when the document
@@ -438,7 +452,7 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    renderer::render_document(document, None, false)
+    renderer::render_document(document, None, false, None)
 }
 
 /// Renders an already-parsed [`Document`] to HTML5 under `options` — the
