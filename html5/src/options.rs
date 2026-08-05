@@ -574,8 +574,8 @@ impl Options {
         // API did not touch it – so a document `:source-highlighter:` is dropped
         // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
         // opt-in) is still honored, even under `Secure`. This adds the
-        // `source-highlighter` piece of the SERVER attribute lock (#56, the
-        // renderer half of #45); note Asciidoctor 2.0.26 does *not* additionally
+        // `source-highlighter` piece of the SERVER attribute lock (the renderer
+        // half of #45); note Asciidoctor 2.0.26 does *not* additionally
         // disable an API-set highlighter under `Secure` (verified against the
         // oracle), so neither does this crate.
         if mode >= SafeMode::Server {
@@ -594,6 +594,44 @@ impl Options {
                 }
             };
         }
+
+        // Matching Asciidoctor: `Secure` (and above) forbids the *document* from
+        // enabling `icons` (Asciidoctor's SECURE "restrict document from enabling
+        // icons" – `attr_overrides['icons'] ||= nil`). An icon-mode admonition or
+        // callout list points at `{iconsdir}` for its image sources, which a
+        // document `:iconsdir:` can steer at an arbitrary origin, so an untrusted
+        // document must not be able to turn icons on. Re-seed `icons` silently
+        // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
+        // API did not touch it – so a document `:icons:`/`:icons: font` is dropped
+        // with no warning while an API/CLI `-a icons=…` (a trusted opt-in) is
+        // still honored. This is the `icons` piece of the SECURE attribute lock
+        // (#50). Unlike `source-highlighter`, the icons
+        // restriction begins at `Secure`, not `Server` — `Server` still allows
+        // the document to enable icons, matching the oracle.
+        if mode >= SafeMode::Secure {
+            let ctx = ModificationContext::ApiOnly;
+            parser = match self.last_action("icons") {
+                Some(Action::Value(value)) => {
+                    parser.with_intrinsic_attribute_silent("icons", value, ctx)
+                }
+                Some(Action::Set) => {
+                    parser.with_intrinsic_attribute_bool_silent("icons", true, ctx)
+                }
+                // An explicit API unset, or no API mention at all: no icons,
+                // locked against the document.
+                Some(Action::Unset) | None => {
+                    parser.with_intrinsic_attribute_bool_silent("icons", false, ctx)
+                }
+            };
+        }
+
+        // Note: `data-uri` is deliberately *not* re-seeded here. Asciidoctor's
+        // SECURE keeps the `data-uri` attribute set and instead gates the actual
+        // image embedding in the converter (`safe < SECURE && (attr? 'data-uri')`
+        // in `abstract_node.rb`), so `{data-uri}` still resolves for a document
+        // that reads it. This crate matches that attribute state; data-uri image
+        // embedding itself is out of scope
+        // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51).
 
         // Surface the input-file attribute family — `docfile`, `docdir`,
         // `docname`, `docfilesuffix` — the way Asciidoctor's loader does,
@@ -1454,6 +1492,85 @@ mod tests {
         );
 
         assert!(html.contains("highlightjs highlight"), "{html}");
+    }
+
+    // Under `Secure`, the document cannot enable `icons`: an icon-mode admonition
+    // or callout list draws its images from `{iconsdir}`, whose origin a document
+    // `:iconsdir:` can steer, so an untrusted document must not turn icons on.
+    // Mirrors Asciidoctor's `attr_overrides['icons'] ||= nil` under SECURE
+    // (#50). A NOTE admonition renders a font glyph
+    // (`<i class="fa icon-note">`) with icons on and a text label
+    // (`<div class="title">Note</div>`) with icons off, so it is the observable
+    // probe for whether icons took effect. Unlike `source-highlighter`, the
+    // restriction begins at `Secure`, not `Server`.
+
+    #[test]
+    fn document_set_icons_is_ignored_under_secure() {
+        // A document that enables font icons itself is ignored under `Secure`
+        // (the API default), so the admonition falls back to its text label.
+        let html = convert_with("= Doc\n:icons: font\n\nNOTE: Heed this.", &Options::new());
+
+        assert!(html.contains("<div class=\"title\">Note</div>"), "{html}");
+        assert!(!html.contains("icon-note"), "{html}");
+    }
+
+    #[test]
+    fn api_set_icons_still_applies_under_secure() {
+        // The restriction is on the *document*, not the API: an API-set `icons`
+        // is honored even under `Secure`, with the document not mentioning it.
+        let html = convert_with(
+            "= Doc\n\nNOTE: Heed this.",
+            &Options::new().attribute("icons", "font"),
+        );
+
+        assert!(html.contains("<i class=\"fa icon-note\""), "{html}");
+    }
+
+    #[test]
+    fn api_bare_set_icons_locks_out_the_document_under_secure() {
+        // A *bare* API `icons` (a set with no value, `Action::Set`) enables
+        // image icons under `Secure` and locks the attribute, so the document's
+        // own `:icons: font` is dropped rather than switching to font mode. This
+        // exercises the `Some(Action::Set)` arm, distinct from the valued
+        // `attribute("icons", …)` path above.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\nNOTE: Heed this.",
+            &Options::new().set("icons"),
+        );
+
+        // Image mode (a bare set), not font mode: an `<img>` icon and no glyph.
+        assert!(
+            html.contains(r#"<img src="./images/icons/note.png" alt="Note">"#),
+            "{html}"
+        );
+        assert!(!html.contains("icon-note"), "{html}");
+    }
+
+    #[test]
+    fn document_icons_cannot_override_an_api_unset_under_secure() {
+        // An API unset locks icons off; the document's own `:icons: font` cannot
+        // turn them back on under `Secure`.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\nNOTE: Heed this.",
+            &Options::new().unset("icons"),
+        );
+
+        assert!(html.contains("<div class=\"title\">Note</div>"), "{html}");
+        assert!(!html.contains("icon-note"), "{html}");
+    }
+
+    #[test]
+    fn document_set_icons_is_honored_below_secure() {
+        // Below `Secure` (here `Server`) a document may enable icons — `Server`
+        // "allows icons", matching Asciidoctor. This is the boundary that
+        // distinguishes the `icons` lock (Secure) from the `source-highlighter`
+        // lock (Server).
+        let html = convert_with(
+            "= Doc\n:icons: font\n\nNOTE: Heed this.",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
+
+        assert!(html.contains("<i class=\"fa icon-note\""), "{html}");
     }
 
     // `docfile` and `docdir` are intrinsic attributes this crate originates
