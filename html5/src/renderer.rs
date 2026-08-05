@@ -68,11 +68,13 @@ pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
 /// stylesheet it carries its own MIT license header, and a drift-guard test
 /// keeps this copy identical to the reference one.
 ///
-/// This crate does not yet tokenize CodeRay's `<span>` markup (tracked in
-/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/223>), so the styled
-/// spans this stylesheet targets are not emitted; what *is* reproduced is
-/// Asciidoctor's stylesheet side of CodeRay — the `<head>` `<link>`/`<style>`
-/// and the `copycss` file copy — so a document's companion files match.
+/// This crate does not tokenize CodeRay's `<span>` markup – server-side syntax
+/// highlighting is not planned (it would need an in-process highlighter this
+/// library's `asciidoc-parser`-only constraint forbids, or a subprocess) – so
+/// the styled spans this stylesheet targets are not emitted; what *is*
+/// reproduced is Asciidoctor's stylesheet side of CodeRay – the `<head>`
+/// `<link>`/`<style>` and the `copycss` file copy – so a document's companion
+/// files match.
 pub(crate) const CODERAY_STYLESHEET: &str = include_str!("../assets/coderay-asciidoctor.css");
 
 /// The public file name Asciidoctor writes (and links) the CodeRay stylesheet
@@ -102,9 +104,9 @@ const FONT_AWESOME_VERSION: &str = "4.7.0";
 /// `<head>` and a `<script>` before `</body>` — no new dependency, matching the
 /// library's "depend only on `asciidoc-parser`" constraint. The server-side
 /// highlighters (`coderay`, `pygments`, `rouge`), which emit tokenized `<span>`
-/// markup, are tracked separately in
-/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/223> and leave the
-/// source block in its default unhighlighted shape here.
+/// markup, are **not planned** – reproducing their tokenizer output would need
+/// an in-process highlighter that constraint forbids, or a subprocess – so a
+/// source block that requests one keeps its default unhighlighted shape here.
 #[derive(Clone, Copy, PartialEq)]
 enum Highlighter {
     /// `:source-highlighter: highlightjs` (also `highlight.js`).
@@ -7380,11 +7382,11 @@ mod tests {
 
     #[test]
     fn serverside_highlighter_keeps_the_default_shape() {
-        // The coderay server-side highlighter does not (yet) tokenize the source
-        // into `<span>` markup — that is tracked in #223 — so the source block
-        // itself keeps its default unhighlighted shape and no CDN assets are
-        // added. The coderay *stylesheet* docinfo is a separate concern, verified
-        // below.
+        // The coderay server-side highlighter does not tokenize the source into
+        // `<span>` markup – server-side syntax highlighting is not planned – so
+        // the source block itself keeps its default unhighlighted shape and no
+        // CDN assets are added. The coderay *stylesheet* docinfo is a separate
+        // concern, verified below.
         let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -7400,7 +7402,7 @@ mod tests {
     // links the coderay stylesheet in the `<head>`, right after the primary one
     // (the `Secure` default links rather than embeds). This is the stylesheet
     // side of coderay — its `docinfo :head` — even though the source spans are
-    // not yet tokenized (#223).
+    // never tokenized (server-side syntax highlighting is not planned).
     #[test]
     fn coderay_links_its_stylesheet_after_the_primary_one() {
         let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");

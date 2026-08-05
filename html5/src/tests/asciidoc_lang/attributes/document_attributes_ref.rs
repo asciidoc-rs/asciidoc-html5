@@ -1902,8 +1902,8 @@ _url_
 // Source highlighting and formatting: `source-highlighter`/`source-language`
 // are verified on the `verbatim` module pages; the per-highlighter tuning
 // (CodeRay/Pygments/Rouge/prettify/highlight.js) configures the server-side
-// highlighters this renderer does not run (html5#223), so those rows have no
-// distinct rendered value here.
+// highlighters this renderer does not run (server-side syntax highlighting is
+// not planned), so those rows have no distinct rendered value here.
 non_normative!(
     r#"
 == Source highlighting and formatting attributes

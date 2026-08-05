@@ -1844,7 +1844,8 @@ include::verbatim:example$source.adoc[tag=src-base]
 }
 
 // The rouge highlighter shown here is a server-side highlighter this renderer
-// does not run (issue #223), so enabling it is non-normative.
+// does not run (server-side syntax highlighting is not planned), so enabling it
+// is non-normative.
 non_normative!(
     r#"
 [IMPORTANT]
