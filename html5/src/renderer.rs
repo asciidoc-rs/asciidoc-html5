@@ -31,11 +31,11 @@ use std::path::PathBuf;
 use asciidoc_parser::{
     attributes::Attrlist,
     blocks::{
-        AdmonitionBlock, Block, Break, BreakType, ColumnStyle,
-        CompoundDelimitedContext, ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment,
-        IsBlock, ListBlock, ListItem, ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock,
-        QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell,
-        TableCellContent, TableColumn, TableRow, TocBlock, VerticalAlignment,
+        AdmonitionBlock, Block, Break, BreakType, ColumnStyle, CompoundDelimitedContext,
+        ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment, IsBlock, ListBlock, ListItem,
+        ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock, QuoteType, SectionBlock,
+        SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell, TableCellContent,
+        TableColumn, TableRow, TocBlock, VerticalAlignment,
     },
     content::{SubstitutionGroup, SubstitutionStep},
     document::{DocinfoLocation, Footnote, Header, InterpretedValue, TocMode},
