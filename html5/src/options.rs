@@ -592,6 +592,36 @@ impl Options {
             };
         }
 
+        // Matching Asciidoctor: `Secure` forbids the *document* from enabling
+        // `icons` (Asciidoctor's SECURE "restrict document from enabling icons"
+        // – `attr_overrides['icons'] ||= nil`). Icons draw in external assets –
+        // an `<img>` per admonition/callout/icon-macro whose origin a document
+        // `:iconsdir:` can steer – so an untrusted document must not be able to
+        // turn them on. Unlike the `source-highlighter` lock (SERVER and above),
+        // this one begins only at `Secure`: SERVER still "allows icons," so a
+        // document `:icons:`/`:icons: font` is honored there. Re-seed it silently
+        // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
+        // API did not touch it – so a document `:icons:` is dropped with no
+        // warning while an API/CLI `-a icons=font` (a trusted opt-in) is still
+        // honored, even under `Secure`, matching Asciidoctor 2.0.26 (verified
+        // against the oracle). This is the renderer half of #50.
+        if mode >= SafeMode::Secure {
+            let ctx = ModificationContext::ApiOnly;
+            parser = match self.last_action("icons") {
+                Some(Action::Value(value)) => {
+                    parser.with_intrinsic_attribute_silent("icons", value, ctx)
+                }
+                Some(Action::Set) => {
+                    parser.with_intrinsic_attribute_bool_silent("icons", true, ctx)
+                }
+                // An explicit API unset, or no API mention at all: no icons,
+                // locked against the document.
+                Some(Action::Unset) | None => {
+                    parser.with_intrinsic_attribute_bool_silent("icons", false, ctx)
+                }
+            };
+        }
+
         // Surface the input-file attribute family — `docfile`, `docdir`,
         // `docname`, `docfilesuffix` — the way Asciidoctor's loader does,
         // honoring the safe mode. Asciidoctor derives all four from the input
@@ -1448,6 +1478,96 @@ mod tests {
         );
 
         assert!(html.contains("highlightjs highlight"), "{html}");
+    }
+
+    // `icons` gets a `Secure`-only lock: an icon draws in external assets (an
+    // `<img>` per admonition/callout/icon-macro whose origin a document
+    // `:iconsdir:` can steer), so under `Secure` an untrusted document must not
+    // enable them. Unlike the `source-highlighter` lock, this one starts only at
+    // `Secure` – `Server` still allows icons. Mirrors Asciidoctor's SECURE
+    // `attr_overrides['icons'] ||= nil` (#50), matched against the 2.0.26 oracle.
+
+    #[test]
+    fn document_set_icons_is_ignored_under_secure() {
+        // A document that enables icons itself is dropped under `Secure` (the
+        // default), so the admonition keeps its text caption and the icon macro
+        // falls back to bracketed text – no glyph, no image.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+            &Options::new(),
+        );
+
+        assert!(html.contains("<div class=\"title\">Note</div>"), "{html}");
+        assert!(!html.contains("fa icon-note"), "{html}");
+        assert!(
+            html.contains("<span class=\"icon\">[heart&#93;</span>"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn api_set_icons_still_applies_under_secure() {
+        // The restriction is on the *document*, not the API: an API-set `icons`
+        // is honored even under `Secure` (the default), with the document not
+        // mentioning it. Font mode emits the Font Awesome glyphs.
+        let html = convert_with(
+            "= Doc\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+            &Options::new().attribute("icons", "font"),
+        );
+
+        assert!(html.contains("fa icon-note"), "{html}");
+        assert!(html.contains("<i class=\"fa fa-heart\"></i>"), "{html}");
+    }
+
+    #[test]
+    fn api_bare_set_icons_locks_out_the_document_under_secure() {
+        // A *bare* API `icons` (a set with no value, `Action::Set`) selects image
+        // mode and is seeded locked under `Secure`, exercising the
+        // `Some(Action::Set)` arm: the document's own `:icons: font` is dropped,
+        // so icons render as images (from `iconsdir`), not Font Awesome glyphs.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+            &Options::new().set("icons"),
+        );
+
+        assert!(!html.contains("fa icon-note"), "{html}");
+        assert!(
+            html.contains("<img src=\"./images/icons/note.png\" alt=\"Note\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains(
+                "<span class=\"icon\"><img src=\"./images/icons/heart.png\" alt=\"heart\"></span>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn document_icons_cannot_override_an_api_unset_under_secure() {
+        // An API unset locks icons off; the document's own `:icons:` cannot turn
+        // them back on under `Secure`.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+            &Options::new().unset("icons"),
+        );
+
+        assert!(html.contains("<div class=\"title\">Note</div>"), "{html}");
+        assert!(!html.contains("fa icon-note"), "{html}");
+    }
+
+    #[test]
+    fn document_set_icons_is_honored_under_server() {
+        // Below `Secure` (here `Server`) a document may enable icons – SERVER
+        // "allows icons," matching Asciidoctor – so `:icons: font` emits the
+        // Font Awesome glyphs.
+        let html = convert_with(
+            "= Doc\n:icons: font\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
+
+        assert!(html.contains("fa icon-note"), "{html}");
+        assert!(html.contains("<i class=\"fa fa-heart\"></i>"), "{html}");
     }
 
     // `docfile` and `docdir` are intrinsic attributes this crate originates

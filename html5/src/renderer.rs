@@ -7196,8 +7196,13 @@ mod tests {
     fn admonition_custom_icon_with_extension_is_used_as_is() {
         // In image-icon mode, a per-block `icon` value that already has a file
         // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
-        // appends the `icontype` only when the value has no extension).
-        let html = convert(":icons:\n\n[NOTE,icon=tip.png]\nSave often.");
+        // appends the `icontype` only when the value has no extension). Icons are
+        // enabled from the document (`:icons:`), so this converts under `Server`
+        // – a mode below `Secure`, which drops document-set icons (#50).
+        let html = convert_with(
+            ":icons:\n\n[NOTE,icon=tip.png]\nSave often.",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
         assert!(html.contains(
             "<td class=\"icon\">\n\
              <img src=\"./images/icons/tip.png\" alt=\"Note\">\n</td>"
@@ -7207,8 +7212,12 @@ mod tests {
     #[test]
     fn admonition_custom_icon_without_extension_gets_icontype() {
         // A per-block `icon` value with no extension gains the document's
-        // `icontype` extension.
-        let html = convert(":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.");
+        // `icontype` extension. Converted under `Server` so the document-set
+        // `:icons:` is honored (`Secure` drops it – #50).
+        let html = convert_with(
+            ":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
         assert!(html.contains(
             "<td class=\"icon\">\n\
              <img src=\"./images/icons/hint.svg\" alt=\"Note\">\n</td>"

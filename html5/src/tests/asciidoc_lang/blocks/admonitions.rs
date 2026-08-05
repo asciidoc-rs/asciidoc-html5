@@ -18,7 +18,17 @@ use crate::{
         assert_html::{assert_css, assert_xpath},
         sdd::*,
     },
+    Options, SafeMode,
 };
+
+// Converts under `Server`, a safe mode below `Secure` that still "allows icons"
+// (per the Safe Modes page). The admonition-icon examples enable icons from the
+// document header (`:icons:` / `:icons: font`), which this crate's default
+// `Secure` mode drops (matching Asciidoctor – see #50), so those examples
+// render under `Server` to reproduce Asciidoctor's icon-permitting CLI output.
+fn convert_with_icons(source: &str) -> String {
+    crate::convert_with(source, &Options::new().safe_mode(SafeMode::Server))
+}
 
 track_file!("ref/asciidoc-lang/docs/modules/blocks/pages/admonitions.adoc");
 
@@ -181,7 +191,7 @@ include::example$admonition.adoc[tag=para]
 "#
     );
 
-    let output = convert(
+    let output = convert_with_icons(
         "= Document Title\n:icons: font\n\n\
          WARNING: Wolpertingers are known to nest in server racks.\nEnter at your own risk.\n",
     );
@@ -201,7 +211,7 @@ include::example$admonition.adoc[tag=para]
 // line.
 #[test]
 fn icons_image_mode_renders_an_img_icon() {
-    let output = convert(
+    let output = convert_with_icons(
         "= Document Title\n:icons:\n\n\
          WARNING: Wolpertingers are known to nest in server racks.\n",
     );

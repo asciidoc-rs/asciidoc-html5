@@ -19,13 +19,14 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // from the page, the integer level of each mode, the default stylesheet
 // link-vs-embed choice (`SECURE` "prevents access to stylesheets" and so links
 // it, while a lower mode embeds it inline), and the `docfile`/`docdir`
-// concealment under `SERVER`/`SECURE`. Other mode effects this crate honors —
-// the `docinfo`, `backend`, `doctype`, and `source-highlighter` restrictions,
-// and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
-// include directives and URI reads – are exercised by unit tests elsewhere, so
-// their spans stay non-normative here (the `source-highlighter` bullet excepted
-// – it is verified below). What remains unsurfaced – icons, `data-uri`, and SVG
-// modes – is likewise non-normative.
+// concealment under `SERVER`/`SECURE`, and the SECURE `icons` lock (a document
+// `:icons:` is dropped). Other mode effects this crate honors – the `docinfo`,
+// `backend`, `doctype`, and `source-highlighter` restrictions, and (through
+// asciidoc-parser's own safe mode, which this crate sets; see #37) include
+// directives and URI reads – are exercised by unit tests elsewhere, so their
+// spans stay non-normative here (the `source-highlighter` and `icons` bullets
+// excepted – each is verified below). What remains unsurfaced – `data-uri` and
+// SVG modes – is likewise non-normative.
 
 non_normative!(
     r#"
@@ -236,13 +237,14 @@ Its integer value is `10`.
 // below. Docinfo, backend, and doctype are likewise surfaced: SECURE disables
 // docinfo (no docinfo file is read), forces the backend to `html5`, and pins
 // the doctype to `article`, each locked against the document (covered by unit
-// tests in `options.rs`). The remaining SECURE
-// restrictions are not surfaced by this renderer yet, each tracked for later
-// implementation: icons
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), `data-uri`
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/51), interactive/inline
-// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), and
-// source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+// tests in `options.rs`). Icons are now enforced too (#50): SECURE strips a
+// document `:icons:` so no icon assets are drawn in – verified from the
+// `disables icons` bullet just below. The remaining SECURE restrictions are not
+// surfaced by this renderer yet, each tracked for later implementation:
+// `data-uri` (https://github.com/asciidoc-rs/asciidoc-html5/issues/51),
+// interactive/inline SVG modes
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), and source
+// highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
 // stylesheets," which is why it links the stylesheet rather than embedding it —
@@ -256,7 +258,42 @@ non_normative!(
 The `SECURE` safe mode level disallows the document from attempting to read files from the file system and including their contents into the document.
 Additionally, it:
 
+"#
+);
+
+// SECURE strips a document `:icons:` (Asciidoctor's SECURE "restrict document
+// from enabling icons"), so a document that tries to enable icons under SECURE
+// renders none: the admonition keeps its text caption instead of a glyph/image,
+// and an `icon:` macro falls back to its bracketed text. An API-set `icons` is
+// still honored – that half is covered by unit tests in `options.rs` – but the
+// page's claim is the document lock, which is what this drives. (SERVER still
+// allows icons, verified there; this is the SECURE half of the icons work,
+// #50.)
+#[test]
+fn secure_disables_document_icons() {
+    verifies!(
+        r#"
 * disables icons
+"#
+    );
+
+    // Under SECURE (the API default), a document `:icons: font` is dropped: the
+    // admonition shows its caption text, not a Font Awesome glyph, and the icon
+    // macro falls back to bracketed text.
+    let html = convert_with(
+        "= Doc\n:icons: font\n\n[NOTE]\nSave often.\n\nicon:heart[]",
+        &Options::new(),
+    );
+    assert!(html.contains("<div class=\"title\">Note</div>"), "{html}");
+    assert!(!html.contains("fa icon-note"), "{html}");
+    assert!(
+        html.contains("<span class=\"icon\">[heart&#93;</span>"),
+        "{html}"
+    );
+}
+
+non_normative!(
+    r#"
 * disables include directives (`+include::[]+`)
 * data can not be retrieved from URIs
 * prevents access to stylesheets and JavaScript files
