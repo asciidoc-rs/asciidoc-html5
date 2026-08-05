@@ -1253,13 +1253,21 @@ fn render_toc(document: &Document<'_>, class: &str) -> String {
         return String::new();
     }
 
-    // The `class` is escaped defensively (a no-op for the `toc`/`toc2`
-    // defaults); the `toc-title` is emitted verbatim, matching Asciidoctor's
-    // `#{doc.attr 'toc-title'}`.
+    toc_container(class, document.toc_title(), &outline)
+}
+
+/// Wraps a pre-rendered `outline` in the header/preamble TOC container —
+/// `<div id="toc" class="…"><div id="toctitle">…</div>{outline}</div>`. Shared
+/// by [`render_toc`] (top-level document) and the AsciiDoc table cell's leading
+/// TOC (its nested document), which builds its outline from a block slice.
+///
+/// The `class` is escaped defensively (a no-op for the `toc`/`toc2` defaults);
+/// the `title` is emitted verbatim, matching Asciidoctor's `#{doc.attr
+/// 'toc-title'}`.
+fn toc_container(class: &str, title: &str, outline: &str) -> String {
     format!(
-        "<div id=\"toc\" class=\"{}\">\n<div id=\"toctitle\">{}</div>\n{outline}\n</div>",
+        "<div id=\"toc\" class=\"{}\">\n<div id=\"toctitle\">{title}</div>\n{outline}\n</div>",
         escape_attribute(class),
-        document.toc_title(),
     )
 }
 
@@ -1363,6 +1371,7 @@ pub(crate) fn render_document<'a>(
         standalone,
         toc_mode,
         toc_html,
+        cell_toc: None,
         icons_set: document.is_attribute_set("icons"),
         icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
         iconsdir: attribute_str(document, "iconsdir")
@@ -1559,6 +1568,52 @@ struct CellRenderConfig {
     svg_source: Option<SvgSource>,
 }
 
+/// The table-of-contents settings a nested AsciiDoc table cell resolves from
+/// its *own* document, independent of the parent document's TOC. Unlike
+/// [`CellRenderConfig`], these are not inherited — the cell is a standalone
+/// nested document, so its `toc`/`toclevels`/`toc-title`/`toc-class` come from
+/// the cell body's own attributes (see
+/// [`AsciiDocCell::toc_mode`](asciidoc_parser::blocks::AsciiDocCell::toc_mode)).
+struct CellTocConfig {
+    /// Where (and whether) the cell renders a table of contents.
+    mode: TocMode,
+
+    /// The deepest section level the cell's TOC includes (`toclevels`).
+    levels: usize,
+
+    /// The number of section levels that carry a number in the cell's TOC
+    /// (`sectnumlevels`).
+    sectnumlevels: usize,
+
+    /// The cell's TOC title (`toc-title`).
+    title: String,
+
+    /// The CSS class of the cell's TOC container (`toc-class`).
+    class: String,
+}
+
+/// The context a cell sub-renderer keeps so a `toc::[]` block macro inside the
+/// cell can build its outline from the cell's own blocks — the block-slice
+/// counterpart of the top-level document a [`Renderer`] otherwise reads its TOC
+/// from. Held in [`Renderer::cell_toc`].
+struct CellToc<'a> {
+    /// The cell's parsed blocks, walked to build the outline.
+    blocks: &'a [Block<'a>],
+
+    /// The deepest section level included (`toclevels`), overridable per macro
+    /// by a `levels=` attribute.
+    toclevels: usize,
+
+    /// The number of section levels that carry a number (`sectnumlevels`).
+    sectnumlevels: usize,
+
+    /// The cell's TOC title (`toc-title`), the macro's default title.
+    title: String,
+
+    /// The cell's TOC class (`toc-class`), the macro's default container class.
+    class: String,
+}
+
 /// Accumulates HTML as the document tree is walked.
 struct Renderer<'a> {
     out: String,
@@ -1587,6 +1642,13 @@ struct Renderer<'a> {
     /// sections. Emitted at the single site selected by
     /// [`toc_mode`](Self::toc_mode).
     toc_html: String,
+
+    /// The table-of-contents context for a nested AsciiDoc table cell, or
+    /// `None` for a top-level document (which reads its TOC from
+    /// [`document`](Self::document) instead). It carries the cell's parsed
+    /// blocks and resolved `toc*` settings so a `toc::[]` block macro inside
+    /// the cell can build its outline without a [`Document`].
+    cell_toc: Option<CellToc<'a>>,
 
     /// Whether the document sets `icons` to any value (Asciidoctor's `attr?
     /// 'icons'`). It selects the icon-based rendering of callout lists (a
@@ -3744,6 +3806,28 @@ impl Renderer<'_> {
                     ad.title(),
                     ad.is_inline(),
                     ad.footnotes(),
+                    // The cell is a standalone nested document, so its TOC is
+                    // resolved from its own `toc*` attributes, not inherited
+                    // from the parent (Asciidoctor's `AsciiDocCell` behavior).
+                    CellTocConfig {
+                        mode: ad.toc_mode(),
+                        levels: ad.toc_levels(),
+                        // The cell's `sectnumlevels` is read from its own nested
+                        // document (default 3), like the outline module's
+                        // `attribute_usize`; the cell type is un-nameable here,
+                        // so this reads it inline. `sectnumlevels` always
+                        // resolves to a `Value` (its default is `3`), so the
+                        // non-`Value` arm is a defensive fallback (hence
+                        // uncovered). The parser currently surfaces only the
+                        // default here, never a cell-set override (see
+                        // asciidoc-parser#1092).
+                        sectnumlevels: match ad.attribute_value("sectnumlevels") {
+                            InterpretedValue::Value(value) => value.parse().unwrap_or(3),
+                            _ => 3,
+                        },
+                        title: ad.toc_title().to_string(),
+                        class: ad.toc_class().to_string(),
+                    },
                     CellRenderConfig {
                         icons_set: self.icons_set,
                         icons_font: self.icons_font,
@@ -4008,35 +4092,57 @@ impl Renderer<'_> {
     /// `toc-placement` is not `macro`, or there are no sections to list — the
     /// macro emits Asciidoctor's `<!-- toc disabled -->` placeholder instead.
     fn toc_macro<'src>(&mut self, block: &'src Block<'src>, toc: &'src TocBlock<'src>) {
-        // The macro renders a TOC only when this document defers to it. A cell
-        // sub-renderer (which holds no `Document` and never enables a TOC) also
-        // lands here and falls through to the placeholder.
-        let outline = match self.document {
-            Some(document) if self.toc_mode == TocMode::Macro => {
-                let mut options = crate::OutlineOptions::new();
+        // The macro's `levels` attribute overrides `toclevels` for this TOC
+        // only.
+        let macro_levels = toc
+            .macro_attrlist()
+            .named_attribute("levels")
+            .and_then(|attr| attr.value().trim().parse::<usize>().ok());
 
-                // The macro's `levels` attribute overrides `toclevels` for this
-                // TOC only.
-                if let Some(levels) = toc
-                    .macro_attrlist()
-                    .named_attribute("levels")
-                    .and_then(|attr| attr.value().trim().parse::<usize>().ok())
-                {
-                    options = options.toclevels(levels);
-                }
-
-                crate::outline::render_outline(document, &options)
+        // The macro renders a TOC only when this document defers to it. The
+        // outline and the default title/class come from the top-level
+        // `Document` or, in a nested AsciiDoc cell sub-renderer (which holds no
+        // `Document`), from the cell's own TOC context. Anything else falls
+        // through to the placeholder below.
+        //
+        // A `Macro`-mode renderer always has exactly one of `document` /
+        // `cell_toc`, so the final `else` is a defensive, unreachable
+        // catch-all (hence uncovered) that keeps the expression exhaustive.
+        let (outline, default_title, default_class) = if self.toc_mode != TocMode::Macro {
+            (String::new(), String::new(), String::new())
+        } else if let Some(document) = self.document {
+            let mut options = crate::OutlineOptions::new();
+            if let Some(levels) = macro_levels {
+                options = options.toclevels(levels);
             }
 
-            _ => String::new(),
+            (
+                crate::outline::render_outline(document, &options),
+                document.toc_title().to_string(),
+                document.toc_class().to_string(),
+            )
+        } else if let Some(cell_toc) = self.cell_toc.as_ref() {
+            let levels = macro_levels.unwrap_or(cell_toc.toclevels);
+
+            (
+                crate::outline::render_outline_blocks(
+                    cell_toc.blocks,
+                    levels,
+                    cell_toc.sectnumlevels,
+                ),
+                cell_toc.title.clone(),
+                cell_toc.class.clone(),
+            )
+        } else {
+            (String::new(), String::new(), String::new())
         };
 
         // No sections yields an empty outline, which is Asciidoctor's
         // `doc.sections?` guard — emit the placeholder comment.
-        let Some(document) = self.document.filter(|_| !outline.is_empty()) else {
+        if outline.is_empty() {
             self.line("<!-- toc disabled -->");
             return;
-        };
+        }
 
         // An explicit `id` renames both the container and — suffixed with
         // `title` — the title block; absent, they fall back to `toc` /
@@ -4051,10 +4157,7 @@ impl Renderer<'_> {
 
         // A block title overrides `toc-title`; the block's role(s) override
         // `toc-class`.
-        let title = block
-            .title()
-            .map(str::to_string)
-            .unwrap_or_else(|| document.toc_title().to_string());
+        let title = block.title().map(str::to_string).unwrap_or(default_title);
 
         // The role can arrive two ways: as a `role=` attribute inside the macro
         // (`toc::[role=…]`) or as the block's role shorthand on the line above
@@ -4068,7 +4171,7 @@ impl Renderer<'_> {
                 let roles = block.roles();
                 (!roles.is_empty()).then(|| roles.join(" "))
             })
-            .unwrap_or_else(|| document.toc_class().to_string());
+            .unwrap_or(default_class);
 
         self.line(&format!(
             "<div{id_attr} class=\"{}\">",
@@ -4913,12 +5016,14 @@ fn split_blank_lines(text: &str) -> impl Iterator<Item = &str> {
 ///
 /// An `inline`-doctype cell renders just the inline content of its first block.
 /// Otherwise the cell's blocks are rendered as embedded output, preceded by the
-/// nested-document `<h1>` when the cell's title is shown.
+/// nested-document `<h1>` when the cell's title is shown, and (for an
+/// `auto`-placed TOC) by the cell's leading table of contents.
 fn render_cell_document<'s>(
     blocks: &'s [Block<'s>],
     title: Option<&str>,
     inline: bool,
     footnotes: &[Footnote],
+    toc: CellTocConfig,
     config: CellRenderConfig,
 ) -> String {
     if inline {
@@ -4932,21 +5037,49 @@ fn render_cell_document<'s>(
             .to_string();
     }
 
+    // The cell is a standalone nested document with its own TOC. An
+    // `auto`/`left`/`right`/`top`/`bottom` placement is built here and emitted
+    // ahead of the content (like embedded output); a `macro` placement is built
+    // at its `toc::[]` block from the cell blocks carried in `cell_toc`. As in
+    // embedded output, a leading TOC uses the plain `toc` class (the side-column
+    // layout the other classes drive isn't available), while `toc-class` still
+    // rides through `cell_toc` for the macro form.
+    let leading_toc = matches!(
+        toc.mode,
+        TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
+    );
+
+    let toc_html = if leading_toc {
+        let outline = crate::outline::render_outline_blocks(blocks, toc.levels, toc.sectnumlevels);
+        if outline.is_empty() {
+            String::new()
+        } else {
+            toc_container("toc", &toc.title, &outline)
+        }
+    } else {
+        String::new()
+    };
+
     // The cell is a nested document that inherits the parent's verbatim-layout
     // attributes (`tabsize`, `source-indent`, `prewrap`) and section-heading
     // toggles (`sectanchors`, `sectlinks`), so the sub-renderer carries them
     // forward.
     let mut renderer = Renderer {
         out: String::new(),
-        // The cell sub-renderer is handed a block slice, not a `Document`; with
-        // the TOC disabled below, the `toc::[]` macro path never reads it.
+        // The cell sub-renderer is handed a block slice, not a `Document`; the
+        // `toc::[]` macro path reads the cell's TOC from `cell_toc` instead.
         document: None,
         custom_stylesheet: None,
         standalone: false,
-        // A nested cell document never renders its own TOC (Asciidoctor's cell
-        // conversion emits no table of contents), so leave it disabled.
-        toc_mode: TocMode::Disabled,
-        toc_html: String::new(),
+        toc_mode: toc.mode,
+        toc_html,
+        cell_toc: Some(CellToc {
+            blocks,
+            toclevels: toc.levels,
+            sectnumlevels: toc.sectnumlevels,
+            title: toc.title,
+            class: toc.class,
+        }),
         icons_set: config.icons_set,
         icons_font: config.icons_font,
         iconsdir: config.iconsdir.clone(),
@@ -4969,6 +5102,14 @@ fn render_cell_document<'s>(
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
     }
+
+    // An `auto`-placed TOC leads the cell body, after the optional title and
+    // ahead of the content, mirroring embedded output (see
+    // [`embedded_document`](Renderer::embedded_document)).
+    if !renderer.toc_html.is_empty() {
+        renderer.line(&renderer.toc_html.clone());
+    }
+
     renderer.blocks(blocks.iter());
 
     // An AsciiDoc cell keeps its own footnote registry, isolated from the
@@ -5329,6 +5470,90 @@ mod tests {
     fn toc_title_is_configurable() {
         let html = convert("= Doc\n:toc:\n:toc-title: On this page\n\n== Section One\n\nx");
         assert!(html.contains("<div id=\"toctitle\">On this page</div>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_auto_toc_leads_the_cell_body() {
+        // A nested AsciiDoc (`a`) cell resolves its TOC from its own `:toc:`,
+        // independent of the parent. An `auto` placement leads the cell body
+        // (before its sections) with the plain `toc` class, like embedded
+        // output, matching Asciidoctor 2.0.26's nested-document conversion.
+        let html = crate::convert_with(
+            "|===\na|\n:toc:\n\n== Cell Section\n\nbody\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains(
+            "<div class=\"content\"><div id=\"toc\" class=\"toc\">\n\
+             <div id=\"toctitle\">Table of Contents</div>\n\
+             <ul class=\"sectlevel1\">\n\
+             <li><a href=\"#_cell_section\">Cell Section</a></li>\n\
+             </ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn asciidoc_cell_macro_toc_renders_at_the_toc_block() {
+        // A cell's `:toc: macro` defers to a `toc::[]` block inside the cell,
+        // which renders with the `convert_toc` shape (title block carries
+        // `class="title"`) and honors the block's own id.
+        let html = crate::convert_with(
+            "|===\na|\n:toc: macro\n\n[#cell-toc]\ntoc::[]\n\n== Cell Section\n\nbody\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains(
+            "<div id=\"cell-toc\" class=\"toc\">\n\
+             <div id=\"cell-toctitle\" class=\"title\">Table of Contents</div>\n\
+             <ul class=\"sectlevel1\">\n\
+             <li><a href=\"#_cell_section\">Cell Section</a></li>\n\
+             </ul>\n</div>"
+        ));
+    }
+
+    #[test]
+    fn asciidoc_cell_auto_toc_needs_sections() {
+        // A cell whose `:toc:` outline would be empty (no sections) emits no
+        // TOC, like a top-level document (see `toc_needs_sections`).
+        let html = crate::convert_with("|===\na|\n:toc:\n\njust text\n|===\n", &Options::new());
+        assert!(!html.contains("<div id=\"toc\""));
+    }
+
+    #[test]
+    fn asciidoc_cell_toc_numbers_sections() {
+        // With `:sectnums:`, the cell's TOC entries carry their section numbers,
+        // resolved from the cell's own nested document, matching Asciidoctor
+        // 2.0.26. (The `sectnumlevels` cap is not honored inside a cell — the
+        // parser surfaces only the default; see asciidoc-parser#1092.)
+        let html = crate::convert_with(
+            "|===\na|\n:toc:\n:sectnums:\n\n== Alpha\n\n== Bravo\n\nx\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<li><a href=\"#_alpha\">1. Alpha</a></li>"));
+        assert!(html.contains("<li><a href=\"#_bravo\">2. Bravo</a></li>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_macro_toc_honors_levels_override() {
+        // A `levels=` attribute on the cell's `toc::[]` macro caps the depth for
+        // that TOC only: `levels=1` drops the nested level-2 entry.
+        let html = crate::convert_with(
+            "|===\na|\n:toc: macro\n\ntoc::[levels=1]\n\n== Alpha\n\n=== Beta\n\nx\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<li><a href=\"#_alpha\">Alpha</a></li>"));
+        assert!(!html.contains("Beta</a>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_macro_toc_without_sections_is_disabled() {
+        // A cell's `toc::[]` macro with no sections to list emits Asciidoctor's
+        // placeholder comment, like the top-level document
+        // (`toc_macro_without_macro_placement_is_disabled`).
+        let html = crate::convert_with(
+            "|===\na|\n:toc: macro\n\ntoc::[]\n\njust text\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<!-- toc disabled -->"));
+        assert!(!html.contains("<div id=\"toc\""));
     }
 
     #[test]
@@ -8706,6 +8931,7 @@ mod tests {
             standalone: false,
             toc_mode: super::TocMode::Disabled,
             toc_html: String::new(),
+            cell_toc: None,
             icons_set: false,
             icons_font: false,
             iconsdir: String::new(),
