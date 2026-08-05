@@ -1610,11 +1610,20 @@ impl Renderer<'_> {
             ));
         }
 
-        // Document metadata, matching Asciidoctor's `<head>` order: the
-        // `description` and `keywords` attribute values (already special-char
-        // escaped by the parser) and the joined `authors`. The author content
-        // has any `<…>` segment stripped, mirroring Asciidoctor's
-        // `XmlSanitizeRx` scrub of an email left in an author name.
+        // Document metadata, matching Asciidoctor's `<head>` order: `app-name`
+        // (as `application-name`), then `description` and `keywords`, the joined
+        // `authors`, and finally `copyright`. Every value here except `authors`
+        // comes from an attribute *entry*, so the parser has already applied
+        // header substitutions (special characters escaped) — they are emitted
+        // verbatim, exactly as Asciidoctor does, so an `app-name`/`copyright` of
+        // `<script>` reaches the page as `&lt;script&gt;`, not as live markup.
+        // Only `authors` (built from the author info line, not an entry) arrives
+        // raw and is escaped below.
+        if let Some(app_name) = attribute_str(document, "app-name") {
+            self.line(&format!(
+                "<meta name=\"application-name\" content=\"{app_name}\">"
+            ));
+        }
         if let Some(description) = attribute_str(document, "description") {
             self.line(&format!(
                 "<meta name=\"description\" content=\"{description}\">"
@@ -1631,6 +1640,11 @@ impl Renderer<'_> {
             self.line(&format!(
                 "<meta name=\"author\" content=\"{}\">",
                 escape_attribute(&authors)
+            ));
+        }
+        if let Some(copyright) = attribute_str(document, "copyright") {
+            self.line(&format!(
+                "<meta name=\"copyright\" content=\"{copyright}\">"
             ));
         }
 
@@ -6109,6 +6123,27 @@ mod tests {
         // context — Asciidoctor escapes (rather than strips) any angle brackets.
         let html = convert("= Doc\n:author: Foo <bar> Baz\n\nBody.");
         assert!(html.contains("<meta name=\"author\" content=\"Foo &lt;bar&gt; Baz\">"));
+    }
+
+    #[test]
+    fn app_name_and_copyright_metas_escape_markup() {
+        // `app-name` and `copyright` come from attribute entries, so the parser
+        // has already special-char-escaped their values and the renderer emits
+        // them verbatim. A value containing markup therefore reaches the page
+        // escaped — not as live markup — matching Asciidoctor. (Escaping here
+        // would double-escape and diverge from the oracle.)
+        let html =
+            convert("= Doc\n:app-name: <script>x</script>\n:copyright: A & <b>B</b>\n\nBody.");
+        assert!(
+            html.contains(
+                "<meta name=\"application-name\" content=\"&lt;script&gt;x&lt;/script&gt;\">"
+            ),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"copyright\" content=\"A &amp; &lt;b&gt;B&lt;/b&gt;\">"),
+            "{html}"
+        );
     }
 
     #[test]
