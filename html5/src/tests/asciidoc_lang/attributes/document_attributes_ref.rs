@@ -1789,7 +1789,15 @@ Only relevant used when value of `icons` attribute is `font`.
     );
 
     // The Font Awesome `<link>` lives in the standalone document's `<head>`.
-    let standalone = |source: &str| convert_with(source, &Options::new().standalone(true));
+    // Each example enables icons from the *document* header (`:icons: font`),
+    // which only takes effect below `Secure` (#56), so these convert under
+    // `Server`.
+    let standalone = |source: &str| {
+        convert_with(
+            source,
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        )
+    };
 
     // `iconfont-remote` is set (empty) by default, so `:icons: font` links the
     // Font Awesome stylesheet from a CDN. `iconfont-cdn`, when unset, defaults
