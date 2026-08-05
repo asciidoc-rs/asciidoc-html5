@@ -44,7 +44,7 @@ use asciidoc_parser::{
 
 use crate::{
     html::{class_attribute, escape_attribute, id_attribute},
-    svg_handler,
+    svg_file_handler,
 };
 
 /// Asciidoctor's compiled default stylesheet, embedded verbatim. This is a copy
@@ -88,6 +88,10 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 /// The `highlight.js` release Asciidoctor v2.0.26 links from the CDN
 /// (`Asciidoctor::HIGHLIGHT_JS_VERSION`).
 const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
+
+/// The Font Awesome release Asciidoctor v2.0.26 links from the CDN for
+/// font-based icons (`Asciidoctor::FONT_AWESOME_VERSION`).
+const FONT_AWESOME_VERSION: &str = "4.7.0";
 
 /// The active *client-side* syntax highlighter, resolved from the
 /// `source-highlighter` document attribute.
@@ -328,6 +332,23 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     match document.attribute_value(name) {
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
+    }
+}
+
+/// The ` style="max-width: <value>;"` fragment Asciidoctor adds to each of the
+/// standalone layout's container divs (`#header`, `#content`, `#footnotes`,
+/// `#footer`) when the `max-width` attribute is set, or an empty string when it
+/// is not. The value is emitted whenever the attribute is *present* — matching
+/// Asciidoctor's `node.attr? 'max-width'` gate, which treats a bare
+/// `:max-width:` (no value) as present, yielding an empty length.
+fn max_width_style(document: &Document<'_>) -> String {
+    match document.attribute_value("max-width") {
+        InterpretedValue::Value(value) => {
+            format!(" style=\"max-width: {};\"", escape_attribute(&value))
+        }
+
+        InterpretedValue::Set => " style=\"max-width: ;\"".to_string(),
+        InterpretedValue::Unset => String::new(),
     }
 }
 
@@ -1211,7 +1232,7 @@ fn render_toc(document: &Document<'_>, class: &str) -> String {
 /// against and the safe mode that confines the read.
 ///
 /// This mirrors the include/docinfo handlers' anchoring (see
-/// [`crate::svg_handler`]); *inline* images (`image:…`) are handled by the
+/// [`crate::svg_file_handler`]); *inline* images (`image:…`) are handled by the
 /// parser through its own registered handler, so this is only for block images.
 /// A `None` `svg_source` at [`render_document`] (the plain string
 /// [`convert`](crate::convert), which has no base directory) leaves a block
@@ -1713,6 +1734,11 @@ impl Renderer<'_> {
         // does the same unless the document opts out.
         self.stylesheet(document);
 
+        // Under `:icons: font`, the Font Awesome stylesheet `<link>` the icon
+        // glyphs depend on sits right after the primary stylesheet, matching
+        // Asciidoctor's placement (before the syntax highlighter's `<head>`).
+        self.iconfont_head(document);
+
         // The active syntax highlighter's `<head>` docinfo (its stylesheet
         // `<link>`) sits after the stylesheet and before the head docinfo,
         // matching Asciidoctor's placement.
@@ -1774,12 +1800,18 @@ impl Renderer<'_> {
         // is what lets a docinfo header replace the default one.
         self.docinfo(document, DocinfoLocation::Header);
 
+        // The `max-width` attribute constrains the body width by adding an
+        // inline `style="max-width: …;"` to each of the standalone layout's
+        // container divs (`#header`, `#content`, `#footnotes`, `#footer`),
+        // matching Asciidoctor's `html5` backend.
+        let max_width = max_width_style(document);
+
         // The header is suppressed by `noheader`.
         if !document.is_attribute_set("noheader") {
-            self.header(document);
+            self.header(document, &max_width);
         }
 
-        self.line("<div id=\"content\">");
+        self.line(&format!("<div id=\"content\"{max_width}>"));
         self.blocks(document.child_blocks());
         self.line("</div>");
 
@@ -1793,7 +1825,7 @@ impl Renderer<'_> {
         // "{last-update-label} {docdatetime}" line (the "Last updated …" stamp)
         // unless the document is `reproducible`.
         if !document.is_attribute_set("nofooter") {
-            self.line("<div id=\"footer\">");
+            self.line(&format!("<div id=\"footer\"{max_width}>"));
             self.line("<div id=\"footer-text\">");
 
             // The version line, gated on `revnumber` like Asciidoctor. The
@@ -1898,7 +1930,10 @@ impl Renderer<'_> {
             return;
         }
 
-        self.footnotes_block(footnotes);
+        // The document-level footnotes block picks up the `max-width` constraint
+        // like the other standalone container divs; the cell-local block (which
+        // has no document to read the attribute from) never does.
+        self.footnotes_block(footnotes, &max_width_style(document));
     }
 
     /// Emits the `#footnotes` block for the given footnotes — the `<div
@@ -1910,9 +1945,10 @@ impl Renderer<'_> {
     /// block and the cell-local block an AsciiDoc (`a`) table cell renders from
     /// its own footnote registry. The caller is responsible for the emptiness
     /// and `nofootnotes` checks; this assumes there is at least one footnote to
-    /// list.
-    fn footnotes_block(&mut self, footnotes: &[Footnote]) {
-        self.line("<div id=\"footnotes\">");
+    /// list. `max_width` is the ` style="max-width: …;"` fragment for the
+    /// standalone `#footnotes` div (empty for the cell-local block).
+    fn footnotes_block(&mut self, footnotes: &[Footnote], max_width: &str) {
+        self.line(&format!("<div id=\"footnotes\"{max_width}>"));
         self.line("<hr>");
 
         for footnote in footnotes {
@@ -1955,8 +1991,10 @@ impl Renderer<'_> {
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
     /// the author and revision details block and an automatically placed table
-    /// of contents.
-    fn header(&mut self, document: &Document<'_>) {
+    /// of contents. `max_width` is the ` style="max-width: …;"` fragment
+    /// applied to the opening `<div id="header">` when the `max-width`
+    /// attribute is set.
+    fn header(&mut self, document: &Document<'_>, max_width: &str) {
         let header: &Header<'_> = document.header();
 
         // A standalone document shows its title as the header `<h1>` by default;
@@ -1995,7 +2033,7 @@ impl Renderer<'_> {
             return;
         }
 
-        self.line("<div id=\"header\">");
+        self.line(&format!("<div id=\"header\"{max_width}>"));
 
         if let Some(title) = title {
             self.line(&format!("<h1>{title}</h1>"));
@@ -2086,6 +2124,55 @@ impl Renderer<'_> {
         if !content.is_empty() {
             self.line(content);
         }
+    }
+
+    /// Emits the Font Awesome stylesheet `<link>` that font-based icons
+    /// (`:icons: font`) depend on, matching Asciidoctor's `html5` backend (the
+    /// block right after the primary stylesheet). Nothing is emitted unless the
+    /// resolved `icons` attribute is `font` — the same gate the admonition,
+    /// callout, and inline-icon markup use, so the glyphs and the font that
+    /// draws them are always emitted together.
+    ///
+    /// With `iconfont-remote` set (the default), the link points at a CDN: an
+    /// `iconfont-cdn` attribute overrides the URL outright, otherwise it is
+    /// `{cdn}/font-awesome/{version}/css/font-awesome.min.css`, where `{cdn}`
+    /// follows `asset-uri-scheme` ([`cdn_base_url`]) and `{version}` is
+    /// [`FONT_AWESOME_VERSION`]. With `iconfont-remote` unset
+    /// (`:iconfont-remote!:`), the link is a local `{iconfont-name}.css`
+    /// (default `font-awesome`) resolved against `stylesdir` by
+    /// [`normalize_web_path`], so no remote resource is referenced.
+    ///
+    /// Following the resolved `icons` value keeps this consistent with the icon
+    /// markup: this crate honors a document-set `:icons:` in every safe mode
+    /// (unlike Asciidoctor, which locks `icons` against the document at
+    /// `Secure`), so the link, like the markup, is attribute-driven rather than
+    /// gated a second time in the renderer — mirroring how the syntax
+    /// highlighter's CDN `<link>` follows its (safe-mode-locked) attribute
+    /// (html5#56).
+    fn iconfont_head(&mut self, document: &Document<'_>) {
+        if !self.icons_font {
+            return;
+        }
+
+        let href = if document.is_attribute_set("iconfont-remote") {
+            attribute_str(document, "iconfont-cdn").unwrap_or_else(|| {
+                format!(
+                    "{}/font-awesome/{FONT_AWESOME_VERSION}/css/font-awesome.min.css",
+                    cdn_base_url(document)
+                )
+            })
+        } else {
+            let name = attribute_str(document, "iconfont-name")
+                .unwrap_or_else(|| "font-awesome".to_string());
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+
+            normalize_web_path(&format!("{name}.css"), &stylesdir)
+        };
+
+        self.line(&format!(
+            "<link rel=\"stylesheet\" href=\"{}\">",
+            escape_attribute(&href)
+        ));
     }
 
     /// Emits the active client-side highlighter's `<head>` docinfo — the
@@ -3956,11 +4043,13 @@ impl Renderer<'_> {
     /// (unlike most blocks, whose title precedes their content).
     ///
     /// The advanced image modes build on this baseline in their own issues: the
-    /// `data-uri` embed (#51), interactive/inline SVG (#52), and icons (#50).
-    /// An SVG target therefore renders as a plain `<img>` here. A `title=`
-    /// given *inside* the macro is not yet promoted to the figure caption
-    /// (the parser surfaces it only as a macro attribute); use the `.Title`
-    /// block line.
+    /// `data-uri` embed (#51) and icons (#50). Below `Secure`, an interactive
+    /// SVG target (`opts=interactive`) renders as an `<object>`, and an
+    /// `opts=inline` SVG embeds the file's `<svg>` contents directly (see the
+    /// SVG handling below); at `Secure` or above both fall back to a plain
+    /// `<img>`. A `title=` given *inside* the macro is not yet promoted to the
+    /// figure caption (the parser surfaces it only as a macro attribute); use
+    /// the `.Title` block line.
     fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
         let macro_attrs = media.macro_attrlist();
 
@@ -4013,8 +4102,8 @@ impl Renderer<'_> {
         //
         // * `opts=inline` embeds the SVG *file's contents* directly as an `<svg>`
         //   element (read through [`SvgSource`], prepared by
-        //   [`svg_handler::prepare_inline_svg`]); when the file cannot be read it falls
-        //   back to a `<span class="alt">`, as Asciidoctor does.
+        //   [`svg_file_handler::prepare_inline_svg`]); when the file cannot be read it
+        //   falls back to a `<span class="alt">`, as Asciidoctor does.
         // * `opts=interactive` embeds a live `<object>` so its scripting and links stay
         //   active, with a `fallback` image (or the alt text) nested.
         //
@@ -4129,13 +4218,14 @@ impl Renderer<'_> {
     /// `src` is the resolved web-path `src` (the target joined with
     /// `imagesdir`), the same value passed to the parser's inline-image
     /// handler. It is resolved against the [`SvgSource`] base directory and
-    /// confined by the safe mode's jail ([`svg_handler::read_svg_file`]),
+    /// confined by the safe mode's jail ([`svg_file_handler::read_svg_file`]),
     /// then prepared — preamble stripped and dimensions rewritten when
-    /// `width`/`height` are given — by [`svg_handler::prepare_inline_svg`].
+    /// `width`/`height` are given — by
+    /// [`svg_file_handler::prepare_inline_svg`].
     fn inline_svg(&self, src: &str, width: Option<&str>, height: Option<&str>) -> Option<String> {
         let source = self.svg_source.as_ref()?;
-        let raw = svg_handler::read_svg_file(&source.base_dir, source.safe, src)?;
-        svg_handler::prepare_inline_svg(raw, width, height)
+        let raw = svg_file_handler::read_svg_file(&source.base_dir, source.safe, src)?;
+        svg_file_handler::prepare_inline_svg(raw, width, height)
     }
 
     /// The role(s) placed on a media block's wrapper, matching Asciidoctor's
@@ -4749,7 +4839,7 @@ fn render_cell_document<'s>(
     // `footnote-number` counter is document-wide, so the indices (and thus the
     // `_footnotedef_N` ids) stay globally unique.
     if !footnotes.is_empty() {
-        renderer.footnotes_block(footnotes);
+        renderer.footnotes_block(footnotes, "");
     }
 
     // `convert` joins its lines with no trailing newline; drop the one the

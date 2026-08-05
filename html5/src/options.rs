@@ -56,7 +56,7 @@ use asciidoc_parser::{parser::ModificationContext, Parser, ReferenceTime, SafeMo
 
 use crate::{
     docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFileHandler,
-    svg_handler::FsSvgFileHandler,
+    svg_file_handler::FsSvgFileHandler,
 };
 
 /// The Asciidoctor release this crate targets for output parity, reported
@@ -747,22 +747,23 @@ impl Options {
         );
 
         // Anchor filesystem-relative resources: `include::` targets, docinfo
-        // files, and inline-SVG (`opts=inline`) targets. Naming the primary file
-        // lets the parser resolve top-level includes against that file's
-        // directory and derive the `docname` for private docinfo; supplying a
-        // base directory (given directly or derived from the primary file)
-        // installs the filesystem include, SVG, and docinfo handlers, each
-        // confined by the safe mode. Under `secure` the parser converts includes
-        // to links, drops docinfo, and never embeds an inline SVG without
-        // consulting the handlers, so installing them there is harmless.
+        // files, and SVG images embedded inline (`opts=inline`, both the inline
+        // `image:` and block `image::` forms). Naming the primary file lets the
+        // parser resolve top-level includes against that file's directory and
+        // derive the `docname` for private docinfo; supplying a base directory
+        // (given directly or derived from the primary file) installs the
+        // filesystem include, docinfo, and SVG handlers, each confined by the
+        // safe mode. Under `secure` the parser converts includes to links, drops
+        // docinfo, and renders SVG images as plain `<img>` without consulting any
+        // handler, so installing them there is harmless.
         if let Some(primary) = &self.primary_file {
             parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
         }
         if let Some(base) = self.effective_base_dir() {
             parser = parser
                 .with_include_file_handler(FsIncludeFileHandler::new(base.clone(), mode))
-                .with_svg_file_handler(FsSvgFileHandler::new(base.clone(), mode))
-                .with_docinfo_file_handler(FsDocinfoFileHandler::new(base, mode));
+                .with_docinfo_file_handler(FsDocinfoFileHandler::new(base.clone(), mode))
+                .with_svg_file_handler(FsSvgFileHandler::new(base, mode));
         }
 
         // Pin the clock that drives the time-dependent document attributes, if

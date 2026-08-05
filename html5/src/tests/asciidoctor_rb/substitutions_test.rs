@@ -2601,12 +2601,73 @@ mod macros {
         assert_eq!(subs_opts("image:tiger.svg[Tiger,fallback=tiger.png,opts=interactive]", &Options::new().safe_mode(SafeMode::Server).attribute("imagesdir", "images")), "<span class=\"image\"><object type=\"image/svg+xml\" data=\"images/tiger.svg\"><img src=\"images/tiger.png\" alt=\"Tiger\"></object></span>");
     }
 
-    // Inline SVG (`opts=inline`) is not rendered: `asciidoc-parser` supports it
-    // but degrades to alt text unless a filesystem-backed `SvgFileHandler` is
-    // installed (via `Parser::with_svg_file_handler`), which this crate does
-    // not yet wire up. Tracked by asciidoc-html5#52.
-    non_normative!(
-        r#"
+    /// The raw contents this crate's `FsSvgFileHandler` reads for `circle.svg`,
+    /// standing in for Asciidoctor's on-disk `fixtures/circle.svg`. It carries
+    /// `width`, `height`, and `style` attributes (which inline rendering must
+    /// strip when an explicit width is supplied) plus an XML preamble (which
+    /// must be dropped).
+    const CIRCLE_SVG: &str = concat!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"500\" height=\"500\" ",
+        "style=\"fill:red\" viewBox=\"0 0 500 500\">",
+        "<circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>",
+    );
+
+    /// The expected inline rendering of `circle.svg` at width 100: the XML
+    /// preamble removed, the original width/height/style removed, and
+    /// `width="100"` appended to the opening tag.
+    const CIRCLE_SVG_INLINE: &str = concat!(
+        r#"<span class="image">"#,
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100">"#,
+        r#"<circle cx="250" cy="250" r="200"/></svg></span>"#,
+    );
+
+    /// Renders `image:circle.svg[Tiger,100,opts=inline]` against a throwaway
+    /// on-disk project whose `fixtures/circle.svg` holds [`CIRCLE_SVG`],
+    /// optionally with `data-uri` set. It writes the fixture, points `docdir`
+    /// at the temp directory and `imagesdir` at `fixtures` (so the resolved
+    /// target is `fixtures/circle.svg`), converts under the `server` safe
+    /// mode — which installs the
+    /// [`FsSvgFileHandler`](crate::svg_file_handler::FsSvgFileHandler)
+    /// and permits the inline mode — then removes the directory and returns the
+    /// substituted paragraph. This is the file-backed counterpart to Ruby's
+    /// `docdir: testdir` reading the real `fixtures/circle.svg`.
+    #[track_caller]
+    fn inline_svg_subs(data_uri: bool) -> String {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("adoc-inline-svg-{}-{unique}", std::process::id()));
+        std::fs::create_dir_all(dir.join("fixtures")).expect("create fixtures dir");
+        std::fs::write(dir.join("fixtures/circle.svg"), CIRCLE_SVG).expect("write circle.svg");
+
+        let mut opts = Options::new()
+            .safe_mode(SafeMode::Server)
+            .attribute("imagesdir", "fixtures")
+            .attribute("docdir", dir.to_string_lossy());
+
+        if data_uri {
+            opts = opts.set("data-uri");
+        }
+
+        let result = subs_opts("image:circle.svg[Tiger,100,opts=inline]", &opts);
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    // Inline SVG (`opts=inline`) embeds the SVG file's contents as an `<svg>`
+    // element. This crate installs a filesystem-backed `SvgFileHandler` (see
+    // `FsSvgFileHandler`), so the SVG is read from disk (honoring the safe-mode
+    // jail), its XML preamble is stripped, and the explicit `100` width replaces
+    // the file's own `width`/`height`/`style` — matching Asciidoctor. Resolves
+    // asciidoc-html5#52.
+    #[test]
+    fn an_image_macro_with_an_inline_svg_image_should_be_converted_to_an_svg_element() {
+        verifies!(
+            r#"
     test 'an image macro with an inline SVG image should be converted to an svg element' do
       para = block_from_string('image:circle.svg[Tiger,100,opts=inline]', safe: Asciidoctor::SafeMode::SERVER, attributes: { 'imagesdir' => 'fixtures', 'docdir' => testdir })
       result = para.sub_macros(para.source).gsub(/>\s+</, '><')
@@ -2617,19 +2678,39 @@ mod macros {
     end
 
 "#
-    );
+        );
 
-    // As 792 (inline SVG needs a `SvgFileHandler` this crate does not install),
-    // plus the `data-uri` variant. Tracked by asciidoc-html5#52.
-    non_normative!(
-        r#"
+        let result = inline_svg_subs(false);
+        assert_eq!(result, CIRCLE_SVG_INLINE);
+
+        // The Ruby test's regex assertions, spelled out: the `<svg>` tag carries
+        // `width="100"` and the file's own `width`/`height`/`style` are gone.
+        assert!(result.contains(r#"width="100""#));
+        assert!(!result.contains(r#"width="500""#));
+        assert!(!result.contains(r#"height="500""#));
+        assert!(!result.contains("style="));
+    }
+
+    // The `inline` embedding ignores `data-uri` (there is no `src` to embed —
+    // the SVG contents are inlined directly), so setting `data-uri` produces the
+    // same `<svg>` element. Resolves asciidoc-html5#52.
+    #[test]
+    fn an_image_macro_with_an_inline_svg_image_should_be_converted_to_an_svg_element_even_when_data_uri_is_set(
+    ) {
+        verifies!(
+            r#"
     test 'an image macro with an inline SVG image should be converted to an svg element even when data-uri is set' do
       para = block_from_string('image:circle.svg[Tiger,100,opts=inline]', safe: Asciidoctor::SafeMode::SERVER, attributes: { 'data-uri' => '', 'imagesdir' => 'fixtures', 'docdir' => testdir })
       assert_match(/<svg\s[^>]*width="100">/, para.sub_macros(para.source).gsub(/>\s+</, '><'))
     end
 
 "#
-    );
+        );
+
+        let result = inline_svg_subs(true);
+        assert_eq!(result, CIRCLE_SVG_INLINE);
+        assert!(result.contains(r#"width="100""#));
+    }
 
     #[test]
     fn an_image_macro_with_an_svg_image_should_not_use_an_object_element_when_safe_mode_is_secure()
