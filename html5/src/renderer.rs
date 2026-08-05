@@ -1183,7 +1183,7 @@ fn common_leading_indent(lines: &[&str]) -> Option<usize> {
 }
 
 /// Restores the leading indentation of a list item's *principal* paragraph
-/// `lines` from its raw source span, reproducing Asciidoctor's dedent (#237).
+/// `lines` from its raw source span, reproducing Asciidoctor's dedent.
 ///
 /// `asciidoc-parser` rewrites the leading whitespace of a list item's wrapped
 /// principal lines before the renderer sees it via `rendered_content`, and does
@@ -8143,7 +8143,8 @@ mod tests {
     #[test]
     fn restore_list_principal_indent_keeps_indent_when_a_wrapped_line_is_flush_left() {
         // A flush-left continuation line (`second`) zeroes the common indent, so
-        // the indented `// ...` line keeps its two spaces (the #237 shape).
+        // the indented `// ...` line keeps its two spaces (the hanging-indent
+        // shape this fix restores).
         let mut lines = vec![
             "list item 1".to_string(),
             "// not line comment".to_string(),

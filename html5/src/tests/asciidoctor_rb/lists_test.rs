@@ -592,7 +592,7 @@ wrapped content']"#,
             assert_css(&output, "ul", 1);
             assert_css(&output, "ul li", 2);
 
-            // The wrapped principal line keeps its `  ` hanging indent (#237); a
+            // The wrapped principal line keeps its `  ` hanging indent; a
             // multi-line `text()` predicate is the node-text line comparison the
             // Ruby test performs. Asciidoctor 2.0.26 emits no extra blank line
             // here, so the `gsub` the Ruby applies is a no-op for this output.
