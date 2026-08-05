@@ -533,6 +533,20 @@ mod tests {
             assert_eq!(match_dimension_attr(tag, 10), None);
             // Without leading whitespace, no match.
             assert_eq!(match_dimension_attr(r#"width="1""#, 0), None);
+            // An opening quote with no closing quote does not match (the value
+            // scan runs off the end), so a malformed tag is left intact rather
+            // than swallowing the rest of the string.
+            assert_eq!(match_dimension_attr(r#" width="unclosed"#, 0), None);
+            // A value character that is not a quote after `name=` does not match.
+            assert_eq!(match_dimension_attr(r#" width=bare"#, 0), None);
+        }
+
+        // A malformed opening tag whose `width` has no closing quote is left
+        // untouched by the strip: no attribute matches, so nothing is removed.
+        #[test]
+        fn strip_svg_dimension_attrs_leaves_an_unterminated_value() {
+            let tag = r#"<svg width="oops>"#;
+            assert_eq!(strip_svg_dimension_attrs(tag), tag);
         }
     }
 }
