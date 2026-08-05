@@ -2056,10 +2056,10 @@ Can't be unset in SECURE mode.
     assert!(!linked.contains("<style>"));
 }
 
-// `max-width` constrains the body width via inline styles on the layout
-// containers; not yet implemented (html5#280).
-non_normative!(
-    r#"
+#[test]
+fn max_width_attribute() {
+    verifies!(
+        r#"
 |max-width
 |CSS length (e.g. 55em, 12cm, etc)
 |{n}
@@ -2069,7 +2069,42 @@ non_normative!(
 Use CSS stylesheet instead.*
 
 "#
-);
+    );
+
+    // `max-width` adds an inline `style="max-width: …;"` to each of the
+    // standalone layout's container divs — `#header`, `#content`, `#footnotes`,
+    // and `#footer` — constraining the document body width (html5#280).
+    let constrained = convert_with(
+        "= Doc Title\nAuthor Name\n:max-width: 55em\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(constrained.contains(r#"<div id="header" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="content" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="footnotes" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="footer" style="max-width: 55em;">"#));
+
+    // A bare `:max-width:` (set with no value) still counts as present, so the
+    // style is emitted with an empty length — matching Asciidoctor's
+    // `node.attr? 'max-width'` gate.
+    let empty = convert_with(
+        "= Doc Title\nAuthor Name\n:max-width:\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(empty.contains(r#"<div id="header" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="content" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footnotes" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footer" style="max-width: ;">"#));
+
+    // Without the attribute, the same container divs carry no inline style.
+    let plain = convert_with(
+        "= Doc Title\nAuthor Name\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(plain.contains(r#"<div id="header">"#));
+    assert!(plain.contains(r#"<div id="content">"#));
+    assert!(plain.contains(r#"<div id="footnotes">"#));
+    assert!(plain.contains(r#"<div id="footer">"#));
+}
 
 #[test]
 fn stylesheet_location_and_toc_class_attributes() {
