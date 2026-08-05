@@ -2083,6 +2083,18 @@ Use CSS stylesheet instead.*
     assert!(constrained.contains(r#"<div id="footnotes" style="max-width: 55em;">"#));
     assert!(constrained.contains(r#"<div id="footer" style="max-width: 55em;">"#));
 
+    // A bare `:max-width:` (set with no value) still counts as present, so the
+    // style is emitted with an empty length — matching Asciidoctor's
+    // `node.attr? 'max-width'` gate.
+    let empty = convert_with(
+        "= Doc Title\nAuthor Name\n:max-width:\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(empty.contains(r#"<div id="header" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="content" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footnotes" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footer" style="max-width: ;">"#));
+
     // Without the attribute, the same container divs carry no inline style.
     let plain = convert_with(
         "= Doc Title\nAuthor Name\n\nHello.footnote:[A note.]\n",
