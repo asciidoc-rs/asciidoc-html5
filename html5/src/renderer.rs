@@ -783,6 +783,15 @@ fn asset_extname(path: &str) -> Option<&str> {
 /// other extension yields `image/<ext>` (the extension verbatim, without the
 /// dot, and *not* lowercased, matching Asciidoctor); a target with no extension
 /// is `application/octet-stream`.
+///
+/// The type is derived *only* from the target's extension, deliberately
+/// **not** from a `format` attribute — a faithful port of Asciidoctor's
+/// `generate_data_uri`, whose MIME derivation reads `Helpers.extname
+/// target_image` alone. So an extensionless target carrying `format=png` still
+/// embeds as `application/octet-stream` under `data-uri`, matching Asciidoctor
+/// 2.0.26 (verified against the oracle). `format` is honored where Asciidoctor
+/// honors it — distinguishing an SVG target for the interactive `<object>`
+/// referencing — just not here.
 fn data_uri_mimetype(target: &str) -> String {
     match asset_extname(target) {
         Some(".svg") => "image/svg+xml".to_string(),
@@ -5765,6 +5774,27 @@ mod tests {
                 dotdir.contains(&format!("data:application/octet-stream;base64,{GIF_B64}")),
                 "{dotdir}"
             );
+        }
+
+        // A `format` attribute does *not* steer the `data-uri` MIME type:
+        // Asciidoctor's `generate_data_uri` derives it from the target's
+        // extension alone, so an extensionless target with `format=png` still
+        // embeds as `application/octet-stream`, not `image/png`. Verified
+        // against Asciidoctor 2.0.26 — matching the oracle outranks the more
+        // "intuitive" `image/png` a naive reading would expect. (`format` is
+        // still honored for SVG detection, exercised elsewhere.)
+        #[test]
+        fn format_attribute_does_not_steer_the_data_uri_mimetype() {
+            let html = convert_data_uri(
+                "image::photo[X,format=png]",
+                SafeMode::Unsafe,
+                &[("photo", GIF)],
+            );
+            assert!(
+                html.contains(&format!("data:application/octet-stream;base64,{GIF_B64}")),
+                "{html}"
+            );
+            assert!(!html.contains("image/png"), "{html}");
         }
 
         // An unreadable (here, missing) image embeds as an *empty* data URI,
