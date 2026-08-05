@@ -42,7 +42,10 @@ use asciidoc_parser::{
     Document, HasSpan, Parser, SafeMode,
 };
 
-use crate::html::{class_attribute, escape_attribute, id_attribute};
+use crate::{
+    html::{class_attribute, escape_attribute, id_attribute},
+    svg_file_handler,
+};
 
 /// Asciidoctor's compiled default stylesheet, embedded verbatim. This is a copy
 /// of `ref/asciidoctor/data/stylesheets/asciidoctor-default.css` (Asciidoctor
@@ -85,6 +88,10 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 /// The `highlight.js` release Asciidoctor v2.0.26 links from the CDN
 /// (`Asciidoctor::HIGHLIGHT_JS_VERSION`).
 const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
+
+/// The Font Awesome release Asciidoctor v2.0.26 links from the CDN for
+/// font-based icons (`Asciidoctor::FONT_AWESOME_VERSION`).
+const FONT_AWESOME_VERSION: &str = "4.7.0";
 
 /// The active *client-side* syntax highlighter, resolved from the
 /// `source-highlighter` document attribute.
@@ -325,6 +332,23 @@ pub(crate) fn attribute_str(document: &Document<'_>, name: &str) -> Option<Strin
     match document.attribute_value(name) {
         InterpretedValue::Value(value) => Some(value),
         InterpretedValue::Set | InterpretedValue::Unset => None,
+    }
+}
+
+/// The ` style="max-width: <value>;"` fragment Asciidoctor adds to each of the
+/// standalone layout's container divs (`#header`, `#content`, `#footnotes`,
+/// `#footer`) when the `max-width` attribute is set, or an empty string when it
+/// is not. The value is emitted whenever the attribute is *present* — matching
+/// Asciidoctor's `node.attr? 'max-width'` gate, which treats a bare
+/// `:max-width:` (no value) as present, yielding an empty length.
+fn max_width_style(document: &Document<'_>) -> String {
+    match document.attribute_value("max-width") {
+        InterpretedValue::Value(value) => {
+            format!(" style=\"max-width: {};\"", escape_attribute(&value))
+        }
+
+        InterpretedValue::Set => " style=\"max-width: ;\"".to_string(),
+        InterpretedValue::Unset => String::new(),
     }
 }
 
@@ -1230,6 +1254,34 @@ fn render_toc(document: &Document<'_>, class: &str) -> String {
     )
 }
 
+/// The filesystem anchor for reading an SVG file to embed inline in a *block*
+/// image (`image::…[opts=inline]`): the base directory the target resolves
+/// against and the safe mode that confines the read.
+///
+/// This mirrors the include/docinfo handlers' anchoring (see
+/// [`crate::svg_file_handler`]); *inline* images (`image:…`) are handled by the
+/// parser through its own registered handler, so this is only for block images.
+/// A `None` `svg_source` at [`render_document`] (the plain string
+/// [`convert`](crate::convert), which has no base directory) leaves a block
+/// `opts=inline` SVG unreadable, so it falls back to its alt text — matching
+/// Asciidoctor when it cannot read the file.
+#[derive(Clone, Debug)]
+pub(crate) struct SvgSource {
+    /// The base directory the (imagesdir-prefixed) target resolves against and,
+    /// when jailed, the boundary the read may not cross.
+    base_dir: PathBuf,
+
+    /// The safe mode in force, which confines the read.
+    safe: SafeMode,
+}
+
+impl SvgSource {
+    /// Creates an SVG read anchor at `base_dir`, confined by `safe`.
+    pub(crate) fn new(base_dir: PathBuf, safe: SafeMode) -> Self {
+        Self { base_dir, safe }
+    }
+}
+
 /// Renders a parsed [`Document`] to an HTML5 string.
 ///
 /// `standalone` selects the output mode: `true` emits the complete
@@ -1244,18 +1296,19 @@ fn render_toc(document: &Document<'_>, class: &str) -> String {
 /// [`convert`](crate::convert) entry point. It is ignored in embedded output,
 /// which emits no stylesheet.
 ///
-/// `base_dir` is the directory that filesystem-relative image targets resolve
-/// against when the document sets `data-uri` (Asciidoctor's `base_dir`); it is
-/// `None` for callers with nothing to anchor the lookup — the string entry
-/// points without an input file, and
-/// [`convert_document`](crate::convert_document) — where a `data-uri` image
-/// cannot be read and embeds as an empty data URI. The safe mode governing
-/// those reads is derived from the document's `safe-mode-level`.
+/// `svg_source` anchors the render-time filesystem reads: a block image's
+/// inline-embedded SVG (`image::…[opts=inline]`) and the `data-uri` embedding
+/// of images and image-mode icons. It carries the base directory those targets
+/// resolve against and the safe mode confining the read. It is `None` for
+/// callers with no base directory (the string-only
+/// [`convert`](crate::convert)), which leaves a block `opts=inline` SVG
+/// unreadable — so it falls back to its alt text — and a `data-uri` image
+/// embedded as an empty data URI. See [`SvgSource`].
 pub(crate) fn render_document<'a>(
     document: &'a Document<'a>,
     custom_stylesheet: Option<&'a str>,
     standalone: bool,
-    base_dir: Option<PathBuf>,
+    svg_source: Option<SvgSource>,
 ) -> String {
     // Build the header/preamble TOC block once, up front — it is emitted at the
     // single site the placement selects. Only the placements that render a TOC
@@ -1326,24 +1379,10 @@ pub(crate) fn render_document<'a>(
         cellbgcolor: attribute_str(document, "cellbgcolor"),
         svg_below_secure: safe_mode_below_secure(document),
         data_uri: document.is_attribute_set("data-uri"),
-        safe: document_safe_mode(document),
-        base_dir,
+        svg_source,
     };
     renderer.document(document);
     renderer.out
-}
-
-/// Reconstructs the [`SafeMode`] a document was processed under from its
-/// `safe-mode-level` intrinsic attribute (the numeric level the parser seeds).
-/// An unset or unrecognized level is treated as [`SafeMode::Secure`], the most
-/// conservative mode — the same fallback [`safe_mode_below_secure`] applies.
-fn document_safe_mode(document: &Document<'_>) -> SafeMode {
-    match attribute_str(document, "safe-mode-level").and_then(|level| level.parse::<u32>().ok()) {
-        Some(level) if level == SafeMode::Unsafe as u32 => SafeMode::Unsafe,
-        Some(level) if level == SafeMode::Safe as u32 => SafeMode::Safe,
-        Some(level) if level == SafeMode::Server as u32 => SafeMode::Server,
-        _ => SafeMode::Secure,
-    }
 }
 
 /// How the `sectanchors` document attribute decorates a non-discrete section
@@ -1498,12 +1537,17 @@ struct CellRenderConfig {
     /// Inherited from the enclosing document so an AsciiDoc cell's images honor
     /// the same SVG safe-mode gate (see [`Renderer::svg_below_secure`]).
     svg_below_secure: bool,
-    /// Inherited so an AsciiDoc cell's images embed as `data:` URIs under the
-    /// same `data-uri`/safe-mode/base-directory context as the parent document
+
+    /// Inherited so an AsciiDoc cell's images and image-mode icons embed as
+    /// `data:` URIs under the same `data-uri` context as the parent document
     /// (see [`Renderer::data_uri`]).
     data_uri: bool,
-    safe: SafeMode,
-    base_dir: Option<PathBuf>,
+
+    /// Inherited from the enclosing document so an AsciiDoc cell's block image
+    /// can embed an inline SVG — and its images and icons can embed as `data:`
+    /// URIs — from the same anchored, jailed base directory (see
+    /// [`Renderer::svg_source`]).
+    svg_source: Option<SvgSource>,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1611,11 +1655,12 @@ struct Renderer<'a> {
     cellbgcolor: Option<String>,
 
     /// Whether the document's safe mode is below `Secure` (see
-    /// [`safe_mode_below_secure`]). It gates the SVG `interactive` referencing
-    /// of a block image: an `opts=interactive` SVG renders as an `<object>`
-    /// only below `Secure`, and as a plain `<img>` at `Secure` or above
-    /// (the API default), matching Asciidoctor. A document-less
-    /// sub-renderer (an AsciiDoc table cell) inherits this from its parent.
+    /// [`safe_mode_below_secure`]). It gates the SVG `interactive` and `inline`
+    /// referencing of a block image: an `opts=interactive` SVG renders as an
+    /// `<object>` (and an `opts=inline` SVG as an embedded `<svg>`) only below
+    /// `Secure`, and as a plain `<img>` at `Secure` or above (the API default),
+    /// matching Asciidoctor. A document-less sub-renderer (an AsciiDoc table
+    /// cell) inherits this from its parent.
     svg_below_secure: bool,
 
     /// Whether the `data-uri` document attribute is set. When it is — and the
@@ -1623,24 +1668,20 @@ struct Renderer<'a> {
     /// [`svg_below_secure`](Self::svg_below_secure)) — the renderer embeds
     /// each referenced image (and image-mode icon) into the output as a
     /// base64 `data:` URI instead of linking it, matching Asciidoctor's
-    /// `AbstractNode#image_uri`. `Secure` and above disable it.
+    /// `AbstractNode#image_uri`. `Secure` and above disable it. The read is
+    /// anchored and confined by [`svg_source`](Self::svg_source).
     data_uri: bool,
 
-    /// The safe mode in force, needed to confine the filesystem reads that
-    /// [`generate_data_uri`](Self::generate_data_uri) performs for `data-uri`
-    /// image embedding to the base directory's jail (`safe`/`server`). Derived
-    /// from the document's `safe-mode-level`; a document-less sub-renderer
-    /// inherits it from its parent.
-    safe: SafeMode,
-
-    /// The base directory that filesystem-relative image targets resolve
-    /// against when `data-uri` embeds them (Asciidoctor's `base_dir`, the
-    /// anchor its `normalize_system_path` uses). `None` when nothing
-    /// anchors the lookup — a plain string conversion with no base
-    /// directory or input file — in which case a `data-uri` image cannot be
-    /// read and embeds as an empty data URI, matching Asciidoctor's
-    /// unreadable-image fallback.
-    base_dir: Option<PathBuf>,
+    /// The filesystem anchor (base directory and safe mode) for the renderer's
+    /// render-time reads: a block image's inline-embedded SVG
+    /// (`image::…[opts=inline]`) and the `data-uri` embedding of images and
+    /// image-mode icons. `None` when no base directory anchors the read — a
+    /// plain string conversion with no base directory or input file — in which
+    /// case a block inline SVG falls back to its alt text and a `data-uri`
+    /// image embeds as an empty data URI. Inherited by a document-less
+    /// sub-renderer (an AsciiDoc table cell) so its block images embed the
+    /// same way. See [`SvgSource`].
+    svg_source: Option<SvgSource>,
 }
 
 impl Renderer<'_> {
@@ -1745,6 +1786,11 @@ impl Renderer<'_> {
         // does the same unless the document opts out.
         self.stylesheet(document);
 
+        // Under `:icons: font`, the Font Awesome stylesheet `<link>` the icon
+        // glyphs depend on sits right after the primary stylesheet, matching
+        // Asciidoctor's placement (before the syntax highlighter's `<head>`).
+        self.iconfont_head(document);
+
         // The active syntax highlighter's `<head>` docinfo (its stylesheet
         // `<link>`) sits after the stylesheet and before the head docinfo,
         // matching Asciidoctor's placement.
@@ -1806,12 +1852,18 @@ impl Renderer<'_> {
         // is what lets a docinfo header replace the default one.
         self.docinfo(document, DocinfoLocation::Header);
 
+        // The `max-width` attribute constrains the body width by adding an
+        // inline `style="max-width: …;"` to each of the standalone layout's
+        // container divs (`#header`, `#content`, `#footnotes`, `#footer`),
+        // matching Asciidoctor's `html5` backend.
+        let max_width = max_width_style(document);
+
         // The header is suppressed by `noheader`.
         if !document.is_attribute_set("noheader") {
-            self.header(document);
+            self.header(document, &max_width);
         }
 
-        self.line("<div id=\"content\">");
+        self.line(&format!("<div id=\"content\"{max_width}>"));
         self.blocks(document.child_blocks());
         self.line("</div>");
 
@@ -1825,7 +1877,7 @@ impl Renderer<'_> {
         // "{last-update-label} {docdatetime}" line (the "Last updated …" stamp)
         // unless the document is `reproducible`.
         if !document.is_attribute_set("nofooter") {
-            self.line("<div id=\"footer\">");
+            self.line(&format!("<div id=\"footer\"{max_width}>"));
             self.line("<div id=\"footer-text\">");
 
             // The version line, gated on `revnumber` like Asciidoctor. The
@@ -1930,7 +1982,10 @@ impl Renderer<'_> {
             return;
         }
 
-        self.footnotes_block(footnotes);
+        // The document-level footnotes block picks up the `max-width` constraint
+        // like the other standalone container divs; the cell-local block (which
+        // has no document to read the attribute from) never does.
+        self.footnotes_block(footnotes, &max_width_style(document));
     }
 
     /// Emits the `#footnotes` block for the given footnotes — the `<div
@@ -1942,9 +1997,10 @@ impl Renderer<'_> {
     /// block and the cell-local block an AsciiDoc (`a`) table cell renders from
     /// its own footnote registry. The caller is responsible for the emptiness
     /// and `nofootnotes` checks; this assumes there is at least one footnote to
-    /// list.
-    fn footnotes_block(&mut self, footnotes: &[Footnote]) {
-        self.line("<div id=\"footnotes\">");
+    /// list. `max_width` is the ` style="max-width: …;"` fragment for the
+    /// standalone `#footnotes` div (empty for the cell-local block).
+    fn footnotes_block(&mut self, footnotes: &[Footnote], max_width: &str) {
+        self.line(&format!("<div id=\"footnotes\"{max_width}>"));
         self.line("<hr>");
 
         for footnote in footnotes {
@@ -1987,8 +2043,10 @@ impl Renderer<'_> {
 
     /// Emits `<div id="header">` with the `<h1>` doctitle and, when present,
     /// the author and revision details block and an automatically placed table
-    /// of contents.
-    fn header(&mut self, document: &Document<'_>) {
+    /// of contents. `max_width` is the ` style="max-width: …;"` fragment
+    /// applied to the opening `<div id="header">` when the `max-width`
+    /// attribute is set.
+    fn header(&mut self, document: &Document<'_>, max_width: &str) {
         let header: &Header<'_> = document.header();
 
         // A standalone document shows its title as the header `<h1>` by default;
@@ -2027,7 +2085,7 @@ impl Renderer<'_> {
             return;
         }
 
-        self.line("<div id=\"header\">");
+        self.line(&format!("<div id=\"header\"{max_width}>"));
 
         if let Some(title) = title {
             self.line(&format!("<h1>{title}</h1>"));
@@ -2118,6 +2176,54 @@ impl Renderer<'_> {
         if !content.is_empty() {
             self.line(content);
         }
+    }
+
+    /// Emits the Font Awesome stylesheet `<link>` that font-based icons
+    /// (`:icons: font`) depend on, matching Asciidoctor's `html5` backend (the
+    /// block right after the primary stylesheet). Nothing is emitted unless the
+    /// resolved `icons` attribute is `font` — the same gate the admonition,
+    /// callout, and inline-icon markup use, so the glyphs and the font that
+    /// draws them are always emitted together.
+    ///
+    /// With `iconfont-remote` set (the default), the link points at a CDN: an
+    /// `iconfont-cdn` attribute overrides the URL outright, otherwise it is
+    /// `{cdn}/font-awesome/{version}/css/font-awesome.min.css`, where `{cdn}`
+    /// follows `asset-uri-scheme` ([`cdn_base_url`]) and `{version}` is
+    /// [`FONT_AWESOME_VERSION`]. With `iconfont-remote` unset
+    /// (`:iconfont-remote!:`), the link is a local `{iconfont-name}.css`
+    /// (default `font-awesome`) resolved against `stylesdir` by
+    /// [`normalize_web_path`], so no remote resource is referenced.
+    ///
+    /// Following the resolved `icons` value keeps this consistent with the icon
+    /// markup: `icons` is locked against the document at `Secure` (in
+    /// `Options::apply`, matching Asciidoctor), so the link, like the markup,
+    /// is attribute-driven rather than gated a second time in the renderer
+    /// — mirroring how the syntax highlighter's CDN `<link>` follows its
+    /// (safe-mode-locked) attribute.
+    fn iconfont_head(&mut self, document: &Document<'_>) {
+        if !self.icons_font {
+            return;
+        }
+
+        let href = if document.is_attribute_set("iconfont-remote") {
+            attribute_str(document, "iconfont-cdn").unwrap_or_else(|| {
+                format!(
+                    "{}/font-awesome/{FONT_AWESOME_VERSION}/css/font-awesome.min.css",
+                    cdn_base_url(document)
+                )
+            })
+        } else {
+            let name = attribute_str(document, "iconfont-name")
+                .unwrap_or_else(|| "font-awesome".to_string());
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+
+            normalize_web_path(&format!("{name}.css"), &stylesdir)
+        };
+
+        self.line(&format!(
+            "<link rel=\"stylesheet\" href=\"{}\">",
+            escape_attribute(&href)
+        ));
     }
 
     /// Emits the active client-side highlighter's `<head>` docinfo — the
@@ -3653,8 +3759,7 @@ impl Renderer<'_> {
                         cellbgcolor: self.cellbgcolor.clone(),
                         svg_below_secure: self.svg_below_secure,
                         data_uri: self.data_uri,
-                        safe: self.safe,
-                        base_dir: self.base_dir.clone(),
+                        svg_source: self.svg_source.clone(),
                     },
                 )
             ),
@@ -4014,19 +4119,20 @@ impl Renderer<'_> {
     /// ([`data_uri_mimetype`]). The file is resolved the way Asciidoctor's
     /// `normalize_system_path` resolves it — `target` against `asset_dir`,
     /// confined to the base directory's jail under `safe`/`server` — and read
-    /// as raw bytes. An unreadable target (missing, outside the jail, or —
-    /// as when no base directory anchors the lookup — unresolvable) yields
-    /// an *empty* data URI (`data:<mime>;base64,`), matching Asciidoctor's
-    /// fallback for an image it cannot embed. (Asciidoctor also logs a
-    /// warning there; this renderer, which has no warning channel, matches
-    /// only the output.)
+    /// as raw bytes, using the base directory and safe mode carried by
+    /// [`svg_source`](Self::svg_source). An unreadable target (missing, outside
+    /// the jail, or — as when no [`SvgSource`] anchors the lookup —
+    /// unresolvable) yields an *empty* data URI (`data:<mime>;base64,`),
+    /// matching Asciidoctor's fallback for an image it cannot embed.
+    /// (Asciidoctor also logs a warning there; this renderer, which has no
+    /// warning channel, matches only the output.)
     fn generate_data_uri(&self, target: &str, asset_dir: &str) -> String {
         let mimetype = data_uri_mimetype(target);
 
-        let bytes = self.base_dir.as_deref().and_then(|base_dir| {
+        let bytes = self.svg_source.as_ref().and_then(|svg| {
             let path =
-                crate::include_handler::resolve_in_dir(base_dir, self.safe, asset_dir, target);
-            match crate::include_handler::read_confined_bytes(base_dir, self.safe, &path) {
+                crate::include_handler::resolve_in_dir(&svg.base_dir, svg.safe, asset_dir, target);
+            match crate::include_handler::read_confined_bytes(&svg.base_dir, svg.safe, &path) {
                 crate::include_handler::ReadBytesOutcome::Read(bytes) => Some(bytes),
                 crate::include_handler::ReadBytesOutcome::NotFound
                 | crate::include_handler::ReadBytesOutcome::NotReadable => None,
@@ -4054,12 +4160,16 @@ impl Renderer<'_> {
     /// image gains a captioned `Figure N.` title *after* its content
     /// (unlike most blocks, whose title precedes their content).
     ///
-    /// The remaining advanced image modes build on this baseline in their own
-    /// issues: interactive/inline SVG (#52) and icons (#50). An SVG target
-    /// therefore renders as a plain `<img>` here (outside the `interactive`
-    /// mode). A `title=` given *inside* the macro is not yet promoted to the
-    /// figure caption (the parser surfaces it only as a macro attribute); use
-    /// the `.Title` block line.
+    /// The remaining advanced image mode builds on this baseline in its own
+    /// issue: icons (#50). Below `Secure`, an interactive SVG target
+    /// (`opts=interactive`) renders as an `<object>`, and an `opts=inline` SVG
+    /// embeds the file's `<svg>` contents directly (see the SVG handling
+    /// below); at `Secure` or above both fall back to a plain `<img>`.
+    /// Under `data-uri` (below `Secure`) the `<img>`/`<object>`
+    /// `src`/`data` is the image embedded as a base64 `data:` URI (see
+    /// [`image_uri`](Self::image_uri)). A `title=` given *inside* the macro
+    /// is not yet promoted to the figure caption (the parser surfaces it
+    /// only as a macro attribute); use the `.Title` block line.
     fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
         let macro_attrs = media.macro_attrlist();
 
@@ -4105,15 +4215,20 @@ impl Renderer<'_> {
             dimensions.push_str(&format!(" height=\"{}\"", escape_attribute(height)));
         }
 
-        // An SVG target (`format=svg`, or a target *containing* `.svg`)
-        // referenced with `opts=interactive` renders as an `<object>` so its
-        // embedded scripting and links stay live — but only below the `Secure`
-        // safe mode, matching Asciidoctor's `convert_image`. At `Secure` or above
-        // (the API default) it falls through to a plain `<img>`. The `inline`
-        // option (embedding the SVG file's contents as `<svg>`) is not yet
-        // implemented for block images here, so such an SVG also renders as
-        // `<img>` for now (see
-        // https://github.com/asciidoc-rs/asciidoc-html5/issues/275).
+        // An SVG target (`format=svg`, or a target *containing* `.svg`) can be
+        // referenced two security-sensitive ways, each enabled only below the
+        // `Secure` safe mode (at `Secure` or above — the API default — it falls
+        // through to a plain `<img>`), matching Asciidoctor's `convert_image`:
+        //
+        // * `opts=inline` embeds the SVG *file's contents* directly as an `<svg>`
+        //   element (read through [`SvgSource`], prepared by
+        //   [`svg_file_handler::prepare_inline_svg`]); when the file cannot be read it
+        //   falls back to a `<span class="alt">`, as Asciidoctor does.
+        // * `opts=interactive` embeds a live `<object>` so its scripting and links stay
+        //   active, with a `fallback` image (or the alt text) nested.
+        //
+        // `inline` takes precedence over `interactive`, matching Asciidoctor's
+        // `if node.option? 'inline' … elsif node.option? 'interactive'`.
         //
         // The target test is a deliberate port of Asciidoctor's case-sensitive
         // substring check (`target.include? '.svg'`), quirks included: a
@@ -4122,12 +4237,28 @@ impl Renderer<'_> {
         // Asciidoctor 2.0.26, so they are kept rather than "corrected".
         let is_svg = named("format") == Some("svg") || target.contains(".svg");
 
-        let interactive = macro_attrs.has_option("interactive")
-            || block
-                .attrlist()
-                .is_some_and(|a| a.has_option("interactive"));
+        let has_option = |name: &str| {
+            macro_attrs.has_option(name) || block.attrlist().is_some_and(|a| a.has_option(name))
+        };
 
-        let mut img = if is_svg && self.svg_below_secure && interactive {
+        let inline = has_option("inline");
+        let interactive = has_option("interactive");
+
+        let mut img = if is_svg && self.svg_below_secure && inline {
+            // Embed the SVG file's contents as an `<svg>`. The file is read from
+            // its plain web path (`media_uri`), *not* `src`: under `data-uri`,
+            // `src` is a `data:` URI, but `opts=inline` embeds the file contents
+            // regardless (Asciidoctor reads the file for inline SVG independent
+            // of `data-uri`). When it can't be read (no base directory, a
+            // missing/unreadable file, or empty contents), fall back to the alt
+            // text — raw, as Asciidoctor emits it.
+            self.inline_svg(
+                &media_uri(target, &self.imagesdir),
+                positional("width", 2),
+                positional("height", 3),
+            )
+            .unwrap_or_else(|| format!("<span class=\"alt\">{alt}</span>"))
+        } else if is_svg && self.svg_below_secure && interactive {
             // The content nested inside the `<object>`, shown when a user agent
             // can't render it: a `fallback` image if one is supplied, otherwise
             // the alt text (emitted raw, as Asciidoctor does).
@@ -4160,11 +4291,8 @@ impl Renderer<'_> {
         if let Some(link) = named("link") {
             let window = named("window");
 
-            let nofollow = macro_attrs.has_option("nofollow")
-                || block.attrlist().is_some_and(|a| a.has_option("nofollow"));
-
-            let noopener = macro_attrs.has_option("noopener")
-                || block.attrlist().is_some_and(|a| a.has_option("noopener"));
+            let nofollow = has_option("nofollow");
+            let noopener = has_option("noopener");
 
             img = format!(
                 "<a class=\"image\" href=\"{}\"{}>{img}</a>",
@@ -4207,6 +4335,25 @@ impl Renderer<'_> {
         }
 
         self.line("</div>");
+    }
+
+    /// Reads and prepares the SVG file at `src` for inline embedding in a block
+    /// image (`image::…[opts=inline]`), or `None` when the SVG cannot be
+    /// embedded — no base directory anchors the read (the plain string
+    /// [`convert`](crate::convert)), the file is missing/unreadable, or its
+    /// contents are empty — so the caller falls back to the alt text.
+    ///
+    /// `src` is the resolved web-path `src` (the target joined with
+    /// `imagesdir`), the same value passed to the parser's inline-image
+    /// handler. It is resolved against the [`SvgSource`] base directory and
+    /// confined by the safe mode's jail ([`svg_file_handler::read_svg_file`]),
+    /// then prepared — preamble stripped and dimensions rewritten when
+    /// `width`/`height` are given — by
+    /// [`svg_file_handler::prepare_inline_svg`].
+    fn inline_svg(&self, src: &str, width: Option<&str>, height: Option<&str>) -> Option<String> {
+        let source = self.svg_source.as_ref()?;
+        let raw = svg_file_handler::read_svg_file(&source.base_dir, source.safe, src)?;
+        svg_file_handler::prepare_inline_svg(raw, width, height)
     }
 
     /// The role(s) placed on a media block's wrapper, matching Asciidoctor's
@@ -4808,8 +4955,7 @@ fn render_cell_document<'s>(
         cellbgcolor: config.cellbgcolor,
         svg_below_secure: config.svg_below_secure,
         data_uri: config.data_uri,
-        safe: config.safe,
-        base_dir: config.base_dir,
+        svg_source: config.svg_source,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -4822,7 +4968,7 @@ fn render_cell_document<'s>(
     // `footnote-number` counter is document-wide, so the indices (and thus the
     // `_footnotedef_N` ids) stay globally unique.
     if !footnotes.is_empty() {
-        renderer.footnotes_block(footnotes);
+        renderer.footnotes_block(footnotes, "");
     }
 
     // `convert` joins its lines with no trailing newline; drop the one the
@@ -5307,18 +5453,22 @@ mod tests {
     }
 
     #[test]
-    fn image_block_svg_inline_falls_back_to_img() {
-        // The `inline` (embedded `<svg>`) referencing is not yet implemented for
-        // block images (needs to read the SVG file — issue #275), so even below
-        // `Secure` an `opts=inline` block image renders a plain `<img>` rather
-        // than embedding the SVG. This locks that interim behavior.
+    fn image_block_svg_inline_without_a_base_dir_falls_back_to_alt() {
+        // The `inline` (embedded `<svg>`) referencing reads the SVG file's
+        // contents; the plain string entry point has no base directory to anchor
+        // that read (`convert_with` sets no `input_file`), so — like Asciidoctor
+        // when it cannot read the file — an `opts=inline` block image below
+        // `Secure` falls back to a `<span class="alt">` rather than an `<img>`.
+        // (Reading a real on-disk SVG is exercised via `convert_file_with` in the
+        // SVG Images page coverage.)
         let html = convert_with(
             "image::diagram.svg[Diagram,opts=inline]",
             &Options::new().safe_mode(SafeMode::Unsafe),
         );
-        assert!(content(&html).contains("<img src=\"diagram.svg\" alt=\"Diagram\">"));
+        assert!(content(&html).contains("<span class=\"alt\">Diagram</span>"));
         assert!(!html.contains("<object"));
         assert!(!html.contains("<svg"));
+        assert!(!html.contains("<img"));
     }
 
     #[test]
@@ -5334,6 +5484,107 @@ mod tests {
             "<object type=\"image/svg+xml\" data=\"diagram.svg\">\
              <span class=\"alt\">Diagram</span></object>"
         ));
+    }
+
+    /// Writes a `sample.svg` (XML preamble + a `<svg>` tag carrying
+    /// width/height/style/viewBox, and a trailing newline like a real file) and
+    /// a `main.adoc` holding `body` into a fresh temp directory, converts the
+    /// file embedded under `safe`, and returns the HTML. `tag` names the temp
+    /// directory so concurrent tests do not collide.
+    fn with_svg(tag: &str, safe: SafeMode, body: &str) -> String {
+        let dir =
+            std::env::temp_dir().join(format!("adoc-render-svg-{}-{tag}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create scratch dir");
+        std::fs::write(
+            dir.join("sample.svg"),
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"500\" height=\"500\" \
+             style=\"fill:red\" viewBox=\"0 0 500 500\">\
+             <circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>\n",
+        )
+        .expect("write sample.svg");
+
+        let main = dir.join("main.adoc");
+        std::fs::write(&main, format!("= Doc\n\n{body}\n")).expect("write main.adoc");
+
+        let html = crate::convert_file_with(&main, &Options::new().safe_mode(safe).embedded(true))
+            .expect("convert the file");
+
+        let _ = std::fs::remove_dir_all(&dir);
+        html
+    }
+
+    #[test]
+    fn image_block_svg_inline_embeds_the_file_contents() {
+        // Below `Secure`, an `opts=inline` block image embeds the SVG file's
+        // contents as an `<svg>`: the XML preamble is stripped, and the macro's
+        // width (300) replaces the tag's own width/height/style while the
+        // required `viewBox` is preserved — byte-for-byte matching Asciidoctor.
+        let html = with_svg(
+            "inline-embed",
+            SafeMode::Unsafe,
+            "image::sample.svg[Diagram,300,opts=inline]",
+        );
+        assert!(
+            html.contains(
+                "<div class=\"imageblock\">\n<div class=\"content\">\n\
+                 <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\" width=\"300\">\
+                 <circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>\n\
+                 </div>\n</div>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn image_block_svg_inline_in_asciidoc_table_cell() {
+        // An `opts=inline` block image inside an AsciiDoc (`a|`) cell embeds the
+        // SVG too: the cell's document-less sub-renderer inherits the base
+        // directory and safe mode through `CellRenderConfig`.
+        let html = with_svg(
+            "inline-cell",
+            SafeMode::Unsafe,
+            "|===\na|image::sample.svg[Diagram,300,opts=inline]\n|===",
+        );
+        assert!(
+            html.contains(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\" width=\"300\">\
+                 <circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>"
+            ),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn image_block_svg_inline_is_plain_img_at_secure() {
+        // The inline embedding is security-sensitive: at `Secure` the same
+        // `opts=inline` block image renders a plain `<img>` (its width preserved
+        // as an attribute), never reading the file — matching Asciidoctor.
+        let html = with_svg(
+            "inline-secure",
+            SafeMode::Secure,
+            "image::sample.svg[Diagram,300,opts=inline]",
+        );
+        assert!(
+            html.contains("<img src=\"sample.svg\" alt=\"Diagram\" width=\"300\">"),
+            "{html}"
+        );
+        assert!(!html.contains("<svg"), "{html}");
+    }
+
+    #[test]
+    fn image_block_svg_inline_missing_file_falls_back_to_alt() {
+        // When the `opts=inline` target cannot be read (here it does not exist),
+        // the block image falls back to a `<span class="alt">`, as Asciidoctor
+        // does — not a broken `<img>` or an empty `<svg>`.
+        let html = with_svg(
+            "inline-missing",
+            SafeMode::Unsafe,
+            "image::absent.svg[Gone,opts=inline]",
+        );
+        assert!(html.contains("<span class=\"alt\">Gone</span>"), "{html}");
+        assert!(!html.contains("<svg"), "{html}");
+        assert!(!html.contains("<img"), "{html}");
     }
 
     #[test]
@@ -5583,6 +5834,30 @@ mod tests {
                 )),
                 "{html}"
             );
+        }
+
+        // `data-uri` and `opts=inline` coexist: an inline SVG still embeds the
+        // file's `<svg>` contents directly (Asciidoctor reads the file for
+        // `opts=inline` regardless of `data-uri`). The read must use the plain
+        // web path, not the `data:` URI `src` would otherwise carry — a
+        // regression guard for that interaction.
+        #[test]
+        fn does_not_disturb_an_inline_svg() {
+            let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>";
+            let html = convert_data_uri(
+                "image::c.svg[Circle,opts=inline]",
+                SafeMode::Unsafe,
+                &[("c.svg", svg)],
+            );
+
+            // The SVG is inlined (not embedded as a `data:` URI, not the alt
+            // fallback).
+            assert!(
+                html.contains("<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>"),
+                "{html}"
+            );
+            assert!(!html.contains("data:image/svg"), "{html}");
+            assert!(!html.contains("<span class=\"alt\">"), "{html}");
         }
     }
 
@@ -7573,8 +7848,13 @@ mod tests {
     fn admonition_custom_icon_with_extension_is_used_as_is() {
         // In image-icon mode, a per-block `icon` value that already has a file
         // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
-        // appends the `icontype` only when the value has no extension).
-        let html = convert(":icons:\n\n[NOTE,icon=tip.png]\nSave often.");
+        // appends the `icontype` only when the value has no extension). A
+        // document-set `:icons:` only takes effect below `Secure` (#50), so this
+        // converts under `Server`.
+        let html = convert_with(
+            ":icons:\n\n[NOTE,icon=tip.png]\nSave often.",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
         assert!(html.contains(
             "<td class=\"icon\">\n\
              <img src=\"./images/icons/tip.png\" alt=\"Note\">\n</td>"
@@ -7584,8 +7864,12 @@ mod tests {
     #[test]
     fn admonition_custom_icon_without_extension_gets_icontype() {
         // A per-block `icon` value with no extension gains the document's
-        // `icontype` extension.
-        let html = convert(":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.");
+        // `icontype` extension. A document-set `:icons:` only takes effect below
+        // `Secure` (#50), so this converts under `Server`.
+        let html = convert_with(
+            ":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.",
+            &Options::new().safe_mode(SafeMode::Server),
+        );
         assert!(html.contains(
             "<td class=\"icon\">\n\
              <img src=\"./images/icons/hint.svg\" alt=\"Note\">\n</td>"
@@ -8382,8 +8666,7 @@ mod tests {
             cellbgcolor: None,
             svg_below_secure: false,
             data_uri: false,
-            safe: super::SafeMode::Secure,
-            base_dir: None,
+            svg_source: None,
         }
     }
 

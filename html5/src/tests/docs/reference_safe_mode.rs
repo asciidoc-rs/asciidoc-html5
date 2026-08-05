@@ -139,11 +139,13 @@ to `secure`, while the `adoc` command defaults to `unsafe`.
 == Known limitations
 
 The attributes above are populated for every conversion, so referencing and
-gating on the safe mode work today. Some of the features whose availability the
-safe mode governs already honor it -- `docinfo` and `data-uri` image embedding
-(enabled only below `secure`). The rest -- include directives, icons, source
-highlighting, and backend locking -- are not surfaced by this renderer yet, so
-there is not much more to gate on beyond the stylesheet link-versus-embed choice
+gating on the safe mode work today. Most of the features whose availability the
+safe mode governs already honor it -- among them `docinfo`, the
+`source-highlighter` and `icons` restrictions, the interactive and inline SVG
+referencing modes, and `data-uri` image embedding (each active only below the
+mode that enables it). What remains -- chiefly include directives -- is gated by
+asciidoc-parser's own safe mode, so there is not much more to gate on in this
+renderer beyond the stylesheet link-versus-embed choice
 described on the xref:safe-modes.adoc[Safe Modes] page. As those features
 arrive, they will honor the safe mode too.
 "#

@@ -23,10 +23,11 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // the `docinfo`, `backend`, `doctype`, and `source-highlighter` restrictions,
 // and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
 // include directives and URI reads – are exercised by unit tests elsewhere, so
-// their spans stay non-normative here (the `source-highlighter` bullet excepted
-// – it is verified below, as is `data-uri`, whose SECURE gate this crate now
-// enforces). What remains unsurfaced – icons and the SVG modes – is likewise
-// non-normative.
+// their spans stay non-normative here (the `source-highlighter`, `icons`, and
+// `data-uri` bullets excepted – all three are verified below). The SVG
+// interactive/inline referencing modes are likewise surfaced and honor the safe
+// mode (below `SECURE` they render an `<object>`/`<svg>`; at `SECURE` a plain
+// `<img>`), exercised by unit tests elsewhere.
 
 non_normative!(
     r#"
@@ -121,7 +122,7 @@ Its integer value is `1`.
 // SERVER's restriction rather than merely matching it. Docinfo, backend,
 // doctype, source-highlighter, docfile, and docdir are all covered by unit
 // tests in `options.rs`; the source-highlighter lock (#215, the renderer half
-// of #56) is also verified from the `setting …` bullet just below.
+// of #45) is also verified from the `setting …` bullet just below.
 non_normative!(
     r#"
 [#server]
@@ -234,15 +235,18 @@ Its integer value is `10`.
 
 // SECURE inherits SERVER's `docdir`/`docfile` concealment — `docdir` emptied,
 // `docfile` reduced to its basename — enforced in `Options::apply` and verified
-// below. Docinfo, backend, and doctype are likewise surfaced: SECURE disables
-// docinfo (no docinfo file is read), forces the backend to `html5`, and pins
-// the doctype to `article`, each locked against the document (covered by unit
-// tests in `options.rs`). SECURE also disables `data-uri`, so a referenced
-// image is linked rather than embedded — surfaced and verified below (#51). The
-// remaining SECURE restrictions are not surfaced by this renderer yet, each
-// tracked for later implementation: icons
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/50), interactive/inline
-// SVG modes (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), and
+// below. Docinfo, backend, doctype, icons, and `data-uri` are likewise
+// surfaced: SECURE disables docinfo (no docinfo file is read), forces the
+// backend to `html5`, pins the doctype to `article`, drops a document-set
+// `icons` (an untrusted document must not be able to steer icon image sources
+// through `iconsdir`), and disables `data-uri` (a referenced image is linked,
+// not embedded) — each locked or gated against the document; the icons and
+// `data-uri` locks are verified just below, the rest covered by unit tests in
+// `options.rs`. SECURE also disables the interactive (`opts=interactive`) and
+// inline (`opts=inline`) SVG modes — an SVG image renders as a plain `<img>` —
+// surfaced and covered by unit tests (in `substitutions_test.rs` and the
+// renderer's block-image tests). The one remaining SECURE restriction not
+// surfaced by this renderer yet is server-side
 // source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
@@ -257,7 +261,46 @@ non_normative!(
 The `SECURE` safe mode level disallows the document from attempting to read files from the file system and including their contents into the document.
 Additionally, it:
 
+"#
+);
+
+// Under SECURE, a document that enables `icons` itself is ignored, matching
+// Asciidoctor's `attr_overrides['icons'] ||= nil`: an icon-mode admonition
+// draws its images from `{iconsdir}`, whose origin a document `:iconsdir:`
+// could steer, so an untrusted document must not turn icons on. Enforced in
+// `Options::apply`; a lower mode (here `Server`) still lets the document enable
+// icons.
+#[test]
+fn secure_disables_document_set_icons() {
+    verifies!(
+        r#"
 * disables icons
+"#
+    );
+
+    // A NOTE admonition renders a Font Awesome glyph with icons on and its text
+    // label with icons off, so it is the observable probe for whether the
+    // document-set `icons` took effect.
+    let secure = convert_with(
+        "= Doc\n:icons: font\n\nNOTE: Heed this.",
+        &Options::new().safe_mode(SafeMode::Secure),
+    );
+    assert!(
+        secure.contains(r#"<div class="title">Note</div>"#),
+        "{secure}"
+    );
+    assert!(!secure.contains("icon-note"), "{secure}");
+
+    // Below SECURE (here `Server`), the same document-set `icons` takes effect.
+    let server = convert_with(
+        "= Doc\n:icons: font\n\nNOTE: Heed this.",
+        &Options::new().safe_mode(SafeMode::Server),
+    );
+    assert!(server.contains(r#"<i class="fa icon-note""#), "{server}");
+}
+
+non_normative!(
+    r#"
 * disables include directives (`+include::[]+`)
 * data can not be retrieved from URIs
 * prevents access to stylesheets and JavaScript files

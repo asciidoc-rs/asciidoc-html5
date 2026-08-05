@@ -51,6 +51,7 @@ mod include_handler;
 mod options;
 mod outline;
 mod renderer;
+mod svg_file_handler;
 
 pub use asciidoc_parser::{Document, ReferenceTime, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
@@ -168,11 +169,21 @@ fn render(document: &Document<'_>, options: &Options) -> String {
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
+    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`) read,
+    // and the `data-uri` embedding of images and icons, at the same base
+    // directory and safe mode the include/docinfo handlers use; with no base
+    // directory (the plain string `convert`), such an SVG is left unreadable and
+    // falls back to its alt text, and a `data-uri` image embeds as an empty data
+    // URI.
+    let svg_source = options
+        .effective_base_dir()
+        .map(|base| renderer::SvgSource::new(base, options.safe_mode_or_default()));
+
     renderer::render_document(
         document,
         stylesheet.as_deref(),
         options.is_standalone(),
-        options.effective_base_dir(),
+        svg_source,
     )
 }
 
@@ -437,10 +448,28 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// and page breaks. A construct the renderer does not handle emits a visible
 /// `<!-- asciidoc-html5: unsupported … -->` comment so the output stays
 /// well-formed and the gap is easy to see. The aim, as coverage grows, is
-/// parity with Asciidoctor's `html5` backend; the remaining advanced image
-/// modes (interactive/inline SVG, icons) are the main remaining gap. Referenced
-/// images (and image-mode icons) are embedded as base64 `data:` URIs when the
-/// document sets `data-uri` below the `Secure` safe mode.
+/// parity with Asciidoctor's `html5` backend; icons are the main remaining
+/// gap. (Interactive SVG renders as an `<object>`; an `opts=inline` SVG embeds
+/// the file's `<svg>` contents — for both the inline `image:` and block
+/// `image::` forms; and `data-uri` embeds referenced images and image-mode
+/// icons as base64 `data:` URIs below `Secure` — each honoring the safe mode;
+/// see the base-directory note below.)
+///
+/// # A block inline SVG (and a `data-uri` image) needs a base directory
+///
+/// A *block* image's inline-embedded SVG (`image::…[opts=inline]`), and any
+/// `data-uri` image or image-mode icon, is read from disk *at render time*, so
+/// it needs the base directory and safe mode that only [`Options`] carries —
+/// and this options-free entry point has neither. Rendered here, such a block
+/// SVG falls back to its alt text (a `<span class="alt">`), and a `data-uri`
+/// image embeds as an empty data URI — the same results Asciidoctor produces
+/// when it cannot read the file. To embed them, convert the file directly with
+/// [`convert_file`]/[`convert_file_with`], or render the [`Document`] with
+/// [`convert_document_with`] under [`Options`] that name the file or base
+/// directory ([`Options::input_file`] / [`Options::base_dir`]) — the same
+/// anchor [`convert_file_with`] sets for you. An *inline* image's `opts=inline`
+/// SVG is unaffected either way: `asciidoc-parser` reads and embeds it at parse
+/// time, so it is already present in the [`Document`] this renders.
 ///
 /// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
@@ -738,8 +767,8 @@ mod load_tests {
     use asciidoc_parser::{blocks::FindBlocks as _, document::InterpretedValue};
 
     use crate::{
-        convert, convert_document, convert_with, load, load_file, load_file_with, load_with,
-        Options, SafeMode,
+        convert, convert_document, convert_document_with, convert_with, load, load_file,
+        load_file_with, load_with, Options, SafeMode,
     };
 
     // `load` returns the parsed document, and rendering it with
@@ -812,6 +841,52 @@ mod load_tests {
 
         // The include resolved, so the rendered document carries the included text.
         assert!(convert_document(&doc).contains("Included body."));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // A *block* image's inline SVG (`image::…[opts=inline]`) is read at render
+    // time, so it needs the base directory only `Options` carries. The
+    // options-free `convert_document` has none, so it degrades the block image
+    // to its alt text — while `convert_document_with`, given `Options` that name
+    // the file, supplies the base directory and embeds the file's `<svg>`. This
+    // locks the limitation and its documented workaround (see
+    // `convert_document`). An *inline* `image:` SVG is embedded at parse time, so
+    // it is present either way and is covered separately in the SVG Images page.
+    #[test]
+    fn block_inline_svg_embedding_needs_a_base_directory() {
+        let dir = std::env::temp_dir().join(format!("adoc-load-svg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        std::fs::write(
+            dir.join("sample.svg"),
+            "<svg viewBox=\"0 0 4 4\"><circle/></svg>\n",
+        )
+        .expect("write svg");
+        std::fs::write(
+            dir.join("main.adoc"),
+            "= Doc\n\nimage::sample.svg[Diagram,opts=inline]\n",
+        )
+        .expect("write main");
+
+        let main = dir.join("main.adoc");
+        let opts = Options::new().safe_mode(SafeMode::Unsafe);
+        let doc = load_file_with(&main, &opts).expect("load_file_with reads and parses");
+
+        // Options-free: no base directory, so the block SVG degrades to alt text.
+        let without = convert_document(&doc);
+        assert!(
+            without.contains("<span class=\"alt\">Diagram</span>"),
+            "{without}"
+        );
+        assert!(!without.contains("<svg"), "{without}");
+
+        // With `Options` naming the file: the base directory anchors the read,
+        // so the file's `<svg>` is embedded.
+        let with = convert_document_with(&doc, &opts.clone().input_file(&main));
+        assert!(
+            with.contains("<svg viewBox=\"0 0 4 4\"><circle/></svg>"),
+            "{with}"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
