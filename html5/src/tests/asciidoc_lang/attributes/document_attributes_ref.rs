@@ -2187,9 +2187,12 @@ The attribute in this section are only relevant when using the manpage doctype a
 "#
 );
 
-// Security attributes are API/CLI-only and govern reading, attribute-size,
-// and include-depth limits enforced by the loader/`asciidoc-parser`; none
-// resolves to a value observable in this renderer's rendered output.
+// Security attributes are API/CLI-only. `allow-uri-read` enables reading data
+// from URLs, which neither client does — remote fetch is a deliberate non-goal.
+// `max-include-depth` is enforced by `asciidoc-parser`'s preprocessor (its
+// limit and warning are verified in that crate), and `max-attribute-value-size`
+// is a parser-level attribute-resolution limit. None resolves to a value
+// observable in this renderer's rendered output.
 non_normative!(
     r#"
 == Security attributes
