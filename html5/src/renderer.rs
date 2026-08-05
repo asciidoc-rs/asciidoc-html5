@@ -26,7 +26,7 @@
 //! coverage gaps are obvious. Adding a construct means adding one arm and one
 //! `render_*` method.
 
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 use asciidoc_parser::{
     attributes::Attrlist,
@@ -1149,6 +1149,142 @@ fn restore_literal_paragraph_indent(lines: &mut [String], raw_span: &str) {
         let body = &line[leading_whitespace_len(line)..];
         *line = format!("{indent}{body}");
     }
+}
+
+/// Whether `line` is a single-line comment the parser drops from a paragraph's
+/// rendered content — `//` at column 0 not followed by a third `/` (which would
+/// begin a `////` comment block), Asciidoctor's `LineCommentRx`. Such dropped
+/// lines must be filtered out of the raw span before it is aligned with the
+/// rendered lines, or the pairing shifts by one at every interior comment.
+fn is_line_comment(line: &str) -> bool {
+    line.starts_with("//") && !line.starts_with("///")
+}
+
+/// The common (minimum) leading-whitespace length shared by `lines`, or `None`
+/// when any non-empty line is flush left (indent 0) or `lines` is empty — a
+/// port of the block-indent scan in [`adjust_indentation`] /
+/// `Parser.adjust_indentation!`. A `None` result means no indent is removed.
+fn common_leading_indent(lines: &[&str]) -> Option<usize> {
+    let mut block_indent: Option<usize> = None;
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+
+        let indent = leading_whitespace_len(line);
+        if indent == 0 {
+            return None;
+        }
+
+        block_indent = Some(block_indent.map_or(indent, |b| b.min(indent)));
+    }
+
+    block_indent
+}
+
+/// Restores the leading indentation of a list item's *principal* paragraph
+/// `lines` from its raw source span, reproducing Asciidoctor's dedent.
+///
+/// `asciidoc-parser` rewrites the leading whitespace of a list item's wrapped
+/// principal lines before the renderer sees it via `rendered_content`, and does
+/// so inconsistently, so the correct indentation is recovered here from the raw
+/// span instead. Asciidoctor keeps the item's inline marker/term text (its
+/// first line) verbatim and runs `Parser.adjust_indentation!` over the *folded*
+/// continuation lines that follow — removing their common (minimum) indent, or
+/// nothing when any of them is flush left. When the item has **no** inline text
+/// (a description-list term whose text folds up from a subsequent line), there
+/// is no verbatim first line and the whole principal is the folded paragraph.
+///
+/// `has_inline_text` says which case applies: the caller sets it from whether
+/// the principal's first source line coincides with the marker line (a flush-
+/// left folded first line is otherwise indistinguishable from inline text).
+///
+/// The content lines are the trailing `lines.len()` lines of the span, once the
+/// interior line comments the parser dropped are filtered out (see
+/// [`is_line_comment`]) and any leading `.title`/`[[anchor]]`/`[attrlist]`
+/// metadata is skipped; inline substitutions otherwise never add, drop, or
+/// reindent lines, so the two align line for line. A raw span that, so aligned,
+/// has fewer lines than `lines` (which should not happen) leaves them
+/// untouched.
+fn restore_list_principal_indent(lines: &mut [String], raw_span: &str, has_inline_text: bool) {
+    // `split_terminator` (not `split`) so a raw span ending in a newline does
+    // not yield a phantom trailing element: the content lines align as a
+    // *suffix*, so an extra entry would shift every pairing by one. Line
+    // comments the parser stripped from the rendered content are dropped here
+    // too, keeping the pairing aligned.
+    let raw_lines: Vec<&str> = raw_span
+        .split_terminator('\n')
+        .filter(|line| !is_line_comment(line))
+        .collect();
+
+    if raw_lines.len() < lines.len() {
+        return;
+    }
+
+    // Only the trailing lines of the raw span are content; skip any leading
+    // metadata lines.
+    let offset = raw_lines.len() - lines.len();
+    let raw = &raw_lines[offset..];
+
+    // The inline marker/term text (kept verbatim) is the first line; the folded
+    // paragraph adjust_indentation! applies to starts after it. With no inline
+    // text every line is folded.
+    let folded_start = usize::from(has_inline_text);
+
+    // The common indent removed from the folded lines, or `None` when any is
+    // flush left — `adjust_indentation!` at indent 0.
+    let block_indent = common_leading_indent(raw.get(folded_start..).unwrap_or_default());
+
+    for (i, (line, raw)) in lines.iter_mut().zip(raw).enumerate() {
+        let raw_indent = leading_whitespace_len(raw);
+
+        // The verbatim inline line keeps its indent; a folded line drops the
+        // common indent from the front of its whitespace (clamped so an interior
+        // blank line, which the block indent skips, cannot underflow).
+        let start = if i < folded_start {
+            0
+        } else {
+            block_indent.unwrap_or(0).min(raw_indent)
+        };
+
+        // Replace the parser's residual leading whitespace with the recovered
+        // indentation.
+        let body = &line[leading_whitespace_len(line)..];
+        *line = format!("{}{body}", &raw[start..raw_indent]);
+    }
+}
+
+/// The indent-corrected principal (first attached block) text of a list item,
+/// the counterpart to Asciidoctor's `item.text`. It is the block's
+/// `rendered_content` with a wrapped principal line's hanging indent restored
+/// (see [`restore_list_principal_indent`]); indent recovery applies only to a
+/// simple paragraph — the shape list principal text always takes — so any
+/// other block is returned verbatim.
+///
+/// `item_line` is the source line of the item's marker (its `HasSpan` line):
+/// the principal carries inline marker/term text exactly when its own first
+/// line sits on that line, the signal `restore_list_principal_indent` needs to
+/// tell inline text from a folded first line.
+///
+/// Only a *wrapped* (multi-line) principal can have lost indentation — a single
+/// line has no continuation to reindent, so the parser's rendered content is
+/// already correct. The single-line case (the overwhelming majority of list
+/// items) and any non-paragraph block therefore borrow the content untouched,
+/// keeping this allocation-free off the hot path; only a multi-line paragraph
+/// pays for the split/restore/join.
+fn list_principal_content<'src>(block: &'src Block<'src>, item_line: usize) -> Cow<'src, str> {
+    let content = block.rendered_content().unwrap_or_default();
+
+    if !content.contains('\n')
+        || !matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
+    {
+        return Cow::Borrowed(content);
+    }
+
+    let has_inline_text = block.span().line() == item_line;
+    let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
+    restore_list_principal_indent(&mut lines, block.span().data(), has_inline_text);
+    Cow::Owned(lines.join("\n"))
 }
 
 /// Reindents a verbatim block's `lines` in place, a port of Asciidoctor's
@@ -3345,9 +3481,10 @@ impl Renderer<'_> {
         // appended inside the same `<td>`, matching Asciidoctor's
         // `#{item.text}#{item.blocks? ? LF + item.content : ''}`.
         let mut blocks = list_item.child_blocks();
+        let item_line = list_item.span().line();
         let text = blocks
             .next()
-            .and_then(|block| block.rendered_content())
+            .map(|block| list_principal_content(block, item_line))
             .unwrap_or_default();
 
         let content = self.render_blocks_to_string(blocks);
@@ -3559,7 +3696,7 @@ impl Renderer<'_> {
         });
 
         let attached = if foldable {
-            let text = blocks[0].rendered_content().unwrap_or_default();
+            let text = list_principal_content(blocks[0], description.span().line());
             if !text.is_empty() {
                 self.line(&format!("<p>{text}</p>"));
             }
@@ -3609,11 +3746,12 @@ impl Renderer<'_> {
         // blocks, so the first child block stays an attached block.
         let mut blocks = list_item.child_blocks();
         let principal = if list_item.has_empty_principal_text() {
-            ""
+            Cow::Borrowed("")
         } else {
+            let item_line = item.span().line();
             blocks
                 .next()
-                .and_then(|block| block.rendered_content())
+                .map(|block| list_principal_content(block, item_line))
                 .unwrap_or_default()
         };
 
@@ -7991,6 +8129,102 @@ mod tests {
         // lines; the common indent (2) is then removed, matching Asciidoctor.
         let html = convert(".Cap\n    x\n  y\n");
         assert!(html.contains("<pre>  x\ny</pre>"), "{html}");
+    }
+
+    #[test]
+    fn restore_list_principal_indent_keeps_inline_text_and_dedents_wrapped_lines() {
+        // With inline text the first line is kept verbatim and the common indent
+        // (2) of the two continuation lines is removed — Asciidoctor's dedent.
+        let mut lines = vec!["Foo".to_string(), "five".to_string(), "two".to_string()];
+        super::restore_list_principal_indent(&mut lines, "Foo\n     five\n  two", true);
+        assert_eq!(lines, ["Foo", "   five", "two"]);
+    }
+
+    #[test]
+    fn restore_list_principal_indent_keeps_indent_when_a_wrapped_line_is_flush_left() {
+        // A flush-left continuation line (`second`) zeroes the common indent, so
+        // the indented `// ...` line keeps its two spaces (the hanging-indent
+        // shape this fix restores).
+        let mut lines = vec![
+            "list item 1".to_string(),
+            "// not line comment".to_string(),
+            "second wrapped line".to_string(),
+        ];
+
+        super::restore_list_principal_indent(
+            &mut lines,
+            "list item 1\n  // not line comment\nsecond wrapped line",
+            true,
+        );
+
+        assert_eq!(
+            lines,
+            [
+                "list item 1",
+                "  // not line comment",
+                "second wrapped line"
+            ]
+        );
+    }
+
+    #[test]
+    fn restore_list_principal_indent_dedents_the_first_line_without_inline_text() {
+        // A description term whose text folds up from an indented line has no
+        // inline first line, so every line is folded and the common indent (2)
+        // comes off the first line too.
+        let mut lines = vec!["def1".to_string()];
+        super::restore_list_principal_indent(&mut lines, "  def1", false);
+        assert_eq!(lines, ["def1"]);
+    }
+
+    #[test]
+    fn restore_list_principal_indent_drops_interior_comment_lines_before_aligning() {
+        // The parser strips a column-0 line comment from the rendered content; it
+        // must be filtered from the raw span too, or the surviving lines pair with
+        // the wrong raw line and the dedent misfires.
+        let mut lines = vec!["def2".to_string(), "def2 continued".to_string()];
+
+        super::restore_list_principal_indent(
+            &mut lines,
+            "  def2\n// comment\n  def2 continued",
+            false,
+        );
+
+        assert_eq!(lines, ["def2", "def2 continued"]);
+    }
+
+    #[test]
+    fn restore_list_principal_indent_is_a_no_op_when_the_raw_span_is_short() {
+        // Defensive guard: a raw span with fewer lines than the rendered content
+        // (which should not happen) leaves the lines untouched rather than
+        // underflowing the suffix offset.
+        let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        super::restore_list_principal_indent(&mut lines, "only one line", true);
+        assert_eq!(lines, ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn common_leading_indent_skips_empty_lines_and_finds_the_minimum() {
+        // An empty line is skipped (Asciidoctor's `next if line.empty?`), so it
+        // does not count as a flush-left line that would force `None`; the common
+        // indent is the minimum of the two non-empty lines.
+        assert_eq!(super::common_leading_indent(&["    a", "", "  b"]), Some(2));
+
+        // A genuinely flush-left non-empty line does force `None` (no dedent).
+        assert_eq!(super::common_leading_indent(&["  a", "b"]), None);
+
+        // No lines (all folded content skipped) removes nothing.
+        assert_eq!(super::common_leading_indent(&[]), None);
+    }
+
+    #[test]
+    fn is_line_comment_matches_only_a_column_zero_double_slash() {
+        assert!(super::is_line_comment("// comment"));
+        assert!(super::is_line_comment("//"));
+        // A third slash begins a `////` comment block, not a line comment; an
+        // indented `//` is body text, not a comment.
+        assert!(!super::is_line_comment("/// not a line comment"));
+        assert!(!super::is_line_comment("  // indented, kept as text"));
     }
 
     /// Counts the leading spaces of the sole `<pre>`'s content.
