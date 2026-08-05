@@ -1845,8 +1845,9 @@ _url_
 
 // Source highlighting and formatting: `source-highlighter`/`source-language`
 // are verified on the `verbatim` module pages; the per-highlighter tuning
-// (CodeRay/Pygments/Rouge/prettify/highlight.js) targets highlighters this
-// renderer delegates to the client, with no distinct rendered value here.
+// (CodeRay/Pygments/Rouge/prettify/highlight.js) configures the server-side
+// highlighters this renderer does not run (html5#223), so those rows have no
+// distinct rendered value here.
 non_normative!(
     r#"
 == Source highlighting and formatting attributes
@@ -2003,9 +2004,9 @@ Any other value is permitted, but must be supported by a custom syntax highlight
 "#
 );
 
-// HTML styling attributes: `linkcss`, `copycss`, `stylesheet`, `stylesdir`,
-// `css-signature`, `max-width`, and `toc-class` are exercised by the
-// stylesheet/linkcss and toc rendering tests elsewhere in this crate.
+// `copycss` copies the linked stylesheet into the output directory — a file
+// side-effect verified in `custom_stylesheet.rs`, not observable in this
+// string API — and `css-signature` (a `<body>` id) is not implemented.
 non_normative!(
     r#"
 == HTML styling attributes
@@ -2030,6 +2031,13 @@ Only relevant when the `linkcss` attribute is set and the output is a standalone
 |Assign value to `id` attribute of HTML `<body>` element.
 *Preferred approach is to assign an ID to document title*.
 
+"#
+);
+
+#[test]
+fn linkcss_attribute() {
+    verifies!(
+        r#"
 |linkcss
 |_empty_
 |{n}
@@ -2038,6 +2046,20 @@ Only relevant when the `linkcss` attribute is set and the output is a standalone
 Can't be unset in SECURE mode.
 //<<styling-the-html-with-css>>
 
+"#
+    );
+
+    // `linkcss` links the stylesheet from the head instead of embedding it in a
+    // `<style>` element.
+    let linked = convert_with("= T\n:linkcss:\n\nbody", &Options::new().standalone(true));
+    assert!(linked.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
+    assert!(!linked.contains("<style>"));
+}
+
+// `max-width` constrains the body width via inline styles on the layout
+// containers; not yet implemented (html5#280).
+non_normative!(
+    r#"
 |max-width
 |CSS length (e.g. 55em, 12cm, etc)
 |{n}
@@ -2046,6 +2068,13 @@ Can't be unset in SECURE mode.
 *Not recommended.
 Use CSS stylesheet instead.*
 
+"#
+);
+
+#[test]
+fn stylesheet_location_and_toc_class_attributes() {
+    verifies!(
+        r#"
 |stylesdir
 |_directory path_ +
 _url_ +
@@ -2074,7 +2103,23 @@ An empty value tells the converter to use the default stylesheet.
 |===
 
 "#
-);
+    );
+
+    // `stylesdir` (default `.`) and `stylesheet` set the directory and file name
+    // of the linked stylesheet.
+    let custom = convert_with(
+        "= T\n:linkcss:\n:stylesdir: css\n:stylesheet: custom.css\n\nbody",
+        &Options::new().standalone(true),
+    );
+    assert!(custom.contains(r#"<link rel="stylesheet" href="./css/custom.css">"#));
+
+    // `toc-class` sets the CSS class on the table-of-contents container.
+    assert!(convert_with(
+        "= T\n:toc:\n:toc-class: mytoc\n\n== S\n\ntext",
+        &Options::new().standalone(true)
+    )
+    .contains(r#"<div id="toc" class="mytoc">"#));
+}
 
 // Manpage attributes are only relevant to the manpage doctype/backend, which
 // this renderer does not implement.
