@@ -8,7 +8,11 @@
 //! `document-processing.adoc` — is verified against `convert`/`load`.
 
 mod asciidoc_vs_markdown;
+mod comments;
 mod document_processing;
+mod document_structure;
+mod faq;
 mod glossary;
 mod index;
 mod key_concepts;
+mod normalization;
