@@ -187,24 +187,18 @@ fn render(document: &Document<'_>, options: &Options) -> String {
     )
 }
 
-/// Writes the `copycss` stylesheet copies through `writer`, when the document
-/// calls for them: the primary stylesheet, and the active syntax highlighter's
-/// stylesheet (today, CodeRay's). A no-op when neither applies.
+/// Writes the `copycss` stylesheet copy through `writer`, when the document
+/// calls for it: the primary stylesheet. A no-op when it does not apply.
 ///
-/// The two are independent — a document can copy the CodeRay stylesheet while
-/// its primary stylesheet is embedded or disabled, and vice versa — so each is
-/// planned and written on its own, matching Asciidoctor, which copies the
-/// primary and the syntax-highlighter stylesheets in separate steps.
+/// Asciidoctor also copies the active syntax highlighter's stylesheet (e.g.
+/// CodeRay's), but the server-side highlighters are not supported here (see the
+/// project README), so there is no highlighter stylesheet to copy.
 fn emit_stylesheet_copy(
     document: &Document<'_>,
     options: &Options,
     writer: &mut impl AssetWriter,
 ) -> io::Result<()> {
     if let Some(copy) = copycss::stylesheet_copy(document, options) {
-        writer.write_asset(&copy.dest, copy.content.as_bytes())?;
-    }
-
-    if let Some(copy) = copycss::syntax_highlighter_stylesheet_copy(document, options) {
         writer.write_asset(&copy.dest, copy.content.as_bytes())?;
     }
 
@@ -632,10 +626,12 @@ mod writer_tests {
         assert!(!content.ends_with(b"\n"));
     }
 
-    // With coderay active, `linkcss`, and a source block, the writer receives
-    // both companion files: the primary stylesheet and the CodeRay one.
+    // A server-side highlighter (`coderay`) draws no companion stylesheet: with
+    // `linkcss` and a source block, the writer still receives only the primary
+    // stylesheet. Asciidoctor would also copy `coderay-asciidoctor.css`, but
+    // server-side syntax highlighting is not supported here.
     #[test]
-    fn writer_copies_both_the_primary_and_coderay_stylesheets() {
+    fn writer_copies_only_the_primary_stylesheet_with_a_server_side_highlighter() {
         let source = "= Doc\n\n[source,ruby]\n----\nputs 1\n----";
         let options = Options::new()
             .standalone(true)
@@ -646,13 +642,12 @@ mod writer_tests {
         let mut writer = RecordingAssetWriter::default();
         convert_with_writer(source, &options, &mut writer).expect("convert");
 
-        let mut names: Vec<&str> = writer
+        let names: Vec<&str> = writer
             .written
             .iter()
             .filter_map(|(p, _)| p.to_str())
             .collect();
-        names.sort_unstable();
-        assert_eq!(names, ["asciidoctor.css", "coderay-asciidoctor.css"]);
+        assert_eq!(names, ["asciidoctor.css"]);
     }
 
     // A write error on the primary stylesheet copy is propagated by the
@@ -666,24 +661,6 @@ mod writer_tests {
 
         let mut writer = FailingAssetWriter;
         let err = convert_with_writer("= Doc\n\nBody.", &options, &mut writer)
-            .expect_err("the failing writer aborts the conversion");
-        assert_eq!(err.kind(), io::ErrorKind::Other);
-    }
-
-    // A write error on the CodeRay stylesheet copy is likewise propagated. With
-    // `:stylesheet!:` the primary copy is suppressed, so the CodeRay copy is the
-    // only companion write and its error is the one that surfaces.
-    #[test]
-    fn a_write_error_on_the_coderay_stylesheet_propagates() {
-        let options = Options::new()
-            .standalone(true)
-            .safe_mode(SafeMode::Safe)
-            .set("linkcss")
-            .attribute("source-highlighter", "coderay");
-        let source = "= Doc\n:stylesheet!:\n\n[source,ruby]\n----\nputs 1\n----";
-
-        let mut writer = FailingAssetWriter;
-        let err = convert_with_writer(source, &options, &mut writer)
             .expect_err("the failing writer aborts the conversion");
         assert_eq!(err.kind(), io::ErrorKind::Other);
     }

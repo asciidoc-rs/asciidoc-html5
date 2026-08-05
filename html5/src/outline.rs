@@ -85,6 +85,21 @@ pub(crate) fn render_outline(document: &Document<'_>, options: &OutlineOptions) 
     outline_level(document.child_blocks(), 0, toclevels, sectnumlevels).unwrap_or_default()
 }
 
+/// Generates the HTML TOC for the sections among `blocks`, with the depth and
+/// numbering caps supplied directly rather than read from a `Document`.
+///
+/// This is the block-slice counterpart of [`render_outline`], used by an
+/// AsciiDoc table cell's nested document: the cell exposes its parsed blocks
+/// and its resolved `toclevels`/`sectnumlevels` rather than a full
+/// [`Document`]. It returns an empty `String` when `blocks` holds no sections.
+pub(crate) fn render_outline_blocks<'src>(
+    blocks: &'src [Block<'src>],
+    toclevels: usize,
+    sectnumlevels: usize,
+) -> String {
+    outline_level(blocks.iter(), 0, toclevels, sectnumlevels).unwrap_or_default()
+}
+
 /// Emits one `<ul class="sectlevelN">` list for the sections among `blocks`,
 /// recursing into each section's own subsections. `parent_level` is the level
 /// of the node whose children these are (0 for the document), so the list class

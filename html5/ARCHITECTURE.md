@@ -266,9 +266,15 @@ purely a matter of CSS classes on each source block's `<pre>`/`<code>` (e.g.
 `Highlighter::from_document` / `highlighter_head` / `highlighter_footer` carry the
 `highlightjsdir`/`highlightjs-theme`/`highlightjs-languages` and
 `prettifydir`/`prettify-theme` attributes. The *server-side* highlighters
-(`coderay`, `pygments`, `rouge`), which emit tokenized `<span>` markup, are not
-rendered — they leave the source block in its default unhighlighted shape and are
-tracked in [#223](https://github.com/asciidoc-rs/asciidoc-html5/issues/223).
+(`coderay`, `pygments`, `rouge`), which emit tokenized `<span>` markup, are **not
+planned**: reproducing their per-language tokenizer output byte-for-byte would
+mean either an in-process highlighter (a heavy dependency this library's
+`asciidoc-parser`-only constraint forbids) or shelling out, so a source block
+that requests one keeps its default unhighlighted shape. Nothing keys off the
+`coderay`/`pygments`/`rouge` names – no highlighter stylesheet is linked,
+embedded, or copied (a deliberate divergence from Asciidoctor, which links and
+copies `coderay-asciidoctor.css` for the CodeRay spans it emits and this crate
+does not).
 
 Because a highlighter emits `<link>`/`<script>` tags whose origin a document
 `highlightjsdir`/`prettifydir` can steer, enabling one is safe-mode gated: at
