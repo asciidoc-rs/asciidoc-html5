@@ -140,7 +140,7 @@ to `secure`, while the `adoc` command defaults to `unsafe`.
 
 The attributes above are populated for every conversion, so referencing and
 gating on the safe mode work today. The features whose availability the safe
-mode ultimately governs in Asciidoctor -- include directives, `data-uri`, icons,
+mode ultimately governs in Asciidoctor -- include directives, `data-uri`,
 source highlighting, and `docinfo` -- are not surfaced by this renderer yet, so
 there is not much to gate on beyond the stylesheet link-versus-embed choice
 described on the xref:safe-modes.adoc[Safe Modes] page. As those features
