@@ -1324,10 +1324,10 @@ non_normative!(
 );
 
 // General content and formatting: these configure features verified on
-// their own pages (e.g., `doctype`, `docinfo*`, `hardbreaks-option`,
-// `hide-uri-scheme`, `stem`, `table-*`, `xrefstyle`) or target other
-// converters (PDF `media`/`show-link-uri`, DocBook `pagewidth`, MathJax
-// `eqnums`), so there is nothing distinct to resolve from this catalog row.
+// their own pages (e.g., `doctype`, `docinfo*`, `hide-uri-scheme`, `stem`,
+// `table-*`, `xrefstyle`) or target other converters (PDF `media`/
+// `show-link-uri`, DocBook `pagewidth`, MathJax `eqnums`), so there is
+// nothing distinct to resolve from this catalog row.
 non_normative!(
     r#"
 == General content and formatting attributes
@@ -1409,12 +1409,37 @@ If the value is AMS, only LaTeX content enclosed in an `+\begin{equation}...\end
 If the value is all, then all LaTeX blocks will be numbered.
 See https://docs.mathjax.org/en/v2.5-latest/tex.html#automatic-equation-numbering[equation numbering in MathJax].
 
+"#
+);
+
+#[test]
+fn hardbreaks_option_preserves_hard_line_breaks() {
+    verifies!(
+        r#"
 |hardbreaks-option
 |_empty_
 |{n}
 |{n}
 |xref:blocks:hard-line-breaks.adoc#per-document[Preserve hard line breaks].
 
+"#
+    );
+
+    // Set on the document, `hardbreaks-option` turns every newline inside a
+    // paragraph into a hard line break (`<br>`), matching Asciidoctor.
+    assert_eq!(
+        para(":hardbreaks-option:\n\nline one\nline two"),
+        "line one<br>\nline two",
+    );
+
+    // Without it, the same source keeps the newline as ordinary whitespace.
+    assert_eq!(para("line one\nline two"), "line one\nline two");
+}
+
+// The remaining general content and formatting attributes configure features
+// verified on their own pages or targeting other converters, as noted above.
+non_normative!(
+    r#"
 |hide-uri-scheme
 |_empty_
 |{n}
