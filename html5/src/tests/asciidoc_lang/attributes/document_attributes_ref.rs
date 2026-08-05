@@ -1737,9 +1737,8 @@ A non-empty value replaces the `family` query string parameter in the Google Fon
     assert!(xr("basic").contains(r##"<a href="#tgt">Target Section</a>"##));
 }
 
-// Image and icon attributes: `imagesdir`, `icons`, and the icon-font family
-// are exercised where images and admonition icons are rendered (the
-// `built-in-attributes` and `macros` module pages).
+// The `iconfont-*` trio configures the Font Awesome stylesheet `<link>` that
+// `icons=font` needs, which this renderer does not yet emit (html5#279).
 non_normative!(
     r#"
 == Image and icon attributes
@@ -1771,6 +1770,13 @@ Overrides CDN used to link to the Font Awesome stylesheet.
 |Allows use of a CDN for resolving the icon font.
 Only relevant used when value of `icons` attribute is `font`.
 
+"#
+);
+
+#[test]
+fn icons_and_image_location_attributes() {
+    verifies!(
+        r#"
 |icons
 |_empty_[=`image`] +
 `image` +
@@ -1809,7 +1815,33 @@ _url_
 |===
 
 "#
-);
+    );
+
+    // `icons` chooses font or image icons for admonitions instead of the text
+    // label: `font` emits a Font Awesome `<i>`, while the empty/`image` value
+    // uses an `<img>` from `iconsdir` (default `./images/icons`) with the
+    // `icontype` extension (default `png`).
+    assert!(convert("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====")
+        .contains(r#"<i class="fa icon-note" title="Note">"#));
+    assert!(convert("= T\n:icons:\n\n[NOTE]\n====\nhi\n====")
+        .contains(r#"<img src="./images/icons/note.png" alt="Note""#));
+
+    // `iconsdir` and `icontype` override the directory and extension of the
+    // image icons.
+    assert!(
+        convert("= T\n:icons:\n:iconsdir: /myicons\n:icontype: svg\n\n[NOTE]\n====\nhi\n====")
+            .contains(r#"<img src="/myicons/note.svg""#)
+    );
+
+    // `imagesdir` prefixes image targets; when it is set and `iconsdir` is not,
+    // the image icons default to the `icons` folder beneath it.
+    assert!(convert("= T\n:imagesdir: assets\n\nimage::foo.png[Foo]")
+        .contains(r#"<img src="assets/foo.png""#));
+    assert!(
+        convert("= T\n:icons:\n:imagesdir: assets\n\n[NOTE]\n====\nhi\n====")
+            .contains(r#"<img src="assets/icons/note.png" alt="Note""#)
+    );
+}
 
 // Source highlighting and formatting: `source-highlighter`/`source-language`
 // are verified on the `verbatim` module pages; the per-highlighter tuning
