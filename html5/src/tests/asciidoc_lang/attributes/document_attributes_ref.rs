@@ -1117,12 +1117,10 @@ See xref:document:title.adoc#title-attr[title attribute].
     assert!(titled.contains("<title>Fallback</title>"), "{titled}");
 }
 
-// Section title and table-of-contents attributes: `idprefix`/`idseparator`,
-// `sectnums`/`sectlinks`/`sectanchors`, and `toc`/`toclevels` are verified on
-// the `sections` and `toc` module pages; `partnums`/`title-separator`/
-// `fragment` are book-doctype, subtitle, or parser-only concerns.
-non_normative!(
-    r#"
+#[test]
+fn section_id_and_leveloffset_attributes() {
+    verifies!(
+        r#"
 == Section title and table of contents attributes
 
 [cols="30m,20,^10,^10,30"]
@@ -1153,6 +1151,31 @@ See xref:sections:id-prefix-and-separator.adoc#separator[Change the ID word sepa
 A leading + or - makes the value relative.
 //<<include-partitioning>>
 
+"#
+    );
+
+    // Section IDs are auto-generated from the title as a lowercased slug: each
+    // run of non-word characters becomes the `idseparator` (default `_`) and
+    // the whole thing sits behind `idprefix` (default `_`).
+    assert!(convert("= Doc\n\n== Hello World").contains(r#"<h2 id="_hello_world">"#));
+
+    // Overriding both attributes changes the prefix and the word separator.
+    assert!(
+        convert("= Doc\n:idprefix: sect-\n:idseparator: -\n\n== Hello World")
+            .contains(r#"<h2 id="sect-hello-world">"#)
+    );
+
+    // `leveloffset` shifts the level of the headings that follow it; `+1` turns
+    // a level-1 section (`==`, normally an `<h2>`) into an `<h3>`.
+    assert!(convert("= Doc\n\n:leveloffset: +1\n== Shifted")
+        .contains(r#"<h3 id="_shifted">Shifted</h3>"#));
+}
+
+// `partnums` numbers book parts, which only exist in the book doctype this
+// renderer does not yet lay out (html5#188), so there is no article-doctype
+// effect to resolve here.
+non_normative!(
+    r#"
 |partnums
 |_empty_
 |{n}
@@ -1161,6 +1184,13 @@ A leading + or - makes the value relative.
 See xref:sections:part-numbers-and-labels.adoc#partnums[Number book parts].
 _Book doctype only_.
 
+"#
+);
+
+#[test]
+fn section_anchor_link_and_numbering_attributes() {
+    verifies!(
+        r#"
 |sectanchors
 |_empty_
 |{n}
@@ -1194,12 +1224,52 @@ See xref:sections:auto-ids.adoc#disable[Disable automatic ID generation].
 |{n}
 |xref:sections:numbers.adoc#numlevels[Controls depth of section numbering].
 
+"#
+    );
+
+    // `sectanchors` prepends a hover anchor to each section title.
+    assert!(convert("= Doc\n:sectanchors:\n\n== Hello")
+        .contains(r##"<h2 id="_hello"><a class="anchor" href="#_hello"></a>Hello</h2>"##));
+
+    // `sectids` is set by default, so a section gets an auto-generated ID;
+    // unsetting it suppresses ID generation.
+    assert!(convert("= Doc\n\n== Hello").contains(r#"<h2 id="_hello">"#));
+    assert!(convert("= Doc\n:sectids!:\n\n== Hello").contains("<h2>Hello</h2>"));
+
+    // `sectlinks` turns each section title into a self-referencing link.
+    assert!(convert("= Doc\n:sectlinks:\n\n== Hello")
+        .contains(r##"<h2 id="_hello"><a class="link" href="#_hello">Hello</a></h2>"##));
+
+    // `sectnums` numbers section titles; `sectnumlevels` (default 3) caps how
+    // deep the numbering goes, so at level 1 the nested section is left plain.
+    let numbered = convert("= Doc\n:sectnums:\n\n== First\n\n=== Sub");
+    assert!(numbered.contains(r#"<h2 id="_first">1. First</h2>"#));
+    assert!(numbered.contains(r#"<h3 id="_sub">1.1. Sub</h3>"#));
+    assert!(
+        convert("= Doc\n:sectnums:\n:sectnumlevels: 1\n\n== First\n\n=== Sub")
+            .contains(r#"<h3 id="_sub">Sub</h3>"#)
+    );
+}
+
+// `title-separator` splits a document title into title and subtitle. This
+// renderer has no subtitle rendering (and, like Asciidoctor, leaves the
+// article-doctype `<h1>` unsplit), so the attribute has no distinct effect to
+// verify here.
+non_normative!(
+    r#"
 |title-separator
 |_any_
 |{n}
 |{y}
 |Character used to xref:document:subtitle.adoc[separate document title and subtitle].
 
+"#
+);
+
+#[test]
+fn table_of_contents_attributes() {
+    verifies!(
+        r#"
 |toc
 |_empty_[=`auto`] +
 `auto` +
@@ -1218,6 +1288,31 @@ See xref:sections:auto-ids.adoc#disable[Disable automatic ID generation].
 |{y}
 |xref:toc:levels.adoc[Maximum section level to display].
 
+"#
+    );
+
+    // `toc` turns on the table of contents; `toclevels` (default 2) lists
+    // sections down to the given level.
+    let toc = convert_with(
+        "= Doc\n:toc:\n\n== First\n\n=== Sub",
+        &Options::new().standalone(true),
+    );
+    assert!(toc.contains(r##"<a href="#_first">First</a>"##));
+    assert!(toc.contains(r##"<a href="#_sub">Sub</a>"##));
+
+    // Capping `toclevels` at 1 drops the nested section from the contents.
+    let toc1 = convert_with(
+        "= Doc\n:toc:\n:toclevels: 1\n\n== First\n\n=== Sub",
+        &Options::new().standalone(true),
+    );
+    assert!(toc1.contains(r##"<a href="#_first">First</a>"##));
+    assert!(!toc1.contains(r##"<a href="#_sub">Sub</a>"##));
+}
+
+// `fragment` is a parser flag that relaxes section-nesting enforcement; it has
+// no distinct rendered effect and is exercised by `asciidoc-parser`.
+non_normative!(
+    r#"
 |fragment
 |_empty_
 |{n}
