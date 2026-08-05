@@ -1455,6 +1455,13 @@ non_normative!(
 |Specifies media type of output and enables behavior specific to that media type.
 _PDF converter only_.
 
+"#
+);
+
+#[test]
+fn footer_footnotes_header_and_title_toggle_attributes() {
+    verifies!(
+        r#"
 |nofooter
 |_empty_
 |{n}
@@ -1491,6 +1498,50 @@ _ex._ .html
 |File extension of output file, including dot (`.`), such as `.html`.
 // <<navigating-between-source-files>>
 
+"#
+    );
+
+    // Each `no*` toggle removes the corresponding piece of a standalone
+    // document: `nofooter` the footer, `nofootnotes` the footnotes block,
+    // `noheader` the header, `notitle` the doctitle heading.
+    let opts = || Options::new().standalone(true);
+    let full = convert_with(
+        "= The Title\nAuthor Name\n\nSee this.footnote:[a note]",
+        &opts(),
+    );
+    assert!(full.contains(r#"<div id="header">"#));
+    assert!(full.contains("<h1>The Title</h1>"));
+    assert!(full.contains(r#"<div id="footnotes">"#));
+    assert!(full.contains(r#"<div id="footer">"#));
+
+    assert!(
+        !convert_with("= The Title\n:noheader:\nAuthor Name\n\nbody", &opts())
+            .contains(r#"<div id="header">"#)
+    );
+    assert!(
+        !convert_with("= The Title\n:notitle:\nAuthor Name\n\nbody", &opts())
+            .contains("<h1>The Title</h1>")
+    );
+    assert!(!convert_with(
+        "= The Title\n:nofootnotes:\nAuthor Name\n\nx.footnote:[n]",
+        &opts()
+    )
+    .contains(r#"<div id="footnotes">"#));
+    assert!(
+        !convert_with("= The Title\n:nofooter:\nAuthor Name\n\nbody", &opts())
+            .contains(r#"<div id="footer">"#)
+    );
+
+    // `outfilesuffix` is the output file extension (default `.html`); it is also
+    // what a relative inter-document xref uses for its target by default.
+    assert_eq!(para("{outfilesuffix}"), ".html");
+    assert!(convert("= T\n\nxref:other.adoc[go]").contains(r#"<a href="other.html">go</a>"#));
+}
+
+// `pagewidth` sizes tables in DocBook output, a backend this renderer does not
+// implement.
+non_normative!(
+    r#"
 |pagewidth
 |_integer_ +
 (`425`)
@@ -1498,6 +1549,13 @@ _ex._ .html
 |{y}
 |Page width used to calculate the absolute width of tables in the DocBook output.
 
+"#
+);
+
+#[test]
+fn relative_xref_path_attributes() {
+    verifies!(
+        r#"
 |relfileprefix
 |_empty_ +
 _path segment_
@@ -1517,6 +1575,28 @@ Defaults to the value of the `outfilesuffix` attribute.
 (Preferred over modifying outfilesuffix).
 //|<<navigating-between-source-files>>
 
+"#
+    );
+
+    // `relfilesuffix` (defaulting to `outfilesuffix`) and `relfileprefix` set
+    // the suffix and prefix of a relative inter-document xref's target.
+    assert!(convert("= T\n:relfilesuffix: .htm\n\nxref:other.adoc[go]")
+        .contains(r#"<a href="other.htm">go</a>"#));
+    assert!(convert("= T\n:relfileprefix: ../\n\nxref:other.adoc[go]")
+        .contains(r#"<a href="../other.html">go</a>"#));
+
+    // Because `relfilesuffix` defaults to `outfilesuffix`, changing the latter
+    // changes the xref suffix too.
+    assert!(
+        convert("= T\n:outfilesuffix: .xhtml\n\nxref:other.adoc[go]")
+            .contains(r#"<a href="other.xhtml">go</a>"#)
+    );
+}
+
+// `show-link-uri` appends the link URI after the link text in the PDF
+// converter, which this renderer does not implement.
+non_normative!(
+    r#"
 |show-link-uri
 |_empty_
 |{n}
@@ -1524,6 +1604,13 @@ Defaults to the value of the `outfilesuffix` attribute.
 |Prints the URI of a link after the link text.
 _PDF converter only_.
 
+"#
+);
+
+#[test]
+fn showtitle_attribute() {
+    verifies!(
+        r#"
 |showtitle
 |_empty_
 |{n}
@@ -1531,6 +1618,21 @@ _PDF converter only_.
 |xref:document:title.adoc#hide-or-show[Displays the doctitle in an embedded document].
 Mutually exclusive with the `notitle` attribute.
 
+"#
+    );
+
+    // `showtitle` shows the doctitle heading in embedded output (hidden there by
+    // default); it is the inverse of `notitle`.
+    assert!(convert("= The Title\n:showtitle:\n\nbody").contains("<h1>The Title</h1>"));
+    assert!(!convert("= The Title\n\nbody").contains("<h1>The Title</h1>"));
+}
+
+// `stem` enables math processing. This renderer emits the MathJax delimiters
+// for stem content (e.g. `stem:[x^2]` -> `\$x^2\$`, matching Asciidoctor) but
+// does not yet emit the MathJax loader/config docinfo that renders them in the
+// browser (html5#250), so the end-to-end feature is tracked there.
+non_normative!(
+    r#"
 |stem
 |`_empty_`[=`asciimath`] +
 `asciimath` +
@@ -1539,6 +1641,13 @@ Mutually exclusive with the `notitle` attribute.
 |{y}
 |Enables xref:stem:index.adoc[mathematics processing and interpreter].
 
+"#
+);
+
+#[test]
+fn table_defaults_tabsize_webfonts_and_xrefstyle_attributes() {
+    verifies!(
+        r#"
 |table-frame
 |(`all`) +
 `ends` +
@@ -1591,7 +1700,42 @@ A non-empty value replaces the `family` query string parameter in the Google Fon
 |===
 
 "#
-);
+    );
+
+    // The `table-*` attributes set the document-wide default for a table's
+    // `frame`, `grid`, and `stripes`, reflected in the table's CSS classes.
+    assert!(convert(
+        "= T\n:table-frame: sides\n:table-grid: cols\n:table-stripes: even\n\n|===\n|a\n|==="
+    )
+    .contains(r#"class="tableblock frame-sides grid-cols stripes-even stretch""#));
+
+    // `tabsize` expands a leading tab in verbatim content to that many spaces.
+    assert!(convert("= T\n:tabsize: 2\n\n....\n\tX\n....").contains("<pre>  X</pre>"));
+
+    // `webfonts` controls the Google Fonts `<link>` in a standalone document:
+    // set (the default) links the default families, a non-empty value replaces
+    // the family list, and unsetting it drops the link.
+    let wf = |src: &str| convert_with(src, &Options::new().standalone(true));
+    assert!(wf("= T\n\nbody").contains(
+        r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans"#
+    ));
+    assert!(wf("= T\n:webfonts: Roboto\n\nbody").contains(
+        r#"<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto">"#
+    ));
+    assert!(!wf("= T\n:webfonts!:\n\nbody")
+        .contains(r#"<link rel="stylesheet" href="https://fonts.googleapis.com"#));
+
+    // `xrefstyle` selects the auto-generated cross-reference text: `full` gives
+    // the number and title, `short` the number, `basic` the title.
+    let xr = |style: &str| {
+        convert(&format!(
+            "= T\n:sectnums:\n:xrefstyle: {style}\n\n[#tgt]\n== Target Section\n\n== Two\n\nSee <<tgt>>."
+        ))
+    };
+    assert!(xr("full").contains(r##"<a href="#tgt">Section 1, &#8220;Target Section&#8221;</a>"##));
+    assert!(xr("short").contains(r##"<a href="#tgt">Section 1</a>"##));
+    assert!(xr("basic").contains(r##"<a href="#tgt">Target Section</a>"##));
+}
 
 // Image and icon attributes: `imagesdir`, `icons`, and the icon-font family
 // are exercised where images and admonition icons are rendered (the
