@@ -84,6 +84,10 @@ const DEFAULT_WEBFONTS: &str = "Open+Sans:300,300italic,400,400italic,600,600ita
 /// (`Asciidoctor::HIGHLIGHT_JS_VERSION`).
 const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
 
+/// The Font Awesome release Asciidoctor v2.0.26 links from the CDN for
+/// font-based icons (`Asciidoctor::FONT_AWESOME_VERSION`).
+const FONT_AWESOME_VERSION: &str = "4.7.0";
+
 /// The active *client-side* syntax highlighter, resolved from the
 /// `source-highlighter` document attribute.
 ///
@@ -1678,6 +1682,11 @@ impl Renderer<'_> {
         // does the same unless the document opts out.
         self.stylesheet(document);
 
+        // Under `:icons: font`, the Font Awesome stylesheet `<link>` the icon
+        // glyphs depend on sits right after the primary stylesheet, matching
+        // Asciidoctor's placement (before the syntax highlighter's `<head>`).
+        self.iconfont_head(document);
+
         // The active syntax highlighter's `<head>` docinfo (its stylesheet
         // `<link>`) sits after the stylesheet and before the head docinfo,
         // matching Asciidoctor's placement.
@@ -2063,6 +2072,55 @@ impl Renderer<'_> {
         if !content.is_empty() {
             self.line(content);
         }
+    }
+
+    /// Emits the Font Awesome stylesheet `<link>` that font-based icons
+    /// (`:icons: font`) depend on, matching Asciidoctor's `html5` backend (the
+    /// block right after the primary stylesheet). Nothing is emitted unless the
+    /// resolved `icons` attribute is `font` — the same gate the admonition,
+    /// callout, and inline-icon markup use, so the glyphs and the font that
+    /// draws them are always emitted together.
+    ///
+    /// With `iconfont-remote` set (the default), the link points at a CDN: an
+    /// `iconfont-cdn` attribute overrides the URL outright, otherwise it is
+    /// `{cdn}/font-awesome/{version}/css/font-awesome.min.css`, where `{cdn}`
+    /// follows `asset-uri-scheme` ([`cdn_base_url`]) and `{version}` is
+    /// [`FONT_AWESOME_VERSION`]. With `iconfont-remote` unset
+    /// (`:iconfont-remote!:`), the link is a local `{iconfont-name}.css`
+    /// (default `font-awesome`) resolved against `stylesdir` by
+    /// [`normalize_web_path`], so no remote resource is referenced.
+    ///
+    /// Following the resolved `icons` value keeps this consistent with the icon
+    /// markup: this crate honors a document-set `:icons:` in every safe mode
+    /// (unlike Asciidoctor, which locks `icons` against the document at
+    /// `Secure`), so the link, like the markup, is attribute-driven rather than
+    /// gated a second time in the renderer — mirroring how the syntax
+    /// highlighter's CDN `<link>` follows its (safe-mode-locked) attribute
+    /// (html5#56).
+    fn iconfont_head(&mut self, document: &Document<'_>) {
+        if !self.icons_font {
+            return;
+        }
+
+        let href = if document.is_attribute_set("iconfont-remote") {
+            attribute_str(document, "iconfont-cdn").unwrap_or_else(|| {
+                format!(
+                    "{}/font-awesome/{FONT_AWESOME_VERSION}/css/font-awesome.min.css",
+                    cdn_base_url(document)
+                )
+            })
+        } else {
+            let name = attribute_str(document, "iconfont-name")
+                .unwrap_or_else(|| "font-awesome".to_string());
+            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
+
+            normalize_web_path(&format!("{name}.css"), &stylesdir)
+        };
+
+        self.line(&format!(
+            "<link rel=\"stylesheet\" href=\"{}\">",
+            escape_attribute(&href)
+        ));
     }
 
     /// Emits the active client-side highlighter's `<head>` docinfo — the

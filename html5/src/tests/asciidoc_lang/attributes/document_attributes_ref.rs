@@ -1737,8 +1737,8 @@ A non-empty value replaces the `family` query string parameter in the Google Fon
     assert!(xr("basic").contains(r##"<a href="#tgt">Target Section</a>"##));
 }
 
-// The `iconfont-*` trio configures the Font Awesome stylesheet `<link>` that
-// `icons=font` needs, which this renderer does not yet emit (html5#279).
+// The section heading and table scaffold carry no rendered behavior of their
+// own; the individual attribute rows below are verified.
 non_normative!(
     r#"
 == Image and icon attributes
@@ -1747,6 +1747,13 @@ non_normative!(
 |===
 .>|Name .>|Allowable Values .>|Set By Default .>|Header Only .>|Notes
 
+"#
+);
+
+#[test]
+fn iconfont_stylesheet_link_attributes() {
+    verifies!(
+        r#"
 |iconfont-cdn
 |_url_ +
 (default CDN URL)
@@ -1771,7 +1778,39 @@ Overrides CDN used to link to the Font Awesome stylesheet.
 Only relevant used when value of `icons` attribute is `font`.
 
 "#
-);
+    );
+
+    // The Font Awesome `<link>` lives in the standalone document's `<head>`.
+    let standalone = |source: &str| convert_with(source, &Options::new().standalone(true));
+
+    // `iconfont-remote` is set (empty) by default, so `:icons: font` links the
+    // Font Awesome stylesheet from a CDN. `iconfont-cdn`, when unset, defaults
+    // to the cdnjs.com service at the pinned Font Awesome version.
+    assert!(standalone("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====").contains(
+        r#"<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">"#
+    ));
+
+    // `iconfont-cdn` overrides that CDN URL outright.
+    assert!(
+        standalone(
+            "= T\n:icons: font\n:iconfont-cdn: https://cdn.example.org/fa.css\n\n[NOTE]\n====\nhi\n===="
+        )
+        .contains(r#"<link rel="stylesheet" href="https://cdn.example.org/fa.css">"#)
+    );
+
+    // With `iconfont-remote` unset, no CDN is used: the stylesheet is a local
+    // `{iconfont-name}.css`, whose name defaults to `font-awesome`.
+    assert!(
+        standalone("= T\n:icons: font\n:iconfont-remote!:\n\n[NOTE]\n====\nhi\n====")
+            .contains(r#"<link rel="stylesheet" href="./font-awesome.css">"#)
+    );
+
+    // `iconfont-name` overrides that local stylesheet's name.
+    assert!(standalone(
+        "= T\n:icons: font\n:iconfont-remote!:\n:iconfont-name: my-icons\n\n[NOTE]\n====\nhi\n===="
+    )
+    .contains(r#"<link rel="stylesheet" href="./my-icons.css">"#));
+}
 
 #[test]
 fn icons_and_image_location_attributes() {
