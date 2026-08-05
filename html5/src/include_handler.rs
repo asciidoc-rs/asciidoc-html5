@@ -130,6 +130,30 @@ pub(crate) fn resolve(
     }
 }
 
+/// Resolves an *asset* `target` against `base_dir` with `asset_dir` as the
+/// starting directory (rather than an including file's directory), honoring the
+/// safe mode's jail.
+///
+/// This is the resolution Asciidoctor's `AbstractNode#generate_data_uri`
+/// performs for a `data-uri` image: `normalize_system_path(target, imagesdir)`
+/// resolves the image target against the `imagesdir` (the `asset_dir`),
+/// confined to the base directory under `safe`/`server`. Unlike [`resolve`],
+/// whose `source` names an including *file* and contributes only its directory,
+/// `asset_dir` is itself the starting directory, so a relative image target
+/// lands at `base_dir`/`asset_dir`/`target`.
+pub(crate) fn resolve_in_dir(
+    base_dir: &Path,
+    safe: SafeMode,
+    asset_dir: &str,
+    target: &str,
+) -> PathBuf {
+    if jailed(safe) {
+        resolve_jailed(base_dir, asset_dir, target)
+    } else {
+        resolve_free(base_dir, asset_dir, target)
+    }
+}
+
 /// Resolves `target` without a jail: relative targets anchor at `start` (itself
 /// relative to the base directory), absolute targets are taken as-is, and `..`
 /// may climb anywhere.

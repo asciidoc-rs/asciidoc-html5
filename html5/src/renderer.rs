@@ -26,6 +26,8 @@
 //! coverage gaps are obvious. Adding a construct means adding one arm and one
 //! `render_*` method.
 
+use std::path::PathBuf;
+
 use asciidoc_parser::{
     attributes::Attrlist,
     blocks::{
@@ -738,6 +740,33 @@ fn has_file_extension(path: &str) -> bool {
     matches!(basename.rfind('.'), Some(index) if index > 0)
 }
 
+/// The file extension of `path` including the leading dot (e.g. `.png`), or
+/// `None` when it has none — a direct port of Asciidoctor's `Helpers.extname`
+/// with a `nil` fallback. The extension is the slice from the last `.` to the
+/// end, unless that dot lies in a directory component (a `/` follows it), in
+/// which case the path has no extension.
+fn asset_extname(path: &str) -> Option<&str> {
+    let dot = path.rfind('.')?;
+    if path[dot..].contains('/') {
+        None
+    } else {
+        Some(&path[dot..])
+    }
+}
+
+/// The MIME type embedded in a `data:` URI for the image at `target`, mirroring
+/// Asciidoctor's `generate_data_uri`: an `.svg` target is `image/svg+xml`; any
+/// other extension yields `image/<ext>` (the extension verbatim, without the
+/// dot, and *not* lowercased, matching Asciidoctor); a target with no extension
+/// is `application/octet-stream`.
+fn data_uri_mimetype(target: &str) -> String {
+    match asset_extname(target) {
+        Some(".svg") => "image/svg+xml".to_string(),
+        Some(ext) => format!("image/{}", &ext[1..]),
+        None => "application/octet-stream".to_string(),
+    }
+}
+
 /// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
 /// with each author-supplied role escaped — the inner text of `class="…"`.
 fn class_list(base: &str, roles: &[&str]) -> String {
@@ -1214,10 +1243,19 @@ fn render_toc(document: &Document<'_>, class: &str) -> String {
 /// `None` for callers that cannot supply it, such as the string-only
 /// [`convert`](crate::convert) entry point. It is ignored in embedded output,
 /// which emits no stylesheet.
+///
+/// `base_dir` is the directory that filesystem-relative image targets resolve
+/// against when the document sets `data-uri` (Asciidoctor's `base_dir`); it is
+/// `None` for callers with nothing to anchor the lookup — the string entry
+/// points without an input file, and
+/// [`convert_document`](crate::convert_document) — where a `data-uri` image
+/// cannot be read and embeds as an empty data URI. The safe mode governing
+/// those reads is derived from the document's `safe-mode-level`.
 pub(crate) fn render_document<'a>(
     document: &'a Document<'a>,
     custom_stylesheet: Option<&'a str>,
     standalone: bool,
+    base_dir: Option<PathBuf>,
 ) -> String {
     // Build the header/preamble TOC block once, up front — it is emitted at the
     // single site the placement selects. Only the placements that render a TOC
@@ -1287,9 +1325,25 @@ pub(crate) fn render_document<'a>(
         stem_type: resolve_stem_type(document),
         cellbgcolor: attribute_str(document, "cellbgcolor"),
         svg_below_secure: safe_mode_below_secure(document),
+        data_uri: document.is_attribute_set("data-uri"),
+        safe: document_safe_mode(document),
+        base_dir,
     };
     renderer.document(document);
     renderer.out
+}
+
+/// Reconstructs the [`SafeMode`] a document was processed under from its
+/// `safe-mode-level` intrinsic attribute (the numeric level the parser seeds).
+/// An unset or unrecognized level is treated as [`SafeMode::Secure`], the most
+/// conservative mode — the same fallback [`safe_mode_below_secure`] applies.
+fn document_safe_mode(document: &Document<'_>) -> SafeMode {
+    match attribute_str(document, "safe-mode-level").and_then(|level| level.parse::<u32>().ok()) {
+        Some(level) if level == SafeMode::Unsafe as u32 => SafeMode::Unsafe,
+        Some(level) if level == SafeMode::Safe as u32 => SafeMode::Safe,
+        Some(level) if level == SafeMode::Server as u32 => SafeMode::Server,
+        _ => SafeMode::Secure,
+    }
 }
 
 /// How the `sectanchors` document attribute decorates a non-discrete section
@@ -1444,6 +1498,12 @@ struct CellRenderConfig {
     /// Inherited from the enclosing document so an AsciiDoc cell's images honor
     /// the same SVG safe-mode gate (see [`Renderer::svg_below_secure`]).
     svg_below_secure: bool,
+    /// Inherited so an AsciiDoc cell's images embed as `data:` URIs under the
+    /// same `data-uri`/safe-mode/base-directory context as the parent document
+    /// (see [`Renderer::data_uri`]).
+    data_uri: bool,
+    safe: SafeMode,
+    base_dir: Option<PathBuf>,
 }
 
 /// Accumulates HTML as the document tree is walked.
@@ -1557,6 +1617,30 @@ struct Renderer<'a> {
     /// (the API default), matching Asciidoctor. A document-less
     /// sub-renderer (an AsciiDoc table cell) inherits this from its parent.
     svg_below_secure: bool,
+
+    /// Whether the `data-uri` document attribute is set. When it is — and the
+    /// safe mode is below `Secure` (see
+    /// [`svg_below_secure`](Self::svg_below_secure)) — the renderer embeds
+    /// each referenced image (and image-mode icon) into the output as a
+    /// base64 `data:` URI instead of linking it, matching Asciidoctor's
+    /// `AbstractNode#image_uri`. `Secure` and above disable it.
+    data_uri: bool,
+
+    /// The safe mode in force, needed to confine the filesystem reads that
+    /// [`generate_data_uri`](Self::generate_data_uri) performs for `data-uri`
+    /// image embedding to the base directory's jail (`safe`/`server`). Derived
+    /// from the document's `safe-mode-level`; a document-less sub-renderer
+    /// inherits it from its parent.
+    safe: SafeMode,
+
+    /// The base directory that filesystem-relative image targets resolve
+    /// against when `data-uri` embeds them (Asciidoctor's `base_dir`, the
+    /// anchor its `normalize_system_path` uses). `None` when nothing
+    /// anchors the lookup — a plain string conversion with no base
+    /// directory or input file — in which case a `data-uri` image cannot be
+    /// read and embeds as an empty data URI, matching Asciidoctor's
+    /// unreadable-image fallback.
+    base_dir: Option<PathBuf>,
 }
 
 impl Renderer<'_> {
@@ -2895,7 +2979,7 @@ impl Renderer<'_> {
             Some(icon) => format!("{icon}.{}", self.icontype),
             None => format!("{name}.{}", self.icontype),
         };
-        let src = escape_attribute(&media_uri(&target, &self.iconsdir));
+        let src = escape_attribute(&self.image_uri(&target, &self.iconsdir));
 
         format!("<img src=\"{src}\" alt=\"{}\">", escape_attribute(label))
     }
@@ -3061,17 +3145,18 @@ impl Renderer<'_> {
     /// branch.
     fn colist_row<'src>(&mut self, list_item: &'src ListItem<'src>, num: usize) {
         // The Font Awesome pair carries the number in `<b>`; the image form
-        // points at `{iconsdir}/callouts/{num}.{icontype}`. The path is
-        // attribute-escaped so a hostile `iconsdir`/`icontype` cannot break out
-        // of the quoted `src` (Asciidoctor leaves it raw; we harden it, which
-        // only diverges when those attributes contain `& < > "`).
+        // points at `{iconsdir}/callouts/{num}.{icontype}` — a port of
+        // Asciidoctor's `icon_uri "callouts/#{num}"`, so under `data-uri` (below
+        // `Secure`) the callout icon is embedded as a `data:` URI too (see
+        // [`image_uri`](Self::image_uri)). The path is attribute-escaped so a
+        // hostile `iconsdir`/`icontype` cannot break out of the quoted `src`
+        // (Asciidoctor leaves it raw; we harden it, which only diverges when
+        // those attributes contain `& < > "`).
         let num_label = if self.icons_font {
             format!("<i class=\"conum\" data-value=\"{num}\"></i><b>{num}</b>")
         } else {
-            let src = escape_attribute(&format!(
-                "{}/callouts/{num}.{}",
-                self.iconsdir, self.icontype
-            ));
+            let target = format!("callouts/{num}.{}", self.icontype);
+            let src = escape_attribute(&self.image_uri(&target, &self.iconsdir));
             format!("<img src=\"{src}\" alt=\"{num}\">")
         };
 
@@ -3567,6 +3652,9 @@ impl Renderer<'_> {
                         stem_type: self.stem_type,
                         cellbgcolor: self.cellbgcolor.clone(),
                         svg_below_secure: self.svg_below_secure,
+                        data_uri: self.data_uri,
+                        safe: self.safe,
+                        base_dir: self.base_dir.clone(),
                     },
                 )
             ),
@@ -3888,26 +3976,90 @@ impl Renderer<'_> {
         }
     }
 
+    /// Builds the `src` (or `data`) reference for an image or image-mode icon,
+    /// a port of Asciidoctor's `AbstractNode#image_uri`.
+    ///
+    /// When the document sets `data-uri` and the safe mode is below `Secure`,
+    /// the referenced file is embedded as a base64 `data:` URI (see
+    /// [`generate_data_uri`](Self::generate_data_uri)) instead of linked. Two
+    /// cases are *not* embedded, matching Asciidoctor when `allow-uri-read` is
+    /// off (remote reads are a non-goal here — see the crate's `allow-uri-read`
+    /// non-goal): a `target` that is itself a URI, and a relative `target`
+    /// under a URI `asset_dir` (e.g. an `imagesdir` pointing at a CDN).
+    /// Both fall through to the plain [`media_uri`] reference, exactly as
+    /// when `data-uri` is unset. `asset_dir` is the asset directory the
+    /// target resolves against — `imagesdir` for an image, `iconsdir` for
+    /// an icon.
+    fn image_uri(&self, target: &str, asset_dir: &str) -> String {
+        // `data-uri` embedding applies only below `Secure` (the same gate as the
+        // SVG modes), and never to a URI target or under a URI asset directory —
+        // those would need a network read this crate does not perform, so they
+        // pass through unchanged (Asciidoctor's no-`allow-uri-read` behavior).
+        if self.data_uri
+            && self.svg_below_secure
+            && !looks_like_uri(target)
+            && !looks_like_uri(asset_dir)
+        {
+            return self.generate_data_uri(target, asset_dir);
+        }
+
+        media_uri(target, asset_dir)
+    }
+
+    /// Reads the local image at `target` (resolved against `asset_dir` within
+    /// the base directory) and returns a base64 `data:` URI embedding it — a
+    /// port of Asciidoctor's `AbstractNode#generate_data_uri`.
+    ///
+    /// The MIME type is derived from the target's extension
+    /// ([`data_uri_mimetype`]). The file is resolved the way Asciidoctor's
+    /// `normalize_system_path` resolves it — `target` against `asset_dir`,
+    /// confined to the base directory's jail under `safe`/`server` — and read
+    /// as raw bytes. An unreadable target (missing, outside the jail, or —
+    /// as when no base directory anchors the lookup — unresolvable) yields
+    /// an *empty* data URI (`data:<mime>;base64,`), matching Asciidoctor's
+    /// fallback for an image it cannot embed. (Asciidoctor also logs a
+    /// warning there; this renderer, which has no warning channel, matches
+    /// only the output.)
+    fn generate_data_uri(&self, target: &str, asset_dir: &str) -> String {
+        let mimetype = data_uri_mimetype(target);
+
+        let bytes = self.base_dir.as_deref().and_then(|base_dir| {
+            let path =
+                crate::include_handler::resolve_in_dir(base_dir, self.safe, asset_dir, target);
+            match crate::include_handler::read_confined_bytes(base_dir, self.safe, &path) {
+                crate::include_handler::ReadBytesOutcome::Read(bytes) => Some(bytes),
+                crate::include_handler::ReadBytesOutcome::NotFound
+                | crate::include_handler::ReadBytesOutcome::NotReadable => None,
+            }
+        });
+
+        match bytes {
+            Some(bytes) => format!("data:{mimetype};base64,{}", crate::base64::encode(&bytes)),
+            None => format!("data:{mimetype};base64,"),
+        }
+    }
+
     /// `<div class="imageblock …"><div class="content"><img
     /// …></div>[title]</div>`, matching Asciidoctor's `convert_image` for a
     /// block image (`image::…[]`).
     ///
     /// The `<img>` carries the resolved `src` (the target joined with
-    /// `imagesdir` — see [`media_uri`]), the `alt` text (an explicit value,
-    /// else the target's basename with `_`/`-` turned into spaces), and any
-    /// `width`/`height`. A `link` wraps the image in `<a class="image">`. The
-    /// wrapper's classes are `imageblock`, then a `float` role, then a
-    /// `text-<align>` class, then the block's roles (see
-    /// [`media_roles`](Self::media_roles)); a titled image gains a captioned
-    /// `Figure N.` title *after* its content
+    /// `imagesdir`, or — under `data-uri` below `Secure` — the image embedded
+    /// as a base64 `data:` URI; see [`image_uri`](Self::image_uri)), the
+    /// `alt` text (an explicit value, else the target's basename with
+    /// `_`/`-` turned into spaces), and any `width`/`height`. A `link`
+    /// wraps the image in `<a class="image">`. The wrapper's classes are
+    /// `imageblock`, then a `float` role, then a `text-<align>` class, then
+    /// the block's roles (see [`media_roles`](Self::media_roles)); a titled
+    /// image gains a captioned `Figure N.` title *after* its content
     /// (unlike most blocks, whose title precedes their content).
     ///
-    /// The advanced image modes build on this baseline in their own issues: the
-    /// `data-uri` embed (#51), interactive/inline SVG (#52), and icons (#50).
-    /// An SVG target therefore renders as a plain `<img>` here. A `title=`
-    /// given *inside* the macro is not yet promoted to the figure caption
-    /// (the parser surfaces it only as a macro attribute); use the `.Title`
-    /// block line.
+    /// The remaining advanced image modes build on this baseline in their own
+    /// issues: interactive/inline SVG (#52) and icons (#50). An SVG target
+    /// therefore renders as a plain `<img>` here (outside the `interactive`
+    /// mode). A `title=` given *inside* the macro is not yet promoted to the
+    /// figure caption (the parser surfaces it only as a macro attribute); use
+    /// the `.Title` block line.
     fn image<'src>(&mut self, block: &'src Block<'src>, media: &'src MediaBlock<'src>) {
         let macro_attrs = media.macro_attrlist();
 
@@ -3932,7 +4084,7 @@ impl Renderer<'_> {
         };
 
         let target = media.resolved_target();
-        let src = media_uri(target, &self.imagesdir);
+        let src = self.image_uri(target, &self.imagesdir);
 
         // An explicit `alt` wins; otherwise Asciidoctor derives it from the
         // target's basename with `_`/`-` turned into spaces. The value is a raw
@@ -3982,7 +4134,7 @@ impl Renderer<'_> {
             let fallback = match named("fallback") {
                 Some(fallback) => format!(
                     "<img src=\"{}\" alt=\"{}\"{dimensions}>",
-                    escape_attribute(&media_uri(fallback, &self.imagesdir)),
+                    escape_attribute(&self.image_uri(fallback, &self.imagesdir)),
                     escape_attribute(&alt),
                 ),
 
@@ -4655,6 +4807,9 @@ fn render_cell_document<'s>(
         stem_type: config.stem_type,
         cellbgcolor: config.cellbgcolor,
         svg_below_secure: config.svg_below_secure,
+        data_uri: config.data_uri,
+        safe: config.safe,
+        base_dir: config.base_dir,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -5207,6 +5362,228 @@ mod tests {
         // the derived `alt`.
         let html = convert("image::gallery/photo[]");
         assert!(html.contains("<img src=\"gallery/photo\" alt=\"photo\">"));
+    }
+
+    // The `data-uri` document attribute embeds a referenced image as a base64
+    // `data:` URI instead of linking it, below the `Secure` safe mode. These
+    // exercise the renderer's `image_uri`/`generate_data_uri` against real
+    // files, and were checked byte-for-byte against Asciidoctor 2.0.26.
+    mod data_uri {
+        use std::{
+            fs,
+            path::PathBuf,
+            sync::atomic::{AtomicU64, Ordering},
+        };
+
+        use crate::{convert_with, Options, SafeMode};
+
+        /// A one-pixel transparent GIF — the smallest real image to embed. Its
+        /// strict-base64 encoding is [`GIF_B64`].
+        const GIF: &[u8] = &[
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00,
+            0x3b,
+        ];
+        const GIF_B64: &str = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+
+        /// Creates a fresh, canonicalized temp directory (unique per call) and
+        /// writes each `(relative path, bytes)` into it, returning the
+        /// directory.
+        fn scratch(files: &[(&str, &[u8])]) -> PathBuf {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+            let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir = std::env::temp_dir()
+                .join(format!("ahtml5-datauri-{}-{unique}", std::process::id()));
+            fs::create_dir_all(&dir).expect("create scratch dir");
+            for (name, bytes) in files {
+                let path = dir.join(name);
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).expect("create parent dir");
+                }
+                fs::write(path, bytes).expect("write scratch file");
+            }
+            dir.canonicalize().expect("canonicalize scratch dir")
+        }
+
+        /// Converts `source` with `data-uri` set, anchored at a base directory
+        /// holding `files`, under `safe` (below `Secure` to enable embedding).
+        fn convert_data_uri(source: &str, safe: SafeMode, files: &[(&str, &[u8])]) -> String {
+            let dir = scratch(files);
+            let html = convert_with(
+                source,
+                &Options::new()
+                    .safe_mode(safe)
+                    .base_dir(dir.clone())
+                    .set("data-uri"),
+            );
+            let _ = fs::remove_dir_all(&dir);
+            html
+        }
+
+        // A local image is read from disk and embedded as a base64 `data:` URI,
+        // its MIME type taken from the extension.
+        #[test]
+        fn embeds_a_local_image_below_secure() {
+            let html = convert_data_uri(
+                "image::dot.gif[A dot,1,1]",
+                SafeMode::Unsafe,
+                &[("dot.gif", GIF)],
+            );
+            assert!(
+                html.contains(&format!(
+                    "<img src=\"data:image/gif;base64,{GIF_B64}\" alt=\"A dot\" width=\"1\" height=\"1\">"
+                )),
+                "{html}"
+            );
+        }
+
+        // `Secure` (and above) disables `data-uri`: the image is linked, not
+        // embedded, even with the attribute set.
+        #[test]
+        fn is_disabled_at_secure() {
+            let html = convert_data_uri(
+                "image::dot.gif[A dot]",
+                SafeMode::Secure,
+                &[("dot.gif", GIF)],
+            );
+            assert!(
+                html.contains("<img src=\"dot.gif\" alt=\"A dot\">"),
+                "{html}"
+            );
+            assert!(!html.contains("data:image/gif"), "{html}");
+        }
+
+        // Without the `data-uri` attribute, the image is linked as usual.
+        #[test]
+        fn is_disabled_without_the_attribute() {
+            let dir = scratch(&[("dot.gif", GIF)]);
+            let html = convert_with(
+                "image::dot.gif[A dot]",
+                &Options::new()
+                    .safe_mode(SafeMode::Unsafe)
+                    .base_dir(dir.clone()),
+            );
+            let _ = fs::remove_dir_all(&dir);
+            assert!(
+                html.contains("<img src=\"dot.gif\" alt=\"A dot\">"),
+                "{html}"
+            );
+        }
+
+        // The MIME type follows the target's extension: `.svg` is the special
+        // `image/svg+xml`; any other extension is `image/<ext>` verbatim.
+        #[test]
+        fn mimetype_follows_the_extension() {
+            let svg = convert_data_uri("image::pic.svg[X]", SafeMode::Unsafe, &[("pic.svg", GIF)]);
+            assert!(
+                svg.contains(&format!("data:image/svg+xml;base64,{GIF_B64}")),
+                "{svg}"
+            );
+
+            let png = convert_data_uri("image::pic.png[X]", SafeMode::Unsafe, &[("pic.png", GIF)]);
+            assert!(
+                png.contains(&format!("data:image/png;base64,{GIF_B64}")),
+                "{png}"
+            );
+        }
+
+        // An unreadable (here, missing) image embeds as an *empty* data URI,
+        // carrying only its derived MIME type — Asciidoctor's fallback for an
+        // image it cannot embed.
+        #[test]
+        fn a_missing_image_embeds_as_an_empty_data_uri() {
+            let html = convert_data_uri("image::nope.png[X]", SafeMode::Unsafe, &[]);
+            assert!(
+                html.contains("<img src=\"data:image/png;base64,\" alt=\"X\">"),
+                "{html}"
+            );
+        }
+
+        // A URI target is never embedded (a network read this crate does not
+        // perform): it passes through unchanged, exactly as when `data-uri` is
+        // off.
+        #[test]
+        fn a_uri_target_passes_through() {
+            let html =
+                convert_data_uri("image::https://example.com/x.png[X]", SafeMode::Unsafe, &[]);
+            assert!(
+                html.contains("<img src=\"https://example.com/x.png\" alt=\"X\">"),
+                "{html}"
+            );
+        }
+
+        // The image target resolves against `imagesdir` before it is read, so an
+        // image in a subdirectory is found and embedded.
+        #[test]
+        fn resolves_the_target_against_imagesdir() {
+            let html = convert_data_uri(
+                ":imagesdir: assets\n\nimage::a.png[X]",
+                SafeMode::Unsafe,
+                &[("assets/a.png", GIF)],
+            );
+            assert!(
+                html.contains(&format!("data:image/png;base64,{GIF_B64}")),
+                "{html}"
+            );
+        }
+
+        // Under a jailed safe mode (`safe`/`server`), a target that climbs out of
+        // the base directory cannot be read, so it embeds as an empty data URI —
+        // the read is confined to the jail. (`Unsafe` would follow it.)
+        #[test]
+        fn a_jailed_read_refuses_to_escape_the_base_directory() {
+            // The image sits one level *above* the base directory. `resolve` is
+            // relative to `base_dir`, so put the base a level down and reference
+            // `../secret.png`.
+            let root = scratch(&[("secret.png", GIF), ("base/doc.txt", b"x")]);
+            let base = root.join("base");
+
+            let html = convert_with(
+                "image::../secret.png[X]",
+                &Options::new()
+                    .safe_mode(SafeMode::Safe)
+                    .base_dir(base)
+                    .set("data-uri"),
+            );
+            let _ = fs::remove_dir_all(&root);
+
+            assert!(
+                html.contains("<img src=\"data:image/png;base64,\" alt=\"X\">"),
+                "{html}"
+            );
+            assert!(!html.contains(GIF_B64), "{html}");
+        }
+
+        // Image-mode icons embed too: an admonition's icon and a callout list's
+        // icon both flow through `image_uri` (Asciidoctor's `icon_uri`), so
+        // `data-uri` embeds them from `iconsdir`.
+        #[test]
+        fn embeds_image_mode_icons() {
+            let html = convert_data_uri(
+                ":icons:\n\nNOTE: Heed me.\n\n----\ncode <1>\n----\n<1> A callout.",
+                SafeMode::Unsafe,
+                &[
+                    ("images/icons/note.png", GIF),
+                    ("images/icons/callouts/1.png", GIF),
+                ],
+            );
+            // The admonition icon.
+            assert!(
+                html.contains(&format!(
+                    "<img src=\"data:image/png;base64,{GIF_B64}\" alt=\"Note\">"
+                )),
+                "{html}"
+            );
+            // The callout-list icon.
+            assert!(
+                html.contains(&format!(
+                    "<img src=\"data:image/png;base64,{GIF_B64}\" alt=\"1\">"
+                )),
+                "{html}"
+            );
+        }
     }
 
     #[test]
@@ -8004,6 +8381,9 @@ mod tests {
             stem_type: super::StemType::AsciiMath,
             cellbgcolor: None,
             svg_below_secure: false,
+            data_uri: false,
+            safe: super::SafeMode::Secure,
+            base_dir: None,
         }
     }
 

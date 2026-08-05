@@ -43,6 +43,7 @@ use std::{fs, io, path::Path};
 use asciidoc_parser::Parser;
 
 mod asset_writer;
+mod base64;
 mod copycss;
 mod docinfo_handler;
 mod html;
@@ -167,7 +168,12 @@ fn render(document: &Document<'_>, options: &Options) -> String {
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
-    renderer::render_document(document, stylesheet.as_deref(), options.is_standalone())
+    renderer::render_document(
+        document,
+        stylesheet.as_deref(),
+        options.is_standalone(),
+        options.effective_base_dir(),
+    )
 }
 
 /// Writes the `copycss` stylesheet copies through `writer`, when the document
@@ -431,14 +437,16 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// and page breaks. A construct the renderer does not handle emits a visible
 /// `<!-- asciidoc-html5: unsupported … -->` comment so the output stays
 /// well-formed and the gap is easy to see. The aim, as coverage grows, is
-/// parity with Asciidoctor's `html5` backend; the advanced image modes
-/// (`data-uri`, interactive/inline SVG, icons) are the main remaining gap.
+/// parity with Asciidoctor's `html5` backend; the remaining advanced image
+/// modes (interactive/inline SVG, icons) are the main remaining gap. Referenced
+/// images (and image-mode icons) are embedded as base64 `data:` URIs when the
+/// document sets `data-uri` below the `Secure` safe mode.
 ///
 /// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
 /// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    renderer::render_document(document, None, false)
+    renderer::render_document(document, None, false, None)
 }
 
 /// Renders an already-parsed [`Document`] to HTML5 under `options` — the
