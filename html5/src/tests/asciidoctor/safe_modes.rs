@@ -24,8 +24,11 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
 // include directives and URI reads – are exercised by unit tests elsewhere, so
 // their spans stay non-normative here (the `source-highlighter` and `icons`
-// bullets excepted – both are verified below). What remains unsurfaced –
-// `data-uri` and the SVG modes – is likewise non-normative.
+// bullets excepted – both are verified below). The SVG interactive/inline
+// referencing modes are likewise surfaced and honor the safe mode (below
+// `SECURE` they render an `<object>`/`<svg>`; at `SECURE` a plain `<img>`),
+// exercised by unit tests elsewhere. What remains unsurfaced – `data-uri` – is
+// likewise non-normative.
 
 non_normative!(
     r#"
@@ -238,11 +241,13 @@ Its integer value is `10`.
 // pins the doctype to `article`, and drops a document-set `icons` (an untrusted
 // document must not be able to steer icon image sources through `iconsdir`),
 // each locked against the document — the icons lock verified just below, the
-// rest covered by unit tests in `options.rs`. The remaining SECURE restrictions
-// are not surfaced by this renderer yet, each tracked for later implementation:
-// `data-uri` (https://github.com/asciidoc-rs/asciidoc-html5/issues/51),
-// interactive/inline SVG modes
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/52), and server-side
+// rest covered by unit tests in `options.rs`. SECURE also disables the
+// interactive (`opts=interactive`) and inline (`opts=inline`) SVG modes — an SVG
+// image renders as a plain `<img>` — surfaced and covered by unit tests (in
+// `substitutions_test.rs` and the renderer's block-image tests). The remaining
+// SECURE restrictions are not surfaced by this renderer yet, each tracked for
+// later implementation: `data-uri`
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/51) and server-side
 // source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
