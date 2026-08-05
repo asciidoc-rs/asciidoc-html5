@@ -747,14 +747,15 @@ impl Options {
         );
 
         // Anchor filesystem-relative resources: `include::` targets, docinfo
-        // files, and inline SVG images (`opts=inline`). Naming the primary file
-        // lets the parser resolve top-level includes against that file's
-        // directory and derive the `docname` for private docinfo; supplying a
-        // base directory (given directly or derived from the primary file)
-        // installs the filesystem include, docinfo, and SVG handlers, each
-        // confined by the safe mode. Under `secure` the parser converts includes
-        // to links, drops docinfo, and renders SVG images as plain `<img>`
-        // without consulting any handler, so installing them there is harmless.
+        // files, and SVG images embedded inline (`opts=inline`, both the inline
+        // `image:` and block `image::` forms). Naming the primary file lets the
+        // parser resolve top-level includes against that file's directory and
+        // derive the `docname` for private docinfo; supplying a base directory
+        // (given directly or derived from the primary file) installs the
+        // filesystem include, docinfo, and SVG handlers, each confined by the
+        // safe mode. Under `secure` the parser converts includes to links, drops
+        // docinfo, and renders SVG images as plain `<img>` without consulting any
+        // handler, so installing them there is harmless.
         if let Some(primary) = &self.primary_file {
             parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
         }

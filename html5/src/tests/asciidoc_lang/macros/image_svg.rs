@@ -2,16 +2,18 @@
 //!
 //! An SVG image target accepts an `opts` value controlling how the SVG is
 //! referenced: `none` (the default, an `<img>`), `interactive` (an `<object>`),
-//! or `inline` (an embedded `<svg>`). The `none` and `interactive` referencing
-//! (including the `<object>`'s `fallback`) are implemented and verified through
-//! `convert`; the security-sensitive `interactive` behavior takes effect only
-//! below the `Secure` safe mode, matching Asciidoctor. The `inline` option
-//! embeds the SVG file's contents and is not yet implemented for block images
-//! (tracked as <https://github.com/asciidoc-rs/asciidoc-html5/issues/275>), so
-//! that material — and the `viewBox`/dimensions authoring guidance — is
-//! non-normative.
+//! or `inline` (an embedded `<svg>`). All three are implemented and verified;
+//! the security-sensitive `interactive` and `inline` referencing take effect
+//! only below the `Secure` safe mode, matching Asciidoctor. `inline` embeds the
+//! SVG *file's contents*, so those claims are verified through
+//! [`convert_file_with`](crate::convert_file_with) against an on-disk fixture
+//! (a bare string `convert` has no base directory to read from). Only the
+//! `viewBox`/dimensions authoring guidance and the runtime-hover demonstration
+//! remain non-normative.
 
-use crate::{convert, convert_with, tests::sdd::*, Options, SafeMode};
+use std::fs;
+
+use crate::{convert, convert_file_with, convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoc-lang/docs/modules/macros/pages/image-svg.adoc");
 
@@ -20,6 +22,39 @@ track_file!("ref/asciidoc-lang/docs/modules/macros/pages/image-svg.adoc");
 // `<img>`).
 fn convert_unsafe(source: &str) -> String {
     convert_with(source, &Options::new().safe_mode(SafeMode::Unsafe))
+}
+
+/// A sample SVG whose opening tag carries `width`, `height`, and `style` (plus
+/// the required `viewBox`) and is preceded by an XML declaration, so a
+/// conversion exercises both the preamble stripping and the dimension
+/// rewriting. Written with a trailing newline, the way a real file carries one.
+const SAMPLE_SVG: &str = concat!(
+    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n",
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"500\" height=\"500\" ",
+    "style=\"fill:red\" viewBox=\"0 0 500 500\">",
+    "<circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>\n",
+);
+
+/// Writes [`SAMPLE_SVG`] as `sample.svg` and a `main.adoc` containing
+/// `macro_line` into a fresh temp directory, converts the file below `Secure`
+/// (so inline SVG embedding is enabled and the primary file's directory anchors
+/// the confined read), and returns the embedded HTML.
+fn convert_file_below_secure(tag: &str, macro_line: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("ahtml5-image-svg-{}-{tag}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create temp dir");
+    fs::write(dir.join("sample.svg"), SAMPLE_SVG).expect("write sample.svg");
+
+    let main = dir.join("main.adoc");
+    fs::write(&main, format!("= Doc\n\n{macro_line}\n")).expect("write main.adoc");
+
+    let html = convert_file_with(
+        &main,
+        &Options::new().safe_mode(SafeMode::Unsafe).embedded(true),
+    )
+    .expect("convert the file");
+
+    let _ = fs::remove_dir_all(&dir);
+    html
 }
 
 non_normative!(
@@ -100,9 +135,8 @@ The SVG also inherits CSS from the document stylesheets.
 "#
 );
 
-// `none` renders an `<img>` and `interactive` renders an `<object>`. The
-// `inline` (`<svg>`) referencing embeds the SVG file's contents and is not yet
-// implemented for block images (issue #275); it still renders an `<img>` here.
+// `none` renders an `<img>`, `interactive` renders an `<object>`, and `inline`
+// embeds the SVG file's contents as an `<svg>` (read from disk below `Secure`).
 #[test]
 fn svg_referencing_options() {
     verifies!(
@@ -150,6 +184,34 @@ To allow SVG content reachable by JavaScript in the main DOM or to inherit style
     assert!(convert_unsafe("See image:sample.svg[Diagram,opts=interactive] here.").contains(
         r#"<span class="image"><object type="image/svg+xml" data="sample.svg"><span class="alt">Diagram</span></object></span>"#
     ));
+
+    // `inline`: a *block* image embeds the SVG file's contents directly as an
+    // `<svg>`. The XML preamble is stripped, and the `width` (300) supplied on
+    // the macro replaces the tag's own width/height/style; the required
+    // `viewBox` is preserved.
+    assert!(convert_file_below_secure(
+        "block-inline",
+        "image::sample.svg[Diagram,300,opts=inline]"
+    )
+    .contains(concat!(
+        "<div class=\"imageblock\">\n<div class=\"content\">\n",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\" width=\"300\">",
+        "<circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>\n",
+        "</div>\n</div>",
+    )));
+
+    // The inline *image* macro embeds the same SVG, inside a `<span
+    // class="image">` (this path is handled by the parser's registered SVG file
+    // handler rather than the renderer).
+    assert!(convert_file_below_secure(
+        "inline-inline",
+        "See image:sample.svg[Diagram,300,opts=inline] here."
+    )
+    .contains(concat!(
+        "<span class=\"image\">",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\" width=\"300\">",
+        "<circle cx=\"250\" cy=\"250\" r=\"200\"/></svg></span>",
+    )));
 }
 
 // The `interactive` `<object>` accepts a `fallback` image (nested for user
@@ -182,15 +244,46 @@ If the value of the fallback attribute is a relative path, it will be prefixed w
     );
 }
 
-// The `viewBox`/namespace requirements and the `inline`-option dimension
-// stripping concern the embedded `<svg>` (issue #275) or its authoring, and the
-// closing links are descriptive.
+// The `viewBox` requirement is an authoring constraint on the SVG source, not a
+// converter behavior, so it is non-normative.
 non_normative!(
     r#"
 When using the `inline` or `interactive` options, the `viewBox` attribute must be defined on the root `<svg>` element in order for scaling to work properly.
 
+"#
+);
+
+// A `width`/`height` on an inline SVG macro strips the tag's own
+// `width`/`height`/`style` and appends the requested dimensions.
+#[test]
+fn inline_strips_width_height_and_style() {
+    verifies!(
+        r#"
 When using the `inline` option, if you specify a width or height on the image macro in AsciiDoc, the `width`, `height` and `style` attributes on the `<svg>` element will be removed. Additionally, when using `inline` the primary SVG elements (e.g., `<svg>`) cannot have a namespace.
 
+"#
+    );
+
+    // Supplying a width (300) and height (200) on the macro removes the tag's
+    // own width/height/style and appends the requested dimensions in their
+    // place; the required `viewBox` is preserved. This exercises the
+    // attribute-stripping clause of the spec line. The trailing "cannot have a
+    // namespace" clause is an authoring constraint on the SVG *source* (its
+    // element names must not be namespace-prefixed), not a converter behavior:
+    // the SVG is embedded verbatim and its element names are never rewritten.
+    // The preserved `xmlns="…"` is a default-namespace *declaration*, unrelated
+    // to that clause, and Asciidoctor keeps it too.
+    assert!(convert_file_below_secure("strip", "image::sample.svg[Embedded,300,200,opts=inline]")
+        .contains(concat!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 500 500\" width=\"300\" height=\"200\">",
+            "<circle cx=\"250\" cy=\"250\" r=\"200\"/></svg>",
+        )));
+}
+
+// The `interactive` CSS-linking requirement, the optimization tip, and the
+// closing links are descriptive authoring guidance.
+non_normative!(
+    r#"
 If using the `interactive` option, you must link to the CSS that declares the fonts in the SVG file using an XML stylesheet declaration.
 
 If you're inserting an SVG using either the `inline` or `interactive` options, we strongly recommend you optimize your SVG using a tool like {url-svgo}[svgo^] or {url-svg-editor}[SVG Editor^].
