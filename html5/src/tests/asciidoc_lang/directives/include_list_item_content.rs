@@ -9,7 +9,10 @@
 //! `convert` and match Asciidoctor.
 
 use super::convert_including;
-use crate::tests::{assert_html::assert_css, sdd::*};
+use crate::tests::{
+    assert_html::{assert_css, assert_xpath},
+    sdd::*,
+};
 
 track_file!("ref/asciidoc-lang/docs/modules/directives/pages/include-list-item-content.adoc");
 
@@ -95,10 +98,21 @@ Here's an example of how to include compound content from another file into a li
     assert_css(&output, ".ulist > ul > li", 1);
     assert_css(&output, ".ulist > ul > li > .openblock", 1);
     assert_css(&output, ".ulist > ul > li > .openblock .paragraph", 2);
-    assert!(
-        output.contains("The principal text of the item.")
-            && output.contains("A second paragraph of item content."),
-        "{output}"
+
+    // The two included paragraphs land inside the attached open block, in order
+    // — scoping each string to its paragraph so misplaced or duplicated content
+    // can't satisfy the check.
+    let paras = r#"//li/div[@class="openblock"]/div[@class="content"]/div[@class="paragraph"]/p"#;
+    assert_xpath(
+        &output,
+        &format!(r#"({paras})[1][text()="The principal text of the item."]"#),
+        1,
+    );
+
+    assert_xpath(
+        &output,
+        &format!(r#"({paras})[2][text()="A second paragraph of item content."]"#),
+        1,
     );
 }
 
