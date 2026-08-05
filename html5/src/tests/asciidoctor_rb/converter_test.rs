@@ -26,8 +26,12 @@
 //!   - "should allow converter to set htmlsyntax when basebackend is html"
 //!     asserts the XHTML self-closing `<img .../>`; the XHTML syntax
 //!     (`xhtml`/`xhtml5`) is explicitly not supported (README).
-//!   - "can call read_svg_contents ..." exercises inline SVG (`opts=inline`),
-//!     which this renderer does not render (see `substitutions_test.rs`).
+//!   - "can call read_svg_contents ..." calls the Ruby converter's internal
+//!     `read_svg_contents` helper directly on a *block* image; that helper has
+//!     no public analogue here (the equivalent lives in asciidoc-parser), and
+//!     block-image inline SVG embedding is tracked separately (#275). The
+//!     inline-image `opts=inline` path is rendered and verified in
+//!     `substitutions_test.rs`.
 //!   - the `outfilesuffix` defaults ("should set outfilesuffix ...", "should
 //!     not override outfilesuffix attribute if locked") are the `.html`
 //!     derivation already verified in `cli/src/tests/output_naming.rs`.

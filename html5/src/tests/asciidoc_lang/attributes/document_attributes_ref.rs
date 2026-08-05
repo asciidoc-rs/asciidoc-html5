@@ -1737,8 +1737,8 @@ A non-empty value replaces the `family` query string parameter in the Google Fon
     assert!(xr("basic").contains(r##"<a href="#tgt">Target Section</a>"##));
 }
 
-// The `iconfont-*` trio configures the Font Awesome stylesheet `<link>` that
-// `icons=font` needs, which this renderer does not yet emit (html5#279).
+// The section heading and table scaffold carry no rendered behavior of their
+// own; the individual attribute rows below are verified.
 non_normative!(
     r#"
 == Image and icon attributes
@@ -1747,6 +1747,13 @@ non_normative!(
 |===
 .>|Name .>|Allowable Values .>|Set By Default .>|Header Only .>|Notes
 
+"#
+);
+
+#[test]
+fn iconfont_stylesheet_link_attributes() {
+    verifies!(
+        r#"
 |iconfont-cdn
 |_url_ +
 (default CDN URL)
@@ -1771,7 +1778,48 @@ Overrides CDN used to link to the Font Awesome stylesheet.
 Only relevant used when value of `icons` attribute is `font`.
 
 "#
-);
+    );
+
+    // The Font Awesome `<link>` lives in the standalone document's `<head>`.
+    // These examples enable icons from the document header (`:icons: font`),
+    // which this crate's default `Secure` safe mode drops (matching Asciidoctor –
+    // see #50), so they convert under `Server`, a mode that still "allows icons,"
+    // to reproduce the icon-permitting output Asciidoctor's CLI generates.
+    let standalone = |source: &str| {
+        convert_with(
+            source,
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        )
+    };
+
+    // `iconfont-remote` is set (empty) by default, so `:icons: font` links the
+    // Font Awesome stylesheet from a CDN. `iconfont-cdn`, when unset, defaults
+    // to the cdnjs.com service at the pinned Font Awesome version.
+    assert!(standalone("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====").contains(
+        r#"<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">"#
+    ));
+
+    // `iconfont-cdn` overrides that CDN URL outright.
+    assert!(
+        standalone(
+            "= T\n:icons: font\n:iconfont-cdn: https://cdn.example.org/fa.css\n\n[NOTE]\n====\nhi\n===="
+        )
+        .contains(r#"<link rel="stylesheet" href="https://cdn.example.org/fa.css">"#)
+    );
+
+    // With `iconfont-remote` unset, no CDN is used: the stylesheet is a local
+    // `{iconfont-name}.css`, whose name defaults to `font-awesome`.
+    assert!(
+        standalone("= T\n:icons: font\n:iconfont-remote!:\n\n[NOTE]\n====\nhi\n====")
+            .contains(r#"<link rel="stylesheet" href="./font-awesome.css">"#)
+    );
+
+    // `iconfont-name` overrides that local stylesheet's name.
+    assert!(standalone(
+        "= T\n:icons: font\n:iconfont-remote!:\n:iconfont-name: my-icons\n\n[NOTE]\n====\nhi\n===="
+    )
+    .contains(r#"<link rel="stylesheet" href="./my-icons.css">"#));
+}
 
 #[test]
 fn icons_and_image_location_attributes() {
@@ -2063,10 +2111,10 @@ Can't be unset in SECURE mode.
     assert!(!linked.contains("<style>"));
 }
 
-// `max-width` constrains the body width via inline styles on the layout
-// containers; not yet implemented (html5#280).
-non_normative!(
-    r#"
+#[test]
+fn max_width_attribute() {
+    verifies!(
+        r#"
 |max-width
 |CSS length (e.g. 55em, 12cm, etc)
 |{n}
@@ -2076,7 +2124,42 @@ non_normative!(
 Use CSS stylesheet instead.*
 
 "#
-);
+    );
+
+    // `max-width` adds an inline `style="max-width: …;"` to each of the
+    // standalone layout's container divs — `#header`, `#content`, `#footnotes`,
+    // and `#footer` — constraining the document body width (html5#280).
+    let constrained = convert_with(
+        "= Doc Title\nAuthor Name\n:max-width: 55em\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(constrained.contains(r#"<div id="header" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="content" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="footnotes" style="max-width: 55em;">"#));
+    assert!(constrained.contains(r#"<div id="footer" style="max-width: 55em;">"#));
+
+    // A bare `:max-width:` (set with no value) still counts as present, so the
+    // style is emitted with an empty length — matching Asciidoctor's
+    // `node.attr? 'max-width'` gate.
+    let empty = convert_with(
+        "= Doc Title\nAuthor Name\n:max-width:\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(empty.contains(r#"<div id="header" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="content" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footnotes" style="max-width: ;">"#));
+    assert!(empty.contains(r#"<div id="footer" style="max-width: ;">"#));
+
+    // Without the attribute, the same container divs carry no inline style.
+    let plain = convert_with(
+        "= Doc Title\nAuthor Name\n\nHello.footnote:[A note.]\n",
+        &Options::new().standalone(true),
+    );
+    assert!(plain.contains(r#"<div id="header">"#));
+    assert!(plain.contains(r#"<div id="content">"#));
+    assert!(plain.contains(r#"<div id="footnotes">"#));
+    assert!(plain.contains(r#"<div id="footer">"#));
+}
 
 #[test]
 fn stylesheet_location_and_toc_class_attributes() {
