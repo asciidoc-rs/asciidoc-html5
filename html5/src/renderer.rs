@@ -5740,6 +5740,33 @@ mod tests {
             );
         }
 
+        // A target with no usable extension gets the generic
+        // `application/octet-stream` MIME type — both when the target simply has
+        // no dot, and when its only dot lies in a *directory* component (so the
+        // file name itself has no extension), matching Asciidoctor's
+        // `Helpers.extname` (a dot with a `/` after it is not an extension).
+        #[test]
+        fn an_extensionless_target_is_application_octet_stream() {
+            // No dot anywhere in the target.
+            let bare = convert_data_uri("image::photo[X]", SafeMode::Unsafe, &[("photo", GIF)]);
+            assert!(
+                bare.contains(&format!("data:application/octet-stream;base64,{GIF_B64}")),
+                "{bare}"
+            );
+
+            // The only dot is in a directory component, so the file name has no
+            // extension (exercises `asset_extname`'s dot-in-directory branch).
+            let dotdir = convert_data_uri(
+                "image::my.dir/pic[X]",
+                SafeMode::Unsafe,
+                &[("my.dir/pic", GIF)],
+            );
+            assert!(
+                dotdir.contains(&format!("data:application/octet-stream;base64,{GIF_B64}")),
+                "{dotdir}"
+            );
+        }
+
         // An unreadable (here, missing) image embeds as an *empty* data URI,
         // carrying only its derived MIME type — Asciidoctor's fallback for an
         // image it cannot embed.
