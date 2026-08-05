@@ -3815,7 +3815,12 @@ impl Renderer<'_> {
                         // The cell's `sectnumlevels` is read from its own nested
                         // document (default 3), like the outline module's
                         // `attribute_usize`; the cell type is un-nameable here,
-                        // so this reads it inline.
+                        // so this reads it inline. `sectnumlevels` always
+                        // resolves to a `Value` (its default is `3`), so the
+                        // non-`Value` arm is a defensive fallback (hence
+                        // uncovered). The parser currently surfaces only the
+                        // default here, never a cell-set override (see
+                        // asciidoc-parser#1092).
                         sectnumlevels: match ad.attribute_value("sectnumlevels") {
                             InterpretedValue::Value(value) => value.parse().unwrap_or(3),
                             _ => 3,
@@ -4099,6 +4104,10 @@ impl Renderer<'_> {
         // `Document` or, in a nested AsciiDoc cell sub-renderer (which holds no
         // `Document`), from the cell's own TOC context. Anything else falls
         // through to the placeholder below.
+        //
+        // A `Macro`-mode renderer always has exactly one of `document` /
+        // `cell_toc`, so the final `else` is a defensive, unreachable
+        // catch-all (hence uncovered) that keeps the expression exhaustive.
         let (outline, default_title, default_class) = if self.toc_mode != TocMode::Macro {
             (String::new(), String::new(), String::new())
         } else if let Some(document) = self.document {
@@ -5498,6 +5507,53 @@ mod tests {
              <li><a href=\"#_cell_section\">Cell Section</a></li>\n\
              </ul>\n</div>"
         ));
+    }
+
+    #[test]
+    fn asciidoc_cell_auto_toc_needs_sections() {
+        // A cell whose `:toc:` outline would be empty (no sections) emits no
+        // TOC, like a top-level document (see `toc_needs_sections`).
+        let html = crate::convert_with("|===\na|\n:toc:\n\njust text\n|===\n", &Options::new());
+        assert!(!html.contains("<div id=\"toc\""));
+    }
+
+    #[test]
+    fn asciidoc_cell_toc_numbers_sections() {
+        // With `:sectnums:`, the cell's TOC entries carry their section numbers,
+        // resolved from the cell's own nested document, matching Asciidoctor
+        // 2.0.26. (The `sectnumlevels` cap is not honored inside a cell — the
+        // parser surfaces only the default; see asciidoc-parser#1092.)
+        let html = crate::convert_with(
+            "|===\na|\n:toc:\n:sectnums:\n\n== Alpha\n\n== Bravo\n\nx\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<li><a href=\"#_alpha\">1. Alpha</a></li>"));
+        assert!(html.contains("<li><a href=\"#_bravo\">2. Bravo</a></li>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_macro_toc_honors_levels_override() {
+        // A `levels=` attribute on the cell's `toc::[]` macro caps the depth for
+        // that TOC only: `levels=1` drops the nested level-2 entry.
+        let html = crate::convert_with(
+            "|===\na|\n:toc: macro\n\ntoc::[levels=1]\n\n== Alpha\n\n=== Beta\n\nx\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<li><a href=\"#_alpha\">Alpha</a></li>"));
+        assert!(!html.contains("Beta</a>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_macro_toc_without_sections_is_disabled() {
+        // A cell's `toc::[]` macro with no sections to list emits Asciidoctor's
+        // placeholder comment, like the top-level document
+        // (`toc_macro_without_macro_placement_is_disabled`).
+        let html = crate::convert_with(
+            "|===\na|\n:toc: macro\n\ntoc::[]\n\njust text\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<!-- toc disabled -->"));
+        assert!(!html.contains("<div id=\"toc\""));
     }
 
     #[test]
