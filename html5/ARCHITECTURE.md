@@ -270,9 +270,11 @@ purely a matter of CSS classes on each source block's `<pre>`/`<code>` (e.g.
 planned**: reproducing their per-language tokenizer output byte-for-byte would
 mean either an in-process highlighter (a heavy dependency this library's
 `asciidoc-parser`-only constraint forbids) or shelling out, so a source block
-that requests one keeps its default unhighlighted shape. What *is* reproduced is
-the stylesheet side of CodeRay – the `<head>` `<link>`/`<style>` and the
-`copycss` file copy – so a document's companion files still match Asciidoctor.
+that requests one keeps its default unhighlighted shape. Nothing keys off the
+`coderay`/`pygments`/`rouge` names – no highlighter stylesheet is linked,
+embedded, or copied (a deliberate divergence from Asciidoctor, which links and
+copies `coderay-asciidoctor.css` for the CodeRay spans it emits and this crate
+does not).
 
 Because a highlighter emits `<link>`/`<script>` tags whose origin a document
 `highlightjsdir`/`prettifydir` can steer, enabling one is safe-mode gated: at

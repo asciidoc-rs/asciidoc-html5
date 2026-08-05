@@ -31,7 +31,7 @@ use std::path::PathBuf;
 use asciidoc_parser::{
     attributes::Attrlist,
     blocks::{
-        AdmonitionBlock, Block, BlockSelector, Break, BreakType, ColumnStyle,
+        AdmonitionBlock, Block, Break, BreakType, ColumnStyle,
         CompoundDelimitedContext, ContentModel, FindBlocks, Frame, Grid, HorizontalAlignment,
         IsBlock, ListBlock, ListItem, ListItemMarker, ListType, MediaBlock, MediaType, QuoteBlock,
         QuoteType, SectionBlock, SectionType, SimpleBlockStyle, Stripes, TableBlock, TableCell,
@@ -59,28 +59,6 @@ pub(crate) const DEFAULT_STYLESHEET: &str = include_str!("../assets/asciidoctor-
 /// under — `Stylesheets::DEFAULT_STYLESHEET_NAME`. The linked reference and the
 /// `copycss` destination both use it.
 pub(crate) const DEFAULT_STYLESHEET_NAME: &str = "asciidoctor.css";
-
-/// The CodeRay syntax-highlighter stylesheet, embedded verbatim. This is a copy
-/// of `ref/asciidoctor/data/stylesheets/coderay-asciidoctor.css` (Asciidoctor
-/// v2.0.26) — the CSS Asciidoctor's CodeRay adapter emits (or writes next to
-/// the output) when a source block is highlighted in `class` CSS mode, via
-/// `SyntaxHighlighter::CodeRayAdapter#read_stylesheet`. Like the default
-/// stylesheet it carries its own MIT license header, and a drift-guard test
-/// keeps this copy identical to the reference one.
-///
-/// This crate does not tokenize CodeRay's `<span>` markup – server-side syntax
-/// highlighting is not planned (it would need an in-process highlighter this
-/// library's `asciidoc-parser`-only constraint forbids, or a subprocess) – so
-/// the styled spans this stylesheet targets are not emitted; what *is*
-/// reproduced is Asciidoctor's stylesheet side of CodeRay – the `<head>`
-/// `<link>`/`<style>` and the `copycss` file copy – so a document's companion
-/// files match.
-pub(crate) const CODERAY_STYLESHEET: &str = include_str!("../assets/coderay-asciidoctor.css");
-
-/// The public file name Asciidoctor writes (and links) the CodeRay stylesheet
-/// under — `CodeRayAdapter#stylesheet_basename`. The linked reference and the
-/// `copycss` destination both use it.
-pub(crate) const CODERAY_STYLESHEET_NAME: &str = "coderay-asciidoctor.css";
 
 /// The `family` query string Asciidoctor uses for its Google Fonts `<link>`
 /// when the `webfonts` attribute carries no explicit value: Open Sans for
@@ -227,75 +205,6 @@ fn is_promoted_source_listing(block: &Block<'_>, source_language: Option<&str>) 
                 .attrlist()
                 .and_then(|attrlist| attrlist.nth_attribute(2))
                 .is_none())
-}
-
-/// Whether `block` is a source block — one the renderer dispatches to
-/// [`source`](Renderer::source): a source-styled simple block, or a
-/// source-styled `----` listing (including one promoted by `source-language`).
-/// This mirrors the two arms of [`Renderer::block`] that reach `source`, and is
-/// what a syntax highlighter runs over.
-fn is_source_block(block: &Block<'_>, source_language: Option<&str>) -> bool {
-    match block {
-        Block::Simple(simple) => simple.style() == SimpleBlockStyle::Source,
-
-        Block::RawDelimited(_) => {
-            block.resolved_context().as_ref() == "listing"
-                && is_promoted_source_listing(block, source_language)
-        }
-
-        _ => false,
-    }
-}
-
-/// Whether the document contains at least one source block, anywhere in the
-/// tree — including inside sections, compound blocks, list items, and the
-/// nested documents of AsciiDoc table cells (reached via
-/// [`BlockSelector::traverse_documents`]).
-///
-/// This is how the CodeRay stylesheet's "was anything highlighted?" gate is
-/// resolved statically. Asciidoctor sets its `@requires_stylesheet` flag while
-/// *rendering* each highlighted source block; because this crate assembles the
-/// `<head>` before the body, it answers the same question up front by scanning
-/// the parse tree instead.
-fn document_has_source_block(document: &Document<'_>) -> bool {
-    let source_language = attribute_str(document, "source-language");
-    document
-        .find_blocks(&BlockSelector::new().traverse_documents(true))
-        .any(|block| is_source_block(block, source_language.as_deref()))
-}
-
-/// Whether `source-highlighter` selects CodeRay.
-fn coderay_active(document: &Document<'_>) -> bool {
-    attribute_str(document, "source-highlighter").as_deref() == Some("coderay")
-}
-
-/// Whether CodeRay is in its class-based CSS mode — the mode that needs a
-/// stylesheet. Only `class` mode sets the adapter's `@requires_stylesheet`
-/// flag; `style` mode inlines the colors into each span.
-///
-/// Asciidoctor reads the mode as `attr('coderay-css', 'class')`: the `class`
-/// default holds unless an explicit value overrides it. The parser seeds that
-/// default, so an absent attribute already reads back as `class`, and an
-/// explicit `:coderay-css!:` (unset) falls back to the same `class` default —
-/// only a non-`class` value (such as `style`) turns the stylesheet off.
-fn coderay_css_is_class(document: &Document<'_>) -> bool {
-    !matches!(
-        attribute_str(document, "coderay-css").as_deref(),
-        Some(mode) if mode != "class"
-    )
-}
-
-/// Whether the CodeRay stylesheet (`coderay-asciidoctor.css`) applies to this
-/// document — CodeRay is the highlighter, it is in class CSS mode, and there is
-/// a source block to highlight. This is the single gate both the `<head>`
-/// docinfo ([`Renderer::highlighter_head`]) and the `copycss` copy
-/// ([`crate::copycss`]) key off, matching Asciidoctor's
-/// `SyntaxHighlighter#docinfo?`/`#write_stylesheet?` (both return the adapter's
-/// `@requires_stylesheet` flag).
-pub(crate) fn coderay_stylesheet_required(document: &Document<'_>) -> bool {
-    coderay_active(document)
-        && coderay_css_is_class(document)
-        && document_has_source_block(document)
 }
 
 /// Whether every non-blank line of a paragraph's `source` is an AsciiDoc line
@@ -2248,13 +2157,10 @@ impl Renderer<'_> {
     /// directly.
     fn highlighter_head(&mut self, document: &Document<'_>) {
         let href = match self.source_highlighter {
-            // No *client-side* highlighter. A server-side CodeRay highlighter
-            // still contributes a stylesheet docinfo (its `<link>` or embedded
-            // `<style>`), so try that before bailing out.
-            None => {
-                self.coderay_stylesheet_head(document);
-                return;
-            }
+            // No client-side highlighter, and the server-side ones
+            // (`coderay`/`pygments`/`rouge`) are not supported – they emit no
+            // stylesheet docinfo here – so there is nothing to link.
+            None => return,
 
             Some(Highlighter::HighlightJs) => {
                 let theme = attribute_str(document, "highlightjs-theme")
@@ -2284,38 +2190,6 @@ impl Renderer<'_> {
         };
 
         self.line(&format!("<link rel=\"stylesheet\" href=\"{href}\">"));
-    }
-
-    /// Emits the CodeRay stylesheet's `<head>` docinfo, when it applies (see
-    /// [`coderay_stylesheet_required`]) — matching the CodeRay adapter's
-    /// `docinfo :head`.
-    ///
-    /// Under `linkcss` the stylesheet is linked at its `stylesdir` web path
-    /// (`./coderay-asciidoctor.css`, or `./css/coderay-asciidoctor.css` under
-    /// `stylesdir=css`); otherwise it is embedded inline, right below the
-    /// primary stylesheet, using the same trailing-newline-chomped `<style>`
-    /// template as the default stylesheet.
-    fn coderay_stylesheet_head(&mut self, document: &Document<'_>) {
-        if !coderay_stylesheet_required(document) {
-            return;
-        }
-
-        if links_stylesheet(document) {
-            let stylesdir = attribute_str(document, "stylesdir").unwrap_or_default();
-            let href = normalize_web_path(CODERAY_STYLESHEET_NAME, &stylesdir);
-            self.line(&format!(
-                "<link rel=\"stylesheet\" href=\"{}\">",
-                escape_attribute(&href)
-            ));
-        } else {
-            self.line("<style>");
-            self.line(
-                CODERAY_STYLESHEET
-                    .strip_suffix('\n')
-                    .unwrap_or(CODERAY_STYLESHEET),
-            );
-            self.line("</style>");
-        }
     }
 
     /// Emits the active client-side highlighter's `<footer>` docinfo — the
@@ -7382,11 +7256,13 @@ mod tests {
 
     #[test]
     fn serverside_highlighter_keeps_the_default_shape() {
-        // The coderay server-side highlighter does not tokenize the source into
-        // `<span>` markup – server-side syntax highlighting is not planned – so
-        // the source block itself keeps its default unhighlighted shape and no
-        // CDN assets are added. The coderay *stylesheet* docinfo is a separate
-        // concern, verified below.
+        // The coderay server-side highlighter is not supported — server-side
+        // syntax highlighting is not planned — so `source-highlighter=coderay`
+        // behaves like any unknown highlighter: the source block keeps its
+        // default unhighlighted shape, no CDN assets are added, and no CodeRay
+        // stylesheet is linked or embedded (a divergence from Asciidoctor, which
+        // links `coderay-asciidoctor.css` for the spans it emits and this crate
+        // does not).
         let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -7396,127 +7272,8 @@ mod tests {
             "{html}"
         );
         assert!(!html.contains("cdnjs.cloudflare.com"), "{html}");
-    }
-
-    // With coderay active and a source block present, a standalone document
-    // links the coderay stylesheet in the `<head>`, right after the primary one
-    // (the `Secure` default links rather than embeds). This is the stylesheet
-    // side of coderay — its `docinfo :head` — even though the source spans are
-    // never tokenized (server-side syntax highlighting is not planned).
-    #[test]
-    fn coderay_links_its_stylesheet_after_the_primary_one() {
-        let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
-        let primary = html
-            .find("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">")
-            .expect("primary stylesheet link");
-        let coderay = html
-            .find("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">")
-            .expect("coderay stylesheet link");
-        assert!(
-            primary < coderay,
-            "coderay link should follow primary: {html}"
-        );
-    }
-
-    // Under `stylesdir`, the coderay stylesheet link mirrors that web path, the
-    // same way the primary stylesheet link does.
-    #[test]
-    fn coderay_stylesheet_link_honors_stylesdir() {
-        let html = convert_with(
-            "= Doc\n:stylesdir: css\n\n[source,ruby]\n----\nputs 1\n----",
-            &Options::new().attribute("source-highlighter", "coderay"),
-        );
-        assert!(
-            html.contains("<link rel=\"stylesheet\" href=\"./css/coderay-asciidoctor.css\">"),
-            "{html}"
-        );
-    }
-
-    // A URI `stylesdir` links the coderay stylesheet as a URI, not a mangled
-    // `./https:/…` local path — matching how the primary stylesheet link (and
-    // Asciidoctor) treats a URI styles directory.
-    #[test]
-    fn coderay_stylesheet_link_honors_a_uri_stylesdir() {
-        let html = convert_with(
-            "= Doc\n:stylesdir: https://cdn.example.com/css\n\n[source,ruby]\n----\nputs 1\n----",
-            &Options::new().attribute("source-highlighter", "coderay"),
-        );
-        assert!(
-            html.contains(
-                "<link rel=\"stylesheet\" \
-                 href=\"https://cdn.example.com/css/coderay-asciidoctor.css\">"
-            ),
-            "{html}"
-        );
-        assert!(!html.contains("./https:/"), "{html}");
-    }
-
-    // Without `linkcss` (here via an `Unsafe` safe mode, which embeds), coderay
-    // embeds its stylesheet inline as a second `<style>` block below the primary
-    // one, rather than linking it.
-    #[test]
-    fn coderay_embeds_its_stylesheet_when_not_linking() {
-        let html = convert_with(
-            "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
-            &Options::new()
-                .safe_mode(SafeMode::Unsafe)
-                .attribute("source-highlighter", "coderay"),
-        );
-        assert!(html.contains("pre.CodeRay{background:#f7f7f8}"), "{html}");
-        assert!(
-            !html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
-            "{html}"
-        );
-    }
-
-    // No source block means coderay highlighted nothing, so no stylesheet
-    // docinfo is emitted — matching Asciidoctor's `@requires_stylesheet` gate.
-    #[test]
-    fn coderay_emits_no_stylesheet_without_a_source_block() {
-        let html = convert_hl("coderay", "Just a paragraph.");
         assert!(!html.contains("coderay-asciidoctor.css"), "{html}");
         assert!(!html.contains("pre.CodeRay"), "{html}");
-    }
-
-    // `coderay-css=style` inlines the colors into each span, so no stylesheet is
-    // required and none is emitted, even with a source block present.
-    #[test]
-    fn coderay_css_style_mode_emits_no_stylesheet() {
-        let html = convert_with(
-            "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
-            &Options::new()
-                .attribute("source-highlighter", "coderay")
-                .attribute("coderay-css", "style"),
-        );
-        assert!(!html.contains("coderay-asciidoctor.css"), "{html}");
-        assert!(!html.contains("pre.CodeRay"), "{html}");
-    }
-
-    // A source block nested in an AsciiDoc table cell still counts: the
-    // stylesheet scan enters cell documents, so coderay links its stylesheet.
-    #[test]
-    fn coderay_stylesheet_reaches_a_source_block_in_a_table_cell() {
-        let html = convert_hl(
-            "coderay",
-            "|===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
-        );
-        assert!(
-            html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
-            "{html}"
-        );
-    }
-
-    // A source *paragraph* (`[source,ruby]` with no `----` delimiters) is a
-    // `Simple` block carrying the `Source` style rather than a delimited
-    // listing. It is a source block all the same, so coderay links its
-    // stylesheet — exercising the `Block::Simple` arm of `is_source_block`.
-    #[test]
-    fn coderay_stylesheet_reaches_a_source_paragraph() {
-        let html = convert_hl("coderay", "[source,ruby]\nputs 1");
-        assert!(
-            html.contains("<link rel=\"stylesheet\" href=\"./coderay-asciidoctor.css\">"),
-            "{html}"
-        );
     }
 
     #[test]
@@ -8316,8 +8073,8 @@ mod tests {
 
         // A trailing slash on the URI `stylesdir` is not doubled.
         assert_eq!(
-            normalize_web_path("coderay-asciidoctor.css", "https://cdn.example.com/css/"),
-            "https://cdn.example.com/css/coderay-asciidoctor.css"
+            normalize_web_path("custom.css", "https://cdn.example.com/css/"),
+            "https://cdn.example.com/css/custom.css"
         );
 
         // An absolute stylesheet ignores `stylesdir`, even a URI one.
