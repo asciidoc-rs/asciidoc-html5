@@ -240,7 +240,7 @@ Its integer value is `10`.
 // below. Docinfo, backend, and doctype are likewise surfaced: SECURE disables
 // docinfo (no docinfo file is read), forces the backend to `html5`, and pins
 // the doctype to `article`, each locked against the document (covered by unit
-// tests in `options.rs`). Icons are now enforced too (#50): SECURE strips a
+// tests in `options.rs`). Icons are now enforced too: SECURE strips a
 // document `:icons:` so no icon assets are drawn in – verified from the
 // `disables icons` bullet just below. SECURE also disables the interactive
 // (`opts=interactive`) and inline (`opts=inline`) SVG modes – an SVG image
@@ -272,8 +272,7 @@ Additionally, it:
 // and an `icon:` macro falls back to its bracketed text. An API-set `icons` is
 // still honored – that half is covered by unit tests in `options.rs` – but the
 // page's claim is the document lock, which is what this drives. (SERVER still
-// allows icons, verified there; this is the SECURE half of the icons work,
-// #50.)
+// allows icons, verified there.)
 #[test]
 fn secure_disables_document_icons() {
     verifies!(

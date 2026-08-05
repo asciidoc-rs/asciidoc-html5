@@ -1782,9 +1782,9 @@ Only relevant used when value of `icons` attribute is `font`.
 
     // The Font Awesome `<link>` lives in the standalone document's `<head>`.
     // These examples enable icons from the document header (`:icons: font`),
-    // which this crate's default `Secure` safe mode drops (matching Asciidoctor –
-    // see #50), so they convert under `Server`, a mode that still "allows icons,"
-    // to reproduce the icon-permitting output Asciidoctor's CLI generates.
+    // which this crate's default `Secure` safe mode drops (matching Asciidoctor),
+    // so they convert under `Server`, a mode that still "allows icons," to
+    // reproduce the icon-permitting output Asciidoctor's CLI generates.
     let standalone = |source: &str| {
         convert_with(
             source,
@@ -1866,8 +1866,8 @@ _url_
     );
 
     // The `icons` rows enable icons from the document header, which this crate's
-    // default `Secure` safe mode drops (matching Asciidoctor – see #50), so these
-    // examples convert under `Server`, a mode that still "allows icons," to
+    // default `Secure` safe mode drops (matching Asciidoctor), so these examples
+    // convert under `Server`, a mode that still "allows icons," to
     // reproduce the icon-permitting output Asciidoctor's CLI generates. (The
     // `imagesdir`-only example below sets no `icons`, so it needs no such mode.)
     let icons = |source: &str| convert_with(source, &Options::new().safe_mode(SafeMode::Server));

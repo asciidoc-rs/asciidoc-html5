@@ -7288,7 +7288,7 @@ mod tests {
         // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
         // appends the `icontype` only when the value has no extension). Icons are
         // enabled from the document (`:icons:`), so this converts under `Server`
-        // – a mode below `Secure`, which drops document-set icons (#50).
+        // – a mode below `Secure`, which drops document-set icons.
         let html = convert_with(
             ":icons:\n\n[NOTE,icon=tip.png]\nSave often.",
             &Options::new().safe_mode(SafeMode::Server),
@@ -7303,7 +7303,7 @@ mod tests {
     fn admonition_custom_icon_without_extension_gets_icontype() {
         // A per-block `icon` value with no extension gains the document's
         // `icontype` extension. Converted under `Server` so the document-set
-        // `:icons:` is honored (`Secure` drops it – #50).
+        // `:icons:` is honored (`Secure` drops it).
         let html = convert_with(
             ":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.",
             &Options::new().safe_mode(SafeMode::Server),

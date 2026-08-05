@@ -607,7 +607,7 @@ impl Options {
         // API did not touch it – so a document `:icons:` is dropped with no
         // warning while an API/CLI `-a icons=font` (a trusted opt-in) is still
         // honored, even under `Secure`, matching Asciidoctor 2.0.26 (verified
-        // against the oracle). This is the renderer half of #50.
+        // against the oracle).
         if mode >= SafeMode::Secure {
             let ctx = ModificationContext::ApiOnly;
             parser = match self.last_action("icons") {
@@ -1490,7 +1490,7 @@ mod tests {
     // `:iconsdir:` can steer), so under `Secure` an untrusted document must not
     // enable them. Unlike the `source-highlighter` lock, this one starts only at
     // `Secure` – `Server` still allows icons. Mirrors Asciidoctor's SECURE
-    // `attr_overrides['icons'] ||= nil` (#50), matched against the 2.0.26 oracle.
+    // `attr_overrides['icons'] ||= nil`, matched against the 2.0.26 oracle.
 
     #[test]
     fn document_set_icons_is_ignored_under_secure() {

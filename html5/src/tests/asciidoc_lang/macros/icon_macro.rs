@@ -14,8 +14,8 @@ track_file!("ref/asciidoc-lang/docs/modules/macros/pages/icon-macro.adoc");
 
 // The image- and font-mode examples on this page enable icons from the document
 // header (`:icons:`, `:icons: font`, …). Under this crate's default `Secure`
-// safe mode a document may not enable icons (matching Asciidoctor – see #50),
-// so these tests convert under `Server`, the mode the Safe Modes page ties to
+// safe mode a document may not enable icons (matching Asciidoctor), so these
+// tests convert under `Server`, the mode the Safe Modes page ties to
 // "allows icons," reproducing the output Asciidoctor's CLI (which defaults to
 // the icon-permitting `unsafe`) generates for the same source. Text-mode
 // examples (icons unset) render the same bracketed fallback in every mode.
