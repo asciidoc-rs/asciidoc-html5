@@ -9,9 +9,19 @@
 //! concerns tracked as non-normative (including the page's `////` comment
 //! block).
 
-use crate::{convert, tests::sdd::*};
+use crate::{convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoc-lang/docs/modules/macros/pages/icons-font.adoc");
+
+// These examples enable icons from the *document* header (`:icons: font`),
+// which only takes effect below the `Secure` safe mode: under `Secure` (the API
+// default) Asciidoctor drops a document-set `icons` so an untrusted document
+// cannot steer icon image sources through `iconsdir` (see #56). They therefore
+// convert under `Server` — the highest mode that still lets the document enable
+// icons — matching the font-icon output the page documents.
+fn convert(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Server))
+}
 
 non_normative!(
     r#"

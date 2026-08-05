@@ -8,9 +8,21 @@
 //! output and the missing-image fallback (which needs filesystem access) are
 //! non-normative.
 
-use crate::{convert, tests::sdd::*};
+use crate::{convert_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoc-lang/docs/modules/macros/pages/icon-macro.adoc");
+
+// The image- and font-mode examples enable icons from the *document* header
+// (`:icons:` / `:icons: font`), which only takes effect below the `Secure` safe
+// mode: under `Secure` (the API default) Asciidoctor drops a document-set
+// `icons` so an untrusted document cannot steer icon image sources through
+// `iconsdir` (see #56). They therefore convert under `Server` — the highest
+// mode that still lets the document enable icons. The text-mode examples set no
+// `icons`, so they render identically here (an icon macro with icons off yields
+// its alt text regardless of the safe mode).
+fn convert(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Server))
+}
 
 non_normative!(
     r#"

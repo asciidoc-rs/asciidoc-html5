@@ -169,11 +169,14 @@ document cannot change them itself.
 
 == Known limitations
 
-Most of what a safe mode governs in Asciidoctor concerns features this renderer
-does not surface yet -- include directives, icons, `data-uri`, source
-highlighting, and backend locking. Two of the features it governs already work:
-the stylesheet link-versus-embed choice described above, and `docinfo` (a
-`secure` document drops docinfo without reading the files). As the other
-features arrive, they will honor the safe mode too.
+Most of what a safe mode governs in Asciidoctor now works here: the stylesheet
+link-versus-embed choice described above; `docinfo` (a `secure` document drops
+docinfo without reading the files); the `backend` and `doctype` locks (pinned to
+`html5` and `article`, closed to the document); the `docdir` and `docfile`
+concealment under `server` and `secure`; and the `source-highlighter` and
+`icons` attribute restrictions (a `server` document cannot enable a highlighter,
+a `secure` document cannot enable icons). A couple of converter behaviors it
+governs are not surfaced yet -- `data-uri` image embedding and the interactive
+and inline SVG modes -- and will honor the safe mode as they arrive.
 "#
 );

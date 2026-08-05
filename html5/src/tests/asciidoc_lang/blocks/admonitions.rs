@@ -13,14 +13,26 @@
 //! `ref/asciidoc-lang/docs/modules/blocks/examples/admonition.adoc`).
 
 use crate::{
-    convert,
+    convert, convert_with,
     tests::{
         assert_html::{assert_css, assert_xpath},
         sdd::*,
     },
+    Options, SafeMode,
 };
 
 track_file!("ref/asciidoc-lang/docs/modules/blocks/pages/admonitions.adoc");
+
+// The two icon examples enable icons from the *document* header (`:icons:
+// font` / `:icons:`), which only takes effect below the `Secure` safe mode:
+// under `Secure` (the API default) Asciidoctor drops a document-set `icons` so
+// an untrusted document cannot steer icon image sources through `iconsdir` (see
+// #56). They therefore convert under `Server` — the highest mode that still
+// lets the document enable icons — while every other example on this page uses
+// the plain `Secure`-default `convert`.
+fn convert_icons_enabled(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Server))
+}
 
 non_normative!(
     r#"
@@ -181,7 +193,7 @@ include::example$admonition.adoc[tag=para]
 "#
     );
 
-    let output = convert(
+    let output = convert_icons_enabled(
         "= Document Title\n:icons: font\n\n\
          WARNING: Wolpertingers are known to nest in server racks.\nEnter at your own risk.\n",
     );
@@ -201,7 +213,7 @@ include::example$admonition.adoc[tag=para]
 // line.
 #[test]
 fn icons_image_mode_renders_an_img_icon() {
-    let output = convert(
+    let output = convert_icons_enabled(
         "= Document Title\n:icons:\n\n\
          WARNING: Wolpertingers are known to nest in server racks.\n",
     );
