@@ -66,25 +66,6 @@ fn embedded_stylesheet_matches_the_reference_copy() {
     }
 }
 
-// The renderer also embeds `html5/assets/coderay-asciidoctor.css` — the CodeRay
-// syntax-highlighter stylesheet it links, embeds, and copies. Guard it against
-// the vendored `ref/` copy the same way. Skipped when the `ref/` tree is absent
-// (it ships with the repository but not with the published crate).
-#[test]
-fn embedded_coderay_stylesheet_matches_the_reference_copy() {
-    let embedded = include_str!("../../../../assets/coderay-asciidoctor.css");
-    let reference_path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../ref/asciidoctor/data/stylesheets/coderay-asciidoctor.css"
-    );
-    if let Ok(reference) = std::fs::read_to_string(reference_path) {
-        assert_eq!(
-            embedded, reference,
-            "html5/assets/coderay-asciidoctor.css has drifted from the vendored ref/ copy"
-        );
-    }
-}
-
 /// Converts `source` under a safe mode below `Secure`, so the default
 /// stylesheet is embedded inline (`<style>`) rather than linked. The default
 /// (`Secure`) mode links it — the behavior asserted separately below — but the

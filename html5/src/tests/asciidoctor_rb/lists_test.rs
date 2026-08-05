@@ -27,7 +27,8 @@
 //!
 //! What stays `non_normative!` here:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
-//! - `coderay` source-highlighter tests (this crate implements no highlighter; <https://github.com/asciidoc-rs/asciidoc-html5/issues/215>);
+//! - `coderay` source-highlighter tests (server-side syntax highlighting is not
+//!   planned – the renderer never tokenizes source into `<span>` markup);
 //! - `asciidoc-parser` parser-model assertions that have no rendered-output
 //!   counterpart (`document_from_string` + `find_by(...).level`, the colist
 //!   `.style` check), reproduced but not re-expressed;
@@ -10622,9 +10623,10 @@ context 'Callout lists' do
         assert!(output.contains("io:fwrite(\"hello, world~n\"). %<b class=\"conum\">(2)</b>"));
     }
 
-    // Non-normative: requires the `coderay` source highlighter, which this crate
-    // does not implement (syntax highlighting is tracked in
-    // <https://github.com/asciidoc-rs/asciidoc-html5/issues/215>).
+    // Non-normative: requires the `coderay` source highlighter to tokenize the
+    // block. Server-side syntax highlighting is not planned (an in-process
+    // highlighter would breach the library's `asciidoc-parser`-only constraint),
+    // so the renderer never runs coderay.
     non_normative!(
         r##"
   test 'should allow line comment chars preceding callout number to be configurable when source-highlighter is coderay' do

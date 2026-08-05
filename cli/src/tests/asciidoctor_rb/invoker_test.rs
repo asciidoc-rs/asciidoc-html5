@@ -1051,10 +1051,17 @@ fn should_output_to_file_specified() {
     assert!(out.exists());
 }
 
-#[test]
-fn should_copy_coderay_stylesheet_to_target_directory_if_linkcss_is_specified() {
-    verifies!(
-        r#"
+// Non-normative: despite its name, this Ruby test invokes with
+// `source-highlighter=coderay` and asserts Asciidoctor copies *both* the
+// default `asciidoctor.css` and the CodeRay `coderay-asciidoctor.css` next to
+// the output. `adoc` deliberately diverges – server-side syntax highlighting
+// (CodeRay, Pygments, Rouge) is not planned, so it emits no CodeRay spans and
+// copies no CodeRay stylesheet, and the bundled CodeRay assertion can no longer
+// hold. The default-stylesheet copy itself is verified at the library level in
+// `copycss.rs` (`default_stylesheet_is_copied_as_asciidoctor_css`) and on the
+// project's own `stylesheet-modes.adoc` docs page.
+non_normative!(
+    r#"
   test 'should copy default stylesheet to target directory if linkcss is specified' do
     sample_outpath = fixture_path 'sample-output.html'
     asciidoctor_stylesheet = fixture_path 'asciidoctor.css'
@@ -1078,54 +1085,14 @@ fn should_copy_coderay_stylesheet_to_target_directory_if_linkcss_is_specified() 
   end
 
 "#
-    );
+);
 
-    // With `linkcss` and `source-highlighter=coderay`, a document that contains
-    // a source block gets both companion stylesheets copied next to the output:
-    // the default `asciidoctor.css` and the CodeRay `coderay-asciidoctor.css`.
-    let project = Project::new("linkcss-coderay");
-    let input = project.write(
-        "source-block.adoc",
-        "= Doc\n\n[source,ruby]\n----\nputs 1\n----\n",
-    );
-    let out = project.path("sample-output.html");
-    project
-        .run(&[
-            "-o",
-            out.to_str().unwrap(),
-            "-a",
-            "linkcss",
-            "-a",
-            "source-highlighter=coderay",
-            input.to_str().unwrap(),
-        ])
-        .expect("adoc converts");
-    assert!(out.exists());
-    assert!(project.exists("asciidoctor.css"));
-    assert!(project.exists("coderay-asciidoctor.css"));
-
-    // Both copied stylesheets have the line-ending discipline the Ruby test
-    // asserts: each uses LF, carries no CR, and — because Asciidoctor `rstrip`s
-    // the stylesheet data it writes — ends without a trailing newline.
-    for name in ["asciidoctor.css", "coderay-asciidoctor.css"] {
-        let contents = project.read(name);
-        assert!(contents.contains('\n'), "{name} should contain LF");
-        assert!(!contents.contains('\r'), "{name} should carry no CR");
-        assert!(
-            !contents.ends_with('\n'),
-            "{name} should have no trailing newline"
-        );
-    }
-
-    // Deviation from the Ruby test: it applies that same discipline to the
-    // rendered HTML output too, but `adoc` appends a final newline to the HTML
-    // — a separate convention from the stylesheet copies this test covers.
-}
-
-#[test]
-fn should_not_copy_coderay_stylesheet_when_no_source_blocks_were_highlighted() {
-    verifies!(
-        r#"
+// Non-normative: this Ruby test checks CodeRay's "was anything highlighted?"
+// gate – no source block means no `coderay-asciidoctor.css` copy. `adoc` never
+// copies a CodeRay stylesheet at all (server-side syntax highlighting is not
+// planned), so there is no gate to verify; it would only pass vacuously.
+non_normative!(
+    r#"
   test 'should not copy coderay stylesheet to target directory when no source blocks where highlighted' do
     sample_outpath = fixture_path 'sample-output.html'
     asciidoctor_stylesheet = fixture_path 'asciidoctor.css'
@@ -1143,29 +1110,7 @@ fn should_not_copy_coderay_stylesheet_when_no_source_blocks_were_highlighted() {
   end
 
 "#
-    );
-
-    // A document with no source block highlights nothing, so — even with
-    // `linkcss` and `source-highlighter=coderay` — `adoc` copies the default
-    // stylesheet but writes no `coderay-asciidoctor.css`.
-    let project = Project::new("linkcss-coderay-nosrc");
-    let input = project.write("sample.adoc", "= Doc\n\nJust a paragraph.\n");
-    let out = project.path("sample-output.html");
-    project
-        .run(&[
-            "-o",
-            out.to_str().unwrap(),
-            "-a",
-            "linkcss",
-            "-a",
-            "source-highlighter=coderay",
-            input.to_str().unwrap(),
-        ])
-        .expect("adoc converts");
-    assert!(out.exists());
-    assert!(project.exists("asciidoctor.css"));
-    assert!(!project.exists("coderay-asciidoctor.css"));
-}
+);
 
 #[test]
 fn should_not_copy_default_stylesheet_to_target_directory_if_linkcss_is_set_and_copycss_is_unset() {

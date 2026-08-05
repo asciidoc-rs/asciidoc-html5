@@ -34,7 +34,8 @@
 //!   `apply_subs` with a `nil`/explicit subs argument) and the **Resolve subs**
 //!   `Block.new(subs: …)` constructor plumbing exercise parser-model APIs this
 //!   crate does not surface.
-//! * Source-highlighting backends (**coderay**, **pygments**) are out of scope.
+//! * Server-side source-highlighting backends (**coderay**, **pygments**) are
+//!   not planned – the renderer never tokenizes source into highlighted markup.
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -7050,8 +7051,8 @@ mod resolve_subs {
     );
 
     // Resolves the `specialcharacters` sub to `:highlight` for a coderay source
-    // block — source highlighting is out of scope, and `block.subs` is a
-    // parser-model API this crate does not surface.
+    // block — server-side syntax highlighting is not planned, and `block.subs`
+    // is a parser-model API this crate does not surface.
     non_normative!(
         r#"
     test 'should resolve specialcharacters sub as highlight for source block when source highlighter is coderay' do
@@ -7067,9 +7068,9 @@ mod resolve_subs {
 "#
     );
 
-    // As 2428 for pygments (gated on `PYGMENTS_VERSION`) — source highlighting
-    // is out of scope, and `block.subs` is a parser-model API this crate does
-    // not surface.
+    // As 2428 for pygments (gated on `PYGMENTS_VERSION`) — server-side syntax
+    // highlighting is not planned, and `block.subs` is a parser-model API this
+    // crate does not surface.
     non_normative!(
         r#"
     test 'should resolve specialcharacters sub as highlight for source block when source highlighter is pygments', if: ENV['PYGMENTS_VERSION'] do
