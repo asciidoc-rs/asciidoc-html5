@@ -31,6 +31,14 @@ fn para_with(source: &str, options: &Options) -> String {
     para_of(&output)
 }
 
+/// Converts `source` under the `Server` safe mode. A document-set `:icons:`
+/// only takes effect below `Secure` — under `Secure` (the API default)
+/// Asciidoctor drops it so an untrusted document cannot steer icon image
+/// sources through `iconsdir` (see #50) — so the icon examples convert here.
+fn convert_icons(source: &str) -> String {
+    convert_with(source, &Options::new().safe_mode(SafeMode::Server))
+}
+
 fn para_of(output: &str) -> String {
     output
         .split_once("<p>")
@@ -1781,10 +1789,9 @@ Only relevant used when value of `icons` attribute is `font`.
     );
 
     // The Font Awesome `<link>` lives in the standalone document's `<head>`.
-    // These examples enable icons from the document header (`:icons: font`),
-    // which this crate's default `Secure` safe mode drops (matching Asciidoctor),
-    // so they convert under `Server`, a mode that still "allows icons," to
-    // reproduce the icon-permitting output Asciidoctor's CLI generates.
+    // Each example enables icons from the *document* header (`:icons: font`),
+    // which only takes effect below `Secure` (#50), so these convert under
+    // `Server`.
     let standalone = |source: &str| {
         convert_with(
             source,
@@ -1875,25 +1882,26 @@ _url_
     // `icons` chooses font or image icons for admonitions instead of the text
     // label: `font` emits a Font Awesome `<i>`, while the empty/`image` value
     // uses an `<img>` from `iconsdir` (default `./images/icons`) with the
-    // `icontype` extension (default `png`).
-    assert!(icons("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====")
+    // `icontype` extension (default `png`). A document-set `:icons:` only takes
+    // effect below `Secure` (#50), so these convert under `Server`.
+    assert!(convert_icons("= T\n:icons: font\n\n[NOTE]\n====\nhi\n====")
         .contains(r#"<i class="fa icon-note" title="Note">"#));
-    assert!(icons("= T\n:icons:\n\n[NOTE]\n====\nhi\n====")
+    assert!(convert_icons("= T\n:icons:\n\n[NOTE]\n====\nhi\n====")
         .contains(r#"<img src="./images/icons/note.png" alt="Note""#));
 
     // `iconsdir` and `icontype` override the directory and extension of the
     // image icons.
-    assert!(
-        icons("= T\n:icons:\n:iconsdir: /myicons\n:icontype: svg\n\n[NOTE]\n====\nhi\n====")
-            .contains(r#"<img src="/myicons/note.svg""#)
-    );
+    assert!(convert_icons(
+        "= T\n:icons:\n:iconsdir: /myicons\n:icontype: svg\n\n[NOTE]\n====\nhi\n===="
+    )
+    .contains(r#"<img src="/myicons/note.svg""#));
 
     // `imagesdir` prefixes image targets; when it is set and `iconsdir` is not,
     // the image icons default to the `icons` folder beneath it.
     assert!(convert("= T\n:imagesdir: assets\n\nimage::foo.png[Foo]")
         .contains(r#"<img src="assets/foo.png""#));
     assert!(
-        icons("= T\n:icons:\n:imagesdir: assets\n\n[NOTE]\n====\nhi\n====")
+        convert_icons("= T\n:icons:\n:imagesdir: assets\n\n[NOTE]\n====\nhi\n====")
             .contains(r#"<img src="assets/icons/note.png" alt="Note""#)
     );
 }
