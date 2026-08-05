@@ -34,11 +34,7 @@
 //! - a few dlist tests blocked on behavior outside this crate: bibliography
 //!   `starts-with(following-sibling::text(), …)` assertions the `assert_html`
 //!   xpath subset does not implement, and a following-heading test that needs
-//!   setext (`~~~~`) section parsing `asciidoc-parser` does not provide;
-//! - one wrapped list-item principal paragraph whose hanging-indent second line
-//!   loses its leading indent: the renderer now restores an attached literal paragraph's
-//!   indent (#168), but a wrapped *principal* line still needs node-text extraction
-//!   the `assert_html` xpath subset does not implement (<https://github.com/asciidoc-rs/asciidoc-html5/issues/157>).
+//!   setext (`~~~~`) section parsing `asciidoc-parser` does not provide.
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -564,11 +560,10 @@ wrapped content']"#,
             );
         }
 
-        // Non-normative: asserts — via a node-text line comparison the harness
-        // cannot express (#157) — that the wrapped line keeps its leading indent,
-        // which the parser strips before the renderer sees it (#168).
-        non_normative!(
-            r#"
+        #[test]
+        fn wrapped_list_item_with_hanging_indent_followed_by_non_indented_line() {
+            verifies!(
+                r#"
     test 'wrapped list item with hanging indent followed by non-indented line' do
       # NOTE cannot use single-quoted heredoc because of https://github.com/jruby/jruby/issues/4260
       input = <<~EOS
@@ -591,7 +586,24 @@ wrapped content']"#,
     end
 
 "#
-        );
+            );
+            let output =
+                convert("== Lists\n\n- list item 1\n  // not line comment\nsecond wrapped line\n- list item 2\n");
+            assert_css(&output, "ul", 1);
+            assert_css(&output, "ul li", 2);
+
+            // The wrapped principal line keeps its `  ` hanging indent (#237); a
+            // multi-line `text()` predicate is the node-text line comparison the
+            // Ruby test performs. Asciidoctor 2.0.26 emits no extra blank line
+            // here, so the `gsub` the Ruby applies is a no-op for this output.
+            assert_xpath(
+                &output,
+                r#"(//ul/li)[1]/p[text() = "list item 1
+  // not line comment
+second wrapped line"]"#,
+                1,
+            );
+        }
 
         #[test]
         fn a_list_item_with_a_nested_marker_terminates_indented_paragraph_for_text_of_list_item() {
