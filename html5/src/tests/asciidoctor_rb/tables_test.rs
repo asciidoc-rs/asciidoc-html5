@@ -12,9 +12,6 @@
 //! <https://github.com/asciidoc-rs/asciidoc-html5/issues/164>. In brief:
 //!
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
-//! - tests whose assertions depend on constructs this renderer does not yet
-//!   emit — description lists inside AsciiDoc cells (#154), table of contents
-//!   (#86), and font-based admonition icons (#50);
 //! - the per-cell, order-dependent form of `cellbgcolor` (set through inline
 //!   attribute entries, `{set:cellbgcolor:…}`) – permanently out of scope,
 //!   because `asciidoc-parser` does not implement inline attribute entries; the
@@ -2928,10 +2925,10 @@ fn should_update_doctype_related_attributes_in_asciidoc_table_cell_when_doctype_
     );
 }
 
-// Asserts a font-based admonition icon (`i.icon-note`); font icons are not
-// implemented yet (#50).
-non_normative!(
-    r#"
+#[test]
+fn should_not_allow_asciidoc_table_cell_to_set_a_document_attribute_that_was_hard_set_by_the_api() {
+    verifies!(
+        r#"
     test 'should not allow AsciiDoc table cell to set a document attribute that was hard set by the API' do
       input = <<~'EOS'
       |===
@@ -2948,7 +2945,19 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input =
+        "|===\na|\n:icons:\n\nNOTE: This admonition does not have a font-based icon.\n|===\n";
+    let output = convert_with(
+        input,
+        &Options::new()
+            .safe_mode(SafeMode::Safe)
+            .attribute("icons", "font"),
+    );
+    assert_css(&output, "td.icon .title", 0);
+    assert_css(&output, "td.icon i.icon-note", 1);
+}
 
 #[test]
 fn should_not_allow_asciidoc_table_cell_to_set_a_document_attribute_that_was_hard_unset_by_the_api()
@@ -3278,10 +3287,10 @@ fn showtitle_can_be_disabled_in_asciidoc_table_cell_if_set_by_api() {
     }
 }
 
-// Asserts on description-list rendering (`div.dlist`) inside an AsciiDoc
-// cell; description lists are not implemented yet (#154).
-non_normative!(
-    r#"
+#[test]
+fn asciidoc_content() {
+    verifies!(
+        r#"
     test 'AsciiDoc content' do
       input = <<~'EOS'
       [cols="1e,1,5a"]
@@ -3335,7 +3344,22 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input = "[cols=\"1e,1,5a\"]\n|===\n|Name |Backends |Description\n\n|badges |xhtml11, html5 |\nLink badges ('XHTML 1.1' and 'CSS') in document footers.\n\n[NOTE]\n====\nThe path names of images, icons and scripts are relative path\nnames to the output document not the source document.\n====\n|[[X97]] docinfo, docinfo1, docinfo2 |All backends |\nThese three attributes control which document information\nfiles will be included in the the header of the output file:\n\ndocinfo:: Include `<filename>-docinfo.<ext>`\ndocinfo1:: Include `docinfo.<ext>`\ndocinfo2:: Include `docinfo.<ext>` and `<filename>-docinfo.<ext>`\n\nWhere `<filename>` is the file name (sans extension) of the AsciiDoc\ninput file and `<ext>` is `.html` for HTML outputs or `.xml` for\nDocBook outputs. If the input file is the standard input then the\noutput file name is used.\n|===\n";
+    let output = convert(input);
+    assert_css(&output, "table.tableblock > tbody > tr", 2);
+    assert_css(
+        &output,
+        "table.tableblock > tbody > tr:nth-child(1) > td:nth-child(3) div.admonitionblock",
+        1,
+    );
+    assert_css(
+        &output,
+        "table.tableblock > tbody > tr:nth-child(2) > td:nth-child(3) div.dlist",
+        1,
+    );
+}
 
 #[test]
 fn should_preserve_leading_indentation_in_contents_of_asciidoc_table_cell_if_contents_starts_with_newline(
@@ -3887,10 +3911,10 @@ non_normative!(
 "#
 );
 
-// Asserts on the table of contents built from a cell's nested document; TOC
-// rendering is not implemented yet (#86).
-non_normative!(
-    r#"
+#[test]
+fn asciidoc_table_cell_should_not_inherit_toc_setting_from_parent_document() {
+    verifies!(
+        r#"
     test 'AsciiDoc table cell should not inherit toc setting from parent document' do
       input = <<~'EOS'
       = Document Title
@@ -3912,12 +3936,19 @@ non_normative!(
     end
 
 "#
-);
+    );
 
-// Asserts on the table of contents built from a cell's nested document; TOC
-// rendering is not implemented yet (#86).
-non_normative!(
-    r#"
+    let input =
+        "= Document Title\n:toc:\n\n== Section\n\n|===\na|\n== Section in Nested Document\n\ncontent\n|===\n";
+    let output = convert_standalone(input);
+    assert_css(&output, ".toc", 1);
+    assert_css(&output, "table .toc", 0);
+}
+
+#[test]
+fn should_be_able_to_enable_toc_in_an_asciidoc_table_cell() {
+    verifies!(
+        r#"
     test 'should be able to enable toc in an AsciiDoc table cell' do
       input = <<~'EOS'
       = Document Title
@@ -3941,12 +3972,19 @@ non_normative!(
     end
 
 "#
-);
+    );
 
-// Asserts on the table of contents built from a cell's nested document; TOC
-// rendering is not implemented yet (#86).
-non_normative!(
-    r#"
+    let input =
+        "= Document Title\n\n== Section A\n\n|===\na|\n= Subdocument Title\n:toc:\n\n== Subdocument Section A\n\ncontent\n|===\n";
+    let output = convert_standalone(input);
+    assert_css(&output, ".toc", 1);
+    assert_css(&output, "table .toc", 1);
+}
+
+#[test]
+fn should_be_able_to_enable_toc_in_an_asciidoc_table_cell_even_if_hard_unset_by_api() {
+    verifies!(
+        r#"
     test 'should be able to enable toc in an AsciiDoc table cell even if hard unset by API' do
       input = <<~'EOS'
       = Document Title
@@ -3970,12 +4008,19 @@ non_normative!(
     end
 
 "#
-);
+    );
 
-// Asserts on the table of contents built from a cell's nested document; TOC
-// rendering is not implemented yet (#86).
-non_normative!(
-    r#"
+    let input =
+        "= Document Title\n\n== Section A\n\n|===\na|\n= Subdocument Title\n:toc:\n\n== Subdocument Section A\n\ncontent\n|===\n";
+    let output = convert_with(input, &Options::new().standalone(true).unset("toc"));
+    assert_css(&output, ".toc", 1);
+    assert_css(&output, "table .toc", 1);
+}
+
+#[test]
+fn should_be_able_to_enable_toc_in_both_outer_document_and_in_an_asciidoc_table_cell() {
+    verifies!(
+        r#"
     test 'should be able to enable toc in both outer document and in an AsciiDoc table cell' do
       input = <<~'EOS'
       = Document Title
@@ -4005,7 +4050,16 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    let input =
+        "= Document Title\n:toc:\n\n== Section A\n\n|===\na|\n= Subdocument Title\n:toc: macro\n\n[#table-cell-toc]\ntoc::[]\n\n== Subdocument Section A\n\ncontent\n|===\n";
+    let output = convert_standalone(input);
+    assert_css(&output, ".toc", 2);
+    assert_css(&output, "#toc", 1);
+    assert_css(&output, "table .toc", 1);
+    assert_css(&output, "table #table-cell-toc", 1);
+}
 
 #[test]
 fn document_in_an_asciidoc_table_cell_should_not_see_doctitle_of_parent() {
