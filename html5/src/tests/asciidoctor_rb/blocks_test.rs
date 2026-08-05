@@ -5296,16 +5296,10 @@ width="500px" height="500px">
         );
     }
 
-    // Divergence: `asciidoc-parser` recognizes the block-image macro even when
-    // the target carries leading or trailing whitespace (` tiger.png` renders an
-    // `<img src="%20tiger.png">`, `tiger.png ` an `<img src="tiger.png%20">`).
-    // Asciidoctor 2.0.26 requires the target to begin and end with a non-space
-    // (its block-macro regex), so it does *not* recognize either form — the
-    // first line becomes a description list, the second a paragraph. This is a
-    // parser-level recognition difference, not a renderer one, so it is tracked
-    // upstream rather than worked around here.
-    non_normative!(
-        r#"
+    #[test]
+    fn t19_block_image_target_leading_trailing_spaces() {
+        verifies!(
+            r#"
     test 'should not recognize block image if target has leading or trailing spaces' do
       [' tiger.png', 'tiger.png '].each do |target|
         input = %(image::#{target}[Tiger])
@@ -5316,7 +5310,16 @@ width="500px" height="500px">
     end
 
 "#
-    );
+        );
+
+        // A leading- or trailing-space target no longer satisfies the block-image
+        // macro (asciidoc-parser 0.29.11): the first line becomes a description
+        // list, the second a paragraph — matching Asciidoctor 2.0.26.
+        for target in [" tiger.png", "tiger.png "] {
+            let html = convert(&format!("image::{target}[Tiger]"));
+            assert_xpath(&html, "//img", 0);
+        }
+    }
 
     #[test]
     fn t20_block_image_alt_above_macro() {
