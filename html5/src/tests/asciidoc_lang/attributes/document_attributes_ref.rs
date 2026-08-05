@@ -1872,13 +1872,6 @@ _url_
 "#
     );
 
-    // The `icons` rows enable icons from the document header, which this crate's
-    // default `Secure` safe mode drops (matching Asciidoctor), so these examples
-    // convert under `Server`, a mode that still "allows icons," to
-    // reproduce the icon-permitting output Asciidoctor's CLI generates. (The
-    // `imagesdir`-only example below sets no `icons`, so it needs no such mode.)
-    let icons = |source: &str| convert_with(source, &Options::new().safe_mode(SafeMode::Server));
-
     // `icons` chooses font or image icons for admonitions instead of the text
     // label: `font` emits a Font Awesome `<i>`, while the empty/`image` value
     // uses an `<img>` from `iconsdir` (default `./images/icons`) with the

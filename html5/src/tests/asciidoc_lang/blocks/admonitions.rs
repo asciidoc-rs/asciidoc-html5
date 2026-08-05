@@ -21,15 +21,6 @@ use crate::{
     Options, SafeMode,
 };
 
-// Converts under `Server`, a safe mode below `Secure` that still "allows icons"
-// (per the Safe Modes page). The admonition-icon examples enable icons from the
-// document header (`:icons:` / `:icons: font`), which this crate's default
-// `Secure` mode drops (matching Asciidoctor), so those examples
-// render under `Server` to reproduce Asciidoctor's icon-permitting CLI output.
-fn convert_with_icons(source: &str) -> String {
-    crate::convert_with(source, &Options::new().safe_mode(SafeMode::Server))
-}
-
 track_file!("ref/asciidoc-lang/docs/modules/blocks/pages/admonitions.adoc");
 
 // The two icon examples enable icons from the *document* header (`:icons:
