@@ -175,10 +175,10 @@ docinfo without reading the files); the `backend` and `doctype` locks (pinned to
 `html5` and `article`, closed to the document); the `docdir` and `docfile`
 concealment under `server` and `secure`; the `source-highlighter` and `icons`
 attribute restrictions (a `server` document cannot enable a highlighter, a
-`secure` document cannot enable icons); and the interactive and inline SVG
-referencing modes, which downgrade to a plain `<img>` under `secure`
-(block-image inline SVG is not yet supported). The one converter behavior it
-governs that this renderer does not surface yet is `data-uri` image embedding,
-which will honor the safe mode as it arrives.
+`secure` document cannot enable icons); the interactive and inline SVG
+referencing modes, which downgrade to a plain `<img>` under `secure`; and
+`data-uri` image embedding (an image, or an image-mode icon, is embedded as a
+base64 data URI only below `secure`). As the remaining converter behaviors
+arrive, they will honor the safe mode too.
 "#
 );

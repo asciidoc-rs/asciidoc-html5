@@ -130,6 +130,30 @@ pub(crate) fn resolve(
     }
 }
 
+/// Resolves an *asset* `target` against `base_dir` with `asset_dir` as the
+/// starting directory (rather than an including file's directory), honoring the
+/// safe mode's jail.
+///
+/// This is the resolution Asciidoctor's `AbstractNode#generate_data_uri`
+/// performs for a `data-uri` image: `normalize_system_path(target, imagesdir)`
+/// resolves the image target against the `imagesdir` (the `asset_dir`),
+/// confined to the base directory under `safe`/`server`. Unlike [`resolve`],
+/// whose `source` names an including *file* and contributes only its directory,
+/// `asset_dir` is itself the starting directory, so a relative image target
+/// lands at `base_dir`/`asset_dir`/`target`.
+pub(crate) fn resolve_in_dir(
+    base_dir: &Path,
+    safe: SafeMode,
+    asset_dir: &str,
+    target: &str,
+) -> PathBuf {
+    if jailed(safe) {
+        resolve_jailed(base_dir, asset_dir, target)
+    } else {
+        resolve_free(base_dir, asset_dir, target)
+    }
+}
+
 /// Resolves `target` without a jail: relative targets anchor at `start` (itself
 /// relative to the base directory), absolute targets are taken as-is, and `..`
 /// may climb anywhere.
@@ -602,8 +626,8 @@ mod tests {
     use asciidoc_parser::SafeMode;
 
     use super::{
-        directory_of, fold_into, is_absolute, normalize, posixify, strip_root, strip_utf8_bom,
-        FsIncludeFileHandler, LegacyEncoding,
+        directory_of, fold_into, is_absolute, normalize, posixify, resolve_in_dir, strip_root,
+        strip_utf8_bom, FsIncludeFileHandler, LegacyEncoding,
     };
 
     const BASE: &str = "/home/user/project";
@@ -834,6 +858,51 @@ mod tests {
         assert_eq!(
             resolve(SafeMode::Safe, Some("main.adoc"), "part.adoc"),
             "/home/user/project/part.adoc"
+        );
+    }
+
+    /// Resolves an asset `target` against `BASE` with `asset_dir` as the
+    /// starting directory (the `data-uri` image path), rendered with forward
+    /// slashes like [`resolve`].
+    fn resolve_in(safe: SafeMode, asset_dir: &str, target: &str) -> String {
+        resolve_in_dir(&PathBuf::from(BASE), safe, asset_dir, target)
+            .to_string_lossy()
+            .replace('\\', "/")
+    }
+
+    // A relative asset target lands at `base_dir`/`asset_dir`/`target` — the
+    // asset directory is the *starting* directory (unlike `resolve`, whose
+    // `source` contributes only its parent), so `imagesdir` is prepended whole.
+    #[test]
+    fn asset_relative_target_anchors_under_the_asset_dir() {
+        assert_eq!(
+            resolve_in(SafeMode::Unsafe, "images", "sunset.png"),
+            "/home/user/project/images/sunset.png"
+        );
+        // The same under a jail (`safe`), which also anchors below the base.
+        assert_eq!(
+            resolve_in(SafeMode::Safe, "images", "sunset.png"),
+            "/home/user/project/images/sunset.png"
+        );
+        // An empty asset directory resolves the target directly under the base.
+        assert_eq!(
+            resolve_in(SafeMode::Unsafe, "", "sunset.png"),
+            "/home/user/project/sunset.png"
+        );
+    }
+
+    // Under `unsafe` (no jail) an asset target may climb above the base with
+    // `..`; under a jail the climb is clamped back inside it. This is the
+    // difference the `data-uri` safe-mode jail enforces.
+    #[test]
+    fn asset_target_escape_is_free_but_jailed_is_clamped() {
+        assert_eq!(
+            resolve_in(SafeMode::Unsafe, "images", "../../secret.png"),
+            "/home/user/secret.png"
+        );
+        assert_eq!(
+            resolve_in(SafeMode::Safe, "images", "../../secret.png"),
+            "/home/user/project/secret.png"
         );
     }
 

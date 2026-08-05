@@ -23,12 +23,11 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // the `docinfo`, `backend`, `doctype`, and `source-highlighter` restrictions,
 // and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
 // include directives and URI reads – are exercised by unit tests elsewhere, so
-// their spans stay non-normative here (the `source-highlighter` and `icons`
-// bullets excepted – both are verified below). The SVG interactive/inline
-// referencing modes are likewise surfaced and honor the safe mode (below
-// `SECURE` they render an `<object>`/`<svg>`; at `SECURE` a plain `<img>`),
-// exercised by unit tests elsewhere. What remains unsurfaced – `data-uri` – is
-// likewise non-normative.
+// their spans stay non-normative here (the `source-highlighter`, `icons`, and
+// `data-uri` bullets excepted – all three are verified below). The SVG
+// interactive/inline referencing modes are likewise surfaced and honor the safe
+// mode (below `SECURE` they render an `<object>`/`<svg>`; at `SECURE` a plain
+// `<img>`), exercised by unit tests elsewhere.
 
 non_normative!(
     r#"
@@ -236,18 +235,18 @@ Its integer value is `10`.
 
 // SECURE inherits SERVER's `docdir`/`docfile` concealment — `docdir` emptied,
 // `docfile` reduced to its basename — enforced in `Options::apply` and verified
-// below. Docinfo, backend, doctype, and icons are likewise surfaced: SECURE
-// disables docinfo (no docinfo file is read), forces the backend to `html5`,
-// pins the doctype to `article`, and drops a document-set `icons` (an untrusted
-// document must not be able to steer icon image sources through `iconsdir`),
-// each locked against the document — the icons lock verified just below, the
-// rest covered by unit tests in `options.rs`. SECURE also disables the
-// interactive (`opts=interactive`) and inline (`opts=inline`) SVG modes — an
-// SVG image renders as a plain `<img>` — surfaced and covered by unit tests (in
-// `substitutions_test.rs` and the renderer's block-image tests). The remaining
-// SECURE restrictions are not surfaced by this renderer yet, each tracked for
-// later implementation: `data-uri`
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/51) and server-side
+// below. Docinfo, backend, doctype, icons, and `data-uri` are likewise
+// surfaced: SECURE disables docinfo (no docinfo file is read), forces the
+// backend to `html5`, pins the doctype to `article`, drops a document-set
+// `icons` (an untrusted document must not be able to steer icon image sources
+// through `iconsdir`), and disables `data-uri` (a referenced image is linked,
+// not embedded) — each locked or gated against the document; the icons and
+// `data-uri` locks are verified just below, the rest covered by unit tests in
+// `options.rs`. SECURE also disables the interactive (`opts=interactive`) and
+// inline (`opts=inline`) SVG modes — an SVG image renders as a plain `<img>` —
+// surfaced and covered by unit tests (in `substitutions_test.rs` and the
+// renderer's block-image tests). The one remaining SECURE restriction not
+// surfaced by this renderer yet is server-side
 // source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
@@ -307,7 +306,51 @@ non_normative!(
 * prevents access to stylesheets and JavaScript files
 * sets the backend to `html5`
 * disables `docinfo` files
+"#
+);
+
+// SECURE disables `data-uri`: even with the attribute set and a readable image
+// on disk, the image is *linked* (its plain `src`), never embedded as a base64
+// data URI. This is the safe-mode half of #51 — `data-uri` embedding is gated
+// on the safe mode being below `Secure`.
+#[test]
+fn secure_disables_data_uri() {
+    verifies!(
+        r#"
 * disables `data-uri`
+"#
+    );
+
+    // A one-pixel GIF the embed would read if `data-uri` were honored.
+    let dir = std::env::temp_dir().join(format!("ahtml5-secure-datauri-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    std::fs::write(
+        dir.join("dot.gif"),
+        [
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c,
+            0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00,
+            0x3b,
+        ],
+    )
+    .expect("write image");
+
+    // Secure (the API default) with `data-uri` set: the image stays linked.
+    let html = convert_with(
+        "image::dot.gif[A dot]",
+        &Options::new().base_dir(dir.clone()).set("data-uri"),
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert!(
+        html.contains("<img src=\"dot.gif\" alt=\"A dot\">"),
+        "{html}"
+    );
+    assert!(!html.contains("data:image/gif"), "{html}");
+}
+
+non_normative!(
+    r#"
 * disables interactive (`opts=interactive`) and inline (`opts=inline`) modes for SVGs
 "#
 );

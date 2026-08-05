@@ -1,12 +1,15 @@
 //! Coverage of the AsciiDoc language description's *Specify Image Format* page.
 //!
 //! The `format` attribute tells a converter an image's format when the target's
-//! file extension can't. Its one behavior observable in this crate's HTML
-//! output is distinguishing an SVG target: `format=svg` makes an extensionless
-//! target eligible for the SVG `interactive` (`<object>`) referencing, which is
-//! verified through `convert` (below the `Secure` safe mode). The data-URI and
-//! reencoding scenarios (`data-uri`, PDF) don't affect this crate's output and
-//! are non-normative.
+//! file extension can't. Two of its behaviors are observable in this crate's
+//! HTML output: distinguishing an SVG target (`format=svg` makes an
+//! extensionless target eligible for the SVG `interactive` (`<object>`)
+//! referencing), and choosing the MIME type of a `data-uri` embed
+//! (`image/svg+xml` for an SVG, `image/<ext>` otherwise). Both are verified
+//! below the `Secure` safe mode. The PDF-reencoding scenario doesn't affect
+//! this crate's output and is non-normative.
+
+use std::{fs, path::PathBuf};
 
 use crate::{convert_with, tests::sdd::*, Options, SafeMode};
 
@@ -16,6 +19,21 @@ track_file!("ref/asciidoc-lang/docs/modules/macros/pages/image-format.adoc");
 // enabled — the path in which `format=svg` recognition is observable.
 fn convert_unsafe(source: &str) -> String {
     convert_with(source, &Options::new().safe_mode(SafeMode::Unsafe))
+}
+
+/// A one-pixel GIF written to a scratch directory so a `data-uri` embed has a
+/// real file to read. Returns the directory it was written to.
+fn scratch_with_image(name: &str) -> PathBuf {
+    const GIF: &[u8] = &[
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0xff, 0xff, 0xff, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b,
+    ];
+
+    let dir = std::env::temp_dir().join(format!("ahtml5-imgfmt-{}-{name}", std::process::id()));
+    fs::create_dir_all(&dir).expect("create scratch dir");
+    fs::write(dir.join(name), GIF).expect("write image");
+    dir.canonicalize().expect("canonicalize scratch dir")
 }
 
 non_normative!(
@@ -79,9 +97,8 @@ But since the author has specified `format=svg`, the converter can recognize thi
     );
 }
 
-// The remaining scenarios in which a converter needs the format — data-URI
-// embedding (`data-uri`) and reencoding (PDF) — don't affect this crate's HTML
-// output, and the MIME-type guidance is descriptive.
+// The MIME-type guidance (the sub-MIME `format` value, and the SVG exception)
+// is descriptive; the format-detection cases are non-normative here.
 non_normative!(
     r#"
 Here are few cases when the image format cannot be determined automatically:
@@ -105,10 +122,58 @@ AsciiDoc recognizes extra settings for xref:image-svg.adoc[SVG images], such as 
 If the converter needs to read and process the file, it often must use a different library to process an SVG since the contents of an SVG is an XML document.
 So being able to recognize an SVG target is essential for almost any converter.
 
+"#
+);
+
+// When `data-uri` is set (below `Secure`), this crate embeds the image as a
+// data URI, and the MIME type of that data URI is derived from the image format
+// — `image/svg+xml` for an SVG (which "differs" from the others by the `+xml`
+// suffix), and `image/<ext>` for any other format. Both claims are observable
+// in the embedded `src`.
+#[test]
+fn data_uri_embed_encodes_the_mime_type_from_the_format() {
+    verifies!(
+        r#"
 If the `data-uri` attribute is set on the document, an AsciiDoc processor must convert the image to a data URI.
 To start, the data URI for an SVG differs from a data URI for any other format.
 But even when creating a data URI for a non-SVG, the MIME type of that image must be included in the data URI, in which case the image format must be known.
 
+"#
+    );
+
+    // A non-SVG image embeds with its format's MIME type (`image/png`).
+    let dir = scratch_with_image("pic.png");
+    let png = convert_with(
+        "image::pic.png[X]",
+        &Options::new()
+            .safe_mode(SafeMode::Unsafe)
+            .base_dir(dir.clone())
+            .set("data-uri"),
+    );
+    assert!(png.contains("<img src=\"data:image/png;base64,"), "{png}");
+    let _ = fs::remove_dir_all(&dir);
+
+    // An SVG's data URI differs: its MIME type is `image/svg+xml`, not
+    // `image/svg`.
+    let dir = scratch_with_image("pic.svg");
+    let svg = convert_with(
+        "image::pic.svg[X]",
+        &Options::new()
+            .safe_mode(SafeMode::Unsafe)
+            .base_dir(dir.clone())
+            .set("data-uri"),
+    );
+    assert!(
+        svg.contains("<img src=\"data:image/svg+xml;base64,"),
+        "{svg}"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// The PDF-reencoding scenario doesn't affect this crate's HTML output, and the
+// closing guidance is descriptive.
+non_normative!(
+    r#"
 Some converters, such as a PDF converter, have to reencode the image data.
 This means the converter must parse the image data, which may require loading an additional library.
 Doing that processing almost certainly requires knowing the format of the image.

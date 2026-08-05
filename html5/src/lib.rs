@@ -43,6 +43,7 @@ use std::{fs, io, path::Path};
 use asciidoc_parser::Parser;
 
 mod asset_writer;
+mod base64;
 mod copycss;
 mod docinfo_handler;
 mod html;
@@ -168,10 +169,12 @@ fn render(document: &Document<'_>, options: &Options) -> String {
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
-    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`) read
-    // at the same base directory and safe mode the include/docinfo handlers use;
-    // with no base directory (the plain string `convert`), such an SVG is left
-    // unreadable and falls back to its alt text.
+    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`) read,
+    // and the `data-uri` embedding of images and icons, at the same base
+    // directory and safe mode the include/docinfo handlers use; with no base
+    // directory (the plain string `convert`), such an SVG is left unreadable and
+    // falls back to its alt text, and a `data-uri` image embeds as an empty data
+    // URI.
     let svg_source = options
         .effective_base_dir()
         .map(|base| renderer::SvgSource::new(base, options.safe_mode_or_default()));
@@ -445,20 +448,22 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// and page breaks. A construct the renderer does not handle emits a visible
 /// `<!-- asciidoc-html5: unsupported … -->` comment so the output stays
 /// well-formed and the gap is easy to see. The aim, as coverage grows, is
-/// parity with Asciidoctor's `html5` backend; the advanced image modes
-/// (`data-uri`, icons) are the main remaining gap. (Interactive SVG renders as
-/// an `<object>`, and an `opts=inline` SVG embeds the file's `<svg>` contents —
-/// for both the inline `image:` and block `image::` forms — honoring the safe
-/// mode; see the base-directory note below.)
+/// parity with Asciidoctor's `html5` backend; icons are the main remaining
+/// gap. (Interactive SVG renders as an `<object>`; an `opts=inline` SVG embeds
+/// the file's `<svg>` contents — for both the inline `image:` and block
+/// `image::` forms; and `data-uri` embeds referenced images and image-mode
+/// icons as base64 `data:` URIs below `Secure` — each honoring the safe mode;
+/// see the base-directory note below.)
 ///
-/// # A block inline SVG needs a base directory
+/// # A block inline SVG (and a `data-uri` image) needs a base directory
 ///
-/// A *block* image's inline-embedded SVG (`image::…[opts=inline]`) is read from
-/// disk *at render time*, so it needs the base directory and safe mode that
-/// only [`Options`] carries — and this options-free entry point has neither.
-/// Rendered here, such a block image falls back to its alt text (a `<span
-/// class="alt">`), the same result Asciidoctor produces when it cannot read the
-/// file. To embed it, convert the file directly with
+/// A *block* image's inline-embedded SVG (`image::…[opts=inline]`), and any
+/// `data-uri` image or image-mode icon, is read from disk *at render time*, so
+/// it needs the base directory and safe mode that only [`Options`] carries —
+/// and this options-free entry point has neither. Rendered here, such a block
+/// SVG falls back to its alt text (a `<span class="alt">`), and a `data-uri`
+/// image embeds as an empty data URI — the same results Asciidoctor produces
+/// when it cannot read the file. To embed them, convert the file directly with
 /// [`convert_file`]/[`convert_file_with`], or render the [`Document`] with
 /// [`convert_document_with`] under [`Options`] that name the file or base
 /// directory ([`Options::input_file`] / [`Options::base_dir`]) — the same
