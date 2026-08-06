@@ -3496,25 +3496,24 @@ fn error_about_unresolved_preprocessor_directive_on_first_line_of_an_asciidoc_ta
     // message naming the file it came from – the included temp file. This crate
     // emits the parser's richer `… - include::<target>[]` form, which still
     // contains the substring Asciidoctor's `assert_includes` checks.
-    assert!(
-        output.contains(&format!("Unresolved directive in {tmp_include_path}")),
-        "{output}"
-    );
+    let has_message = output.contains(&format!("Unresolved directive in {tmp_include_path}"));
 
     // The one warning is `include file not found`, and its cursor resolves –
     // through the document source map – to line 5 of the included temp file (the
     // cell's first line, where the failing `include::` lives). Asciidoctor's
     // logged message names the *resolved* absolute path of the missing target;
     // this crate carries the directive's raw target on the warning instead.
-    let warnings: Vec<_> = doc.warnings().collect();
-    let cursors: Vec<_> = warnings
-        .iter()
+    let cursors: Vec<_> = doc
+        .warnings()
         .filter(|w| matches!(&w.warning, WarningType::IncludeFileNotFound(t) if t == "does-not-exist.adoc"))
         .map(|w| doc.source_map().original_file_and_line(w.source.line()))
         .collect();
 
+    // Clean up before asserting so a failing assertion cannot leak the fixture,
+    // matching the suite's temp-directory tests.
     let _ = fs::remove_dir_all(&dir);
 
+    assert!(has_message, "{output}");
     assert_eq!(
         cursors,
         vec![Some(SourceLine(Some(tmp_include_path.to_string()), 5))],
