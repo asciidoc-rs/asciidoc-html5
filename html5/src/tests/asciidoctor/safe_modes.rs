@@ -245,9 +245,14 @@ Its integer value is `10`.
 // `options.rs`. SECURE also disables the interactive (`opts=interactive`) and
 // inline (`opts=inline`) SVG modes — an SVG image renders as a plain `<img>` —
 // surfaced and covered by unit tests (in `substitutions_test.rs` and the
-// renderer's block-image tests). The one remaining SECURE restriction not
-// surfaced by this renderer yet is server-side
-// source highlighting (https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
+// renderer's block-image tests). The `source-highlighter` restriction is
+// surfaced too: SECURE inherits SERVER's lock, so a document-set
+// `:source-highlighter:` is dropped and only an API/CLI value enables a
+// highlighter — the renderer half of #45
+// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), enforced in
+// `Options::apply` and verified from the SERVER section above. (Server-side
+// highlighting itself — CodeRay, Pygments, Rouge — is a settled project
+// non-goal, not a pending restriction.)
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
 // stylesheets," which is why it links the stylesheet rather than embedding it —
