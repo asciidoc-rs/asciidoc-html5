@@ -10,12 +10,9 @@
 //! Each is verified against `convert`.
 //!
 //! A document-set `:source-highlighter:` is honored only *below* the `Server`
-//! safe mode (the renderer half of the safe-mode lock — see
-//! [issue #45]), so these conversions run under `SafeMode::Safe`. Standalone
-//! output is used throughout so the highlighter's `<head>` stylesheet and
-//! footer scripts are present to inspect.
-//!
-//! [issue #45]: https://github.com/asciidoc-rs/asciidoc-html5/issues/45
+//! safe mode (the renderer's safe-mode lock), so these conversions run under
+//! `SafeMode::Safe`. Standalone output is used throughout so the highlighter's
+//! `<head>` stylesheet and footer scripts are present to inspect.
 
 use crate::{
     convert_with,

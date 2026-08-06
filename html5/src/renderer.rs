@@ -7808,7 +7808,7 @@ mod tests {
         );
     }
 
-    // Safe-mode gating of `source-highlighter` (Greptile P1 / #45). A
+    // Safe-mode gating of `source-highlighter` (Greptile P1). A
     // highlighter emits `<link>`/`<script>` tags whose origin a document
     // attribute can steer, so an untrusted document must not be able to enable
     // one under a server-side safe mode. This mirrors Asciidoctor's

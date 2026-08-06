@@ -121,8 +121,9 @@ Its integer value is `1`.
 // locked against the document (and the API) in *every* safe mode – subsuming
 // SERVER's restriction rather than merely matching it. Docinfo, backend,
 // doctype, source-highlighter, docfile, and docdir are all covered by unit
-// tests in `options.rs`; the source-highlighter lock (#215, the renderer half
-// of #45) is also verified from the `setting …` bullet just below.
+// tests in `options.rs`; the source-highlighter lock (#215, the renderer's
+// safe-mode restriction) is also verified from the `setting …` bullet just
+// below.
 non_normative!(
     r#"
 [#server]
@@ -248,11 +249,9 @@ Its integer value is `10`.
 // renderer's block-image tests). The `source-highlighter` restriction is
 // surfaced too: SECURE inherits SERVER's lock, so a document-set
 // `:source-highlighter:` is dropped and only an API/CLI value enables a
-// highlighter — the renderer half of #45
-// (https://github.com/asciidoc-rs/asciidoc-html5/issues/45), enforced in
-// `Options::apply` and verified from the SERVER section above. (Server-side
-// highlighting itself — CodeRay, Pygments, Rouge — is a settled project
-// non-goal, not a pending restriction.)
+// highlighter — enforced in `Options::apply` and verified from the SERVER
+// section above. (Server-side highlighting itself — CodeRay, Pygments, Rouge —
+// is a settled project non-goal, not a pending restriction.)
 // Include directives and URI reads are already gated by asciidoc-parser's safe
 // mode, which this crate now sets (see #37). SECURE also "prevents access to
 // stylesheets," which is why it links the stylesheet rather than embedding it —
