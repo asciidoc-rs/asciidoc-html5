@@ -69,8 +69,10 @@ fn an_output_symlinked_to_the_input_is_rejected_without_truncating_it() {
 // An output path that is a *hard link* to the input shares the input's identity
 // under a distinct pathname, so canonicalization alone would not equate them.
 // The guard compares OS file identity, so it is caught, and writing does not
-// replace the shared file's contents. Hard links exist on both Unix and
-// Windows, and the guard now reads file identity on both, so this runs on both.
+// replace the shared file's contents. File identity is read on Unix and
+// Windows; a platform without it would skip the check and let the write
+// through, so this is gated to the platforms whose behavior it asserts.
+#[cfg(any(unix, windows))]
 #[test]
 fn an_output_hard_linked_to_the_input_is_rejected_without_truncating_it() {
     let dir = tempdir("hardlink-alias");
@@ -151,8 +153,9 @@ fn a_batch_with_no_input_output_collision_converts() {
 // the *opened* handle's identity is one of the inputs. Here the output is a
 // hard link to the input — standing in for an alias swapped in after the
 // up-front check — so the write is refused and the source keeps its contents.
-// Hard links and the identity check both exist on Unix and Windows, so this
-// runs on both.
+// The identity check runs on Unix and Windows; a platform without it would skip
+// the check, so this is gated to the platforms whose behavior it asserts.
+#[cfg(any(unix, windows))]
 #[test]
 fn write_output_rejects_a_hard_linked_output_without_truncating_the_input() {
     let dir = tempdir("write-output-hardlink");
@@ -210,13 +213,11 @@ fn write_output_rejects_a_symlinked_output_without_truncating_the_input() {
 
 // A destination that aliases no input is written normally, fully replacing any
 // pre-existing content at the path — exercising the truncate-then-write path.
+// With no inputs to alias, the write proceeds on every platform (nothing to
+// match), so this is not gated the way the identity-dependent cases are.
 #[test]
 fn write_output_writes_a_non_aliasing_destination() {
     let dir = tempdir("write-output-plain");
-    let input = dir.join("doc.adoc");
-    std::fs::write(&input, "= Doc\n\nSource.\n").expect("write input");
-
-    let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
     // Seed the output with content longer than the new HTML, so a stale tail
     // would survive a write that failed to truncate first.
@@ -224,8 +225,7 @@ fn write_output_writes_a_non_aliasing_destination() {
     std::fs::write(&out, "stale contents that are longer than the new output")
         .expect("seed output");
 
-    crate::write_output(&out, "<html>ok</html>", std::slice::from_ref(&input_id))
-        .expect("non-aliasing write succeeds");
+    crate::write_output(&out, "<html>ok</html>", &[]).expect("non-aliasing write succeeds");
 
     let written = std::fs::read_to_string(&out).expect("read output back");
     assert_eq!(written, "<html>ok</html>");
@@ -240,8 +240,10 @@ fn write_output_writes_a_non_aliasing_destination() {
 // input path is unlinked and replaced by an unrelated file after its identity
 // is captured, yet the original file (still reachable through `out`) is
 // recognized and left intact. Re-resolving the swapped path would instead read
-// the decoy, miss the match, and truncate the source. Hard links and the
-// identity check both work on Unix and Windows, so this runs on both.
+// the decoy, miss the match, and truncate the source. The identity check runs
+// on Unix and Windows; a platform without it would skip the check, so this is
+// gated to the platforms whose behavior it asserts.
+#[cfg(any(unix, windows))]
 #[test]
 fn write_output_uses_frozen_input_identity_when_the_input_path_is_swapped() {
     let dir = tempdir("write-output-frozen-id");
