@@ -973,10 +973,10 @@ impl AssetWriter for OutputGuard {
 /// past the check — closing the window the path-based check cannot, on both
 /// sides.
 ///
-/// The identity comparison runs on Unix and Windows (see [`FileId`]). On a
-/// platform exposing no file identity at all, capturing the opened handle's
-/// [`FileId`] yields `None`, so the check is skipped and the write proceeds —
-/// no worse than the pre-guard behavior on such a platform.
+/// The identity comparison runs on Unix and Windows (see [`FileId`] and
+/// [`opened_output_aliases_input`]). On a platform exposing no file identity at
+/// all, that check is a no-op, so the write proceeds — no worse than the
+/// pre-guard behavior on such a platform.
 fn write_output(path: &Path, html: &str, input_ids: &[FileId]) -> io::Result<()> {
     // Open (creating if absent) *without* truncating, so a substituted symlink or
     // hard link to an input is opened but its contents are left intact — the
@@ -991,13 +991,11 @@ fn write_output(path: &Path, html: &str, input_ids: &[FileId]) -> io::Result<()>
     // each input identity frozen before conversion. A match means the handle we
     // are about to truncate is one of this invocation's sources, reached either
     // directly or through an alias swapped in after the up-front path check.
-    if let Some(out_id) = FileId::from_file(&file)? {
-        if input_ids.contains(&out_id) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "input file and output file cannot be the same",
-            ));
-        }
+    if opened_output_aliases_input(&file, input_ids)? {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "input file and output file cannot be the same",
+        ));
     }
 
     // The handle aliases no input; truncate the (possibly pre-existing) file now
@@ -1047,8 +1045,10 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// (`FILE_ID_128`), read from an open handle via
 /// `GetFileInformationByHandleEx(FileIdInfo)` — the 128-bit id is preferred
 /// over the legacy 64-bit index, which can alias on ReFS. On any other platform
-/// there is no identity to read: capture always yields `None` and callers fall
-/// back to path comparison, exactly as before this identity check existed.
+/// there is no identity to read: [`FileId::from_path`] always yields `None` and
+/// [`opened_output_aliases_input`] is a no-op, so callers fall back to path
+/// comparison and an unchecked write — exactly as before this identity check
+/// existed.
 #[cfg(unix)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct FileId {
@@ -1076,8 +1076,8 @@ impl FileId {
 
     /// The identity of the already-open `file`, read from its descriptor
     /// (`fstat`) so it is bound to the handle rather than to a path.
-    fn from_file(file: &fs::File) -> io::Result<Option<Self>> {
-        Ok(Some(Self::from_metadata(&file.metadata()?)))
+    fn from_file(file: &fs::File) -> io::Result<Self> {
+        Ok(Self::from_metadata(&file.metadata()?))
     }
 }
 
@@ -1115,13 +1115,13 @@ impl FileId {
             .open(path)
             .ok()?;
 
-        Self::from_file(&file).ok().flatten()
+        Self::from_file(&file).ok()
     }
 
     /// The identity of the already-open `file`, read from its handle via
     /// `GetFileInformationByHandleEx(FileIdInfo)` so it is bound to the handle
     /// rather than to a path.
-    fn from_file(file: &fs::File) -> io::Result<Option<Self>> {
+    fn from_file(file: &fs::File) -> io::Result<Self> {
         use std::os::windows::io::AsRawHandle as _;
 
         // `FileIdInfo` in the `FILE_INFO_BY_HANDLE_CLASS` enumeration.
@@ -1164,16 +1164,18 @@ impl FileId {
             return Err(io::Error::last_os_error());
         }
 
-        Ok(Some(Self {
+        Ok(Self {
             volume_serial_number: info.volume_serial_number,
             file_id: info.file_id,
-        }))
+        })
     }
 }
 
-/// A platform exposing no file identity: every capture yields `None`, so
-/// [`same_file`] and [`write_output`] fall back to path comparison and to an
-/// unchecked write respectively — the behavior that predated this guard.
+/// A platform exposing no file identity: [`FileId::from_path`] always yields
+/// `None` and [`opened_output_aliases_input`] is a no-op, so [`same_file`] and
+/// [`write_output`] fall back to path comparison and to an unchecked write
+/// respectively — the behavior that predated this guard. The type is
+/// uninhabited, so no `FileId` is ever constructed here.
 #[cfg(not(any(unix, windows)))]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FileId {}
@@ -1183,10 +1185,24 @@ impl FileId {
     fn from_path(_path: &Path) -> Option<Self> {
         None
     }
+}
 
-    fn from_file(_file: &fs::File) -> io::Result<Option<Self>> {
-        Ok(None)
-    }
+/// Whether the just-opened output `file` is one of this invocation's inputs — a
+/// direct collision or an alias (symlink/hard link) swapped in after the
+/// up-front path check. Reads the opened handle's [`FileId`] and tests it
+/// against `input_ids`, the identities frozen before conversion.
+///
+/// On a platform exposing no file identity there is nothing to compare, so this
+/// is a no-op returning `false` and [`write_output`] proceeds unchecked, as it
+/// did before this guard existed.
+#[cfg(any(unix, windows))]
+fn opened_output_aliases_input(file: &fs::File, input_ids: &[FileId]) -> io::Result<bool> {
+    Ok(input_ids.contains(&FileId::from_file(file)?))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn opened_output_aliases_input(_file: &fs::File, _input_ids: &[FileId]) -> io::Result<bool> {
+    Ok(false)
 }
 
 /// Resolves `path` to a canonical identity suitable for comparing whether two
