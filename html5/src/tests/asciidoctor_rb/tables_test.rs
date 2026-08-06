@@ -19,23 +19,24 @@
 //! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
-//!   no rendered-HTML claim, and one whose assertion is the exact cursor of an
-//!   unresolved-include warning raised from a `Tempfile` (#167).
+//!   no rendered-HTML claim.
 //!
 //! Warning assertions (`assert_message @logger, :ERROR/:WARN, …`) are checked
-//! against the document's warnings inventory via [`assert_warning`].
+//! against the document's warnings inventory via [`assert_warning`] — or, when
+//! the cursor must survive an `include::` chain (as in the AsciiDoc-cell
+//! unresolved-directive test, #167), through the document source map.
 //!
 //! One accepted divergence: a header cell in a `^`/`>`-aligned column renders
 //! `halign-left` here (Asciidoctor inherits the column alignment for header
 //! cells). This is a documented `asciidoc-parser` behavior — header cells
 //! ignore the column's alignment operators — and no ported assertion checks it.
 
-use std::path::Path;
+use std::{fs, path::Path};
 
-use asciidoc_parser::warnings::WarningType;
+use asciidoc_parser::{parser::SourceLine, warnings::WarningType};
 
 use crate::{
-    convert, convert_with, load,
+    convert, convert_with, load, load_with,
     tests::{
         assert_html::{assert_css, assert_xpath},
         sdd::*,
@@ -3431,10 +3432,11 @@ fn preprocessor_directive_on_first_line_of_an_asciidoc_table_cell_should_be_proc
     assert!(output.contains("included content"), "{output}");
 }
 
-// Asserts the exact file/line cursor of an unresolved-`include::` warning
-// raised from inside an AsciiDoc cell (via a `Tempfile` include chain) (#167).
-non_normative!(
-    r#"
+#[test]
+fn error_about_unresolved_preprocessor_directive_on_first_line_of_an_asciidoc_table_cell_should_have_correct_cursor(
+) {
+    verifies!(
+        r#"
     test 'error about unresolved preprocessor directive on first line of an AsciiDoc table cell should have correct cursor' do
       begin
         tmp_include = Tempfile.new %w(include- .adoc)
@@ -3466,7 +3468,58 @@ non_normative!(
     end
 
 "#
-);
+    );
+
+    // Stand in for Ruby's `Tempfile`: a uniquely-named include file in a fresh
+    // temp directory, which becomes the `safe`-mode base directory. Its basename
+    // is the file the cursor and message must name (`tmp_include_path`).
+    let dir = std::env::temp_dir().join(format!("ahtml5-tables-167-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create temp dir");
+
+    let tmp_include_path = "include-cursor.adoc";
+    fs::write(
+        dir.join(tmp_include_path),
+        "|===\n|A |B\n\n|text\na|include::does-not-exist.adoc[]\n|===\n",
+    )
+    .expect("write include file");
+
+    let input = format!("first\n\ninclude::{tmp_include_path}[]\n\nlast\n");
+    let options = Options::new()
+        .safe_mode(SafeMode::Safe)
+        .base_dir(dir.canonicalize().expect("canonicalize base dir"));
+
+    let output = convert_with(&input, &options);
+    let doc = load_with(&input, &options);
+
+    // The unresolved directive on the cell's first line is expanded into a
+    // message naming the file it came from – the included temp file. This crate
+    // emits the parser's richer `… - include::<target>[]` form, which still
+    // contains the substring Asciidoctor's `assert_includes` checks.
+    assert!(
+        output.contains(&format!("Unresolved directive in {tmp_include_path}")),
+        "{output}"
+    );
+
+    // The one warning is `include file not found`, and its cursor resolves –
+    // through the document source map – to line 5 of the included temp file (the
+    // cell's first line, where the failing `include::` lives). Asciidoctor's
+    // logged message names the *resolved* absolute path of the missing target;
+    // this crate carries the directive's raw target on the warning instead.
+    let warnings: Vec<_> = doc.warnings().collect();
+    let cursors: Vec<_> = warnings
+        .iter()
+        .filter(|w| matches!(&w.warning, WarningType::IncludeFileNotFound(t) if t == "does-not-exist.adoc"))
+        .map(|w| doc.source_map().original_file_and_line(w.source.line()))
+        .collect();
+
+    let _ = fs::remove_dir_all(&dir);
+
+    assert_eq!(
+        cursors,
+        vec![Some(SourceLine(Some(tmp_include_path.to_string()), 5))],
+    );
+}
 
 #[test]
 fn cross_reference_link_in_an_asciidoc_table_cell_should_resolve_to_reference_in_main_document() {
