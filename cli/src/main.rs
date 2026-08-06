@@ -567,15 +567,15 @@ fn run_with_streams_using(
     // write-time collision check (see [`write_output`]) compares the opened
     // output against identities frozen up front rather than against input paths
     // re-resolved after conversion. A concurrent process that later renames an
-    // input's path — while keeping that input's original inode reachable through
-    // the output path — cannot slip the inode past the check: its identity was
+    // input's path — while keeping that input's original identity reachable
+    // through the output path — cannot slip it past the check: its identity was
     // already captured here, so re-resolving the (now-changed) path can neither
-    // point the check at a replacement nor drop it. Inputs that cannot be stat'd
-    // are omitted (an unreadable input exposes no inode to protect); the identity
-    // comparison itself is Unix-only, matching [`same_inode`].
-    let input_ids: Vec<fs::Metadata> = input_paths
+    // point the check at a replacement nor drop it. Inputs whose identity cannot
+    // be read are omitted (an unreadable input exposes no identity to protect);
+    // see [`FileId`] for how identity is captured on each platform.
+    let input_ids: Vec<FileId> = input_paths
         .iter()
-        .filter_map(|path| fs::metadata(path).ok())
+        .filter_map(|path| FileId::from_path(path))
         .collect();
 
     // A single source reaching the failure level fails the whole invocation, but
@@ -623,7 +623,7 @@ fn convert_source(
     base_options: &Options,
     source: &InputSource,
     input_paths: &[PathBuf],
-    input_ids: &[fs::Metadata],
+    input_ids: &[FileId],
     seed_input_mtime: bool,
     reporter: &WarningReporter,
     stdin: &mut dyn Read,
@@ -664,7 +664,7 @@ fn convert_source(
     // opened). That narrow TOCTOU window is closed at write time by
     // [`write_output`], which re-verifies the *opened* output handle's identity
     // against the inputs' identities frozen before conversion (`input_ids`)
-    // before truncating (Unix only; see its platform note).
+    // before truncating.
     if let OutputTarget::File(path) = &target {
         if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
@@ -959,51 +959,45 @@ impl AssetWriter for OutputGuard {
 /// is read; between that check and this write a concurrent process could swap
 /// the output path for a symlink or hard link to an input, so the identity
 /// verified there need not be the file finally written (a TOCTOU race). Here
-/// the output is opened *without* truncating, its handle is `fstat`ed
-/// ([`std::fs::File::metadata`]), and its device and inode are compared against
-/// `input_ids` — each input's identity as captured up front in
-/// [`run_with_streams`], before any conversion. A substituted alias is
-/// therefore opened but left intact when
-/// it is caught, so no source is truncated; only once the handle matches no
-/// input is it truncated ([`std::fs::File::set_len`]) and written.
+/// the output is opened *without* truncating, its [`FileId`] is read from the
+/// open handle, and that identity is compared against `input_ids` — each
+/// input's identity as captured up front in [`run_with_streams`], before any
+/// conversion. A substituted alias is therefore opened but left intact when it
+/// is caught, so no source is truncated; only once the handle matches no input
+/// is it truncated ([`std::fs::File::set_len`]) and written.
 ///
 /// Both ends of the comparison are pinned: the output to the descriptor just
 /// opened, and each input to an identity frozen before conversion. So neither
 /// swapping the *output* path for an alias nor renaming an *input's* path
-/// (while keeping its inode reachable through the output) can slip a source
+/// (while keeping its identity reachable through the output) can slip a source
 /// past the check — closing the window the path-based check cannot, on both
 /// sides.
 ///
-/// # Platform limitation
-///
-/// The file-descriptor identity comparison is Unix-only, for the same reason
-/// [`same_file`]'s is: std exposes the equivalent Windows file id only behind
-/// an unstable feature. On Windows this falls back to a plain [`fs::write`],
-/// which leaves the narrow race open there — the same nightly-gated
-/// `windows_by_handle` limitation tracked in
-/// <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
-#[cfg(unix)]
-fn write_output(path: &Path, html: &str, input_ids: &[fs::Metadata]) -> io::Result<()> {
-    // Open (creating if absent) *without* `O_TRUNC`, so a substituted symlink or
+/// The identity comparison runs on Unix and Windows (see [`FileId`]). On a
+/// platform exposing no file identity at all, capturing the opened handle's
+/// [`FileId`] yields `None`, so the check is skipped and the write proceeds —
+/// no worse than the pre-guard behavior on such a platform.
+fn write_output(path: &Path, html: &str, input_ids: &[FileId]) -> io::Result<()> {
+    // Open (creating if absent) *without* truncating, so a substituted symlink or
     // hard link to an input is opened but its contents are left intact — the
-    // fstat below can then reject it before any data is written.
+    // identity check below can then reject it before any data is written.
     let mut file = fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(false)
         .open(path)?;
 
-    let out_meta = file.metadata()?;
-
     // Compare the *opened* file's identity — bound to the descriptor — against
     // each input identity frozen before conversion. A match means the handle we
     // are about to truncate is one of this invocation's sources, reached either
     // directly or through an alias swapped in after the up-front path check.
-    if input_ids.iter().any(|input| same_inode(&out_meta, input)) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "input file and output file cannot be the same",
-        ));
+    if let Some(out_id) = FileId::from_file(&file)? {
+        if input_ids.contains(&out_id) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "input file and output file cannot be the same",
+            ));
+        }
     }
 
     // The handle aliases no input; truncate the (possibly pre-existing) file now
@@ -1012,41 +1006,23 @@ fn write_output(path: &Path, html: &str, input_ids: &[fs::Metadata]) -> io::Resu
     file.write_all(html.as_bytes())
 }
 
-#[cfg(not(unix))]
-fn write_output(path: &Path, html: &str, _input_ids: &[fs::Metadata]) -> io::Result<()> {
-    fs::write(path, html)
-}
-
 /// Whether `a` and `b` name the same file on disk.
 ///
-/// When both paths exist, compares their file identity — device and inode — so
-/// two entries pointing at the same underlying file are recognized even under
-/// different path spellings, including a hard link (which shares an inode but
-/// has no common path) and a symlink (whose target is stat'd). Writing through
-/// either would replace that shared file's contents, so an output aliasing an
-/// input this way must be refused.
+/// When both paths exist, compares their file identity (see [`FileId`]) so two
+/// entries pointing at the same underlying file are recognized even under
+/// different path spellings, including a hard link (which shares an identity
+/// but has no common path) and a symlink (whose target is resolved). Writing
+/// through either would replace that shared file's contents, so an output
+/// aliasing an input this way must be refused.
 ///
 /// For a path that does not exist yet — a derived output not written, or one
-/// reached through a parent-directory symlink — there is no inode to compare,
-/// so it falls back to comparing resolved paths (see [`resolve_for_compare`]),
-/// and finally to the plain absolute comparison, so the check still works
-/// before either file exists.
-///
-/// # Platform limitation
-///
-/// The identity comparison is Unix-only: the equivalent Windows file id
-/// (`file_index`/`volume_serial_number`) is exposed by std only behind an
-/// unstable feature, and the actively-maintained crates that fill the gap are
-/// avoided here (see the project's dependency policy). On Windows the check
-/// therefore relies on path resolution — which `canonicalize` still uses to
-/// resolve symlinks and junctions, so a symlinked output is caught — but a
-/// *hard-linked* output (distinct path, no symlink to resolve) is not detected,
-/// so writing it could truncate the source. Closing that would take a Win32
-/// `GetFileInformationByHandle` call via a fresh, maintained binding; tracked
-/// in <https://github.com/asciidoc-rs/asciidoc-html5/issues/169>.
+/// reached through a parent-directory symlink — there is no identity to
+/// compare, so it falls back to comparing resolved paths (see
+/// [`resolve_for_compare`]), and finally to the plain absolute comparison, so
+/// the check still works before either file exists.
 fn same_file(a: &Path, b: &Path) -> bool {
-    if let (Ok(ma), Ok(mb)) = (fs::metadata(a), fs::metadata(b)) {
-        if same_inode(&ma, &mb) {
+    if let (Some(ida), Some(idb)) = (FileId::from_path(a), FileId::from_path(b)) {
+        if ida == idb {
             return true;
         }
     }
@@ -1061,20 +1037,156 @@ fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// Whether two metadata handles refer to the same underlying file (same device
-/// and inode). On Unix this catches hard links and resolved symlinks; on other
-/// platforms std exposes no inode, so [`same_file`] relies on its path
-/// comparison instead.
+/// An OS-level file identity: enough to decide whether two paths or two open
+/// handles name the same underlying file, across hard links and resolved
+/// symlinks. It underpins both the up-front path check ([`same_file`]) and the
+/// race-free write-time check ([`write_output`]).
+///
+/// On Unix it is the `(device, inode)` pair, read from the file's metadata. On
+/// Windows it is the volume serial number paired with the 128-bit file id
+/// (`FILE_ID_128`), read from an open handle via
+/// `GetFileInformationByHandleEx(FileIdInfo)` — the 128-bit id is preferred
+/// over the legacy 64-bit index, which can alias on ReFS. On any other platform
+/// there is no identity to read: capture always yields `None` and callers fall
+/// back to path comparison, exactly as before this identity check existed.
 #[cfg(unix)]
-fn same_inode(a: &fs::Metadata, b: &fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt as _;
-
-    a.dev() == b.dev() && a.ino() == b.ino()
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FileId {
+    dev: u64,
+    ino: u64,
 }
 
-#[cfg(not(unix))]
-fn same_inode(_a: &fs::Metadata, _b: &fs::Metadata) -> bool {
-    false
+#[cfg(unix)]
+impl FileId {
+    /// The identity recorded in `meta` (device + inode).
+    fn from_metadata(meta: &fs::Metadata) -> Self {
+        use std::os::unix::fs::MetadataExt as _;
+
+        Self {
+            dev: meta.dev(),
+            ino: meta.ino(),
+        }
+    }
+
+    /// The identity of the file `path` names, following symlinks, or `None` if
+    /// it cannot be stat'd.
+    fn from_path(path: &Path) -> Option<Self> {
+        fs::metadata(path).ok().map(|m| Self::from_metadata(&m))
+    }
+
+    /// The identity of the already-open `file`, read from its descriptor
+    /// (`fstat`) so it is bound to the handle rather than to a path.
+    fn from_file(file: &fs::File) -> io::Result<Option<Self>> {
+        Ok(Some(Self::from_metadata(&file.metadata()?)))
+    }
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FileId {
+    volume_serial_number: u64,
+    file_id: [u8; 16],
+}
+
+#[cfg(windows)]
+impl FileId {
+    /// The identity of the file `path` names, following symlinks and junctions,
+    /// or `None` if it cannot be opened. The handle asks only for
+    /// `FILE_READ_ATTRIBUTES` (the minimal right for a metadata query, so it
+    /// succeeds even where data access would be denied) with backup semantics
+    /// so a directory can be opened too, sharing fully so a concurrent user
+    /// is not disturbed.
+    fn from_path(path: &Path) -> Option<Self> {
+        use std::os::windows::fs::OpenOptionsExt as _;
+
+        // `FILE_READ_ATTRIBUTES`.
+        const FILE_READ_ATTRIBUTES: u32 = 0x0000_0080;
+
+        // `FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE`.
+        const FILE_SHARE_ALL: u32 = 0x0000_0007;
+
+        // `FILE_FLAG_BACKUP_SEMANTICS`, required to open a directory handle.
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+
+        let file = fs::OpenOptions::new()
+            .access_mode(FILE_READ_ATTRIBUTES)
+            .share_mode(FILE_SHARE_ALL)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .ok()?;
+
+        Self::from_file(&file).ok().flatten()
+    }
+
+    /// The identity of the already-open `file`, read from its handle via
+    /// `GetFileInformationByHandleEx(FileIdInfo)` so it is bound to the handle
+    /// rather than to a path.
+    fn from_file(file: &fs::File) -> io::Result<Option<Self>> {
+        use std::os::windows::io::AsRawHandle as _;
+
+        // `FileIdInfo` in the `FILE_INFO_BY_HANDLE_CLASS` enumeration.
+        const FILE_ID_INFO: i32 = 18;
+
+        #[repr(C)]
+        struct FileIdInfoRaw {
+            volume_serial_number: u64,
+            file_id: [u8; 16],
+        }
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetFileInformationByHandleEx(
+                h_file: *mut core::ffi::c_void,
+                file_information_class: i32,
+                lp_file_information: *mut core::ffi::c_void,
+                dw_buffer_size: u32,
+            ) -> i32;
+        }
+
+        let mut info = FileIdInfoRaw {
+            volume_serial_number: 0,
+            file_id: [0; 16],
+        };
+
+        // SAFETY: `file` owns a valid handle for the duration of this call;
+        // `info` is a live, correctly-sized `FILE_ID_INFO` buffer whose size we
+        // pass, and `GetFileInformationByHandleEx` only writes into it.
+        let ok = unsafe {
+            GetFileInformationByHandleEx(
+                file.as_raw_handle(),
+                FILE_ID_INFO,
+                (&mut info as *mut FileIdInfoRaw).cast(),
+                core::mem::size_of::<FileIdInfoRaw>() as u32,
+            )
+        };
+
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        Ok(Some(Self {
+            volume_serial_number: info.volume_serial_number,
+            file_id: info.file_id,
+        }))
+    }
+}
+
+/// A platform exposing no file identity: every capture yields `None`, so
+/// [`same_file`] and [`write_output`] fall back to path comparison and to an
+/// unchecked write respectively — the behavior that predated this guard.
+#[cfg(not(any(unix, windows)))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FileId {}
+
+#[cfg(not(any(unix, windows)))]
+impl FileId {
+    fn from_path(_path: &Path) -> Option<Self> {
+        None
+    }
+
+    fn from_file(_file: &fs::File) -> io::Result<Option<Self>> {
+        Ok(None)
+    }
 }
 
 /// Resolves `path` to a canonical identity suitable for comparing whether two

@@ -66,18 +66,18 @@ fn an_output_symlinked_to_the_input_is_rejected_without_truncating_it() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// An output path that is a *hard link* to the input shares the input's inode
+// An output path that is a *hard link* to the input shares the input's identity
 // under a distinct pathname, so canonicalization alone would not equate them.
-// The guard compares file identity (device + inode), so it is caught, and
-// writing does not replace the shared inode's contents.
-#[cfg(unix)]
+// The guard compares OS file identity, so it is caught, and writing does not
+// replace the shared file's contents. Hard links exist on both Unix and
+// Windows, and the guard now reads file identity on both, so this runs on both.
 #[test]
 fn an_output_hard_linked_to_the_input_is_rejected_without_truncating_it() {
     let dir = tempdir("hardlink-alias");
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
-    // `out.html` is a second directory entry for the input's inode.
+    // `out.html` is a second directory entry for the input file.
     let out = dir.join("out.html");
     std::fs::hard_link(&input, &out).expect("create hard link");
 
@@ -148,10 +148,11 @@ fn a_batch_with_no_input_output_collision_converts() {
 }
 
 // `write_output` opens the destination without truncating and rejects it when
-// the *opened* handle's inode is one of the inputs. Here the output is a hard
-// link to the input — standing in for an alias swapped in after the up-front
-// check — so the write is refused and the source keeps its contents.
-#[cfg(unix)]
+// the *opened* handle's identity is one of the inputs. Here the output is a
+// hard link to the input — standing in for an alias swapped in after the
+// up-front check — so the write is refused and the source keeps its contents.
+// Hard links and the identity check both exist on Unix and Windows, so this
+// runs on both.
 #[test]
 fn write_output_rejects_a_hard_linked_output_without_truncating_the_input() {
     let dir = tempdir("write-output-hardlink");
@@ -160,9 +161,9 @@ fn write_output_rejects_a_hard_linked_output_without_truncating_the_input() {
 
     // Freeze the input's identity up front, the way `run` snapshots inputs
     // before any conversion.
-    let input_id = std::fs::metadata(&input).expect("stat input");
+    let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
-    // `out.html` is a second directory entry for the input's inode.
+    // `out.html` is a second directory entry for the input file.
     let out = dir.join("out.html");
     std::fs::hard_link(&input, &out).expect("create hard link");
 
@@ -189,7 +190,7 @@ fn write_output_rejects_a_symlinked_output_without_truncating_the_input() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
-    let input_id = std::fs::metadata(&input).expect("stat input");
+    let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
     let link = dir.join("link.html");
     std::os::unix::fs::symlink(&input, &link).expect("create symlink");
@@ -215,7 +216,7 @@ fn write_output_writes_a_non_aliasing_destination() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nSource.\n").expect("write input");
 
-    let input_id = std::fs::metadata(&input).expect("stat input");
+    let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
     // Seed the output with content longer than the new HTML, so a stale tail
     // would survive a write that failed to truncate first.
@@ -235,12 +236,12 @@ fn write_output_writes_a_non_aliasing_destination() {
 // The identity check compares the opened output against inputs' identities
 // *frozen before conversion*, not against input paths re-resolved at write
 // time. So a racing process that renames an input's path — while keeping its
-// original inode reachable through the output — cannot fool the guard: here the
+// original file reachable through the output — cannot fool the guard: here the
 // input path is unlinked and replaced by an unrelated file after its identity
-// is captured, yet the original inode (still reachable through `out`) is
-// recognized and left intact. Re-resolving the swapped path would instead stat
-// the decoy, miss the match, and truncate the source.
-#[cfg(unix)]
+// is captured, yet the original file (still reachable through `out`) is
+// recognized and left intact. Re-resolving the swapped path would instead read
+// the decoy, miss the match, and truncate the source. Hard links and the
+// identity check both work on Unix and Windows, so this runs on both.
 #[test]
 fn write_output_uses_frozen_input_identity_when_the_input_path_is_swapped() {
     let dir = tempdir("write-output-frozen-id");
@@ -248,24 +249,24 @@ fn write_output_uses_frozen_input_identity_when_the_input_path_is_swapped() {
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
     // Capture the input's identity up front, as `run` does before any conversion.
-    let input_id = std::fs::metadata(&input).expect("stat input");
+    let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
-    // Keep the original inode alive through `out.html`, then swap the `doc.adoc`
-    // path for an unrelated decoy file (a distinct inode).
+    // Keep the original file alive through `out.html`, then swap the `doc.adoc`
+    // path for an unrelated decoy file (a distinct identity).
     let out = dir.join("out.html");
-    std::fs::hard_link(&input, &out).expect("hard link out to the input inode");
+    std::fs::hard_link(&input, &out).expect("hard link out to the input file");
     std::fs::remove_file(&input).expect("unlink the original input path");
     std::fs::write(&input, "= Decoy\n\nUnrelated.\n").expect("recreate a decoy at the path");
 
     let err = crate::write_output(&out, "<html></html>", std::slice::from_ref(&input_id))
-        .expect_err("the frozen identity still catches the original inode");
+        .expect_err("the frozen identity still catches the original file");
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
 
-    // The original source inode, reachable through `out`, keeps its contents.
-    let after = std::fs::read_to_string(&out).expect("read the original inode back");
+    // The original source file, reachable through `out`, keeps its contents.
+    let after = std::fs::read_to_string(&out).expect("read the original file back");
     assert!(
         after.contains("Original source."),
-        "the original source inode was truncated despite the frozen identity: {after:?}"
+        "the original source file was truncated despite the frozen identity: {after:?}"
     );
 
     let _ = std::fs::remove_dir_all(&dir);
