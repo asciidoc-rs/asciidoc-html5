@@ -32,9 +32,7 @@
 //! which need an include processed against a real fixture file (or hand-set
 //! catalog state this crate cannot inject). Every such divergence (DocBook and
 //! compat mode aside) cites the issue tracking the work to make it compatible
-//! (#127–#128). An inter-document `xref:` whose path names the current
-//! document (via the `docname` attribute) now collapses to a self-reference –
-//! including inside an AsciiDoc table cell (#125, formerly a divergence).
+//! (#127–#128).
 
 use asciidoc_parser::warnings::WarningType;
 
