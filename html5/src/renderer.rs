@@ -174,8 +174,17 @@ fn renders_nothing(block: &Block<'_>) -> bool {
 /// `source` only when its first positional (the block style) is absent and its
 /// second positional (the language) is present, so `[ruby]` (style `ruby`) or a
 /// plain `----` stays a listing.
+///
+/// A Markdown-style fenced code block (```` ``` ````) is also always
+/// source-styled — see [`opens_with_backtick_fence`].
 fn is_source_listing(block: &Block<'_>) -> bool {
     if block.declared_style() == Some("source") {
+        return true;
+    }
+
+    // A fenced code block is source-styled even without a language, which the
+    // parser does not record for a bare fence.
+    if opens_with_backtick_fence(block) {
         return true;
     }
 
@@ -186,6 +195,22 @@ fn is_source_listing(block: &Block<'_>) -> bool {
             .attrlist()
             .and_then(|attrlist| attrlist.nth_attribute(2))
             .is_some()
+}
+
+/// Whether a `listing` block originated from a Markdown-style fenced code block
+/// (```` ``` ````). Asciidoctor's parser gives every fenced code block the
+/// `source` style, even one that declares no language; `asciidoc-parser`
+/// records the `source` style only when the fence names a language (````
+/// ```ruby ````), leaving a bare fence styleless. The renderer therefore
+/// recovers the promotion from the block's raw span, whose first line is the
+/// opening delimiter.
+///
+/// The fence delimiter is exactly three backticks (matching Asciidoctor's
+/// `FencedCodeRx`), optionally followed by a language on the same line; a run
+/// of four or more backticks is not a fence.
+fn opens_with_backtick_fence(block: &Block<'_>) -> bool {
+    let first_line = block.span().data().lines().next().unwrap_or_default();
+    first_line.starts_with("```") && first_line.as_bytes().get(3) != Some(&b'`')
 }
 
 /// Whether a `----` listing is rendered as a source block, given the document's
@@ -355,6 +380,27 @@ fn cdn_base_url(document: &Document<'_>) -> String {
     };
 
     format!("{scheme}//cdnjs.cloudflare.com/ajax/libs")
+}
+
+/// The file extension of image-mode admonition icons — the `icontype`
+/// attribute, defaulting to `png`.
+///
+/// Asciidoctor derives this in `Document#initialize`: when the `icons`
+/// attribute carries a value that is neither empty, `font`, nor `image`, and no
+/// explicit `icontype` is set, that value becomes the `icontype` (and `icons`
+/// is normalized to image mode). So `:icons: jpg` renders `tip.jpg`, while an
+/// explicit `:icontype:` always wins. `asciidoc-parser` does not perform this
+/// normalization, so the renderer replicates it here.
+fn icontype(document: &Document<'_>) -> String {
+    if !document.has_attribute("icontype") {
+        if let Some(value) = attribute_str(document, "icons") {
+            if !value.is_empty() && value != "font" && value != "image" {
+                return value;
+            }
+        }
+    }
+
+    attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string())
 }
 
 /// The base directory `highlightjs` assets load from: the `highlightjsdir`
@@ -1453,7 +1499,7 @@ pub(crate) fn render_document<'a>(
         icons_font: attribute_str(document, "icons").as_deref() == Some("font"),
         iconsdir: attribute_str(document, "iconsdir")
             .unwrap_or_else(|| "./images/icons".to_string()),
-        icontype: attribute_str(document, "icontype").unwrap_or_else(|| "png".to_string()),
+        icontype: icontype(document),
         imagesdir: attribute_str(document, "imagesdir").unwrap_or_default(),
         asset_uri_scheme: attribute_str(document, "asset-uri-scheme")
             .unwrap_or_else(|| "https".to_string()),
@@ -2761,7 +2807,15 @@ impl Renderer<'_> {
             .attrlist()
             .and_then(|attrlist| attrlist.named_or_positional_attribute("language", 2))
             .map(|attr| attr.value())
-            .or(self.source_language.as_deref());
+            .or(self.source_language.as_deref())
+            // A fenced code block's info string reaches the parser as a single
+            // positional attribute — ```` ```ruby,numbered ```` yields the
+            // language `ruby,numbered` — because `asciidoc-parser` does not split
+            // it into separate positional attributes the way Asciidoctor does.
+            // Keep only the language token, the part before the first comma. A
+            // bracketed `[source,lang]` never carries a comma in this attribute,
+            // so this is a no-op for it.
+            .map(|language| language.split(',').next().unwrap_or(language).trim());
 
         let (pre_class, code_open) = self.source_pre_code(block, language);
         self.line(&format!(
