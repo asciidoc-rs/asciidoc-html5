@@ -28,6 +28,10 @@ documented behavior is guaranteed.
 |`base_dir`
 |The directory relative `include::` targets and docinfo files resolve against.
 
+|`:catalog_assets`
+|`catalog_assets`
+|Record each referenced image and link in the document's catalog.
+
 |`:safe`
 |`safe_mode`
 |The xref:ROOT:safe-modes.adoc[safe mode]; defaults to `secure`.
@@ -99,6 +103,24 @@ let html = convert_with("= Doc\n\ninclude::part.adoc[]\n", &opts);
 See xref:ROOT:safe-modes.adoc[Safe Modes] for how the safe mode restricts those
 reads.
 
+== Catalog referenced images and links
+
+`catalog_assets(true)` records each `image:`/`image::` and `link:` target the
+document references, so a caller can enumerate them without walking the
+rendered HTML. It's off by default, so the catalog's image and link lists stay
+empty unless you opt in:
+
+[,rust]
+----
+use asciidoc_html5::{load_with, Options};
+
+let opts = Options::new().catalog_assets(true);
+let doc = load_with("image:diagram.svg[] link:https://example.org[Example]", &opts);
+assert_eq!(doc.catalog().images().len(), 1);
+assert_eq!(doc.catalog().images()[0].target, "diagram.svg");
+assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
+----
+
 == Options without a counterpart
 
 Many Asciidoctor API options do not apply to this library:
@@ -117,5 +139,7 @@ Many Asciidoctor API options do not apply to this library:
   false` returns an unparsed document to configure before an explicit `parse`
   call; here all parse-time configuration is supplied up front through
   `Options`, and `load`/`load_file` return a fully parsed, owned `Document`.
-* *Not yet implemented.* `:catalog_assets` and `:parse_header_only` are tracked
-  for future work.
+* *Not yet implemented.* `:parse_header_only` (stopping the parser after the
+  header) would require a change to the pinned `asciidoc-parser` dependency,
+  not just this library, so it's tracked for future work rather than
+  supported today.
