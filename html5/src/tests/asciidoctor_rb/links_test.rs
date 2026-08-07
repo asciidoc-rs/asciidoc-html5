@@ -33,10 +33,8 @@
 //! catalog state this crate cannot inject). Every such divergence (DocBook and
 //! compat mode aside) cites the issue tracking the work to make it compatible
 //! (#127–#128). An inter-document `xref:` whose path names the current
-//! document (via `docname`) now collapses to a self-reference – including
-//! inside an AsciiDoc table cell (#125, formerly a divergence); this crate
-//! establishes `docname` through the primary file name (`input_file`), since
-//! the parser derives it from the input file rather than an attribute.
+//! document (via the `docname` attribute) now collapses to a self-reference –
+//! including inside an AsciiDoc table cell (#125, formerly a divergence).
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -3499,18 +3497,15 @@ fn should_warn_and_create_link_if_debug_mode_is_enabled_inter_document_xref_poin
 "###
     );
 
-    // The `<<test.adoc#foobaz>>` target's path names the current document, so
-    // it collapses to a same-document reference to `#foobaz`; that fragment is
-    // undefined, so it renders as a broken link and records a `possible
-    // invalid reference` warning – the counterpart to `assert_message logger,
-    // :INFO, …`. This crate establishes `docname` through the primary file
-    // name (Asciidoctor's test sets the `docname` attribute directly, but the
-    // parser derives `docname` from the input file), so `input_file` is the
-    // faithful equivalent. (This crate always collects the warning;
-    // Asciidoctor gates it on the verbose mode the Ruby enters via
+    // The `<<test.adoc#foobaz>>` target's path names the current document (via
+    // the `docname` attribute), so it collapses to a same-document reference to
+    // `#foobaz`; that fragment is undefined, so it renders as a broken link and
+    // records a `possible invalid reference` warning – the counterpart to
+    // `assert_message logger, :INFO, …`. (This crate always collects the
+    // warning; Asciidoctor gates it on the verbose mode the Ruby enters via
     // `in_verbose_mode`.)
     let input = "[#foobar]\n== Foobar\n\n== Section B\n\nSee <<test.adoc#foobaz>>.\n";
-    let doc = load_with(input, &Options::new().input_file("test.adoc"));
+    let doc = load_with(input, &Options::new().attribute("docname", "test"));
     let output = convert_document(&doc);
     assert_xpath(
         &output,
@@ -3540,13 +3535,11 @@ fn should_use_doctitle_as_fallback_link_text_if_inter_document_xref_points_to_cu
 "###
     );
 
-    // The `xref:test.adoc[]` target's path names the current document, so it
-    // collapses to a same-document reference (`href="#"`); with no link text,
-    // the fallback is the doctitle. This crate establishes `docname` through
-    // the primary file name (`input_file`) rather than the `docname` attribute
-    // the Ruby sets, since the parser derives `docname` from the input file.
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference
+    // (`href="#"`); with no link text, the fallback is the doctitle.
     let input = "= Links & Stuff at https://example.org\n\nSee xref:test.adoc[]\n";
-    let output = convert_with(input, &Options::new().input_file("test.adoc"));
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
     assert_includes(
         &output,
         r####"<a href="#">Links &amp; Stuff at https://example.org</a>"####,
@@ -3574,11 +3567,11 @@ fn should_use_doctitle_of_root_document_as_fallback_link_text_for_inter_document
     );
 
     // Inside an AsciiDoc table cell, the `xref:test.adoc[]` target's path names
-    // the current (root) document, so it collapses to a same-document
-    // reference whose fallback text is the root doctitle. `docname` is
-    // established through the primary file name (`input_file`), as above.
+    // the current (root) document (via the `docname` attribute), so it
+    // collapses to a same-document reference whose fallback text is the root
+    // doctitle.
     let input = "= Document Title\n\n|===\na|See xref:test.adoc[]\n|===\n";
-    let output = convert_with(input, &Options::new().input_file("test.adoc"));
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
     assert_includes(&output, r####"<a href="#">Document Title</a>"####);
 }
 
@@ -3601,12 +3594,12 @@ fn should_use_reftext_on_document_as_fallback_link_text_if_inter_document_xref_p
 "###
     );
 
-    // The `xref:test.adoc[]` target's path names the current document, so it
-    // collapses to a same-document reference; with no link text, the document
-    // `reftext` is preferred over the doctitle as the fallback. `docname` is
-    // established through the primary file name (`input_file`), as above.
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference; with
+    // no link text, the document `reftext` is preferred over the doctitle as
+    // the fallback.
     let input = "[reftext=\"Links and Stuff\"]\n= Links & Stuff\n\nSee xref:test.adoc[]\n";
-    let output = convert_with(input, &Options::new().input_file("test.adoc"));
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
     assert_includes(&output, r####"<a href="#">Links and Stuff</a>"####);
 }
 
@@ -3650,13 +3643,12 @@ fn should_use_fallback_link_text_if_inter_document_xref_points_to_current_doc_wi
 "###
     );
 
-    // The `xref:test.adoc[]` target's path names the current document, so it
-    // collapses to a same-document reference; with no header (hence no doctitle
-    // or reftext) and no link text, the fallback is the literal `[^top]`.
-    // `docname` is established through the primary file name (`input_file`), as
-    // above.
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference; with
+    // no header (hence no doctitle or reftext) and no link text, the fallback
+    // is the literal `[^top]`.
     let input = "See xref:test.adoc[]\n";
-    let output = convert_with(input, &Options::new().input_file("test.adoc"));
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
     assert_includes(&output, r####"<a href="#">[^top]</a>"####);
 }
 
