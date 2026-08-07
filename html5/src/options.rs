@@ -1883,6 +1883,27 @@ mod tests {
         );
     }
 
+    // An end-to-end guard that the primary-file-name path reaches the parser's
+    // inter-document xref self-reference resolution: naming the primary file
+    // `test.adoc` derives `docname=test`, so `xref:test.adoc[]` – whose path
+    // names the current document – collapses to a same-document reference
+    // (`href="#"`) with the doctitle as fallback text. The Ruby-port cases in
+    // `links_test.rs` drive the same behavior through the `docname` attribute
+    // directly (mirroring Asciidoctor's tests); this one covers the
+    // filename-derived leg that `Options::input_file` supplies.
+    #[test]
+    fn input_file_docname_collapses_an_inter_document_self_xref() {
+        let html = crate::convert_with(
+            "= Links & Stuff\n\nSee xref:test.adoc[]\n",
+            &Options::new().input_file("test.adoc"),
+        );
+
+        assert!(
+            html.contains(r##"<a href="#">Links &amp; Stuff</a>"##),
+            "{html}"
+        );
+    }
+
     #[test]
     fn an_extensionless_name_has_an_empty_docfilesuffix() {
         // With no extension, `docfilesuffix` is empty and `docname` is the whole

@@ -27,13 +27,12 @@
 //! DocBook-backend tests (this crate targets only the `html5` backend); the
 //! compat-mode xref-target tests, which are permanently out of scope – this
 //! crate will not implement compat mode; other inline behavior
-//! `asciidoc-parser` diverges on (an inter-document `xref:` whose path
-//! names the current document via `docname` – including inside an AsciiDoc
-//! table cell – and not resolving a forward xref during parsing); and the
-//! tests that inject or resolve `catalog[:includes]` state, which need an
-//! include processed against a real fixture file (or hand-set catalog state
-//! this crate cannot inject). Every such divergence (DocBook and compat mode
-//! aside) cites the issue tracking the work to make it compatible (#125–#128).
+//! `asciidoc-parser` diverges on (not resolving a forward xref during
+//! parsing); and the tests that inject or resolve `catalog[:includes]` state,
+//! which need an include processed against a real fixture file (or hand-set
+//! catalog state this crate cannot inject). Every such divergence (DocBook and
+//! compat mode aside) cites the issue tracking the work to make it compatible
+//! (#127–#128).
 
 use asciidoc_parser::warnings::WarningType;
 
@@ -3470,14 +3469,11 @@ non_normative!(
 "###
 );
 
-// An inter-document `xref:` whose path names the current document (via
-// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
-// parser` matches no such path and renders the inter-document link instead,
-// so the `#`-fragment fallback text is not produced — a divergence. (The
-// `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.) Tracked by #125.
-non_normative!(
-    r###"
+#[test]
+fn should_warn_and_create_link_if_debug_mode_is_enabled_inter_document_xref_points_to_current_doc_and_reference_not_found(
+) {
+    verifies!(
+        r###"
   test 'should warn and create link if debug mode is enabled, inter-document xref points to current doc, and reference not found' do
     input = <<~'EOS'
     [#foobar]
@@ -3497,16 +3493,33 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// An inter-document `xref:` whose path names the current document (via
-// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
-// parser` matches no such path and renders the inter-document link instead,
-// so the `#`-fragment fallback text is not produced — a divergence. (The
-// `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.) Tracked by #125.
-non_normative!(
-    r###"
+    // The `<<test.adoc#foobaz>>` target's path names the current document (via
+    // the `docname` attribute), so it collapses to a same-document reference to
+    // `#foobaz`; that fragment is undefined, so it renders as a broken link and
+    // records a `possible invalid reference` warning – the counterpart to
+    // `assert_message logger, :INFO, …`. (This crate always collects the
+    // warning; Asciidoctor gates it on the verbose mode the Ruby enters via
+    // `in_verbose_mode`.)
+    let input = "[#foobar]\n== Foobar\n\n== Section B\n\nSee <<test.adoc#foobaz>>.\n";
+    let doc = load_with(input, &Options::new().attribute("docname", "test"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#foobaz"][text() = "[foobaz]"]"####,
+        1,
+    );
+    assert!(doc
+        .warnings()
+        .any(|w| w.warning == WarningType::PossibleInvalidReference("foobaz".to_string())));
+}
+
+#[test]
+fn should_use_doctitle_as_fallback_link_text_if_inter_document_xref_points_to_current_doc_and_no_link_text_is_provided(
+) {
+    verifies!(
+        r###"
   test 'should use doctitle as fallback link text if inter-document xref points to current doc and no link text is provided' do
     input = <<~'EOS'
     = Links & Stuff at https://example.org
@@ -3518,15 +3531,24 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Combines the `docname` self-reference divergence (#125) with an AsciiDoc
-// table cell. The cell content now renders (tables landed in #165), so the
-// anchor is emitted; but `asciidoc-parser` still resolves `xref:test.adoc[]`
-// as an inter-document link rather than collapsing it to a self-reference, so
-// the expected `#`-fragment fallback text is not produced. Tracked by #125.
-non_normative!(
-    r###"
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference
+    // (`href="#"`); with no link text, the fallback is the doctitle.
+    let input = "= Links & Stuff at https://example.org\n\nSee xref:test.adoc[]\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(
+        &output,
+        r####"<a href="#">Links &amp; Stuff at https://example.org</a>"####,
+    );
+}
+
+#[test]
+fn should_use_doctitle_of_root_document_as_fallback_link_text_for_inter_document_xref_in_asciidoc_table_cell_that_resolves_to_current_doc(
+) {
+    verifies!(
+        r###"
   test 'should use doctitle of root document as fallback link text for inter-document xref in AsciiDoc table cell that resolves to current doc' do
     input = <<~'EOS'
     = Document Title
@@ -3540,16 +3562,22 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// An inter-document `xref:` whose path names the current document (via
-// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
-// parser` matches no such path and renders the inter-document link instead,
-// so the `#`-fragment fallback text is not produced — a divergence. (The
-// `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.) Tracked by #125.
-non_normative!(
-    r###"
+    // Inside an AsciiDoc table cell, the `xref:test.adoc[]` target's path names
+    // the current (root) document (via the `docname` attribute), so it
+    // collapses to a same-document reference whose fallback text is the root
+    // doctitle.
+    let input = "= Document Title\n\n|===\na|See xref:test.adoc[]\n|===\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(&output, r####"<a href="#">Document Title</a>"####);
+}
+
+#[test]
+fn should_use_reftext_on_document_as_fallback_link_text_if_inter_document_xref_points_to_current_doc_and_no_link_text_is_provided(
+) {
+    verifies!(
+        r###"
   test 'should use reftext on document as fallback link text if inter-document xref points to current doc and no link text is provided' do
     input = <<~'EOS'
     [reftext="Links and Stuff"]
@@ -3562,7 +3590,16 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference; with
+    // no link text, the document `reftext` is preferred over the doctitle as
+    // the fallback.
+    let input = "[reftext=\"Links and Stuff\"]\n= Links & Stuff\n\nSee xref:test.adoc[]\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(&output, r####"<a href="#">Links and Stuff</a>"####);
+}
 
 #[test]
 fn should_use_reftext_on_document_as_fallback_link_text_if_xref_points_to_empty_fragment_and_no_link_text_is_provided(
@@ -3588,14 +3625,11 @@ fn should_use_reftext_on_document_as_fallback_link_text_if_xref_points_to_empty_
     assert_includes(&output, r####"<a href="#">Links and Stuff</a>"####);
 }
 
-// An inter-document `xref:` whose path names the current document (via
-// `docname`) should collapse to a self-reference in Asciidoctor; `asciidoc-
-// parser` matches no such path and renders the inter-document link instead,
-// so the `#`-fragment fallback text is not produced — a divergence. (The
-// `xref:#[]` empty-fragment forms, which do not depend on this path
-// matching, are verified above.) Tracked by #125.
-non_normative!(
-    r###"
+#[test]
+fn should_use_fallback_link_text_if_inter_document_xref_points_to_current_doc_without_header_and_no_link_text_is_provided(
+) {
+    verifies!(
+        r###"
   test 'should use fallback link text if inter-document xref points to current doc without header and no link text is provided' do
     input = <<~'EOS'
     See xref:test.adoc[]
@@ -3605,7 +3639,16 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    // The `xref:test.adoc[]` target's path names the current document (via the
+    // `docname` attribute), so it collapses to a same-document reference; with
+    // no header (hence no doctitle or reftext) and no link text, the fallback
+    // is the literal `[^top]`.
+    let input = "See xref:test.adoc[]\n";
+    let output = convert_with(input, &Options::new().attribute("docname", "test"));
+    assert_includes(&output, r####"<a href="#">[^top]</a>"####);
+}
 
 #[test]
 fn should_use_fallback_link_text_if_fragment_of_internal_xref_is_empty_and_no_link_text_is_provided(
