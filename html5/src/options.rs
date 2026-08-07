@@ -146,6 +146,13 @@ pub struct Options {
     /// (`docdate`, `doctime`, `docdatetime`, `docyear`). `None` leaves them to
     /// follow the reference time. See [`input_mtime`](Self::input_mtime).
     input_mtime: Option<ReferenceTime>,
+
+    /// Whether to record each rendered image in
+    /// [`Document::catalog`](asciidoc_parser::Document::catalog)'s image list —
+    /// Asciidoctor's `catalog_assets` API option. `false` (the parser's
+    /// default) leaves the catalog's image list empty. See
+    /// [`catalog_assets`](Self::catalog_assets).
+    catalog_assets: bool,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -422,6 +429,23 @@ impl Options {
         self
     }
 
+    /// Enables (or disables) recording each rendered image in the document's
+    /// catalog — Asciidoctor's `catalog_assets` API option.
+    ///
+    /// With this off (the default), [`Document::catalog`]'s image list stays
+    /// empty even though images still render normally; turning it on populates
+    /// [`Catalog::images`] with one entry per `image::`/`image:` macro
+    /// encountered, in document order — useful for a caller that wants to
+    /// enumerate a document's image references (for example, to bundle or
+    /// verify them) without walking the rendered HTML.
+    ///
+    /// [`Document::catalog`]: asciidoc_parser::Document::catalog
+    /// [`Catalog::images`]: asciidoc_parser::document::Catalog::images
+    pub fn catalog_assets(mut self, yes: bool) -> Self {
+        self.catalog_assets = yes;
+        self
+    }
+
     /// Overrides the attribute `name` with an explicit string `value`.
     ///
     /// This is Asciidoctor's `-a name=value`: the value wins over any
@@ -503,6 +527,7 @@ impl Options {
         // not set on its own.
         let mode = self.safe_mode.unwrap_or(SafeMode::Secure);
         parser = parser.with_safe_mode(mode);
+        parser = parser.with_catalog_assets(self.catalog_assets);
 
         for directive in &self.attributes {
             let context = directive.precedence.modification_context();
@@ -2078,5 +2103,25 @@ mod tests {
         );
         assert!(html.contains("doctype=article"));
         assert!(!html.contains("doctype=book"));
+    }
+
+    #[test]
+    fn catalog_assets_defaults_to_an_empty_image_catalog() {
+        let doc = crate::load_with("image:outer.png[]", &Options::new());
+        assert!(doc.catalog().images().is_empty());
+    }
+
+    #[test]
+    fn catalog_assets_records_each_rendered_image() {
+        // NOTE: `image:` (inline) macros register with the catalog; `image::`
+        // (block) macros do not — asciidoc-parser 0.29.13 only wires catalog
+        // registration through its inline-macro substitution path, an upstream
+        // gap outside this crate's dependency.
+        let doc = crate::load_with(
+            "image:outer.png[] and image:inner.png[]",
+            &Options::new().catalog_assets(true),
+        );
+        let images: Vec<_> = doc.catalog().images().iter().map(|i| &i.target).collect();
+        assert_eq!(images, vec!["outer.png", "inner.png"]);
     }
 }
