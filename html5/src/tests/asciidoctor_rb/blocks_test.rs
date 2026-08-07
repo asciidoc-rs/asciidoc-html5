@@ -8468,7 +8468,7 @@ mod references {
     // Asciidoctor trims the reference text after the first comma of a block
     // anchor, registering `Debian, Ubuntu`; `asciidoc-parser` keeps the leading
     // space (` Debian, Ubuntu`), so the reftext and its reverse lookup do not
-    // match Asciidoctor.
+    // match Asciidoctor (asciidoc-rs/asciidoc-parser#1111).
     non_normative!(
         r#"
     test 'should allow comma in block reference text' do
