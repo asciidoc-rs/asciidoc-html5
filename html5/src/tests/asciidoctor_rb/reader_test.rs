@@ -39,7 +39,6 @@
 //! - a three-level nested include from a subdirectory leaves the inner include
 //!   unresolved — [#131]
 //! - an absolute include path is not resolved — [#132]
-//! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
 //!
 //! An undeclared non-UTF-8 include file is a further, permanent divergence:
 //! Asciidoctor rejects it by raising `invalid byte sequence in UTF-8`, but this
@@ -49,7 +48,6 @@
 //!
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 //! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
-//! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
 
 use std::path::PathBuf;
 
@@ -4033,10 +4031,10 @@ mod preprocessor_reader {
             );
         }
 
-        // Non-normative: an include directive inside an ifdef[...] bracket is not
-        // processed (#133).
-        non_normative!(
-            r#"
+        #[test]
+        fn ifdef_with_defined_attribute_processes_include_directive_in_brackets() {
+            verifies!(
+                r#"
       test 'ifdef with defined attribute processes include directive in brackets' do
         input = 'ifdef::asciidoctor-version[include::fixtures/include-file.adoc[tag=snippetA]]'
         doc = Asciidoctor::Document.new input, safe: :safe, base_dir: DIRNAME
@@ -4049,7 +4047,19 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            // `asciidoctor-version` is always set, so the single-line conditional
+            // holds and its bracketed `include::` body is processed: the selected
+            // tag content is rendered in place of the directive, rather than the
+            // directive text being emitted literally (#133). This crate tests via
+            // `convert` rather than the reader's line stream.
+            let html = convert_safe_with_fixtures(
+                "ifdef::asciidoctor-version[include::fixtures/include-file.adoc[tag=snippetA]]",
+            );
+            assert!(html.contains("snippetA content"), "{html}");
+            assert!(!html.contains("include::"), "{html}");
+        }
 
         #[test]
         fn ifdef_attribute_name_is_not_case_sensitive() {
