@@ -56,6 +56,41 @@ impl VirtualNode {
             children: Vec::new(),
         }
     }
+
+    /// The node's full string value: the concatenation, in document order, of
+    /// every descendant character-data run (for a `#text` node, its own data).
+    ///
+    /// This mirrors Nokogiri's `Node#text` (DOM `textContent`), the recursive
+    /// text an element's `.text` returns in the Ruby suite — distinct from the
+    /// [`text`](Self::text) field, which holds only an element's *direct*
+    /// text-node children (what an XPath `text()` predicate compares against).
+    /// It is the extraction primitive behind
+    /// [`xpath_node_text`](super::xpath_node_text), used for the line-by-line
+    /// text comparisons the Ruby tests spell as `…text.…lines`.
+    pub(super) fn text_content(&self) -> String {
+        let mut out = String::new();
+        self.collect_text(&mut out);
+        out
+    }
+
+    /// Appends this node's character data to `out`. A `#text` node contributes
+    /// its own run; any other node contributes its descendants' runs in
+    /// document order. Element `text` is not read here — the direct runs it
+    /// concatenates are already present as interleaved `#text` children, so
+    /// walking the children alone visits each run exactly once.
+    fn collect_text(&self, out: &mut String) {
+        if self.tag == "#text" {
+            if let Some(t) = &self.text {
+                out.push_str(t);
+            }
+
+            return;
+        }
+
+        for child in &self.children {
+            child.collect_text(out);
+        }
+    }
 }
 
 /// Projects a parsed `scraper` document into a [`VirtualNode`] tree rooted at a
