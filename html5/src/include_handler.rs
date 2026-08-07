@@ -49,6 +49,10 @@
 //! (`invalid byte sequence in UTF-8`); this crate favors recoverable warnings,
 //! so the parser drops the include and records a
 //! `WarningType::IncludeFileNotDecodable` warning instead.
+//!
+//! Broadening this beyond ISO-8859-1 and windows-1252 — more hand-rolled
+//! single-byte code pages, or general multi-byte transcoding via a crate such
+//! as `encoding_rs` — is not planned for 1.0 (#252).
 
 use std::{
     fs, io,
