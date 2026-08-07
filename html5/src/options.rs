@@ -574,10 +574,10 @@ impl Options {
         // API did not touch it – so a document `:source-highlighter:` is dropped
         // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
         // opt-in) is still honored, even under `Secure`. This adds the
-        // `source-highlighter` piece of the SERVER attribute lock (the renderer
-        // half of #45); note Asciidoctor 2.0.26 does *not* additionally
-        // disable an API-set highlighter under `Secure` (verified against the
-        // oracle), so neither does this crate.
+        // `source-highlighter` piece of the SERVER attribute lock; note
+        // Asciidoctor 2.0.26 does *not* additionally disable an API-set
+        // highlighter under `Secure` (verified against the oracle), so neither
+        // does this crate.
         if mode >= SafeMode::Server {
             let ctx = ModificationContext::ApiOnly;
             parser = match self.last_action("source-highlighter") {
@@ -1421,7 +1421,7 @@ mod tests {
     // highlighter emits `<link>`/`<script>` assets whose origin a document
     // attribute can steer, so an untrusted document must not enable one under a
     // server-side safe mode. Mirrors Asciidoctor's `attr_overrides['source-
-    // highlighter'] ||= nil` (#215 / #45).
+    // highlighter'] ||= nil` (#215).
 
     #[test]
     fn document_set_source_highlighter_is_ignored_under_server() {
