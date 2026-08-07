@@ -195,11 +195,18 @@ fn resolve_jailed(base_dir: &Path, start: &str, target: &str) -> PathBuf {
         fold_into(&mut segments, start);
     }
 
-    // An absolute target is recovered to the jail root: it replaces any starting
-    // segments and is reinterpreted relative to the base directory.
+    // An absolute target replaces any starting segments. When it already lies
+    // inside the jail it is honored in place (keeping only the portion below the
+    // base directory); otherwise it is recovered to the jail root by
+    // reinterpreting it relative to the base directory. This matches
+    // Asciidoctor's `PathResolver#system_path`, which returns an absolute target
+    // as-is when it descends from the jail and only recovers one that escapes it.
     if is_absolute(target) {
         segments.clear();
-        fold_into(&mut segments, strip_root(target));
+        match strip_base_prefix(base_dir, target) {
+            Some(rel) => fold_into(&mut segments, &rel),
+            None => fold_into(&mut segments, strip_root(target)),
+        }
     } else {
         fold_into(&mut segments, target);
     }
@@ -790,13 +797,34 @@ mod tests {
         );
     }
 
-    // Under a jail, an absolute target is recovered to the jail root rather than
-    // read from its literal location.
+    // Under a jail, an absolute target that escapes the base directory is
+    // recovered to the jail root rather than read from its literal location.
     #[test]
     fn jailed_absolute_target_is_recovered_to_the_jail() {
         assert_eq!(
             resolve(SafeMode::Server, None, "/etc/passwd"),
             "/home/user/project/etc/passwd"
+        );
+    }
+
+    // Under a jail, an absolute target that already lies inside the base
+    // directory is honored in place (not doubled under the base) — the fix for
+    // #132, matching Asciidoctor's `system_path`, which returns an in-jail
+    // absolute target as-is.
+    #[test]
+    fn jailed_absolute_target_inside_base_is_honored() {
+        assert_eq!(
+            resolve(
+                SafeMode::Safe,
+                None,
+                "/home/user/project/fixtures/chapter-a.adoc"
+            ),
+            "/home/user/project/fixtures/chapter-a.adoc"
+        );
+        // The base directory itself resolves to the base directory.
+        assert_eq!(
+            resolve(SafeMode::Server, None, "/home/user/project"),
+            "/home/user/project"
         );
     }
 
