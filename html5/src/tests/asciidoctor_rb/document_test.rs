@@ -49,8 +49,9 @@
 //!   document): `asciidoc-parser` 0.29.13 only wires catalog registration
 //!   through its *inline* `image:` macro substitution path — a block `image::`
 //!   macro (what that particular test exercises) is not registered. This is an
-//!   upstream gap outside this crate's dependency, noted at the test it
-//!   affects; the other `Catalog` tests are unaffected and verify normally.
+//!   upstream gap outside this crate's dependency, filed as
+//!   asciidoc-rs/asciidoc-parser#1118 and noted at the test it affects; the
+//!   other `Catalog` tests are unaffected and verify normally.
 
 use std::path::{Path, PathBuf};
 
@@ -386,8 +387,9 @@ mod docinfo_files {
             // NOTE: the legacy `docinfo1`/`docinfo2` attribute *names* (as
             // opposed to `docinfo=shared`/`docinfo=private,shared`, which
             // request the same thing by value) are not recognized by
-            // `asciidoc-parser` 0.29.13 — an upstream gap outside this port's
-            // approved scope (favicon/catalog_assets/parse_header_only). The
+            // `asciidoc-parser` 0.29.13. Filed upstream as
+            // asciidoc-rs/asciidoc-parser#1115 — flip these three cases back
+            // to `docinfo1`/`docinfo2`/`docinfo docinfo2` once it lands. The
             // three cases that exercised them (`docinfo1`, `docinfo2`,
             // `docinfo docinfo2`) are dropped; `docinfo=shared` and
             // `docinfo=private,shared` below cover the same claims by value.
@@ -621,10 +623,11 @@ mod docinfo_files {
         let base = Options::new().safe_mode(SafeMode::Server);
 
         // `docinfo1`/`docinfo2` (the legacy attribute names) are not
-        // recognized by `asciidoc-parser` 0.29.13 — see the note on the
-        // docinfo-matrix test above — so this uses `docinfo=private` /
-        // `docinfo=shared` / `docinfo=private,shared` instead, which request
-        // the same private-vs-shared file selection by value.
+        // recognized by `asciidoc-parser` 0.29.13 (asciidoc-rs/asciidoc-parser#1115;
+        // see the note on the docinfo-matrix test above) — so this uses
+        // `docinfo=private` / `docinfo=shared` / `docinfo=private,shared`
+        // instead, which request the same private-vs-shared file selection
+        // by value.
         let output = convert_file_with(
             &sample,
             &base
@@ -756,9 +759,10 @@ mod docinfo_files {
         assert_css(&output, "body script", 1);
         assert_css(&output, "a#top", 0);
 
-        // `docinfo1`/`docinfo2` are not recognized (see the note on the
-        // docinfo-matrix test above); `docinfo=shared`/`docinfo=private,shared`
-        // request the same file selection by value.
+        // `docinfo1`/`docinfo2` are not recognized (asciidoc-rs/asciidoc-parser#1115;
+        // see the note on the docinfo-matrix test above);
+        // `docinfo=shared`/`docinfo=private,shared` request the same file
+        // selection by value.
         let output =
             convert_file_with(&sample, &base.clone().attribute("docinfo", "shared")).unwrap();
         assert!(!output.is_empty());
@@ -900,12 +904,15 @@ mod docinfo_files {
     // `asciidoc-parser` 0.29.13 always applies default (`attributes`)
     // substitution to docinfo content and does not honor a custom
     // `docinfosubs` value (so the `replacements` half of the next test's
-    // claim — `(C)` becoming `©` — does not occur) or the `attribute-missing`
-    // policy within it (a reference to a missing attribute resolves to an
+    // claim — `(C)` becoming `©` — does not occur; filed upstream as
+    // asciidoc-rs/asciidoc-parser#1116) or the `attribute-missing` policy
+    // within it (a reference to an explicitly-unset attribute resolves to an
     // empty string rather than dropping its line, so this test's central
-    // claim does not hold). Both are upstream substitution-pipeline gaps
-    // outside this port's approved scope (favicon/catalog_assets/
-    // parse_header_only).
+    // claim does not hold; filed upstream as
+    // asciidoc-rs/asciidoc-parser#1117 — that one is not docinfo-specific,
+    // it affects attribute substitution generally). Flip both tests below
+    // back from `non_normative!` to `verifies!` once the respective issue
+    // lands.
     non_normative!(
         r##"
     test 'should substitute attributes in docinfo files by default' do
@@ -1231,7 +1238,10 @@ mod structure {
         // sanitize (strip markup from) the subtitle half the way Ruby's
         // `doctitle sanitize: true` does, so the subtitle is asserted with
         // its markup intact (`*Subtitle*`) rather than sanitized to plain
-        // text (`Subtitle`).
+        // text (`Subtitle`). This crate has no `sanitize:`-equivalent
+        // accessor at all; filed upstream as
+        // asciidoc-rs/asciidoc-parser#1122 — revisit this assertion once a
+        // sanitized accessor lands.
         let doc = load("= Main Title: *Subtitle*\nAuthor Name\n\ncontent\n");
         assert_eq!(doc.header().main_title(), Some("Main Title"));
         assert_eq!(doc.header().subtitle(), Some("*Subtitle*"));
@@ -1261,19 +1271,22 @@ mod structure {
 "#
         );
 
-        // See the note on `document_with_subtitle` above: the subtitle is not
-        // sanitized, so its markup survives.
+        // See the note on `document_with_subtitle` above
+        // (asciidoc-rs/asciidoc-parser#1122): the subtitle is not sanitized,
+        // so its markup survives.
         let doc = load("[separator=::]\n= Main Title:: *Subtitle*\nAuthor Name\n\ncontent\n");
         assert_eq!(doc.header().main_title(), Some("Main Title"));
         assert_eq!(doc.header().subtitle(), Some("*Subtitle*"));
     }
 
-    // `title-separator` supplied through the API/`Options` is not consulted by
-    // `Header::main_title`/`subtitle` — only a document `[separator=…]` block
-    // attribute is (as the previous two tests exercise) — so this crate has
-    // no way to reproduce the API-overrides-the-document claim this test
-    // makes. An upstream gap outside this port's approved scope
-    // (favicon/catalog_assets/parse_header_only).
+    // `title-separator` locked via `ModificationContext::ApiOnly` is not
+    // consulted by `Header::main_title`/`subtitle` — a document
+    // `[separator=…]` block attribute (as the previous two tests exercise)
+    // still overrides it, even though the API lock should win — so this
+    // crate has no way to reproduce the API-overrides-the-document claim
+    // this test makes. Filed upstream as
+    // asciidoc-rs/asciidoc-parser#1119 — flip this test back to `verifies!`
+    // once the lock is honored.
     non_normative!(
         r#"
     test 'should not honor custom separator for doctitle if attribute is locked by API' do
@@ -1654,9 +1667,9 @@ mod structure {
     // implicit doctitle even though `project-name` is defined later in the
     // same header (matching Asciidoctor's *substitution*, which also leaves
     // the reference literal — verified in the previous test — but not its
-    // *no-warning* nuance for this specific ordering). An upstream
-    // warning-ordering gap outside this port's approved scope
-    // (favicon/catalog_assets/parse_header_only).
+    // *no-warning* nuance for this specific ordering). Filed upstream as
+    // asciidoc-rs/asciidoc-parser#1124 — flip this test back to `verifies!`
+    // once the warning is suppressed.
     non_normative!(
         r#"
     test 'should not warn if implicit document title contains attribute reference for attribute defined later in header' do
@@ -1853,9 +1866,13 @@ mod structure {
     // Title") and the standalone `<h1>` (which should render the markup,
     // as verified elsewhere for simpler titles — see e.g.
     // `should_sanitize_content_of_html_meta_authors_tag`'s neighbor tests)
-    // instead emit the raw, unprocessed title source. A pre-existing
-    // doctitle-rendering limitation outside this port's approved scope
-    // (favicon/catalog_assets/parse_header_only).
+    // instead emit the raw, unprocessed title source, because
+    // `Header::parse` applies the restricted `Header` substitution group
+    // (specialchars+attrs+pass only) to the doctitle instead of the `Title`
+    // group. Filed upstream as asciidoc-rs/asciidoc-parser#1121 (title
+    // substitution group) and asciidoc-rs/asciidoc-parser#1122 (a
+    // sanitized-doctitle accessor for the `<title>` half) — flip this test
+    // back to `verifies!` once both land.
     non_normative!(
         r#"
     test 'should sanitize contents of HTML title element' do
@@ -2017,9 +2034,9 @@ mod structure {
 
         // `revdate` diverges from Ruby here: the revision line's empty date
         // field parses to a set-but-empty value rather than staying unset
-        // (`doc.attributes['revdate']` is `nil` in Ruby). An upstream parsing
-        // nuance outside this port's approved scope
-        // (favicon/catalog_assets/parse_header_only).
+        // (`doc.attributes['revdate']` is `nil` in Ruby). Filed upstream as
+        // asciidoc-rs/asciidoc-parser#1125 — assert `revdate` is unset here
+        // once it lands.
         let doc = load("= Document Title\nAuthor Name\nv1.0.0,:remark\n\ncontent\n");
         assert_eq!(attr_str(&doc, "revnumber").as_deref(), Some("1.0.0"));
         assert_eq!(attr_str(&doc, "revremark").as_deref(), Some("remark"));
@@ -2185,10 +2202,9 @@ mod structure {
     // a rendered author name down to plain text; this crate escapes it
     // instead (see `author_meta_joins_and_escapes_the_authors` in
     // `renderer.rs`), so the rendered link markup this `:author:` value
-    // produces survives as escaped HTML rather than being stripped. A
-    // pre-existing rendering limitation outside this port's approved scope
-    // (favicon/catalog_assets/parse_header_only); the same family as the
-    // `<title>` sanitization gap noted above.
+    // produces survives as escaped HTML rather than being stripped. This is
+    // this crate's own rendering choice, not an upstream `asciidoc-parser`
+    // gap — no sanitizing pass is applied before writing the `<meta>` tag.
     non_normative!(
         r#"
     test 'should sanitize content of HTML meta authors tag' do
@@ -2903,9 +2919,9 @@ mod structure {
         // matrix does: `[{ 'showtitle' => '' }, [':notitle:']]` and
         // `[{ 'showtitle' => false }, [':!notitle:']]`. `asciidoc-parser`'s
         // `showtitle`/`notitle` linkage resolves the document's entry last
-        // regardless of which side the API locked. An upstream gap outside
-        // this port's approved scope (favicon/catalog_assets/
-        // parse_header_only).
+        // regardless of which side the API locked. Filed upstream as
+        // asciidoc-rs/asciidoc-parser#1120 — restore these two cases once
+        // the API lock is honored there too.
         type OptFn = fn(Options) -> Options;
         let cases: &[(OptFn, &[&str])] = &[
             (|o| o.unset("notitle"), &[]),
@@ -3320,8 +3336,8 @@ mod document_catalog {
     // `asciidoc-parser` 0.29.13 only wires catalog registration through its
     // *inline* `image:` macro substitution path (as the previous test uses);
     // a block `image::` macro — both images in this test — is not
-    // registered. An upstream gap outside this port's approved scope
-    // (favicon/catalog_assets/parse_header_only).
+    // registered. Filed upstream as asciidoc-rs/asciidoc-parser#1118 — flip
+    // this test back to `verifies!` once it lands.
     non_normative!(
         r#"
     test 'should catalog assets inside nested document' do
