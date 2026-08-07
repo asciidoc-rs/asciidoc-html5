@@ -139,7 +139,6 @@ Many Asciidoctor API options do not apply to this library:
   false` returns an unparsed document to configure before an explicit `parse`
   call; here all parse-time configuration is supplied up front through
   `Options`, and `load`/`load_file` return a fully parsed, owned `Document`.
-* *Not yet implemented.* `:parse_header_only` (stopping the parser after the
+* *Permanent non-goal.* `:parse_header_only` (stopping the parser after the
   header) would require a change to the pinned `asciidoc-parser` dependency,
-  not just this library, so it's tracked for future work rather than
-  supported today.
+  not just this library, so this crate does not plan to support it.

@@ -33,10 +33,10 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 // * Ruby- and template-engine-specific options (`:converter`, `:eruby`,
 //   `:extensions`, `:extension_registry`, `:logger`, `:template_*`, `:timings`)
 //   have no place in this library.
-// * `:parse_header_only` has no counterpart -- stopping the parser after the
-//   header would require a change to the pinned `asciidoc-parser` dependency (a
-//   crates.io version, not a workspace member this repo can extend), not just
-//   this crate. Tracked by GitHub issue #96.
+// * `:parse_header_only` is a permanent non-goal -- stopping the parser after
+//   the header would require a change to the pinned `asciidoc-parser`
+//   dependency (a crates.io version, not a workspace member this repo can
+//   extend), not just this crate. See #96.
 // * `:parse` (deferred parsing) has no counterpart at all: all parse-time
 //   configuration is supplied up front through `Options`, and `load` returns a
 //   fully parsed, owned `Document`, so there is no unparsed object to configure
@@ -300,9 +300,10 @@ If value is falsy, it assigns a null logger, effectively turning off logging.
 "#
 );
 
-// `:parse_header_only` -- stopping the parser after the header -- has no
-// counterpart: `load`/`load_file` always parse the whole document. Tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/96.
+// `:parse_header_only` (stopping the parser after the header) is a permanent
+// non-goal: `load`/`load_file` always parse the whole document, and doing
+// otherwise would require a change to the pinned `asciidoc-parser`
+// dependency. See #96.
 non_normative!(
     r#"
 |`:parse_header_only`

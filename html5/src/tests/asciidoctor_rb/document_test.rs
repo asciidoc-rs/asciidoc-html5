@@ -37,9 +37,10 @@
 //!   partition class, fixture-driven `example_document` assertions) — none of
 //!   these have a counterpart on this crate's [`Document`], which exposes
 //!   rendering-relevant state, not the parse tree itself;
-//! - `Document#parse_header_only` — stopping the parser after the header has no
-//!   counterpart in the pinned `asciidoc-parser` dependency (a crates.io
-//!   version, not a workspace member), so it cannot be added from this repo;
+//! - `Document#parse_header_only` — stopping the parser after the header is a
+//!   permanent non-goal: this crate will not implement it, since it would
+//!   require a change to the pinned `asciidoc-parser` dependency (a crates.io
+//!   version, not a workspace member this repo can extend) — see #96;
 //! - the Ruby **`Asciidoctor::Timings`** API, the **unknown-backend exception**
 //!   (this crate has only one backend, so there is nothing to fail to resolve),
 //!   and the **UTF-8 encoding-forcing** test (a Ruby runtime
@@ -3012,9 +3013,11 @@ mod structure {
         }
     }
 
-    // `parse_header_only` — stopping the parser after the header — has no
-    // counterpart in the pinned `asciidoc-parser` dependency (a crates.io
-    // version, not a workspace member this repo can extend).
+    // `parse_header_only` (stopping the parser after the header) is a
+    // permanent non-goal – this crate will not implement it, since it would
+    // require a change to the pinned `asciidoc-parser` dependency (a
+    // crates.io version, not a workspace member this repo can extend). See
+    // #96.
     non_normative!(
         r#"
     test 'parse header only' do
