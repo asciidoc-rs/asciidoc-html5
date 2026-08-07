@@ -21,10 +21,9 @@
 //! observable rendering is verified but the crate performs the read silently.
 //!
 //! What stays `non_normative!` through the ported back-half contexts: only the
-//! DocBook-backend equation tests and the four `eqnums`/`autoNumber` tests in
-//! `Math blocks` (the MathJax docinfo `eqnums` mapping they assert is already
-//! verified in `html5/src/tests/asciidoc_lang/stem/index.rs`, so they are not
-//! duplicated here).
+//! DocBook-backend equation tests in `Math blocks` — the four
+//! `eqnums`/`autoNumber` tests there are verified directly, since the MathJax
+//! docinfo they assert now ships.
 //!
 //! What stays `non_normative!` in the front half:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -3858,14 +3857,10 @@ mod math_blocks {
 "#
     );
 
-    // The `autoNumber` option lives in the MathJax config `<script>` this
-    // renderer emits in standalone output when `stem` is set; the `eqnums`
-    // mapping these four tests assert is already covered by
-    // `eqnums_configures_tex_equation_numbering` in
-    // `html5/src/tests/asciidoc_lang/stem/index.rs`, so it is not duplicated
-    // here.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_set_auto_number_option_for_latexmath_to_none_by_default() {
+        verifies!(
+            r#"
     test 'should set autoNumber option for latexmath to none by default' do
       input = <<~'EOS'
       :stem: latexmath
@@ -3880,6 +3875,20 @@ mod math_blocks {
       assert_includes output, 'TeX: { equationNumbers: { autoNumber: "none" } }'
     end
 
+"#
+        );
+
+        let output = convert_with(
+            ":stem: latexmath\n\n[stem]\n++++\ny = x^2\n++++\n",
+            &Options::new().standalone(true),
+        );
+        assert!(output.contains(r#"TeX: { equationNumbers: { autoNumber: "none" } }"#));
+    }
+
+    #[test]
+    fn should_set_auto_number_option_for_latexmath_to_none_if_eqnums_is_set_to_none() {
+        verifies!(
+            r#"
     test 'should set autoNumber option for latexmath to none if eqnums is set to none' do
       input = <<~'EOS'
       :stem: latexmath
@@ -3895,6 +3904,20 @@ mod math_blocks {
       assert_includes output, 'TeX: { equationNumbers: { autoNumber: "none" } }'
     end
 
+"#
+        );
+
+        let output = convert_with(
+            ":stem: latexmath\n:eqnums: none\n\n[stem]\n++++\ny = x^2\n++++\n",
+            &Options::new().standalone(true),
+        );
+        assert!(output.contains(r#"TeX: { equationNumbers: { autoNumber: "none" } }"#));
+    }
+
+    #[test]
+    fn should_set_auto_number_option_for_latexmath_to_ams_if_eqnums_is_set() {
+        verifies!(
+            r#"
     test 'should set autoNumber option for latexmath to AMS if eqnums is set' do
       input = <<~'EOS'
       :stem: latexmath
@@ -3912,6 +3935,20 @@ mod math_blocks {
       assert_includes output, 'TeX: { equationNumbers: { autoNumber: "AMS" } }'
     end
 
+"#
+        );
+
+        let output = convert_with(
+            ":stem: latexmath\n:eqnums:\n\n[stem]\n++++\n\\begin{equation}\ny = x^2\n\\end{equation}\n++++\n",
+            &Options::new().standalone(true),
+        );
+        assert!(output.contains(r#"TeX: { equationNumbers: { autoNumber: "AMS" } }"#));
+    }
+
+    #[test]
+    fn should_set_auto_number_option_for_latexmath_to_all_if_eqnums_is_set_to_all() {
+        verifies!(
+            r#"
     test 'should set autoNumber option for latexmath to all if eqnums is set to all' do
       input = <<~'EOS'
       :stem: latexmath
@@ -3928,7 +3965,14 @@ mod math_blocks {
     end
 
 "#
-    );
+        );
+
+        let output = convert_with(
+            ":stem: latexmath\n:eqnums: all\n\n[stem]\n++++\ny = x^2\n++++\n",
+            &Options::new().standalone(true),
+        );
+        assert!(output.contains(r#"TeX: { equationNumbers: { autoNumber: "all" } }"#));
+    }
 
     #[test]
     fn should_not_split_equation_in_asciimath_block_at_single_newline() {
