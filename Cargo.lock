@@ -113,8 +113,9 @@ dependencies = [
 
 [[package]]
 name = "asciidoc-parser"
-version = "0.29.11"
-source = "git+https://github.com/asciidoc-rs/asciidoc-parser.git?branch=fix%2Fifdef-include-in-brackets#c0f94b3272f48c078ae4075df3ef36bf86d696bf"
+version = "0.29.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff8bcb0ac41323e34349e0461b7803253a8ca177beeaae5f164ec1d4a2a8c721"
 dependencies = [
  "bytecount",
  "memchr",

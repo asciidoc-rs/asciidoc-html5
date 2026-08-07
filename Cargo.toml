@@ -11,12 +11,5 @@ rust-version = "1.88.0"
 version = "0.1.5"
 
 [workspace.dependencies]
-asciidoc-parser = "0.29.11"
+asciidoc-parser = "0.29.12"
 scraper = "0.27"
-
-# TEMPORARY: pull in the unreleased asciidoc-parser fix for the single-line
-# conditional `include::` bug (asciidoc-rs/asciidoc-parser#1098), which #133
-# depends on. Drop this patch and bump the version above once that fix ships in
-# a release. See https://github.com/asciidoc-rs/asciidoc-html5/issues/133.
-[patch.crates-io]
-asciidoc-parser = { git = "https://github.com/asciidoc-rs/asciidoc-parser.git", branch = "fix/ifdef-include-in-brackets" }
