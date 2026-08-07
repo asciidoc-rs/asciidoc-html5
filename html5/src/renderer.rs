@@ -73,6 +73,10 @@ const HIGHLIGHT_JS_VERSION: &str = "9.18.3";
 /// font-based icons (`Asciidoctor::FONT_AWESOME_VERSION`).
 const FONT_AWESOME_VERSION: &str = "4.7.0";
 
+/// The MathJax release Asciidoctor v2.0.26 loads from the CDN to render STEM
+/// expressions client-side (`Asciidoctor::MATHJAX_VERSION`).
+const MATHJAX_VERSION: &str = "2.7.9";
+
 /// The active *client-side* syntax highlighter, resolved from the
 /// `source-highlighter` document attribute.
 ///
@@ -2104,6 +2108,11 @@ impl Renderer<'_> {
         // matching Asciidoctor — where JavaScript loads at the end of the body.
         self.highlighter_footer(document);
 
+        // When STEM is active, the MathJax loader follows the highlighter
+        // scripts and precedes any footer docinfo, matching Asciidoctor's
+        // ordering in `convert_document`.
+        self.mathjax_footer(document);
+
         // Footer docinfo is inserted immediately after the footer `<div>`, again
         // whether or not the footer itself is suppressed by `nofooter`.
         self.docinfo(document, DocinfoLocation::Footer);
@@ -2517,6 +2526,72 @@ impl Renderer<'_> {
                 ));
             }
         }
+    }
+
+    /// Emits the MathJax loader that renders STEM expressions client-side,
+    /// mirroring the `stem`-guarded block of Asciidoctor's `convert_document`.
+    ///
+    /// The loader is emitted only when the `stem` attribute is set, and only
+    /// for standalone output (embedded output carries no document shell). It
+    /// pairs a `text/x-mathjax-config` stanza — which teaches MathJax the
+    /// custom delimiters this converter emits (`\(…\)`/`\[…\]` for LaTeX,
+    /// `\$…\$` for AsciiMath) and promotes AsciiMath block equations to
+    /// display mode — with the CDN `<script>` that loads MathJax itself.
+    ///
+    /// The `eqnums` attribute controls TeX equation numbering: absent, it
+    /// defaults to `none`; set with no value, it becomes `AMS`; otherwise its
+    /// value passes through.
+    fn mathjax_footer(&mut self, document: &Document<'_>) {
+        if !document.is_attribute_set("stem") {
+            return;
+        }
+
+        // `eqnums` mirrors Asciidoctor's `node.attr 'eqnums', 'none'` followed
+        // by the empty-to-`AMS` fixup: unset defaults to `none`, a bare
+        // `:eqnums:` (or an explicit empty value) becomes `AMS`, and any other
+        // value passes through.
+        //
+        // The value is emitted raw into the inline config script, byte for byte
+        // as Asciidoctor's `convert_document` does — no escaping. That is not a
+        // distinct injection vector: `eqnums` is set by the document (or the API
+        // caller), and a document that can set it can already emit arbitrary
+        // markup, including `<script>`, through a passthrough (`+++…+++` /
+        // `++++`) in any safe mode — the safe mode gates file and network
+        // access, not HTML output. Escaping here would only break parity with
+        // the oracle without closing that far wider, by-design surface.
+        let eqnums = match document.attribute_value("eqnums") {
+            InterpretedValue::Value(value) if !value.is_empty() => value.to_string(),
+            InterpretedValue::Unset => "none".to_string(),
+            _ => "AMS".to_string(),
+        };
+
+        self.line(&format!(
+            "<script type=\"text/x-mathjax-config\">\n\
+             MathJax.Hub.Config({{\n  \
+             messageStyle: \"none\",\n  \
+             tex2jax: {{\n    \
+             inlineMath: [[\"\\\\(\", \"\\\\)\"]],\n    \
+             displayMath: [[\"\\\\[\", \"\\\\]\"]],\n    \
+             ignoreClass: \"nostem|nolatexmath\"\n  \
+             }},\n  \
+             asciimath2jax: {{\n    \
+             delimiters: [[\"\\\\$\", \"\\\\$\"]],\n    \
+             ignoreClass: \"nostem|noasciimath\"\n  \
+             }},\n  \
+             TeX: {{ equationNumbers: {{ autoNumber: \"{eqnums}\" }} }}\n\
+             }})\n\
+             MathJax.Hub.Register.StartupHook(\"AsciiMath Jax Ready\", function () {{\n  \
+             MathJax.InputJax.AsciiMath.postfilterHooks.Add(function (data, node) {{\n    \
+             if ((node = data.script.parentNode) && (node = node.parentNode) && node.classList.contains(\"stemblock\")) {{\n      \
+             data.math.root.display = \"block\"\n    \
+             }}\n    \
+             return data\n  \
+             }})\n\
+             }})\n\
+             </script>\n\
+             <script src=\"{}/mathjax/{MATHJAX_VERSION}/MathJax.js?config=TeX-MML-AM_CHTML\"></script>",
+            cdn_base_url(document)
+        ));
     }
 
     /// Emits the stylesheet portion of the `<head>`, mirroring Asciidoctor's

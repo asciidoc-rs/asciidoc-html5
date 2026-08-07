@@ -19,6 +19,7 @@ mod manpage_backend;
 mod migrate;
 mod reference_safe_mode;
 mod safe_modes;
+mod stem;
 mod syntax_highlighting;
 mod tooling;
 mod whats_new;
