@@ -22,8 +22,9 @@
 //!
 //! What stays `non_normative!` through the ported back-half contexts: only the
 //! DocBook-backend equation tests and the four `eqnums`/`autoNumber` tests in
-//! `Math blocks` (the MathJax docinfo this renderer does not emit yet — html5
-//! #250).
+//! `Math blocks` (the MathJax docinfo `eqnums` mapping they assert is already
+//! verified in `html5/src/tests/asciidoc_lang/stem/index.rs`, so they are not
+//! duplicated here).
 //!
 //! What stays `non_normative!` in the front half:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
@@ -3858,9 +3859,11 @@ mod math_blocks {
     );
 
     // The `autoNumber` option lives in the MathJax config `<script>` this
-    // renderer does not yet emit in standalone output
-    // (asciidoc-rs/asciidoc-html5#250); until that docinfo lands there is no
-    // rendered form of `eqnums` to assert.
+    // renderer emits in standalone output when `stem` is set; the `eqnums`
+    // mapping these four tests assert is already covered by
+    // `eqnums_configures_tex_equation_numbering` in
+    // `html5/src/tests/asciidoc_lang/stem/index.rs`, so it is not duplicated
+    // here.
     non_normative!(
         r#"
     test 'should set autoNumber option for latexmath to none by default' do
