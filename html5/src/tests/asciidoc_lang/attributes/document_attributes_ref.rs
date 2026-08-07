@@ -1636,9 +1636,9 @@ Mutually exclusive with the `notitle` attribute.
 }
 
 // `stem` enables math processing. This renderer emits the MathJax delimiters
-// for stem content (e.g. `stem:[x^2]` -> `\$x^2\$`, matching Asciidoctor) but
-// does not yet emit the MathJax loader/config docinfo that renders them in the
-// browser (html5#250), so the end-to-end feature is tracked there.
+// for stem content (e.g. `stem:[x^2]` -> `\$x^2\$`, matching Asciidoctor) and,
+// in standalone output, the MathJax loader/config docinfo that renders them in
+// the browser — see `html5/src/tests/asciidoctor/stem/mathjax.rs`.
 non_normative!(
     r#"
 |stem
