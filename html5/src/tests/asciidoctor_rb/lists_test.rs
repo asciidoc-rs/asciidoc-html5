@@ -42,7 +42,7 @@ use asciidoc_parser::warnings::WarningType;
 use crate::{
     convert, convert_with, load,
     tests::{
-        assert_html::{assert_css, assert_xpath},
+        assert_html::{assert_css, assert_xpath, xpath_node_text},
         sdd::*,
     },
     Options,
@@ -593,17 +593,17 @@ wrapped content']"#,
             assert_css(&output, "ul", 1);
             assert_css(&output, "ul li", 2);
 
-            // The wrapped principal line keeps its `  ` hanging indent; a
-            // multi-line `text()` predicate is the node-text line comparison the
-            // Ruby test performs. Asciidoctor 2.0.26 emits no extra blank line
-            // here, so the `gsub` the Ruby applies is a no-op for this output.
-            assert_xpath(
-                &output,
-                r#"(//ul/li)[1]/p[text() = "list item 1
-  // not line comment
-second wrapped line"]"#,
-                1,
-            );
+            // Read the principal paragraph's text and compare it line by line,
+            // as the Ruby test does with `.text.…lines`. The wrapped line keeps
+            // its `  ` hanging indent. Asciidoctor 2.0.26 emits no extra blank
+            // line here, so the `gsub` collapsing blank lines is a no-op for
+            // this output and can be dropped from the port.
+            let text = xpath_node_text(&output, r#"(//ul/li)[1]/p"#, 1);
+            let lines: Vec<&str> = text.lines().collect();
+            assert_eq!(lines.len(), 3);
+            assert_eq!(lines[0], "list item 1");
+            assert_eq!(lines[1], "  // not line comment");
+            assert_eq!(lines[2], "second wrapped line");
         }
 
         #[test]

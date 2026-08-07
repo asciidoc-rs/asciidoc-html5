@@ -33,6 +33,14 @@
 //! omitting the count (meaning "at least one match") and passing a boolean for
 //! `count(...)`-style expressions; those forms are not needed yet and can be
 //! added as sibling helpers when a ported page first requires them.
+//!
+//! # Text extraction
+//!
+//! Some Ruby tests do not merely count matches — they read a matched node's
+//! text and compare it line by line
+//! (`xmlnodes_at_xpath(expr, out, N).text.…lines`). [`xpath_node_text`] is the
+//! counterpart: it asserts the match count, then returns the matched nodes'
+//! recursive text (Nokogiri's `Node#text`) for the caller to split and compare.
 
 mod dom;
 mod xpath;
@@ -149,9 +157,41 @@ pub(crate) fn assert_xpath(html: &str, xpath: &str, expected: usize) {
     );
 }
 
+/// Returns the text content of the nodes matched by `xpath`, after asserting
+/// that exactly `expected` of them match.
+///
+/// The result concatenates each matched node's full descendant character data
+/// in document order — the recursive text Nokogiri's `Node#text` /
+/// `NodeSet#text` yields, *not* the direct-text-only value an XPath `text()`
+/// predicate compares against. This mirrors `xmlnodes_at_xpath(expr, out,
+/// N).text` in Asciidoctor's Ruby suite.
+///
+/// It is the extraction primitive for line-by-line comparisons: split the
+/// returned string on `'\n'` and compare each line, the way the Ruby tests do
+/// with `.text.…lines`.
+///
+/// # Panics
+///
+/// Panics if the match count differs from `expected`.
+#[track_caller]
+pub(crate) fn xpath_node_text(html: &str, xpath: &str, expected: usize) -> String {
+    let (document, is_fragment) = parse(html);
+    let root = dom::from_html(&document, is_fragment);
+    let nodes = xpath::query(&root, xpath);
+
+    assert_eq!(
+        nodes.len(),
+        expected,
+        "XPath `{xpath}` matched {} node(s), expected {expected}, in:\n{html}",
+        nodes.len()
+    );
+
+    nodes.iter().map(|node| node.text_content()).collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{assert_css, assert_xpath};
+    use super::{assert_css, assert_xpath, xpath_node_text};
 
     const FRAGMENT: &str = r#"<div id="content">
 <div id="preamble">
@@ -504,6 +544,54 @@ Famous quote.
         assert_xpath(html, r#"//div[@class="paragraph"]"#, 1);
         assert_xpath(html, r#"//div[@class="paragraph lead"]"#, 1);
         assert_xpath(html, r#"//div[@class="lead"]"#, 0);
+    }
+
+    #[test]
+    fn xpath_node_text_extracts_recursive_text_for_line_comparison() {
+        // A wrapped list-item principal whose text spans several lines — the
+        // shape the lists suite compares line by line. `.text` reads the
+        // element's full string value, so the caller can split on newlines.
+        let html = r#"<div class="ulist"><ul>
+<li><p>list item 1
+  // not line comment
+second wrapped line</p></li>
+<li><p>list item 2</p></li>
+</ul></div>"#;
+        let text = xpath_node_text(html, r#"(//ul/li)[1]/p"#, 1);
+        let lines: Vec<&str> = text.lines().collect();
+        assert_eq!(
+            lines,
+            [
+                "list item 1",
+                "  // not line comment",
+                "second wrapped line"
+            ]
+        );
+    }
+
+    #[test]
+    fn xpath_node_text_is_recursive_across_inline_children() {
+        // Nokogiri's `.text` is the concatenation of *all* descendant character
+        // data, so nested inline markup contributes its text too — unlike an
+        // XPath `text()` predicate, which sees only an element's direct runs.
+        let html = r#"<p>a <code>b</code> c</p>"#;
+        assert_eq!(xpath_node_text(html, "//p", 1), "a b c");
+    }
+
+    #[test]
+    fn xpath_node_text_concatenates_a_multi_node_match() {
+        // With an expected count above one, the helper concatenates each match's
+        // text in document order — mirroring Nokogiri's `NodeSet#text`.
+        let html = r#"<p>one</p><p>two</p>"#;
+        assert_eq!(xpath_node_text(html, "//p", 2), "onetwo");
+    }
+
+    #[test]
+    #[should_panic(expected = "expected 1")]
+    fn xpath_node_text_asserts_the_match_count() {
+        // The count is an assertion, as in `xmlnodes_at_xpath(expr, out, 1)`.
+        let html = r#"<p>one</p><p>two</p>"#;
+        xpath_node_text(html, "//p", 1);
     }
 
     #[test]
