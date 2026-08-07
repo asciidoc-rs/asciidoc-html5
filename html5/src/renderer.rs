@@ -2504,6 +2504,15 @@ impl Renderer<'_> {
         // by the empty-to-`AMS` fixup: unset defaults to `none`, a bare
         // `:eqnums:` (or an explicit empty value) becomes `AMS`, and any other
         // value passes through.
+        //
+        // The value is emitted raw into the inline config script, byte for byte
+        // as Asciidoctor's `convert_document` does — no escaping. That is not a
+        // distinct injection vector: `eqnums` is set by the document (or the API
+        // caller), and a document that can set it can already emit arbitrary
+        // markup, including `<script>`, through a passthrough (`+++…+++` /
+        // `++++`) in any safe mode — the safe mode gates file and network
+        // access, not HTML output. Escaping here would only break parity with
+        // the oracle without closing that far wider, by-design surface.
         let eqnums = match document.attribute_value("eqnums") {
             InterpretedValue::Value(value) if !value.is_empty() => value.to_string(),
             InterpretedValue::Unset => "none".to_string(),
