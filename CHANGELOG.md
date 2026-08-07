@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.5...asciidoc-html5-v0.1.6)
+_07 August 2026_
+
+### Added
+
+* *(html5)* Render STEM expressions via client-side MathJax ([#304](https://github.com/asciidoc-rs/asciidoc-html5/pull/304))
+* *(html5)* Support the data-uri attribute for image embedding ([#51](https://github.com/asciidoc-rs/asciidoc-html5/pull/51)) ([#291](https://github.com/asciidoc-rs/asciidoc-html5/pull/291))
+* *(html5)* Lock the icons attribute against the document under SECURE ([#286](https://github.com/asciidoc-rs/asciidoc-html5/pull/286))
+* *(html5)* Implement inline SVG embedding (opts=inline) for images ([#288](https://github.com/asciidoc-rs/asciidoc-html5/pull/288))
+* *(html5)* Support inline SVG images (opts=inline) honoring the safe mode ([#285](https://github.com/asciidoc-rs/asciidoc-html5/pull/285))
+* *(html5)* Emit the Font Awesome stylesheet link for icons=font ([#284](https://github.com/asciidoc-rs/asciidoc-html5/pull/284))
+* *(html5)* Support the max-width attribute ([#282](https://github.com/asciidoc-rs/asciidoc-html5/pull/282))
+* *(html5)* Port the AsciiDoc macros module pages (all 29; SDD coverage + admonition icons + URL imagesdir fix) ([#273](https://github.com/asciidoc-rs/asciidoc-html5/pull/273))
+* *(html5)* Port the AsciiDoc verbatim module pages (SDD coverage + source-language promotion) ([#267](https://github.com/asciidoc-rs/asciidoc-html5/pull/267))
+
+### Documented
+
+* Record that server-side syntax highlighting is not planned ([#295](https://github.com/asciidoc-rs/asciidoc-html5/pull/295))
+* *(html5)* Drop the stale icons mention from the reference-safe-mode page ([#289](https://github.com/asciidoc-rs/asciidoc-html5/pull/289))
+
+### Fixed
+
+* *(html5)* Resolve an in-jail absolute include path ([#132](https://github.com/asciidoc-rs/asciidoc-html5/pull/132)) ([#301](https://github.com/asciidoc-rs/asciidoc-html5/pull/301))
+* Process an include:: directive nested inside an ifdef bracket ([#133](https://github.com/asciidoc-rs/asciidoc-html5/pull/133)) ([#299](https://github.com/asciidoc-rs/asciidoc-html5/pull/299))
+* *(html5)* Preserve a wrapped list-item principal's hanging indent ([#237](https://github.com/asciidoc-rs/asciidoc-html5/pull/237)) ([#293](https://github.com/asciidoc-rs/asciidoc-html5/pull/293))
+* Complete the tables_test.rb port ([#164](https://github.com/asciidoc-rs/asciidoc-html5/pull/164)) ([#292](https://github.com/asciidoc-rs/asciidoc-html5/pull/292))
+* *(html5)* Make include end_to_end temp dirs robust to leftover state ([#290](https://github.com/asciidoc-rs/asciidoc-html5/pull/290))
+* Port the AsciiDoc sections module pages (SDD coverage) ([#270](https://github.com/asciidoc-rs/asciidoc-html5/pull/270))
+* *(html5)* Port the AsciiDoc toc module pages (SDD coverage + embeddable TOC fix) ([#269](https://github.com/asciidoc-rs/asciidoc-html5/pull/269))
+* Add SDD coverage for the asciidoc-lang text module pages ([#264](https://github.com/asciidoc-rs/asciidoc-html5/pull/264))
+* *(cli)* Detect a hard-linked output on Windows in the collision guard ([#169](https://github.com/asciidoc-rs/asciidoc-html5/pull/169)) ([#297](https://github.com/asciidoc-rs/asciidoc-html5/pull/297))
+
+### Other
+
+* *(html5)* Complete the blocks_test.rb port ([#121](https://github.com/asciidoc-rs/asciidoc-html5/pull/121)) ([#305](https://github.com/asciidoc-rs/asciidoc-html5/pull/305))
+* *(html5)* Cover the syntax-highlighting documentation module ([#298](https://github.com/asciidoc-rs/asciidoc-html5/pull/298))
+* *(html5)* Add SDD coverage for the AsciiDoc syntax-quick-reference page ([#287](https://github.com/asciidoc-rs/asciidoc-html5/pull/287))
+* *(html5)* Add SDD coverage for four asciidoc-lang ROOT pages ([#281](https://github.com/asciidoc-rs/asciidoc-html5/pull/281))
+* *(html5)* Port the AsciiDoc docinfo module page (SDD coverage) ([#272](https://github.com/asciidoc-rs/asciidoc-html5/pull/272))
+* *(html5)* Port the AsciiDoc tables module pages (SDD coverage + docs) ([#266](https://github.com/asciidoc-rs/asciidoc-html5/pull/266))
+
 ## [0.1.5](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.4...asciidoc-html5-v0.1.5)
 _02 August 2026_
 
