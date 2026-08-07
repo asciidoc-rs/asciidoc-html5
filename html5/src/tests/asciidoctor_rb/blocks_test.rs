@@ -6458,3 +6458,2166 @@ width="500px" height="500px">
         );
     }
 }
+
+mod media {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Media' do
+"#
+    );
+
+    #[test]
+    fn should_detect_and_convert_video_macro() {
+        verifies!(
+            r#"
+    test 'should detect and convert video macro' do
+      input = 'video::cats-vs-dogs.avi[]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="cats-vs-dogs.avi"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::cats-vs-dogs.avi[]");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="cats-vs-dogs.avi"]"#, 1);
+    }
+
+    #[test]
+    fn should_detect_and_convert_video_macro_with_positional_attributes() {
+        verifies!(
+            r#"
+    test 'should detect and convert video macro with positional attributes for poster and dimensions' do
+      input = 'video::cats-vs-dogs.avi[cats-and-dogs.png, 200, 300]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="cats-vs-dogs.avi"]', output, 1
+      assert_css 'video[poster="cats-and-dogs.png"]', output, 1
+      assert_css 'video[width="200"]', output, 1
+      assert_css 'video[height="300"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::cats-vs-dogs.avi[cats-and-dogs.png, 200, 300]");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="cats-vs-dogs.avi"]"#, 1);
+        assert_css(&output, r#"video[poster="cats-and-dogs.png"]"#, 1);
+        assert_css(&output, r#"video[width="200"]"#, 1);
+        assert_css(&output, r#"video[height="300"]"#, 1);
+    }
+
+    #[test]
+    fn should_set_direction_css_class_on_video_block_if_float_attribute_is_set() {
+        verifies!(
+            r#"
+    test 'should set direction CSS class on video block if float attribute is set' do
+      input = 'video::cats-vs-dogs.avi[cats-and-dogs.png,float=right]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="cats-vs-dogs.avi"]', output, 1
+      assert_css '.videoblock.right', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::cats-vs-dogs.avi[cats-and-dogs.png,float=right]");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="cats-vs-dogs.avi"]"#, 1);
+        assert_css(&output, ".videoblock.right", 1);
+    }
+
+    #[test]
+    fn should_set_text_alignment_css_class_on_video_block_if_align_attribute_is_set() {
+        verifies!(
+            r#"
+    test 'should set text alignment CSS class on video block if align attribute is set' do
+      input = 'video::cats-vs-dogs.avi[cats-and-dogs.png,align=center]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="cats-vs-dogs.avi"]', output, 1
+      assert_css '.videoblock.text-center', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::cats-vs-dogs.avi[cats-and-dogs.png,align=center]");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="cats-vs-dogs.avi"]"#, 1);
+        assert_css(&output, ".videoblock.text-center", 1);
+    }
+
+    #[test]
+    fn video_macro_should_honor_all_options() {
+        verifies!(
+            r#"
+    test 'video macro should honor all options' do
+      input = 'video::cats-vs-dogs.avi[options="autoplay,muted,nocontrols,loop",preload="metadata"]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[autoplay]', output, 1
+      assert_css 'video[muted]', output, 1
+      assert_css 'video:not([controls])', output, 1
+      assert_css 'video[loop]', output, 1
+      assert_css 'video[preload=metadata]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(
+            r#"video::cats-vs-dogs.avi[options="autoplay,muted,nocontrols,loop",preload="metadata"]"#,
+        );
+        assert_css(&output, "video", 1);
+        assert_css(&output, "video[autoplay]", 1);
+        assert_css(&output, "video[muted]", 1);
+        assert_css(&output, "video:not([controls])", 1);
+        assert_css(&output, "video[loop]", 1);
+        assert_css(&output, "video[preload=metadata]", 1);
+    }
+
+    #[test]
+    fn video_macro_should_add_time_range_anchor_with_start_time() {
+        verifies!(
+            r#"
+    test 'video macro should add time range anchor with start time if start attribute is set' do
+      input = 'video::cats-vs-dogs.avi[start="30"]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_xpath '//video[@src="cats-vs-dogs.avi#t=30"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(r#"video::cats-vs-dogs.avi[start="30"]"#);
+        assert_css(&output, "video", 1);
+        assert_xpath(&output, r#"//video[@src="cats-vs-dogs.avi#t=30"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_add_time_range_anchor_with_end_time() {
+        verifies!(
+            r#"
+    test 'video macro should add time range anchor with end time if end attribute is set' do
+      input = 'video::cats-vs-dogs.avi[end="30"]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_xpath '//video[@src="cats-vs-dogs.avi#t=,30"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(r#"video::cats-vs-dogs.avi[end="30"]"#);
+        assert_css(&output, "video", 1);
+        assert_xpath(&output, r#"//video[@src="cats-vs-dogs.avi#t=,30"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_add_time_range_anchor_with_start_and_end_time() {
+        verifies!(
+            r#"
+    test 'video macro should add time range anchor with start and end time if start and end attributes are set' do
+      input = 'video::cats-vs-dogs.avi[start="30",end="60"]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_xpath '//video[@src="cats-vs-dogs.avi#t=30,60"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(r#"video::cats-vs-dogs.avi[start="30",end="60"]"#);
+        assert_css(&output, "video", 1);
+        assert_xpath(&output, r#"//video[@src="cats-vs-dogs.avi#t=30,60"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_use_imagesdir_attribute_to_resolve_target_and_poster() {
+        verifies!(
+            r#"
+    test 'video macro should use imagesdir attribute to resolve target and poster' do
+      input = <<~'EOS'
+      :imagesdir: assets
+
+      video::cats-vs-dogs.avi[cats-and-dogs.png, 200, 300]
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="assets/cats-vs-dogs.avi"]', output, 1
+      assert_css 'video[poster="assets/cats-and-dogs.png"]', output, 1
+      assert_css 'video[width="200"]', output, 1
+      assert_css 'video[height="300"]', output, 1
+    end
+
+"#
+        );
+
+        let output =
+            convert(":imagesdir: assets\n\nvideo::cats-vs-dogs.avi[cats-and-dogs.png, 200, 300]\n");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="assets/cats-vs-dogs.avi"]"#, 1);
+        assert_css(&output, r#"video[poster="assets/cats-and-dogs.png"]"#, 1);
+        assert_css(&output, r#"video[width="200"]"#, 1);
+        assert_css(&output, r#"video[height="300"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_not_use_imagesdir_attribute_to_resolve_target_if_target_is_a_url() {
+        verifies!(
+            r#"
+    test 'video macro should not use imagesdir attribute to resolve target if target is a URL' do
+      input = <<~'EOS'
+      :imagesdir: assets
+
+      video::http://example.org/videos/cats-vs-dogs.avi[]
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="http://example.org/videos/cats-vs-dogs.avi"]', output, 1
+    end
+
+"#
+        );
+
+        let output =
+            convert(":imagesdir: assets\n\nvideo::http://example.org/videos/cats-vs-dogs.avi[]\n");
+        assert_css(&output, "video", 1);
+        assert_css(
+            &output,
+            r#"video[src="http://example.org/videos/cats-vs-dogs.avi"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn video_macro_should_output_custom_html_with_iframe_for_vimeo_service() {
+        verifies!(
+            r#"
+    test 'video macro should output custom HTML with iframe for vimeo service' do
+      input = 'video::67480300[vimeo, 400, 300, start=60, options="autoplay,muted"]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 0
+      assert_css 'iframe', output, 1
+      assert_css 'iframe[src="https://player.vimeo.com/video/67480300?autoplay=1&muted=1#at=60"]', output, 1
+      assert_css 'iframe[width="400"]', output, 1
+      assert_css 'iframe[height="300"]', output, 1
+    end
+
+"#
+        );
+
+        let output =
+            convert(r#"video::67480300[vimeo, 400, 300, start=60, options="autoplay,muted"]"#);
+        assert_css(&output, "video", 0);
+        assert_css(&output, "iframe", 1);
+        assert_css(
+            &output,
+            r#"iframe[src="https://player.vimeo.com/video/67480300?autoplay=1&muted=1#at=60"]"#,
+            1,
+        );
+        assert_css(&output, r#"iframe[width="400"]"#, 1);
+        assert_css(&output, r#"iframe[height="300"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_allow_hash_for_vimeo_video_to_be_specified_in_video_id() {
+        verifies!(
+            r#"
+    test 'video macro should allow hash for vimeo video to be specified in video ID' do
+      input = 'video::67480300/123456789[vimeo, 400, 300, options=loop]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 0
+      assert_css 'iframe', output, 1
+      assert_css 'iframe[src="https://player.vimeo.com/video/67480300?h=123456789&loop=1"]', output, 1
+      assert_css 'iframe[width="400"]', output, 1
+      assert_css 'iframe[height="300"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::67480300/123456789[vimeo, 400, 300, options=loop]");
+        assert_css(&output, "video", 0);
+        assert_css(&output, "iframe", 1);
+        assert_css(
+            &output,
+            r#"iframe[src="https://player.vimeo.com/video/67480300?h=123456789&loop=1"]"#,
+            1,
+        );
+        assert_css(&output, r#"iframe[width="400"]"#, 1);
+        assert_css(&output, r#"iframe[height="300"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_allow_hash_for_vimeo_video_to_be_specified_using_hash_attribute() {
+        verifies!(
+            r#"
+    test 'video macro should allow hash for vimeo video to be specified using hash attribute' do
+      input = 'video::67480300[vimeo, 400, 300, options=loop, hash=123456789]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 0
+      assert_css 'iframe', output, 1
+      assert_css 'iframe[src="https://player.vimeo.com/video/67480300?h=123456789&loop=1"]', output, 1
+      assert_css 'iframe[width="400"]', output, 1
+      assert_css 'iframe[height="300"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("video::67480300[vimeo, 400, 300, options=loop, hash=123456789]");
+        assert_css(&output, "video", 0);
+        assert_css(&output, "iframe", 1);
+        assert_css(
+            &output,
+            r#"iframe[src="https://player.vimeo.com/video/67480300?h=123456789&loop=1"]"#,
+            1,
+        );
+        assert_css(&output, r#"iframe[width="400"]"#, 1);
+        assert_css(&output, r#"iframe[height="300"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_output_custom_html_with_iframe_for_youtube_service() {
+        verifies!(
+            r#"
+    test 'video macro should output custom HTML with iframe for youtube service' do
+      input = 'video::U8GBXvdmHT4/PLg7s6cbtAD15Das5LK9mXt_g59DLWxKUe[youtube, 640, 360, start=60, options="autoplay,muted,modest", theme=light]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 0
+      assert_css 'iframe', output, 1
+      assert_css 'iframe[src="https://www.youtube.com/embed/U8GBXvdmHT4?rel=0&start=60&autoplay=1&mute=1&list=PLg7s6cbtAD15Das5LK9mXt_g59DLWxKUe&modestbranding=1&theme=light"]', output, 1
+      assert_css 'iframe[width="640"]', output, 1
+      assert_css 'iframe[height="360"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(
+            r#"video::U8GBXvdmHT4/PLg7s6cbtAD15Das5LK9mXt_g59DLWxKUe[youtube, 640, 360, start=60, options="autoplay,muted,modest", theme=light]"#,
+        );
+        assert_css(&output, "video", 0);
+        assert_css(&output, "iframe", 1);
+        assert_css(
+            &output,
+            r#"iframe[src="https://www.youtube.com/embed/U8GBXvdmHT4?rel=0&start=60&autoplay=1&mute=1&list=PLg7s6cbtAD15Das5LK9mXt_g59DLWxKUe&modestbranding=1&theme=light"]"#,
+            1,
+        );
+        assert_css(&output, r#"iframe[width="640"]"#, 1);
+        assert_css(&output, r#"iframe[height="360"]"#, 1);
+    }
+
+    #[test]
+    fn video_macro_should_output_custom_html_with_iframe_for_youtube_service_with_dynamic_playlist()
+    {
+        verifies!(
+            r#"
+    test 'video macro should output custom HTML with iframe for youtube service with dynamic playlist' do
+      input = 'video::SCZF6I-Rc4I,AsKGOeonbIs,HwrPhOp6-aM[youtube, 640, 360, start=60, options=autoplay]'
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 0
+      assert_css 'iframe', output, 1
+      assert_css 'iframe[src="https://www.youtube.com/embed/SCZF6I-Rc4I?rel=0&start=60&autoplay=1&playlist=SCZF6I-Rc4I,AsKGOeonbIs,HwrPhOp6-aM"]', output, 1
+      assert_css 'iframe[width="640"]', output, 1
+      assert_css 'iframe[height="360"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(
+            "video::SCZF6I-Rc4I,AsKGOeonbIs,HwrPhOp6-aM[youtube, 640, 360, start=60, options=autoplay]",
+        );
+        assert_css(&output, "video", 0);
+        assert_css(&output, "iframe", 1);
+        assert_css(
+            &output,
+            r#"iframe[src="https://www.youtube.com/embed/SCZF6I-Rc4I?rel=0&start=60&autoplay=1&playlist=SCZF6I-Rc4I,AsKGOeonbIs,HwrPhOp6-aM"]"#,
+            1,
+        );
+        assert_css(&output, r#"iframe[width="640"]"#, 1);
+        assert_css(&output, r#"iframe[height="360"]"#, 1);
+    }
+
+    #[test]
+    fn should_detect_and_convert_audio_macro() {
+        verifies!(
+            r#"
+    test 'should detect and convert audio macro' do
+      input = 'audio::podcast.mp3[]'
+      output = convert_string_to_embedded input
+      assert_css 'audio', output, 1
+      assert_css 'audio[src="podcast.mp3"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("audio::podcast.mp3[]");
+        assert_css(&output, "audio", 1);
+        assert_css(&output, r#"audio[src="podcast.mp3"]"#, 1);
+    }
+
+    #[test]
+    fn audio_macro_should_use_imagesdir_attribute_to_resolve_target() {
+        verifies!(
+            r#"
+    test 'audio macro should use imagesdir attribute to resolve target' do
+      input = <<~'EOS'
+      :imagesdir: assets
+
+      audio::podcast.mp3[]
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css 'audio', output, 1
+      assert_css 'audio[src="assets/podcast.mp3"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(":imagesdir: assets\n\naudio::podcast.mp3[]\n");
+        assert_css(&output, "audio", 1);
+        assert_css(&output, r#"audio[src="assets/podcast.mp3"]"#, 1);
+    }
+
+    #[test]
+    fn audio_macro_should_not_use_imagesdir_attribute_to_resolve_target_if_target_is_a_url() {
+        verifies!(
+            r#"
+    test 'audio macro should not use imagesdir attribute to resolve target if target is a URL' do
+      input = <<~'EOS'
+      :imagesdir: assets
+
+      video::http://example.org/podcast.mp3[]
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css 'video', output, 1
+      assert_css 'video[src="http://example.org/podcast.mp3"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(":imagesdir: assets\n\nvideo::http://example.org/podcast.mp3[]\n");
+        assert_css(&output, "video", 1);
+        assert_css(&output, r#"video[src="http://example.org/podcast.mp3"]"#, 1);
+    }
+
+    #[test]
+    fn audio_macro_should_honor_all_options() {
+        verifies!(
+            r#"
+    test 'audio macro should honor all options' do
+      input = 'audio::podcast.mp3[options="autoplay,nocontrols,loop"]'
+      output = convert_string_to_embedded input
+      assert_css 'audio', output, 1
+      assert_css 'audio[autoplay]', output, 1
+      assert_css 'audio:not([controls])', output, 1
+      assert_css 'audio[loop]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert(r#"audio::podcast.mp3[options="autoplay,nocontrols,loop"]"#);
+        assert_css(&output, "audio", 1);
+        assert_css(&output, "audio[autoplay]", 1);
+        assert_css(&output, "audio:not([controls])", 1);
+        assert_css(&output, "audio[loop]", 1);
+    }
+
+    #[test]
+    fn audio_macro_should_support_start_and_end_time() {
+        verifies!(
+            r#"
+    test 'audio macro should support start and end time' do
+      input = 'audio::podcast.mp3[start=1,end=2]'
+      output = convert_string_to_embedded input
+      assert_css 'audio', output, 1
+      assert_css 'audio[controls]', output, 1
+      assert_css 'audio[src="podcast.mp3#t=1,2"]', output, 1
+    end
+  end
+
+"#
+        );
+
+        let output = convert("audio::podcast.mp3[start=1,end=2]");
+        assert_css(&output, "audio", 1);
+        assert_css(&output, "audio[controls]", 1);
+        assert_css(&output, r#"audio[src="podcast.mp3#t=1,2"]"#, 1);
+    }
+}
+
+mod admonition_icons {
+    use std::{
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Admonition icons' do
+"#
+    );
+
+    /// The 35-byte `ref/asciidoctor/test/fixtures/tip.gif` — a 1x1 GIF, byte
+    /// for byte the same file as `dot.gif` — and the `data:` URI Asciidoctor
+    /// embeds for it under `data-uri`.
+    const TIP_GIF: &[u8] = &[
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x05, 0x04,
+        0x04, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02,
+        0x02, 0x44, 0x01, 0x00, 0x3b,
+    ];
+    const TIP_GIF_DATA_URI: &str =
+        "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
+
+    /// A throwaway on-disk `docdir` holding `fixtures/tip.gif`, the icon the
+    /// `data-uri` admonition-icon tests read (a stand-in for Asciidoctor's
+    /// `test/fixtures`, reached in Ruby via `docdir: testdir`). Removed on
+    /// drop. Point `base_dir` at [`IconFixtures::dir`] and resolve the icon
+    /// under `iconsdir=fixtures`.
+    struct IconFixtures {
+        dir: PathBuf,
+    }
+
+    impl IconFixtures {
+        #[track_caller]
+        fn new() -> Self {
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+            let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let dir =
+                std::env::temp_dir().join(format!("adoc-icons-{}-{unique}", std::process::id()));
+
+            let fixtures = dir.join("fixtures");
+            std::fs::create_dir_all(&fixtures).expect("create fixtures dir");
+            std::fs::write(fixtures.join("tip.gif"), TIP_GIF).expect("write tip.gif");
+
+            Self { dir }
+        }
+
+        fn dir(&self) -> &Path {
+            &self.dir
+        }
+    }
+
+    impl Drop for IconFixtures {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    #[test]
+    fn can_resolve_icon_relative_to_default_iconsdir() {
+        verifies!(
+            r#"
+    test 'can resolve icon relative to default iconsdir' do
+      input = <<~'EOS'
+      :icons:
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SERVER
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="./images/icons/tip.png"][@alt="Tip"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons:\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="./images/icons/tip.png"][@alt="Tip"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn can_resolve_icon_relative_to_custom_iconsdir() {
+        verifies!(
+            r#"
+    test 'can resolve icon relative to custom iconsdir' do
+      input = <<~'EOS'
+      :icons:
+      :iconsdir: icons
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SERVER
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="icons/tip.png"][@alt="Tip"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons:\n:iconsdir: icons\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="icons/tip.png"][@alt="Tip"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_add_file_extension_to_custom_icon_if_not_specified() {
+        verifies!(
+            r#"
+    test 'should add file extension to custom icon if not specified' do
+      input = <<~'EOS'
+      :icons: font
+      :iconsdir: images/icons
+
+      [TIP,icon=a]
+      Override the icon of an admonition block using an attribute
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SERVER
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="images/icons/a.png"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons: font\n:iconsdir: images/icons\n\n[TIP,icon=a]\nOverride the icon of an admonition block using an attribute\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="images/icons/a.png"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_allow_icontype_to_be_specified_when_using_built_in_admonition_icon() {
+        verifies!(
+            r#"
+    test 'should allow icontype to be specified when using built-in admonition icon' do
+      input = 'TIP: Set the icontype using either the icontype attribute on the icons attribute.'
+      [
+        { 'icons' => '', 'ext' => 'png' },
+        { 'icons' => '', 'icontype' => 'jpg', 'ext' => 'jpg' },
+        { 'icons' => 'jpg', 'ext' => 'jpg' },
+        { 'icons' => 'image', 'ext' => 'png' },
+      ].each do |attributes|
+        expected_src = %(./images/icons/tip.#{attributes.delete 'ext'})
+        output = convert_string input, attributes: attributes
+        assert_xpath %(//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="#{expected_src}"]), output, 1
+      end
+    end
+
+"#
+        );
+
+        let input =
+            "TIP: Set the icontype using either the icontype attribute on the icons attribute.";
+        for (attributes, ext) in [
+            (vec![("icons", "")], "png"),
+            (vec![("icons", ""), ("icontype", "jpg")], "jpg"),
+            (vec![("icons", "jpg")], "jpg"),
+            (vec![("icons", "image")], "png"),
+        ] {
+            let mut options = Options::new().standalone(true);
+            for (name, value) in attributes {
+                options = options.attribute(name, value);
+            }
+
+            let output = convert_with(input, &options);
+            assert_xpath(
+                &output,
+                &format!(
+                    r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="./images/icons/tip.{ext}"]"#
+                ),
+                1,
+            );
+        }
+    }
+
+    #[test]
+    fn should_allow_icontype_to_be_specified_when_using_custom_admonition_icon() {
+        verifies!(
+            r#"
+    test 'should allow icontype to be specified when using custom admonition icon' do
+      input = <<~'EOS'
+      [TIP,icon=hint]
+      Set the icontype using either the icontype attribute on the icons attribute.
+      EOS
+      [
+        { 'icons' => '', 'ext' => 'png' },
+        { 'icons' => '', 'icontype' => 'jpg', 'ext' => 'jpg' },
+        { 'icons' => 'jpg', 'ext' => 'jpg' },
+        { 'icons' => 'image', 'ext' => 'png' },
+      ].each do |attributes|
+        expected_src = %(./images/icons/hint.#{attributes.delete 'ext'})
+        output = convert_string input, attributes: attributes
+        assert_xpath %(//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="#{expected_src}"]), output, 1
+      end
+    end
+
+"#
+        );
+
+        let input = "[TIP,icon=hint]\nSet the icontype using either the icontype attribute on the icons attribute.\n";
+        for (attributes, ext) in [
+            (vec![("icons", "")], "png"),
+            (vec![("icons", ""), ("icontype", "jpg")], "jpg"),
+            (vec![("icons", "jpg")], "jpg"),
+            (vec![("icons", "image")], "png"),
+        ] {
+            let mut options = Options::new().standalone(true);
+            for (name, value) in attributes {
+                options = options.attribute(name, value);
+            }
+
+            let output = convert_with(input, &options);
+            assert_xpath(
+                &output,
+                &format!(
+                    r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="./images/icons/hint.{ext}"]"#
+                ),
+                1,
+            );
+        }
+    }
+
+    #[test]
+    fn embeds_base64_encoded_data_uri_of_icon_when_data_uri_attribute_is_set() {
+        verifies!(
+            r#"
+    test 'embeds base64-encoded data uri of icon when data-uri attribute is set and safe mode level is less than SECURE' do
+      input = <<~'EOS'
+      :icons:
+      :iconsdir: fixtures
+      :icontype: gif
+      :data-uri:
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SAFE, attributes: { 'docdir' => testdir }
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs="][@alt="Tip"]', output, 1
+    end
+
+"#
+        );
+
+        let fx = IconFixtures::new();
+        let output = convert_with(
+            ":icons:\n:iconsdir: fixtures\n:icontype: gif\n:data-uri:\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new()
+                .standalone(true)
+                .safe_mode(SafeMode::Safe)
+                .base_dir(fx.dir()),
+        );
+        assert_xpath(
+            &output,
+            &format!(
+                r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="{TIP_GIF_DATA_URI}"][@alt="Tip"]"#
+            ),
+            1,
+        );
+    }
+
+    #[test]
+    fn should_embed_base64_encoded_data_uri_of_custom_icon_when_data_uri_attribute_is_set() {
+        verifies!(
+            r#"
+    test 'should embed base64-encoded data uri of custom icon when data-uri attribute is set' do
+      input = <<~'EOS'
+      :icons:
+      :iconsdir: fixtures
+      :icontype: gif
+      :data-uri:
+
+      [TIP,icon=tip]
+      You can set a custom icon using the icon attribute on the block.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SAFE, attributes: { 'docdir' => testdir }
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs="][@alt="Tip"]', output, 1
+    end
+
+"#
+        );
+
+        let fx = IconFixtures::new();
+        let output = convert_with(
+            ":icons:\n:iconsdir: fixtures\n:icontype: gif\n:data-uri:\n\n[TIP,icon=tip]\nYou can set a custom icon using the icon attribute on the block.\n",
+            &Options::new()
+                .standalone(true)
+                .safe_mode(SafeMode::Safe)
+                .base_dir(fx.dir()),
+        );
+        assert_xpath(
+            &output,
+            &format!(
+                r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="{TIP_GIF_DATA_URI}"][@alt="Tip"]"#
+            ),
+            1,
+        );
+    }
+
+    #[test]
+    fn does_not_embed_base64_encoded_data_uri_of_icon_when_safe_mode_level_is_secure_or_greater() {
+        verifies!(
+            r#"
+    test 'does not embed base64-encoded data uri of icon when safe mode level is SECURE or greater' do
+      input = <<~'EOS'
+      :icons:
+      :iconsdir: fixtures
+      :icontype: gif
+      :data-uri:
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, attributes: { 'icons' => '' }
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="fixtures/tip.gif"][@alt="Tip"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons:\n:iconsdir: fixtures\n:icontype: gif\n:data-uri:\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new().standalone(true).attribute("icons", ""),
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="fixtures/tip.gif"][@alt="Tip"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn cleans_reference_to_ancestor_directories_before_reading_icon() {
+        verifies!(
+            r#"
+    test 'cleans reference to ancestor directories before reading icon if safe mode level is at least SAFE' do
+      input = <<~'EOS'
+      :icons:
+      :iconsdir: ../fixtures
+      :icontype: gif
+      :data-uri:
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SAFE, attributes: { 'docdir' => testdir }
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs="][@alt="Tip"]', output, 1
+"#
+        );
+
+        let fx = IconFixtures::new();
+        let output = convert_with(
+            ":icons:\n:iconsdir: ../fixtures\n:icontype: gif\n:data-uri:\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new()
+                .standalone(true)
+                .safe_mode(SafeMode::Safe)
+                .base_dir(fx.dir()),
+        );
+        assert_xpath(
+            &output,
+            &format!(
+                r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="{TIP_GIF_DATA_URI}"][@alt="Tip"]"#
+            ),
+            1,
+        );
+
+        // The `assert_message` WARN ("image has illegal reference to ancestor of
+        // jail; recovering automatically") is a render-time diagnostic this crate
+        // performs silently while recovering the read back inside the jail.
+        non_normative!(
+            r#"
+      assert_message @logger, :WARN, 'image has illegal reference to ancestor of jail; recovering automatically'
+    end
+
+"#
+        );
+    }
+
+    #[test]
+    fn should_import_font_awesome_and_use_font_based_icons_when_value_of_icons_attribute_is_font() {
+        verifies!(
+            r#"
+    test 'should import Font Awesome and use font-based icons when value of icons attribute is font' do
+      input = <<~'EOS'
+      :icons: font
+
+      [TIP]
+      You can use icons for admonitions by setting the 'icons' attribute.
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SERVER
+      assert_css %(html > head > link[rel="stylesheet"][href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/#{Asciidoctor::FONT_AWESOME_VERSION}/css/font-awesome.min.css"]), output, 1
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/i[@class="fa icon-tip"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons: font\n\n[TIP]\nYou can use icons for admonitions by setting the 'icons' attribute.\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        );
+        assert_css(
+            &output,
+            r#"html > head > link[rel="stylesheet"][href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"]"#,
+            1,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/i[@class="fa icon-tip"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn font_based_icon_should_not_override_icon_specified_on_admonition() {
+        verifies!(
+            r#"
+    test 'font-based icon should not override icon specified on admonition' do
+      input = <<~'EOS'
+      :icons: font
+      :iconsdir: images/icons
+
+      [TIP,icon=a.png]
+      Override the icon of an admonition block using an attribute
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SERVER
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/i[@class="fa icon-tip"]', output, 0
+      assert_xpath '//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="images/icons/a.png"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":icons: font\n:iconsdir: images/icons\n\n[TIP,icon=a.png]\nOverride the icon of an admonition block using an attribute\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Server),
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/i[@class="fa icon-tip"]"#,
+            0,
+        );
+        assert_xpath(
+            &output,
+            r#"//*[@class="admonitionblock tip"]//*[@class="icon"]/img[@src="images/icons/a.png"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_use_http_uri_scheme_for_assets_when_asset_uri_scheme_is_http() {
+        verifies!(
+            r#"
+    test 'should use http uri scheme for assets when asset-uri-scheme is http' do
+      input = <<~'EOS'
+      :asset-uri-scheme: http
+      :icons: font
+      :source-highlighter: highlightjs
+
+      TIP: You can control the URI scheme used for assets with the asset-uri-scheme attribute
+
+      [source,ruby]
+      puts "AsciiDoc, FTW!"
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SAFE
+      assert_css %(html > head > link[rel="stylesheet"][href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/#{Asciidoctor::FONT_AWESOME_VERSION}/css/font-awesome.min.css"]), output, 1
+      assert_css %(html > body > script[src="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/#{Asciidoctor::HIGHLIGHT_JS_VERSION}/highlight.min.js"]), output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            ":asset-uri-scheme: http\n:icons: font\n:source-highlighter: highlightjs\n\nTIP: You can control the URI scheme used for assets with the asset-uri-scheme attribute\n\n[source,ruby]\nputs \"AsciiDoc, FTW!\"\n",
+            &Options::new().standalone(true).safe_mode(SafeMode::Safe),
+        );
+        assert_css(
+            &output,
+            r#"html > head > link[rel="stylesheet"][href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"]"#,
+            1,
+        );
+        assert_css(
+            &output,
+            r#"html > body > script[src="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.3/highlight.min.js"]"#,
+            1,
+        );
+    }
+
+    // Asciidoctor normalizes a bare `:asset-uri-scheme:` to an empty value, so
+    // its CDN assets load over a protocol-relative `//cdnjs…` URL.
+    // `asciidoc-parser` instead resolves a bare set of this attribute to its
+    // intrinsic default of `https`, indistinguishable from an explicit
+    // `:asset-uri-scheme: https`, so the renderer cannot honor the blank form.
+    non_normative!(
+        r#"
+    test 'should use no uri scheme for assets when asset-uri-scheme is blank' do
+      input = <<~'EOS'
+      :asset-uri-scheme:
+      :icons: font
+      :source-highlighter: highlightjs
+
+      TIP: You can control the URI scheme used for assets with the asset-uri-scheme attribute
+
+      [source,ruby]
+      puts "AsciiDoc, FTW!"
+      EOS
+
+      output = convert_string input, safe: Asciidoctor::SafeMode::SAFE
+      assert_css %(html > head > link[rel="stylesheet"][href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/#{Asciidoctor::FONT_AWESOME_VERSION}/css/font-awesome.min.css"]), output, 1
+      assert_css %(html > body > script[src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/#{Asciidoctor::HIGHLIGHT_JS_VERSION}/highlight.min.js"]), output, 1
+    end
+  end
+
+"#
+    );
+}
+
+mod image_paths {
+    use super::*;
+
+    // Both tests drive `block_from_string(...).normalize_asset_path(...)`, the
+    // parser's asset-path resolver — an `asciidoc-parser` model API this crate
+    // does not re-expose. The crate's own asset-path resolution (jail
+    // confinement under `safe`/`server`, and its absence under `unsafe`) is
+    // exercised through rendered `img/@src` values in the `Images` and `Media`
+    // contexts instead.
+    non_normative!(
+        r##"
+  context 'Image paths' do
+    test 'restricts access to ancestor directories when safe mode level is at least SAFE' do
+      input = 'image::asciidoctor.png[Asciidoctor]'
+      basedir = testdir
+      block = block_from_string input, attributes: { 'docdir' => basedir }
+      doc = block.document
+      assert doc.safe >= Asciidoctor::SafeMode::SAFE
+
+      assert_equal File.join(basedir, 'images'), block.normalize_asset_path('images')
+      assert_equal File.join(basedir, 'etc/images'), block.normalize_asset_path("#{disk_root}etc/images")
+      assert_equal File.join(basedir, 'images'), block.normalize_asset_path('../../images')
+    end
+
+    test 'does not restrict access to ancestor directories when safe mode is disabled' do
+      input = 'image::asciidoctor.png[Asciidoctor]'
+      basedir = testdir
+      block = block_from_string input, safe: Asciidoctor::SafeMode::UNSAFE, attributes: { 'docdir' => basedir }
+      doc = block.document
+      assert doc.safe == Asciidoctor::SafeMode::UNSAFE
+
+      assert_equal File.join(basedir, 'images'), block.normalize_asset_path('images')
+      absolute_path = "#{disk_root}etc/images"
+      assert_equal absolute_path, block.normalize_asset_path(absolute_path)
+      assert_equal File.expand_path(File.join(basedir, '../../images')), block.normalize_asset_path('../../images')
+    end
+  end
+
+"##
+    );
+}
+
+mod source_code {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Source code' do
+"#
+    );
+
+    #[test]
+    fn should_support_fenced_code_block_using_backticks() {
+        verifies!(
+            r#"
+    test 'should support fenced code block using backticks' do
+      input = <<~'EOS'
+      ```
+      puts "Hello, World!"
+      ```
+      EOS
+
+      block = block_from_string input
+      assert_equal :listing, block.context
+      assert_equal 'source', (block.attr 'style')
+      assert_equal :fenced_code, (block.attr 'cloaked-context')
+      assert_nil (block.attr 'language')
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 1
+      assert_css '.listingblock pre code', output, 1
+      assert_css '.listingblock pre code:not([class])', output, 1
+    end
+
+"#
+        );
+
+        // The `block.context`/`style`/`cloaked-context`/`language` checks are
+        // `asciidoc-parser` model state (verified there); here the rendered output
+        // is driven. `asciidoc-parser` does not mark a bare fence's `source` style,
+        // so the renderer promotes it (see `opens_with_backtick_fence`), matching
+        // Asciidoctor's `<pre class="highlight"><code>` (no language).
+        let output = convert("```\nputs \"Hello, World!\"\n```\n");
+        assert_css(&output, ".listingblock", 1);
+        assert_css(&output, ".listingblock pre code", 1);
+        assert_css(&output, ".listingblock pre code:not([class])", 1);
+    }
+
+    #[test]
+    fn should_not_recognize_fenced_code_blocks_with_more_than_three_delimiters() {
+        verifies!(
+            r#"
+    test 'should not recognize fenced code blocks with more than three delimiters' do
+      input = <<~'EOS'
+      ````ruby
+      puts "Hello, World!"
+      ````
+
+      ~~~~ javascript
+      alert("Hello, World!")
+      ~~~~
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 0
+    end
+
+"#
+        );
+
+        let output = convert(
+            "````ruby\nputs \"Hello, World!\"\n````\n\n~~~~ javascript\nalert(\"Hello, World!\")\n~~~~\n",
+        );
+        assert_css(&output, ".listingblock", 0);
+    }
+
+    #[test]
+    fn should_support_fenced_code_blocks_with_languages() {
+        verifies!(
+            r#"
+    test 'should support fenced code blocks with languages' do
+      input = <<~'EOS'
+      ```ruby
+      puts "Hello, World!"
+      ```
+
+      ``` javascript
+      alert("Hello, World!")
+      ```
+      EOS
+
+      block = (document_from_string input).blocks[0]
+      assert_equal :listing, block.context
+      assert_equal 'source', (block.attr 'style')
+      assert_equal :fenced_code, (block.attr 'cloaked-context')
+      assert_equal 'ruby', (block.attr 'language')
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 2
+      assert_css '.listingblock pre code.language-ruby[data-lang=ruby]', output, 1
+      assert_css '.listingblock pre code.language-javascript[data-lang=javascript]', output, 1
+    end
+
+"#
+        );
+
+        // The `block.context`/`style`/`cloaked-context`/`language` checks are
+        // `asciidoc-parser` model state (verified there); here the rendered output
+        // is driven.
+        let output = convert(
+            "```ruby\nputs \"Hello, World!\"\n```\n\n``` javascript\nalert(\"Hello, World!\")\n```\n",
+        );
+        assert_css(&output, ".listingblock", 2);
+        assert_css(
+            &output,
+            ".listingblock pre code.language-ruby[data-lang=ruby]",
+            1,
+        );
+        assert_css(
+            &output,
+            ".listingblock pre code.language-javascript[data-lang=javascript]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_support_fenced_code_blocks_with_languages_and_numbering() {
+        verifies!(
+            r#"
+    test 'should support fenced code blocks with languages and numbering' do
+      input = <<~'EOS'
+      ```ruby,numbered
+      puts "Hello, World!"
+      ```
+
+      ``` javascript, numbered
+      alert("Hello, World!")
+      ```
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 2
+      assert_css '.listingblock pre code.language-ruby[data-lang=ruby]', output, 1
+      assert_css '.listingblock pre code.language-javascript[data-lang=javascript]', output, 1
+    end
+
+"#
+        );
+
+        // `asciidoc-parser` hands a fence's info string over as a single language
+        // attribute (`ruby,numbered`) rather than splitting it into positional
+        // attributes; the renderer keeps only the language token before the comma
+        // (see `Renderer::source`), so the `data-lang` matches Asciidoctor.
+        let output = convert(
+            "```ruby,numbered\nputs \"Hello, World!\"\n```\n\n``` javascript, numbered\nalert(\"Hello, World!\")\n```\n",
+        );
+        assert_css(&output, ".listingblock", 2);
+        assert_css(
+            &output,
+            ".listingblock pre code.language-ruby[data-lang=ruby]",
+            1,
+        );
+        assert_css(
+            &output,
+            ".listingblock pre code.language-javascript[data-lang=javascript]",
+            1,
+        );
+    }
+
+    #[test]
+    fn should_allow_source_style_to_be_specified_on_literal_block() {
+        verifies!(
+            r#"
+    test 'should allow source style to be specified on literal block' do
+      input = <<~'EOS'
+      [source]
+      ....
+      console.log('Hello, World!')
+      ....
+      EOS
+
+      block = block_from_string input
+      assert_equal :listing, block.context
+      assert_equal 'source', (block.attr 'style')
+      assert_equal :literal, (block.attr 'cloaked-context')
+      assert_nil (block.attr 'language')
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 1
+      assert_css '.listingblock pre', output, 1
+      assert_css '.listingblock pre code', output, 1
+      assert_css '.listingblock pre code[data-lang]', output, 0
+    end
+
+"#
+        );
+
+        // The `block.context`/`style`/`cloaked-context`/`language` checks are
+        // `asciidoc-parser` model state (verified there); here the rendered output
+        // is driven.
+        let output = convert("[source]\n....\nconsole.log('Hello, World!')\n....\n");
+        assert_css(&output, ".listingblock", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_css(&output, ".listingblock pre code", 1);
+        assert_css(&output, ".listingblock pre code[data-lang]", 0);
+    }
+
+    #[test]
+    fn should_allow_source_style_and_language_to_be_specified_on_literal_block() {
+        verifies!(
+            r#"
+    test 'should allow source style and language to be specified on literal block' do
+      input = <<~'EOS'
+      [source,js]
+      ....
+      console.log('Hello, World!')
+      ....
+      EOS
+
+      block = block_from_string input
+      assert_equal :listing, block.context
+      assert_equal 'source', (block.attr 'style')
+      assert_equal :literal, (block.attr 'cloaked-context')
+      assert_equal 'js', (block.attr 'language')
+      output = convert_string_to_embedded input
+      assert_css '.listingblock', output, 1
+      assert_css '.listingblock pre', output, 1
+      assert_css '.listingblock pre code', output, 1
+      assert_css '.listingblock pre code[data-lang]', output, 1
+    end
+  end
+
+"#
+        );
+
+        // The `block.context`/`style`/`cloaked-context`/`language` checks are
+        // `asciidoc-parser` model state (verified there); here the rendered output
+        // is driven.
+        let output = convert("[source,js]\n....\nconsole.log('Hello, World!')\n....\n");
+        assert_css(&output, ".listingblock", 1);
+        assert_css(&output, ".listingblock pre", 1);
+        assert_css(&output, ".listingblock pre code", 1);
+        assert_css(&output, ".listingblock pre code[data-lang]", 1);
+    }
+}
+
+mod abstract_and_part_intro {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Abstract and Part Intro' do
+"#
+    );
+
+    #[test]
+    fn should_make_abstract_on_open_block_without_title_a_quote_block_for_article() {
+        verifies!(
+            r#"
+    test 'should make abstract on open block without title a quote block for article' do
+      input = <<~'EOS'
+      = Article
+
+      [abstract]
+      --
+      This article is about stuff.
+
+      And other stuff.
+      --
+
+      == Section One
+
+      content
+      EOS
+
+      output = convert_string input
+      assert_css '.quoteblock', output, 1
+      assert_css '.quoteblock.abstract', output, 1
+      assert_css '#preamble .quoteblock', output, 1
+      assert_css '.quoteblock > blockquote', output, 1
+      assert_css '.quoteblock > blockquote > .paragraph', output, 2
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            "= Article\n\n[abstract]\n--\nThis article is about stuff.\n\nAnd other stuff.\n--\n\n== Section One\n\ncontent\n",
+            &Options::new().standalone(true),
+        );
+        assert_css(&output, ".quoteblock", 1);
+        assert_css(&output, ".quoteblock.abstract", 1);
+        assert_css(&output, "#preamble .quoteblock", 1);
+        assert_css(&output, ".quoteblock > blockquote", 1);
+        assert_css(&output, ".quoteblock > blockquote > .paragraph", 2);
+    }
+
+    #[test]
+    fn should_make_abstract_on_open_block_with_title_a_quote_block_with_title_for_article() {
+        verifies!(
+            r#"
+    test 'should make abstract on open block with title a quote block with title for article' do
+      input = <<~'EOS'
+      = Article
+
+      .My abstract
+      [abstract]
+      --
+      This article is about stuff.
+      --
+
+      == Section One
+
+      content
+      EOS
+
+      output = convert_string input
+      assert_css '.quoteblock', output, 1
+      assert_css '.quoteblock.abstract', output, 1
+      assert_css '#preamble .quoteblock', output, 1
+      assert_css '.quoteblock > .title', output, 1
+      assert_css '.quoteblock > .title + blockquote', output, 1
+      assert_css '.quoteblock > .title + blockquote > .paragraph', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            "= Article\n\n.My abstract\n[abstract]\n--\nThis article is about stuff.\n--\n\n== Section One\n\ncontent\n",
+            &Options::new().standalone(true),
+        );
+        assert_css(&output, ".quoteblock", 1);
+        assert_css(&output, ".quoteblock.abstract", 1);
+        assert_css(&output, "#preamble .quoteblock", 1);
+        assert_css(&output, ".quoteblock > .title", 1);
+        assert_css(&output, ".quoteblock > .title + blockquote", 1);
+        assert_css(&output, ".quoteblock > .title + blockquote > .paragraph", 1);
+    }
+
+    #[test]
+    fn should_allow_abstract_in_document_with_title_if_doctype_is_book() {
+        verifies!(
+            r#"
+    test 'should allow abstract in document with title if doctype is book' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      [abstract]
+      Abstract for book with title is valid
+      EOS
+
+      output = convert_string input
+      assert_css '.abstract', output, 1
+    end
+
+"#
+        );
+
+        let output = convert_with(
+            "= Book\n:doctype: book\n\n[abstract]\nAbstract for book with title is valid\n",
+            &Options::new().standalone(true),
+        );
+        assert_css(&output, ".abstract", 1);
+    }
+
+    // This crate does not implement the book-without-doctitle exclusion:
+    // Asciidoctor drops an `[abstract]` used as a direct child of a book document
+    // that has no doctitle (logging a WARN), whereas this crate renders it. The
+    // `.abstract` count therefore does not match, so the test is not verified.
+    non_normative!(
+        r#"
+    test 'should not allow abstract as direct child of document if doctype is book' do
+      input = <<~'EOS'
+      :doctype: book
+
+      [abstract]
+      Abstract for book without title is invalid.
+      EOS
+
+      output = convert_string input
+      assert_css '.abstract', output, 0
+      assert_message @logger, :WARN, 'abstract block cannot be used in a document without a doctitle when doctype is book. Excluding block content.'
+    end
+
+"#
+    );
+
+    // These four abstract tests target the DocBook backend; this crate renders
+    // only the `html5` backend.
+    non_normative!(
+        r#"
+    test 'should make abstract on open block without title converted to DocBook' do
+      input = <<~'EOS'
+      = Article
+
+      [abstract]
+      --
+      This article is about stuff.
+
+      And other stuff.
+      --
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'info > abstract', output, 1
+      assert_css 'info > abstract > simpara', output, 2
+    end
+
+    test 'should make abstract on open block with title converted to DocBook' do
+      input = <<~'EOS'
+      = Article
+
+      .My abstract
+      [abstract]
+      --
+      This article is about stuff.
+      --
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'info > abstract', output, 1
+      assert_css 'info > abstract > title', output, 1
+      assert_css 'info > abstract > title + simpara', output, 1
+    end
+
+    test 'should allow abstract in document with title if doctype is book converted to DocBook' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      [abstract]
+      Abstract for book with title is valid
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'info > abstract', output, 1
+      assert_css 'preface', output, 0
+    end
+
+    test 'should not allow abstract as direct child of document if doctype is book converted to DocBook' do
+      input = <<~'EOS'
+      :doctype: book
+
+      [abstract]
+      Abstract for book is invalid.
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'abstract', output, 0
+      assert_message @logger, :WARN, 'abstract block cannot be used in a document without a doctitle when doctype is book. Excluding block content.'
+    end
+
+"#
+    );
+
+    // The partintro tests are non_normative: this crate does not fully support
+    // the book doctype's level-0 part structure (html5 #188) — a valid partintro
+    // renders without its `partintro` class and the crate emits a "level 0
+    // section headings not supported" warning — nor does it validate and exclude
+    // a misplaced partintro the way Asciidoctor does (which logs an ERROR and
+    // drops the block content). The remaining variants also target the DocBook
+    // backend, which this crate does not render.
+    non_normative!(
+        r#"
+    # TODO partintro shouldn't be recognized if doctype is not book, should be in proper place
+    test 'should accept partintro on open block without title' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      = Part 1
+
+      [partintro]
+      --
+      This is a part intro.
+
+      It can have multiple paragraphs.
+      --
+
+      == Chapter 1
+
+      content
+      EOS
+
+      output = convert_string input
+      assert_css '.openblock', output, 1
+      assert_css '.openblock.partintro', output, 1
+      assert_css '.openblock .title', output, 0
+      assert_css '.openblock .content', output, 1
+      assert_xpath %(//h1[@id="_part_1"]/following-sibling::*[#{contains_class(:openblock)}]), output, 1
+      assert_xpath %(//*[#{contains_class(:openblock)}]/*[@class="content"]/*[@class="paragraph"]), output, 2
+    end
+
+    test 'should accept partintro on open block with title' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      = Part 1
+
+      .Intro title
+      [partintro]
+      --
+      This is a part intro with a title.
+      --
+
+      == Chapter 1
+
+      content
+      EOS
+
+      output = convert_string input
+      assert_css '.openblock', output, 1
+      assert_css '.openblock.partintro', output, 1
+      assert_css '.openblock .title', output, 1
+      assert_css '.openblock .content', output, 1
+      assert_xpath %(//h1[@id="_part_1"]/following-sibling::*[#{contains_class(:openblock)}]), output, 1
+      assert_xpath %(//*[#{contains_class(:openblock)}]/*[@class="title"][text()="Intro title"]), output, 1
+      assert_xpath %(//*[#{contains_class(:openblock)}]/*[@class="content"]/*[@class="paragraph"]), output, 1
+    end
+
+    test 'should exclude partintro if not a child of part' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      [partintro]
+      part intro paragraph
+      EOS
+
+      output = convert_string input
+      assert_css '.partintro', output, 0
+      assert_message @logger, :ERROR, 'partintro block can only be used when doctype is book and must be a child of a book part. Excluding block content.'
+    end
+
+    test 'should not allow partintro unless doctype is book' do
+      input = <<~'EOS'
+      [partintro]
+      part intro paragraph
+      EOS
+
+      output = convert_string input
+      assert_css '.partintro', output, 0
+      assert_message @logger, :ERROR, 'partintro block can only be used when doctype is book and must be a child of a book part. Excluding block content.'
+    end
+
+    test 'should accept partintro on open block without title converted to DocBook' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      = Part 1
+
+      [partintro]
+      --
+      This is a part intro.
+
+      It can have multiple paragraphs.
+      --
+
+      == Chapter 1
+
+      content
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'partintro', output, 1
+      assert_css 'part[xml|id="_part_1"] > partintro', output, 1
+      assert_css 'partintro > simpara', output, 2
+    end
+
+    test 'should accept partintro on open block with title converted to DocBook' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      = Part 1
+
+      .Intro title
+      [partintro]
+      --
+      This is a part intro with a title.
+      --
+
+      == Chapter 1
+
+      content
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'partintro', output, 1
+      assert_css 'part[xml|id="_part_1"] > partintro', output, 1
+      assert_css 'partintro > title', output, 1
+      assert_css 'partintro > title + simpara', output, 1
+    end
+
+    test 'should exclude partintro if not a child of part converted to DocBook' do
+      input = <<~'EOS'
+      = Book
+      :doctype: book
+
+      [partintro]
+      part intro paragraph
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'partintro', output, 0
+      assert_message @logger, :ERROR, 'partintro block can only be used when doctype is book and must be a child of a book part. Excluding block content.'
+    end
+
+    test 'should not allow partintro unless doctype is book converted to DocBook' do
+      input = <<~'EOS'
+      [partintro]
+      part intro paragraph
+      EOS
+
+      output = convert_string input, backend: 'docbook'
+      assert_css 'partintro', output, 0
+      assert_message @logger, :ERROR, 'partintro block can only be used when doctype is book and must be a child of a book part. Excluding block content.'
+    end
+  end
+
+"#
+    );
+}
+
+mod substitutions {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'Substitutions' do
+"#
+    );
+
+    // The first four tests assert only `block.subs` — the resolved substitution
+    // list on the parser's block model, which `asciidoc-parser` verifies. They
+    // have no rendered form to drive here.
+    non_normative!(
+        r#"
+    test 'processor should not crash if subs are empty' do
+      input = <<~'EOS'
+      [subs=","]
+      ....
+      content
+      ....
+      EOS
+
+      doc = document_from_string input
+      block = doc.blocks.first
+      assert_equal [], block.subs
+    end
+
+    test 'should be able to append subs to default block substitution list' do
+      input = <<~'EOS'
+      :application: Asciidoctor
+
+      [subs="+attributes,+macros"]
+      ....
+      {application}
+      ....
+      EOS
+
+      doc = document_from_string input
+      block = doc.blocks.first
+      assert_equal [:specialcharacters, :attributes, :macros], block.subs
+    end
+
+    test 'should be able to prepend subs to default block substitution list' do
+      input = <<~'EOS'
+      :application: Asciidoctor
+
+      [subs="attributes+"]
+      ....
+      {application}
+      ....
+      EOS
+
+      doc = document_from_string input
+      block = doc.blocks.first
+      assert_equal [:attributes, :specialcharacters], block.subs
+    end
+
+    test 'should be able to remove subs to default block substitution list' do
+      input = <<~'EOS'
+      [subs="-quotes,-replacements"]
+      content
+      EOS
+
+      doc = document_from_string input
+      block = doc.blocks.first
+      assert_equal [:specialcharacters, :attributes, :macros, :post_replacements], block.subs
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_be_able_to_prepend_append_and_remove_subs_from_default_block_substitution_list() {
+        verifies!(
+            r#"
+    test 'should be able to prepend, append and remove subs from default block substitution list' do
+      input = <<~'EOS'
+      :application: asciidoctor
+
+      [subs="attributes+,-verbatim,+specialcharacters,+macros"]
+      ....
+      https://{application}.org[{gt}{gt}] <1>
+      ....
+      EOS
+
+      doc = document_from_string input, standalone: false
+      block = doc.blocks.first
+      assert_equal [:attributes, :specialcharacters, :macros], block.subs
+      result = doc.convert
+      assert_includes result, '<pre><a href="https://asciidoctor.org">&gt;&gt;</a> &lt;1&gt;</pre>'
+    end
+
+"#
+        );
+
+        // `block.subs` is an `asciidoc-parser` model assertion; here the rendered
+        // output is driven.
+        let result = convert(
+            ":application: asciidoctor\n\n[subs=\"attributes+,-verbatim,+specialcharacters,+macros\"]\n....\nhttps://{application}.org[{gt}{gt}] <1>\n....\n",
+        );
+        assert!(
+            result
+                .contains(r#"<pre><a href="https://asciidoctor.org">&gt;&gt;</a> &lt;1&gt;</pre>"#),
+            "{result}"
+        );
+    }
+
+    #[test]
+    fn should_be_able_to_set_subs_then_modify_them() {
+        verifies!(
+            r#"
+    test 'should be able to set subs then modify them' do
+      input = <<~'EOS'
+      [subs="verbatim,-callouts"]
+      _hey now_ <1>
+      EOS
+
+      doc = document_from_string input, standalone: false
+      block = doc.blocks.first
+      assert_equal [:specialcharacters], block.subs
+      result = doc.convert
+      assert_includes result, '_hey now_ &lt;1&gt;'
+    end
+  end
+
+"#
+        );
+
+        // `block.subs` is an `asciidoc-parser` model assertion; here the rendered
+        // output is driven.
+        let result = convert("[subs=\"verbatim,-callouts\"]\n_hey now_ <1>\n");
+        assert!(result.contains("_hey now_ &lt;1&gt;"), "{result}");
+    }
+}
+
+mod references {
+    use super::*;
+
+    non_normative!(
+        r#"
+  context 'References' do
+"#
+    );
+
+    #[test]
+    fn should_not_recognize_block_anchor_with_illegal_id_characters() {
+        verifies!(
+            r#"
+    test 'should not recognize block anchor with illegal id characters' do
+      input = <<~'EOS'
+      [[illegal$id,Reference Text]]
+      ----
+      content
+      ----
+      EOS
+
+      doc = document_from_string input
+      block = doc.blocks.first
+      assert_nil block.id
+      assert_nil(block.attr 'reftext')
+      refute doc.catalog[:refs].key? 'illegal$id'
+    end
+
+"#
+        );
+
+        // `block.id`/`block.attr 'reftext'` are `asciidoc-parser` model assertions;
+        // the catalog `refute … key?` is driven here through the document catalog.
+        let doc = load("[[illegal$id,Reference Text]]\n----\ncontent\n----\n");
+        assert!(!doc.catalog().contains_id("illegal$id"));
+    }
+
+    #[test]
+    fn should_not_recognize_block_anchor_that_starts_with_digit() {
+        verifies!(
+            r#"
+    test 'should not recognize block anchor that starts with digit' do
+      input = <<~'EOS'
+      [[3-blind-mice]]
+      --
+      see how they run
+      --
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_includes output, '[[3-blind-mice]]'
+      assert_xpath '/*[@id=":3-blind-mice"]', output, 0
+    end
+
+"#
+        );
+
+        let output = convert("[[3-blind-mice]]\n--\nsee how they run\n--\n");
+        assert!(output.contains("[[3-blind-mice]]"), "{output}");
+        assert_xpath(&output, r#"/*[@id=":3-blind-mice"]"#, 0);
+    }
+
+    #[test]
+    fn should_recognize_block_anchor_that_starts_with_colon() {
+        verifies!(
+            r#"
+    test 'should recognize block anchor that starts with colon' do
+      input = <<~'EOS'
+      [[:idname]]
+      --
+      content
+      --
+      EOS
+
+      output = convert_string_to_embedded input
+      assert_xpath '/*[@id=":idname"]', output, 1
+    end
+
+"#
+        );
+
+        let output = convert("[[:idname]]\n--\ncontent\n--\n");
+        assert_xpath(&output, r#"/*[@id=":idname"]"#, 1);
+    }
+
+    #[test]
+    fn should_use_specified_id_and_reftext_when_registering_block_reference() {
+        verifies!(
+            r#"
+    test 'should use specified id and reftext when registering block reference' do
+      input = <<~'EOS'
+      [[debian,Debian Install]]
+      .Installation on Debian
+      ----
+      $ apt-get install asciidoctor
+      ----
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['debian']
+      refute_nil ref
+      assert_equal 'Debian Install', ref.reftext
+      assert_equal 'debian', (doc.resolve_id 'Debian Install')
+    end
+
+"#
+        );
+
+        let doc = load(
+            "[[debian,Debian Install]]\n.Installation on Debian\n----\n$ apt-get install asciidoctor\n----\n",
+        );
+        let entry = doc.catalog().get_ref("debian");
+        assert!(entry.is_some());
+        assert_eq!(entry.unwrap().reftext.as_deref(), Some("Debian Install"));
+        assert_eq!(
+            doc.catalog().resolve_id("Debian Install"),
+            Some("debian".to_string())
+        );
+    }
+
+    #[test]
+    fn should_allow_square_brackets_in_block_reference_text() {
+        verifies!(
+            r#"
+    test 'should allow square brackets in block reference text' do
+      input = <<~'EOS'
+      [[debian,[Debian] Install]]
+      .Installation on Debian
+      ----
+      $ apt-get install asciidoctor
+      ----
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['debian']
+      refute_nil ref
+      assert_equal '[Debian] Install', ref.reftext
+      assert_equal 'debian', (doc.resolve_id '[Debian] Install')
+    end
+
+"#
+        );
+
+        let doc = load(
+            "[[debian,[Debian] Install]]\n.Installation on Debian\n----\n$ apt-get install asciidoctor\n----\n",
+        );
+        let entry = doc.catalog().get_ref("debian");
+        assert!(entry.is_some());
+        assert_eq!(entry.unwrap().reftext.as_deref(), Some("[Debian] Install"));
+        assert_eq!(
+            doc.catalog().resolve_id("[Debian] Install"),
+            Some("debian".to_string())
+        );
+    }
+
+    // Asciidoctor trims the reference text after the first comma of a block
+    // anchor, registering `Debian, Ubuntu`; `asciidoc-parser` keeps the leading
+    // space (` Debian, Ubuntu`), so the reftext and its reverse lookup do not
+    // match Asciidoctor.
+    non_normative!(
+        r#"
+    test 'should allow comma in block reference text' do
+      input = <<~'EOS'
+      [[debian, Debian, Ubuntu]]
+      .Installation on Debian
+      ----
+      $ apt-get install asciidoctor
+      ----
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['debian']
+      refute_nil ref
+      assert_equal 'Debian, Ubuntu', ref.reftext
+      assert_equal 'debian', (doc.resolve_id 'Debian, Ubuntu')
+    end
+
+"#
+    );
+
+    #[test]
+    fn should_resolve_attribute_reference_in_title_using_attribute_defined_at_location_of_block() {
+        verifies!(
+            r##"
+    test 'should resolve attribute reference in title using attribute defined at location of block' do
+      input = <<~'EOS'
+      = Document Title
+      :foo: baz
+
+      intro paragraph. see <<free-standing>>.
+
+      :foo: bar
+
+      .foo is {foo}
+      [#formal-para]
+      paragraph with title
+
+      [discrete#free-standing]
+      == foo is still {foo}
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['formal-para']
+      refute_nil ref
+      assert_equal 'foo is bar', ref.title
+      assert_equal 'formal-para', (doc.resolve_id 'foo is bar')
+      output = doc.convert standalone: false
+      assert_include '<a href="#free-standing">foo is still bar</a>', output
+      assert_include '<h2 id="free-standing" class="discrete">foo is still bar</h2>', output
+    end
+
+"##
+        );
+
+        // `ref.title` is an `asciidoctor` model assertion (the parser records the
+        // resolved title as the reference's reftext); the reverse lookup and the
+        // rendered output are driven here.
+        let input = "= Document Title\n:foo: baz\n\nintro paragraph. see <<free-standing>>.\n\n:foo: bar\n\n.foo is {foo}\n[#formal-para]\nparagraph with title\n\n[discrete#free-standing]\n== foo is still {foo}\n";
+        let doc = load(input);
+        assert_eq!(
+            doc.catalog().resolve_id("foo is bar"),
+            Some("formal-para".to_string())
+        );
+
+        let output = convert(input);
+        assert!(
+            output.contains(r##"<a href="#free-standing">foo is still bar</a>"##),
+            "{output}"
+        );
+        assert!(
+            output.contains(r##"<h2 id="free-standing" class="discrete">foo is still bar</h2>"##),
+            "{output}"
+        );
+    }
+
+    #[test]
+    fn should_substitute_attribute_references_in_reftext_when_registering_block_reference() {
+        verifies!(
+            r#"
+    test 'should substitute attribute references in reftext when registering block reference' do
+      input = <<~'EOS'
+      :label-tiger: Tiger
+
+      [[tiger-evolution,Evolution of the {label-tiger}]]
+      ****
+      Information about the evolution of the tiger.
+      ****
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['tiger-evolution']
+      refute_nil ref
+      assert_equal 'Evolution of the Tiger', ref.attributes['reftext']
+      assert_equal 'tiger-evolution', (doc.resolve_id 'Evolution of the Tiger')
+    end
+
+"#
+        );
+
+        let doc = load(
+            ":label-tiger: Tiger\n\n[[tiger-evolution,Evolution of the {label-tiger}]]\n****\nInformation about the evolution of the tiger.\n****\n",
+        );
+        let entry = doc.catalog().get_ref("tiger-evolution");
+        assert!(entry.is_some());
+        assert_eq!(
+            entry.unwrap().reftext.as_deref(),
+            Some("Evolution of the Tiger")
+        );
+        assert_eq!(
+            doc.catalog().resolve_id("Evolution of the Tiger"),
+            Some("tiger-evolution".to_string())
+        );
+    }
+
+    #[test]
+    fn should_use_specified_reftext_when_registering_block_reference() {
+        verifies!(
+            r#"
+    test 'should use specified reftext when registering block reference' do
+      input = <<~'EOS'
+      [[debian]]
+      [reftext="Debian Install"]
+      .Installation on Debian
+      ----
+      $ apt-get install asciidoctor
+      ----
+      EOS
+
+      doc = document_from_string input
+      ref = doc.catalog[:refs]['debian']
+      refute_nil ref
+      assert_equal 'Debian Install', ref.reftext
+      assert_equal 'debian', (doc.resolve_id 'Debian Install')
+    end
+  end
+end
+"#
+        );
+
+        let doc = load(
+            "[[debian]]\n[reftext=\"Debian Install\"]\n.Installation on Debian\n----\n$ apt-get install asciidoctor\n----\n",
+        );
+        let entry = doc.catalog().get_ref("debian");
+        assert!(entry.is_some());
+        assert_eq!(entry.unwrap().reftext.as_deref(), Some("Debian Install"));
+        assert_eq!(
+            doc.catalog().resolve_id("Debian Install"),
+            Some("debian".to_string())
+        );
+    }
+}
