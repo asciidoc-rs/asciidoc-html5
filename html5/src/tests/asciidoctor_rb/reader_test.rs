@@ -38,7 +38,6 @@
 //!
 //! - a three-level nested include from a subdirectory leaves the inner include
 //!   unresolved — [#131]
-//! - an absolute include path is not resolved — [#132]
 //! - an `include::` inside an `ifdef[...]` bracket is not processed — [#133]
 //!
 //! An undeclared non-UTF-8 include file is a further, permanent divergence:
@@ -48,7 +47,6 @@
 //! matching `encoding` attribute *is* transcoded and its content rendered.
 //!
 //! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
-//! [#132]: https://github.com/asciidoc-rs/asciidoc-html5/issues/132
 //! [#133]: https://github.com/asciidoc-rs/asciidoc-html5/issues/133
 
 use std::path::PathBuf;
@@ -1692,9 +1690,10 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: an absolute include path is not resolved (#132).
-        non_normative!(
-            r#"
+        #[test]
+        fn can_resolve_include_directive_with_absolute_path() {
+            verifies!(
+                r#"
       test 'can resolve include directive with absolute path' do
         include_path = ::File.join DIRNAME, 'fixtures', 'chapter-a.adoc'
         input = %(include::#{include_path}[])
@@ -1706,7 +1705,37 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            // The absolute include target points at `fixtures/chapter-a.adoc`
+            // inside the canonicalized fixtures tree, so it lies within the jail.
+            // Build it from the canonical base so its lexical prefix matches the
+            // handler's canonicalized `base_dir`. `:showtitle:` surfaces the
+            // included `= Chapter A` level-0 title as an `<h1>` in embedded output
+            // (the doctitle counterpart), the way `should_strip_bom_from_include_file`
+            // does.
+            let canonical_base = fixtures_base_dir()
+                .canonicalize()
+                .expect("canonicalize fixtures base dir");
+
+            let include_path = canonical_base.join("fixtures").join("chapter-a.adoc");
+            let src = format!(":showtitle:\ninclude::{}[]", include_path.display());
+
+            // Under `safe`, the base directory is the fixtures tree, so the
+            // absolute target descends from the jail and resolves in place.
+            let safe_html = convert_safe_with_fixtures(&src);
+            assert!(safe_html.contains("<h1>Chapter A</h1>"), "{safe_html}");
+
+            // Under `unsafe` with an unrelated base directory (`Dir.tmpdir`), the
+            // absolute target is honored freely and still resolves.
+            let unsafe_html = convert_with(
+                &src,
+                &Options::new()
+                    .safe_mode(SafeMode::Unsafe)
+                    .base_dir(std::env::temp_dir()),
+            );
+            assert!(unsafe_html.contains("<h1>Chapter A</h1>"), "{unsafe_html}");
+        }
 
         // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
         // (remote-fetch-not-planned).
