@@ -30,6 +30,10 @@ name = "render_scaling"
 harness = false
 name = "convert_pipeline"
 
+[[bench]]
+harness = false
+name = "bulk_conversion"
+
 # The benches use `codspeed-criterion-compat`; `criterion` is pulled in for
 # local `cargo bench` runs, so cargo-udeps can't see it used directly.
 [package.metadata.cargo-udeps.ignore]
