@@ -21,6 +21,8 @@ The renderer supports the two *client-side* syntax highlighters Asciidoctor ship
 
 **An extension mechanism is not planned for 1.0**, but may be considered for a later version. Asciidoctor exposes an [extension API](https://docs.asciidoctor.org/asciidoctor/latest/extensions/) with a range of extension points (preprocessors, tree processors, postprocessors, block and macro processors, and more); this renderer does not implement any of them yet, and none is part of the 1.0 scope.
 
+The `include::` directive's `encoding` attribute is honored only for two legacy single-byte encodings, ISO-8859-1 and windows-1252; a file in any other non-UTF-8 encoding is dropped with a warning rather than transcoded. **Broader include-encoding coverage — more single-byte code pages, or general multi-byte transcoding via a crate such as [`encoding_rs`](https://crates.io/crates/encoding_rs) — is not planned for 1.0.** Adding it would mean taking on this library's first runtime dependency beyond `asciidoc-parser`, a trade-off deferred past 1.0 (see [#252](https://github.com/asciidoc-rs/asciidoc-html5/issues/252)).
+
 ## Why do this?
 
 Most of all this is a fun project that exercises different architectural and project design skills from my [day job](https://opensource.contentauthenticity.org). As part of that work, I write [technical standards for the Creator Assertions Working Group](https://cawg.io/specs/) in Asciidoc and [Antora](https://antora.org).
