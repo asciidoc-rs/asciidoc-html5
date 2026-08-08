@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.6...asciidoc-html5-v0.1.7)
+_08 August 2026_
+
+### Added
+
+* *(html5)* Support the :catalog_assets API option ([#315](https://github.com/asciidoc-rs/asciidoc-html5/pull/315))
+* *(html5)* Support the favicon attribute ([#314](https://github.com/asciidoc-rs/asciidoc-html5/pull/314))
+
+### Documented
+
+* Mark broader include-encoding coverage as not planned for 1.0 ([#309](https://github.com/asciidoc-rs/asciidoc-html5/pull/309))
+* *(html5)* Refresh stale #250 comments now that MathJax docinfo ships ([#308](https://github.com/asciidoc-rs/asciidoc-html5/pull/308))
+
+### Fixed
+
+* *(bench)* Match safe mode in the bulk-conversion benchmark ([#319](https://github.com/asciidoc-rs/asciidoc-html5/pull/319))
+* *(html5)* Sanitize the <title> doctitle and drop stale parser-gate notes ([#310](https://github.com/asciidoc-rs/asciidoc-html5/pull/310))
+
+### Other
+
+* *(html5)* Verify include-aware inter-document xref resolution ([#127](https://github.com/asciidoc-rs/asciidoc-html5/pull/127)) ([#316](https://github.com/asciidoc-rs/asciidoc-html5/pull/316))
+* *(html5,cli)* Cover the remaining html-backend reference pages (SDD) ([#312](https://github.com/asciidoc-rs/asciidoc-html5/pull/312))
+
 ## [0.1.6](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.5...asciidoc-html5-v0.1.6)
 _07 August 2026_
 
