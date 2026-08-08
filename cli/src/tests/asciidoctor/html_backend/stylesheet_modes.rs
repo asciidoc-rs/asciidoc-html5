@@ -210,6 +210,37 @@ You should see a file named [.path]_asciidoctor.css_.
     ]);
     assert!(dir.join("asciidoctor.css").is_file());
 
+    // "If you specify a custom stylesheet, Asciidoctor will copy that file
+    // instead, retaining the name of the file": a custom `stylesheet` is
+    // copied under its own name, not `asciidoctor.css`. The output goes to a
+    // separate `dist` directory so the copy destination differs from the
+    // source, proving a copy actually happened rather than the source file
+    // simply already sitting where the assertion looks.
+    let custom_dir = scratch("copy-custom");
+    std::fs::write(custom_dir.join("my-theme.css"), "body { color: teal; }")
+        .expect("write custom css");
+    let dist_dir = custom_dir.join("dist");
+    let _ = adoc_stdout(&[
+        custom_dir
+            .join("my-document.adoc")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-o",
+        dist_dir
+            .join("my-document.html")
+            .to_str()
+            .expect("path is UTF-8"),
+        "-a",
+        "linkcss",
+        "-a",
+        "stylesheet=my-theme.css",
+    ]);
+    assert_eq!(
+        std::fs::read_to_string(dist_dir.join("my-theme.css")).expect("read copied css"),
+        "body { color: teal; }"
+    );
+    assert!(!dist_dir.join("asciidoctor.css").exists());
+
     // The `secure` half of the claim above: the same command under `-S secure`
     // does not write the stylesheet to the output directory.
     let secure_dir = scratch("copy-secure");

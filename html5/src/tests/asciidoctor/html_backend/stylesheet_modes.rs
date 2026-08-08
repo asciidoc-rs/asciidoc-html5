@@ -232,6 +232,28 @@ You should see a file named [.path]_asciidoctor.css_.
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
     assert!(out_dir.join("asciidoctor.css").is_file());
 
+    // "If you specify a custom stylesheet, Asciidoctor will copy that file
+    // instead, retaining the name of the file": a custom `stylesheet` is
+    // copied under its own name, not `asciidoctor.css`.
+    std::fs::write(dir.join("my-theme.css"), "body { color: teal; }").expect("write custom css");
+    let custom_out_dir = dir.join("custom-output");
+    let mut custom_writer = DirAssetWriter::new(&custom_out_dir);
+    let custom_html = convert_file_with_writer(
+        dir.join("my-document.adoc"),
+        &Options::new()
+            .safe_mode(SafeMode::Server)
+            .set("linkcss")
+            .attribute("stylesheet", "my-theme.css"),
+        &mut custom_writer,
+    )
+    .expect("convert");
+    assert!(custom_html.contains("<link rel=\"stylesheet\" href=\"./my-theme.css\">"));
+    assert_eq!(
+        std::fs::read_to_string(custom_out_dir.join("my-theme.css")).expect("read copied css"),
+        "body { color: teal; }"
+    );
+    assert!(!custom_out_dir.join("asciidoctor.css").exists());
+
     // Under `secure`, the same conversion links the stylesheet but writes
     // nothing to the output directory.
     let secure_dir = dir.join("secure-output");
