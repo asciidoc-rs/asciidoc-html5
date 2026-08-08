@@ -447,6 +447,18 @@ impl Options {
     /// [`load`](crate::load)/[`load_with`](crate::load_with), with no separate
     /// conversion step required.
     ///
+    /// This does not mean the option is redundant here: rendering an image or
+    /// link macro already needs its target (and, for images, `imagesdir`)
+    /// regardless of this setting, but recording it *again* into the catalog
+    /// costs an extra clone and push per occurrence. `catalog_assets` gates
+    /// that extra bookkeeping so a caller who never reads
+    /// [`Catalog::images`](asciidoc_parser::document::Catalog::images)/
+    /// [`links`](asciidoc_parser::document::Catalog::links) does not pay for
+    /// it — mirroring Asciidoctor, which documents the same option as an
+    /// opt-in for a reason: "\[it\] does not attempt to store information
+    /// about all assets it comes across while processing the document"
+    /// unless asked to.
+    ///
     /// # Examples
     ///
     /// ```

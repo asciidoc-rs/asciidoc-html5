@@ -82,6 +82,17 @@ substitutes inline macros while *parsing*, so both lists are already populated
 on the `Document` that `load`/`load_with` returns; no separate conversion step
 is required.
 
+== Why is this opt-in?
+
+Rendering an image or link macro already needs its target (and, for images,
+`imagesdir`) whether or not `catalog_assets` is set -- that work happens either
+way. What the option gates is recording that data *again* into the catalog: an
+extra clone and push per occurrence, for every image and link in the document.
+`catalog_assets` lets a caller who never reads the image or link catalog skip
+that cost, matching Asciidoctor, which documents this same option as an
+opt-in: it "does not attempt to store information about all assets it comes
+across while processing the document" unless asked to.
+
 == Read cataloged images
 
 Each cataloged image is an `ImageReference`, pairing the macro's `target` with
