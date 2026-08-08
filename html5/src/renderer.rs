@@ -7379,6 +7379,16 @@ mod tests {
             "{html}"
         );
 
+        // A configured path with no file extension falls back to
+        // `image/x-icon` for the type, while the `href` still carries the
+        // extensionless value verbatim (unlike the bare-attribute default,
+        // which rewrites the `href` too).
+        let html = convert("= Doc\n:favicon: myicon\n\nBody.");
+        assert!(
+            html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"myicon\">"),
+            "{html}"
+        );
+
         // An explicit unset (`:favicon!:`) also emits nothing.
         let html = convert("= Doc\n:favicon!:\n\nBody.");
         assert!(!html.contains("rel=\"icon\""), "{html}");
