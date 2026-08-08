@@ -1,0 +1,50 @@
+= Medium Document 2
+:author: Bench Author
+:revdate: 2026-01-01
+
+[[Overview]]
+Labore enim eiusmod consequat magna excepteur laboris occaecat elit sint eu laborum. Exercitation eu incididunt culpa amet quis dolore nisi veniam officia sint in. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/401[project page] for more, or jump to <<Overview>>.
+
+== Section 1
+
+Consequat laboris laborum minim ad elit labore ullamco eiusmod exercitation cupidatat amet. Voluptate quis sint est esse ad dolor nostrud nulla et mollit consectetur. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/792[project page] for more, or jump to <<Overview>>.
+
+[source,rust]
+----
+fn process(n: u32) -> u32 {
+    // Culpa aliqua sed amet enim ut.
+    n.wrapping_mul(33)
+}
+----
+
+== Section 2
+
+Ipsum et minim magna sed nulla incididunt dolore nisi excepteur sunt mollit. In excepteur do magna consequat culpa velit tempor duis elit adipiscing et. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/344[project page] for more, or jump to <<Overview>>.
+
+. Sit commodo amet sed aliquip quis.
+. Quis elit qui fugiat magna labore.
+. Ut velit qui aliquip pariatur lorem.
+
+== Section 3
+
+Excepteur magna nostrud culpa deserunt pariatur reprehenderit minim nisi sunt cupidatat elit. Consequat non velit ipsum ut sed quis nisi qui eu ex ad. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/650[project page] for more, or jump to <<Overview>>.
+
+[cols="1,1,3",options="header"]
+|===
+| Key | Count | Note
+
+| row0 | 314 | Ad mollit magna.
+| row1 | 920 | Do occaecat cupidatat.
+| row2 | 315 | Sit sint quis.
+| row3 | 862 | Laborum in amet.
+|===
+
+
+== Section 4
+
+Culpa velit duis sed incididunt cupidatat id ad dolore ex ipsum veniam. Sunt sed aute duis labore qui magna proident occaecat fugiat nulla eu. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/515[project page] for more, or jump to <<Overview>>.
+
+. Nisi et proident consequat qui ut.
+. Dolore incididunt ad dolor commodo nostrud.
+. Exercitation ex est mollit ullamco elit.
+
