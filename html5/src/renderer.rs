@@ -791,6 +791,33 @@ fn data_uri_mimetype(target: &str) -> String {
     }
 }
 
+/// The `(href, type)` pair for the standalone `<head>`'s favicon `<link>`, or
+/// `None` when `favicon` is unset (including an explicit `:favicon!:`) — a
+/// port of Asciidoctor's favicon handling in `convert_document`. A bare
+/// `:favicon:` (no value, `InterpretedValue::Set`) and an explicit empty value
+/// both default to `favicon.ico` typed `image/x-icon`, matching Ruby's
+/// `node.attr('favicon').empty?` check, which treats both the same. Any other
+/// value is used verbatim as the `href`; the type comes from its file
+/// extension (`.ico` maps to `image/x-icon`; any other extension becomes
+/// `image/<ext>`; no extension also falls back to `image/x-icon`).
+fn favicon_link(document: &Document<'_>) -> Option<(String, String)> {
+    let href = match document.attribute_value("favicon") {
+        InterpretedValue::Value(href) if !href.is_empty() => href,
+        InterpretedValue::Value(_) | InterpretedValue::Set => {
+            return Some(("favicon.ico".to_string(), "image/x-icon".to_string()));
+        }
+        InterpretedValue::Unset => return None,
+    };
+
+    let icon_type = match asset_extname(&href) {
+        Some(".ico") => "image/x-icon".to_string(),
+        Some(ext) => format!("image/{}", &ext[1..]),
+        None => "image/x-icon".to_string(),
+    };
+
+    Some((href, icon_type))
+}
+
 /// The class-attribute *value* (`"<base> <role>…"`) for a media block wrapper,
 /// with each author-supplied role escaped — the inner text of `class="…"`.
 fn class_list(base: &str, roles: &[&str]) -> String {
@@ -1968,6 +1995,19 @@ impl Renderer<'_> {
         if let Some(copyright) = attribute_str(document, "copyright") {
             self.line(&format!(
                 "<meta name=\"copyright\" content=\"{copyright}\">"
+            ));
+        }
+
+        // A `favicon` link sits right after the copyright meta and before the
+        // `<title>`, matching Asciidoctor's placement. An unset `favicon`
+        // (including an explicit `:favicon!:`) emits nothing; a bare `:favicon:`
+        // (no value) defaults to `favicon.ico` typed `image/x-icon`; any other
+        // value is used verbatim as the `href`, with the type derived from its
+        // file extension (`.ico` maps to `image/x-icon`; anything else becomes
+        // `image/<ext>`, with no extension also falling back to `image/x-icon`).
+        if let Some((href, icon_type)) = favicon_link(document) {
+            self.line(&format!(
+                "<link rel=\"icon\" type=\"{icon_type}\" href=\"{href}\">"
             ));
         }
 
@@ -7307,6 +7347,51 @@ mod tests {
             html.contains("<meta name=\"copyright\" content=\"A &amp; &lt;b&gt;B&lt;/b&gt;\">"),
             "{html}"
         );
+    }
+
+    #[test]
+    fn favicon_link_uses_default_or_the_configured_path_and_type() {
+        // Unset: no favicon `<link>` at all.
+        let html = convert("= Doc\n\nBody.");
+        assert!(!html.contains("rel=\"icon\""), "{html}");
+
+        // A bare `:favicon:` (no value) defaults to `favicon.ico` typed
+        // `image/x-icon`.
+        let html = convert("= Doc\n:favicon:\n\nBody.");
+        assert!(
+            html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">"),
+            "{html}"
+        );
+
+        // A configured path derives its type from the file extension.
+        let html = convert("= Doc\n:favicon: ./images/favicon/favicon.png\n\nBody.");
+        assert!(
+            html.contains(
+                "<link rel=\"icon\" type=\"image/png\" href=\"./images/favicon/favicon.png\">"
+            ),
+            "{html}"
+        );
+
+        // `.ico` maps to `image/x-icon`, not `image/ico`.
+        let html = convert("= Doc\n:favicon: /favicon.ico\n\nBody.");
+        assert!(
+            html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"/favicon.ico\">"),
+            "{html}"
+        );
+
+        // A configured path with no file extension falls back to
+        // `image/x-icon` for the type, while the `href` still carries the
+        // extensionless value verbatim (unlike the bare-attribute default,
+        // which rewrites the `href` too).
+        let html = convert("= Doc\n:favicon: myicon\n\nBody.");
+        assert!(
+            html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"myicon\">"),
+            "{html}"
+        );
+
+        // An explicit unset (`:favicon!:`) also emits nothing.
+        let html = convert("= Doc\n:favicon!:\n\nBody.");
+        assert!(!html.contains("rel=\"icon\""), "{html}");
     }
 
     #[test]
