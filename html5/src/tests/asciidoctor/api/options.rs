@@ -1,16 +1,18 @@
-use crate::{convert, convert_file, convert_with, tests::sdd::*, Options, SafeMode};
+use crate::{convert, convert_file, convert_with, load_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 
 // Asciidoctor's "API Options" page: the reference table of options accepted by
 // the Ruby `Asciidoctor` API. Most rows describe Ruby-only machinery with no
-// analog in a Rust text-to-text library and are tracked as non-normative; four
+// analog in a Rust text-to-text library and are tracked as non-normative; five
 // rows map directly onto this crate's `Options` builder and are verified:
 //
 // * `:attributes` -> `Options::attribute` / `attribute_default` / `set` /
 //   `unset` / `set_default` / `unset_default` (override vs. soft-set
 //   precedence).
 // * `:base_dir` -> `Options::base_dir` (anchors relative includes / docinfo).
+// * `:catalog_assets` -> `Options::catalog_assets`, added alongside the
+//   `document_test.rb` port (closes #95).
 // * `:safe` -> `Options::safe_mode`.
 // * `:standalone` -> `Options::standalone` / `embedded`.
 //
@@ -31,9 +33,10 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 // * Ruby- and template-engine-specific options (`:converter`, `:eruby`,
 //   `:extensions`, `:extension_registry`, `:logger`, `:template_*`, `:timings`)
 //   have no place in this library.
-// * Parser behaviors this crate does not yet expose are tracked by GitHub
-//   issues, linked at their rows: `:catalog_assets` (#95) and
-//   `:parse_header_only` (#96).
+// * `:parse_header_only` is a permanent non-goal -- stopping the parser after
+//   the header would require a change to the pinned `asciidoc-parser`
+//   dependency (a crates.io version, not a workspace member this repo can
+//   extend), not just this crate. See #96.
 // * `:parse` (deferred parsing) has no counterpart at all: all parse-time
 //   configuration is supplied up front through `Options`, and `load` returns a
 //   fully parsed, owned `Document`, so there is no unparsed object to configure
@@ -188,11 +191,13 @@ fn base_dir_sets_the_directory_relative_resources_resolve_against() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// `:catalog_assets` -- capturing images and links in the reference table -- has
-// no counterpart: `asciidoc-parser` does not expose an asset-cataloging toggle.
-// Tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/95.
-non_normative!(
-    r#"
+// `:catalog_assets` maps to `Options::catalog_assets`: it enables recording
+// each referenced image (and link) in the document's catalog, which is empty
+// otherwise -- matching the documented default of `false`.
+#[test]
+fn catalog_assets_records_referenced_images_and_links_in_the_catalog() {
+    verifies!(
+        r#"
 |`:catalog_assets`
 |If `true`, the parser captures images and links in the reference table.
 (Normally only IDs, footnotes and indexterms are included).
@@ -204,7 +209,21 @@ _(Experimental)._
 |_Boolean_
 
 "#
-);
+    );
+
+    let input = "image:diagram.svg[] link:https://example.org[Example]";
+
+    // Default (`false`): the catalog's image and link lists stay empty.
+    let doc = load_with(input, &Options::new());
+    assert!(doc.catalog().images().is_empty());
+    assert!(doc.catalog().links().is_empty());
+
+    // `catalog_assets(true)`: both are recorded.
+    let doc = load_with(input, &Options::new().catalog_assets(true));
+    assert_eq!(doc.catalog().images().len(), 1);
+    assert_eq!(doc.catalog().images()[0].target, "diagram.svg");
+    assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
+}
 
 // `:converter` selects a user-supplied Ruby converter class or instance. This
 // crate has a single built-in HTML5 converter and no pluggable-converter API,
@@ -281,9 +300,10 @@ If value is falsy, it assigns a null logger, effectively turning off logging.
 "#
 );
 
-// `:parse_header_only` -- stopping the parser after the header -- has no
-// counterpart: `load`/`load_file` always parse the whole document. Tracked in
-// https://github.com/asciidoc-rs/asciidoc-html5/issues/96.
+// `:parse_header_only` (stopping the parser after the header) is a permanent
+// non-goal: `load`/`load_file` always parse the whole document, and doing
+// otherwise would require a change to the pinned `asciidoc-parser`
+// dependency. See #96.
 non_normative!(
     r#"
 |`:parse_header_only`

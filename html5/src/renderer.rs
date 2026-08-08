@@ -1955,15 +1955,29 @@ impl Renderer<'_> {
         if let Some(keywords) = attribute_str(document, "keywords") {
             self.line(&format!("<meta name=\"keywords\" content=\"{keywords}\">"));
         }
-        if let Some(authors) = attribute_str(document, "authors") {
-            // Unlike the parser-escaped `description`/`keywords`, the `authors`
-            // value arrives raw, so escape it for the attribute context. This
-            // matches Asciidoctor, which escapes (rather than strips) any angle
-            // brackets that appear in the author `<meta>` content.
-            self.line(&format!(
-                "<meta name=\"author\" content=\"{}\">",
-                escape_attribute(&authors)
-            ));
+        if !document.authors().is_empty() {
+            // Unlike the parser-escaped `description`/`keywords`, each author
+            // name arrives raw, so escape it for the attribute context first —
+            // matching Asciidoctor, which escapes (rather than strips) any
+            // angle brackets that appear in the author `<meta>` content.
+            // Asciidoctor's byline additionally runs the replacements step on
+            // the name (see the `<div id="header">` byline below); apply that
+            // *after* escaping so it only ever inserts well-formed entities
+            // (e.g. `&#8217;`) rather than escaping the `&` those entities
+            // start with.
+            let replacements =
+                SubstitutionGroup::Custom(vec![SubstitutionStep::CharacterReplacements]);
+            let byline_parser = Parser::default();
+            let joined = document
+                .authors()
+                .iter()
+                .map(|author| {
+                    byline_parser
+                        .apply_substitutions(&escape_attribute(author.name()), &replacements)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            self.line(&format!("<meta name=\"author\" content=\"{joined}\">"));
         }
         if let Some(copyright) = attribute_str(document, "copyright") {
             self.line(&format!(
@@ -1979,6 +1993,10 @@ impl Renderer<'_> {
         if let Some(title) = &doctitle_sanitized {
             self.line(&format!("<title>{title}</title>"));
         }
+
+        // The favicon `<link>`, when the `favicon` attribute is set, sits right
+        // after `<title>` and before the stylesheet, matching Asciidoctor.
+        self.favicon(document);
 
         // Asciidoctor embeds its default stylesheet (and the web-font link it
         // relies on) into the `<head>` of a standalone document, right after
@@ -2593,6 +2611,37 @@ impl Renderer<'_> {
              </script>\n\
              <script src=\"{}/mathjax/{MATHJAX_VERSION}/MathJax.js?config=TeX-MML-AM_CHTML\"></script>",
             cdn_base_url(document)
+        ));
+    }
+
+    /// Emits the `<link rel="icon">` element when the `favicon` attribute is
+    /// set, matching Asciidoctor's placement right after `<title>`.
+    ///
+    /// A bare `:favicon:` (or an empty value) defaults to `favicon.ico`, typed
+    /// `image/x-icon`; any other value is used as-is for `href`, with the type
+    /// derived from its file extension (`.ico` still maps to `image/x-icon`,
+    /// matching Asciidoctor rather than the literal `image/ico`).
+    fn favicon(&mut self, document: &Document<'_>) {
+        let favicon = match document.attribute_value("favicon") {
+            InterpretedValue::Value(value) if !value.is_empty() => value,
+            InterpretedValue::Value(_) | InterpretedValue::Set => "favicon.ico".to_string(),
+            InterpretedValue::Unset => return,
+        };
+
+        let extension = favicon
+            .rsplit('/')
+            .next()
+            .and_then(|base| base.rfind('.').map(|i| &base[i + 1..]))
+            .unwrap_or_default();
+        let favicon_type = if extension.is_empty() || extension.eq_ignore_ascii_case("ico") {
+            "image/x-icon".to_string()
+        } else {
+            format!("image/{extension}")
+        };
+
+        self.line(&format!(
+            "<link rel=\"icon\" type=\"{favicon_type}\" href=\"{}\">",
+            escape_attribute(&favicon)
         ));
     }
 
@@ -7080,6 +7129,30 @@ mod tests {
     fn nofooter_suppresses_the_footer() {
         let html = convert("= Doc\n:nofooter:\n\nBody.");
         assert!(!html.contains("<div id=\"footer\">"));
+    }
+
+    #[test]
+    fn no_favicon_link_when_favicon_attribute_is_absent() {
+        let html = convert("= Untitled");
+        assert!(!html.contains("rel=\"icon\""));
+    }
+
+    #[test]
+    fn bare_favicon_attribute_defaults_to_favicon_ico() {
+        let html = convert("= Untitled\n:favicon:\n");
+        assert!(html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"favicon.ico\">"));
+    }
+
+    #[test]
+    fn favicon_with_ico_extension_keeps_image_x_icon_type() {
+        let html = convert("= Untitled\n:favicon: /favicon.ico\n");
+        assert!(html.contains("<link rel=\"icon\" type=\"image/x-icon\" href=\"/favicon.ico\">"));
+    }
+
+    #[test]
+    fn favicon_type_is_derived_from_its_extension() {
+        let html = convert("= Untitled\n:favicon: /img/favicon.png\n");
+        assert!(html.contains("<link rel=\"icon\" type=\"image/png\" href=\"/img/favicon.png\">"));
     }
 
     #[test]
