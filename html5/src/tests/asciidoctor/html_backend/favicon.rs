@@ -5,14 +5,16 @@
 //! This crate does not implement the `favicon` attribute yet — the `<head>`
 //! this crate builds has a stylesheet, icon-font, and syntax-highlighter
 //! entry, but no favicon step — so none of this page's claims are verifiable
-//! here. The whole page is tracked as non-normative.
+//! here. The whole page is tracked as non-normative, pending
+//! <https://github.com/asciidoc-rs/asciidoc-html5/issues/313>.
 
 use crate::tests::sdd::*;
 
 track_file!("ref/asciidoctor/docs/modules/html-backend/pages/favicon.adoc");
 
 // The `favicon` attribute is not implemented (no favicon `<link>` is ever
-// emitted), so none of this page's claims have a counterpart to verify.
+// emitted), so none of this page's claims have a counterpart to verify. See
+// issue #313.
 non_normative!(
     r#"
 = Add a Favicon
