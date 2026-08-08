@@ -87,3 +87,14 @@ compared against Ruby there, since CI has no Ruby/asciidoctor toolchain.
   side pays extra for a stricter mode the other isn't also paying.
 - Numbers vary by machine; re-run locally rather than trusting numbers from
   an old PR description or issue comment.
+
+## Snapshots
+
+`snapshots/` holds dated point-in-time recordings of both comparisons above,
+each with the tool versions and environment they were measured on. Since
+CodSpeed only tracks the Rust side of `bulk_conversion` commit-over-commit
+(it can't run Ruby), the most recent snapshot is the reference point for
+translating a CodSpeed delta into "what does this do to the lead over Ruby" —
+see [`snapshots/2026-08-08-ruby-baseline.md`](snapshots/2026-08-08-ruby-baseline.md)
+for the current one and the worked-through method. Add a new dated file
+(don't edit an old one) when re-measuring.
