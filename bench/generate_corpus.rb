@@ -10,11 +10,14 @@
 # running this script. Re-run it (`ruby bench/generate_corpus.rb`) after
 # changing TIERS below to resize or reshape the corpus; commit the result.
 #
-# Every document mixes constructs both adoc and asciidoctor render today
-# (headings, paragraphs with inline formatting, lists, a source block, a
-# table, an admonition, a thematic break, a cross-reference) so the two
-# converters are doing comparable work. Generation is seeded, so re-running
-# this script without editing it reproduces byte-identical output.
+# Every document has headings, a cross-reference, and paragraphs with inline
+# formatting; each section additionally draws one of a list, a source block,
+# a table, an admonition, or a thematic break at random, so a document's
+# coverage of those extras grows with its section count (a one-section
+# "small" document gets only one; see TIERS below) while the corpus as a
+# whole exercises all of them across the two converters. Generation is
+# seeded, so re-running this script without editing it reproduces
+# byte-identical output.
 
 require "fileutils"
 require "zlib"

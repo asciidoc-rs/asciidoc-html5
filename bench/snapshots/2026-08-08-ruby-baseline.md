@@ -12,7 +12,7 @@ adds a new snapshot alongside this one.
 | | |
 |---|---|
 | Date | 2026-08-08 |
-| `asciidoc-html5` / `adoc` | 0.1.6, commit `db34cc0` |
+| `asciidoc-html5` / `adoc` | 0.1.6, [PR #317](https://github.com/asciidoc-rs/asciidoc-html5/pull/317) |
 | `asciidoctor` gem | 2.0.26 (the version pinned in [`ref/asciidoctor`](../../ref/asciidoctor)) |
 | Ruby | 3.3.6 |
 | rustc / cargo | 1.94.1 |
@@ -44,13 +44,20 @@ invocation and that fixed cost amortizes.
 
 | | Throughput | Mean/doc |
 |---|---:|---:|
-| `asciidoc-html5` (`cargo bench --bench bulk_conversion`) | ~710 docs/s, 6.2 MB/s | 1.41 ms |
+| `asciidoc-html5` (`cargo bench --bench bulk_conversion`) | ~972 docs/s, 8.1 MB/s | 1.03 ms |
 | `Asciidoctor.convert` (`bench/bulk_ruby.rb 100`) | ~150 docs/s, 1.25 MB/s | 6.65 ms |
 
-**~4.7× faster** — the more representative number for a bulk tool (a
+**~6.5× faster** — the more representative number for a bulk tool (a
 static-site generator, a doc-build pipeline) that embeds either as a
 library instead of shelling out per file. This is the figure CodSpeed's
 `bulk/convert_corpus_once` benchmark tracks the Rust half of.
+
+(This number moved from an earlier ~4.7× measured before PR #317 fixed a
+safe-mode mismatch — the Rust loop was converting under the library's
+default `SafeMode::Secure` while the Ruby loop explicitly used `:unsafe`,
+so the two weren't doing quite the same work. Both now pin unsafe mode.
+Fixing the mismatch happened to *widen* the measured lead, since unsafe
+mode turned out to be the cheaper path for this corpus.)
 
 ## Interpreting future CodSpeed results against this snapshot
 
@@ -58,7 +65,7 @@ CodSpeed (`.github/workflows/ci.yml`'s `benchmarks` job) reports
 `bulk/convert_corpus_once` as a simulated CPU-instruction count for the Rust
 renderer alone, compared to the previous commit/PR base — it does not, and
 cannot, re-run `bench/bulk_ruby.rb`. To translate a CodSpeed delta into "what
-does this do to the ~4.7× lead over Ruby":
+does this do to the ~6.5× lead over Ruby":
 
 1. Treat the reported **percentage** change as a rough stand-in for wall-clock
    change. `bulk/convert_corpus_once` is CPU-bound pure computation (parse +
@@ -67,11 +74,11 @@ does this do to the ~4.7× lead over Ruby":
    are not identical (branch prediction, cache effects, and allocator
    behavior aren't modeled the same way), so don't treat the derived ratio as
    precise.
-2. Divide the ~4.7× baseline by `(1 + regression%)` for a slowdown, or
+2. Divide the ~6.5× baseline by `(1 + regression%)` for a slowdown, or
    multiply by `(1 + improvement%)` for a speedup. Example: CodSpeed reports
    `bulk/convert_corpus_once` got 10% slower → the Rust-vs-Ruby throughput
-   lead is now roughly 4.7 / 1.10 ≈ **4.3×**, still comfortably ahead. A 30%
-   regression would bring it to ≈3.6×; only a regression well past 300%
+   lead is now roughly 6.5 / 1.10 ≈ **5.9×**, still comfortably ahead. A 30%
+   regression would bring it to ≈5.0×; only a regression well past 500%
    would erase the lead entirely.
 3. This same reasoning does **not** transfer to the CLI comparison (13.5×
    → 7.4× range) — that gap is dominated by Ruby's fixed process-startup
