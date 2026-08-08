@@ -1,13 +1,13 @@
-use crate::{convert, convert_with, tests::sdd::*, Options, SafeMode};
+use crate::{convert, convert_with, load_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("docs/modules/api/pages/options.adoc");
 
 // This crate's "API Options" page. It documents the subset of Asciidoctor's API
 // options that `asciidoc_html5` supports, mapped onto the `Options` builder:
-// `attribute`/`attribute_default`, `standalone`/`embedded`, `safe_mode`, and
-// `base_dir`. Each shown Rust snippet is verified here; the surrounding prose,
-// the summary table, and the closing "Options without a counterpart" list are
-// non-normative.
+// `attribute`/`attribute_default`, `standalone`/`embedded`, `safe_mode`,
+// `base_dir`, and `catalog_assets`. Each shown Rust snippet is verified here;
+// the surrounding prose, the summary table, and the closing "Options without a
+// counterpart" list are non-normative.
 
 non_normative!(
     r#"
@@ -40,6 +40,10 @@ documented behavior is guaranteed.
 |`:base_dir`
 |`base_dir`
 |The directory relative `include::` targets and docinfo files resolve against.
+
+|`:catalog_assets`
+|`catalog_assets`
+|Record referenced images and links in the document catalog.
 
 |`:safe`
 |`safe_mode`
@@ -208,6 +212,49 @@ non_normative!(
 See xref:ROOT:safe-modes.adoc[Safe Modes] for how the safe mode restricts those
 reads.
 
+== Catalog referenced images and links
+
+`catalog_assets(true)` records every referenced image and link in the document
+catalog, alongside the IDs and footnotes it always tracks:
+
+"#
+);
+
+// `catalog_assets(true)` records images and links in the document catalog.
+#[test]
+fn catalog_assets_records_images_and_links() {
+    verifies!(
+        r#"
+[,rust]
+----
+use asciidoc_html5::{load_with, Options};
+
+let opts = Options::new().catalog_assets(true);
+let doc = load_with(
+    "image::screenshot.png[]\n\nSee https://example.org for details.",
+    &opts,
+);
+assert_eq!(doc.catalog().images()[0].target, "screenshot.png");
+assert_eq!(doc.catalog().links(), ["https://example.org"]);
+----
+
+"#
+    );
+
+    let opts = Options::new().catalog_assets(true);
+    let doc = load_with(
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
+        &opts,
+    );
+    assert_eq!(doc.catalog().images()[0].target, "screenshot.png");
+    assert_eq!(doc.catalog().links(), ["https://example.org"]);
+}
+
+non_normative!(
+    r#"
+See xref:catalog-assets.adoc[Catalog Assets] for the full picture, including how
+an image entry's `imagesdir` field is populated.
+
 == Options without a counterpart
 
 Many Asciidoctor API options do not apply to this library:
@@ -226,7 +273,6 @@ Many Asciidoctor API options do not apply to this library:
   false` returns an unparsed document to configure before an explicit `parse`
   call; here all parse-time configuration is supplied up front through
   `Options`, and `load`/`load_file` return a fully parsed, owned `Document`.
-* *Not yet implemented.* `:catalog_assets` and `:parse_header_only` are tracked
-  for future work.
+* *Not yet implemented.* `:parse_header_only` is tracked for future work.
 "#
 );
