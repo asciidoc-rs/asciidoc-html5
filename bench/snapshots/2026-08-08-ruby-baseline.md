@@ -52,11 +52,12 @@ static-site generator, a doc-build pipeline) that embeds either as a
 library instead of shelling out per file. This is the figure CodSpeed's
 `bulk/convert_corpus_once` benchmark tracks the Rust half of.
 
-(This number moved from an earlier ~4.7× measured before PR #317 fixed a
-safe-mode mismatch — the Rust loop was converting under the library's
-default `SafeMode::Secure` while the Ruby loop explicitly used `:unsafe`,
-so the two weren't doing quite the same work. Both now pin unsafe mode.
-Fixing the mismatch happened to *widen* the measured lead, since unsafe
+(This number moved from an earlier ~4.7× measured when PR #317 first
+introduced this benchmark with a safe-mode mismatch — the Rust loop was
+converting under the library's default `SafeMode::Secure` while the Ruby
+loop explicitly used `:unsafe`, so the two weren't doing quite the same
+work. PR #319 fixed the mismatch; both now pin unsafe mode. Fixing it
+happened to *widen* the measured lead, since unsafe
 mode turned out to be the cheaper path for this corpus.)
 
 ## Interpreting future CodSpeed results against this snapshot
