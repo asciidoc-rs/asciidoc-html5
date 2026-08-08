@@ -5,6 +5,7 @@
 //! non-normative; the Rust snippets each page shows are verified by ordinary
 //! tests in the same module.
 
+mod catalog_assets;
 mod convert_files;
 mod convert_strings;
 mod find_blocks;

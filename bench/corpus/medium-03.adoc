@@ -1,0 +1,49 @@
+= Medium Document 4
+:author: Bench Author
+:revdate: 2026-01-01
+
+[[Overview]]
+Excepteur amet cillum eiusmod eu sit non et enim in dolor pariatur. Qui consectetur voluptate cupidatat magna non ad ipsum sit sed in minim. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/527[project page] for more, or jump to <<Overview>>.
+
+== Section 1
+
+Occaecat in velit reprehenderit incididunt mollit non dolor nisi sint consequat fugiat. Cillum sit laboris elit eiusmod dolore aliqua do nostrud veniam ex aliquip. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/533[project page] for more, or jump to <<Overview>>.
+
+* Ullamco aliquip eiusmod quis exercitation esse.
+* Ipsum sit minim deserunt ea in.
+* Dolore excepteur lorem minim labore magna.
+* Ipsum sit velit irure deserunt occaecat.
+
+== Section 2
+
+Cupidatat ut aliqua nostrud dolor eiusmod consectetur id laborum commodo incididunt amet. Ad qui cillum commodo fugiat nisi et mollit voluptate aliqua veniam non. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/640[project page] for more, or jump to <<Overview>>.
+
+* Reprehenderit ex nisi consectetur anim occaecat.
+* Irure esse velit tempor ea deserunt.
+* Enim incididunt culpa commodo reprehenderit elit.
+* Amet duis aliquip ipsum fugiat tempor.
+
+== Section 3
+
+Minim cupidatat in nisi proident voluptate duis ipsum ullamco et consectetur quis. Minim in veniam incididunt id ea occaecat laboris commodo irure ut ex. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/763[project page] for more, or jump to <<Overview>>.
+
+* In minim aute sint ea eiusmod.
+* Esse sint cillum nulla excepteur commodo.
+* Occaecat excepteur nostrud tempor duis in.
+* Velit ut quis adipiscing dolore officia.
+
+== Section 4
+
+Do ipsum minim quis nulla sed non in mollit nostrud anim lorem. Ex laboris amet eiusmod ea in quis elit velit fugiat aliquip laborum. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/921[project page] for more, or jump to <<Overview>>.
+
+[cols="1,1,3",options="header"]
+|===
+| Key | Count | Note
+
+| row0 | 486 | Nostrud pariatur ex.
+| row1 | 523 | Id aliquip ad.
+| row2 | 8 | Adipiscing laborum magna.
+| row3 | 49 | Ipsum quis nostrud.
+|===
+
+

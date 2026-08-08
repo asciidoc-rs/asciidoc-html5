@@ -146,6 +146,11 @@ pub struct Options {
     /// (`docdate`, `doctime`, `docdatetime`, `docyear`). `None` leaves them to
     /// follow the reference time. See [`input_mtime`](Self::input_mtime).
     input_mtime: Option<ReferenceTime>,
+
+    /// Whether to catalog referenced images and links — Asciidoctor's
+    /// `catalog_assets` API option. `None` leaves it at the parser's default
+    /// (disabled). See [`catalog_assets`](Self::catalog_assets).
+    catalog_assets: Option<bool>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -419,6 +424,56 @@ impl Options {
     /// file. See [`ReferenceTime`].
     pub fn input_mtime(mut self, input_mtime: ReferenceTime) -> Self {
         self.input_mtime = Some(input_mtime);
+        self
+    }
+
+    /// Enables cataloging the images and links referenced in the document —
+    /// Asciidoctor's `catalog_assets` API option.
+    ///
+    /// The document catalog always tracks referenceable elements (anchors,
+    /// section headings, footnotes) regardless of this setting; with
+    /// `catalog_assets(true)`, it additionally records every `image:`/`image::`
+    /// macro target (as an
+    /// [`ImageReference`](asciidoc_parser::document::ImageReference), via
+    /// [`Catalog::images`](asciidoc_parser::document::Catalog::images)) and
+    /// every `link:`/`mailto:` macro target and bare URL/email autolink (via
+    /// [`Catalog::links`](asciidoc_parser::document::Catalog::links)), both in
+    /// document order. Left unset (the default), neither list is populated.
+    ///
+    /// Unlike Asciidoctor — whose lazy, Ruby-runtime conversion model only
+    /// catalogs inline images and links once the document is *converted* — this
+    /// crate performs inline substitution while *parsing*, so both lists are
+    /// already populated on the [`Document`](crate::Document) returned by
+    /// [`load`](crate::load)/[`load_with`](crate::load_with), with no separate
+    /// conversion step required.
+    ///
+    /// This does not mean the option is redundant here: rendering an image or
+    /// link macro already needs its target (and, for images, `imagesdir`)
+    /// regardless of this setting, but recording it *again* into the catalog
+    /// costs an extra clone and push per occurrence. `catalog_assets` gates
+    /// that extra bookkeeping so a caller who never reads
+    /// [`Catalog::images`](asciidoc_parser::document::Catalog::images)/
+    /// [`links`](asciidoc_parser::document::Catalog::links) does not pay for
+    /// it — mirroring Asciidoctor, which documents the same option as an
+    /// opt-in for a reason: "\[it\] does not attempt to store information
+    /// about all assets it comes across while processing the document"
+    /// unless asked to.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{load_with, Options};
+    ///
+    /// let opts = Options::new().catalog_assets(true);
+    /// let doc = load_with(
+    ///     "image::screenshot.png[]\n\nSee https://example.org for details.",
+    ///     &opts,
+    /// );
+    /// assert_eq!(doc.catalog().images()[0].target, "screenshot.png");
+    /// assert_eq!(doc.catalog().links(), ["https://example.org"]);
+    /// ```
+    pub fn catalog_assets(mut self, yes: bool) -> Self {
+        self.catalog_assets = Some(yes);
         self
     }
 
@@ -814,6 +869,13 @@ impl Options {
         }
         if let Some(input_mtime) = &self.input_mtime {
             parser = parser.with_input_mtime(input_mtime.clone());
+        }
+
+        // Asciidoctor's `catalog_assets` option; the parser's own default
+        // (disabled) already matches this crate's unset default, so there is
+        // nothing to seed when the caller left it unset.
+        if let Some(catalog_assets) = self.catalog_assets {
+            parser = parser.with_catalog_assets(catalog_assets);
         }
 
         parser
@@ -2078,5 +2140,40 @@ mod tests {
         );
         assert!(html.contains("doctype=article"));
         assert!(!html.contains("doctype=book"));
+    }
+
+    // `catalog_assets` is off by default: images and links referenced in the
+    // document are not recorded in the catalog.
+    #[test]
+    fn catalog_assets_defaults_to_disabled() {
+        let doc = crate::load_with(
+            "image::screenshot.png[]\n\nSee https://example.org for details.",
+            &Options::new(),
+        );
+        assert!(doc.catalog().images().is_empty());
+        assert!(doc.catalog().links().is_empty());
+    }
+
+    // `catalog_assets(true)` records referenced images and links in document
+    // order. Both lists are already populated on the loaded `Document` -- this
+    // crate substitutes inline macros while parsing, unlike Asciidoctor, which
+    // only catalogs them once the document is converted.
+    #[test]
+    fn catalog_assets_true_populates_the_image_and_link_catalog() {
+        let doc = crate::load_with(
+            "image::screenshot.png[]\n\nSee https://example.org and \
+             https://docs.example.org for details.",
+            &Options::new().catalog_assets(true),
+        );
+
+        let images = doc.catalog().images();
+        assert_eq!(images.len(), 1, "{images:?}");
+        assert_eq!(images[0].target, "screenshot.png");
+        assert_eq!(images[0].imagesdir, None);
+
+        assert_eq!(
+            doc.catalog().links(),
+            ["https://example.org", "https://docs.example.org"]
+        );
     }
 }

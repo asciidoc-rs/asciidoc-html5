@@ -6,6 +6,7 @@
 //! verifies that closest available function; the Ruby-specific remainder is
 //! tracked as non-normative.
 
+mod catalog_assets;
 mod convert_files;
 mod convert_strings;
 mod find_blocks;

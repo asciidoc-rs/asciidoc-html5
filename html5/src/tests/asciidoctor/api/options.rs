@@ -1,16 +1,17 @@
-use crate::{convert, convert_file, convert_with, tests::sdd::*, Options, SafeMode};
+use crate::{convert, convert_file, convert_with, load_with, tests::sdd::*, Options, SafeMode};
 
 track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 
 // Asciidoctor's "API Options" page: the reference table of options accepted by
 // the Ruby `Asciidoctor` API. Most rows describe Ruby-only machinery with no
-// analog in a Rust text-to-text library and are tracked as non-normative; four
+// analog in a Rust text-to-text library and are tracked as non-normative; five
 // rows map directly onto this crate's `Options` builder and are verified:
 //
 // * `:attributes` -> `Options::attribute` / `attribute_default` / `set` /
 //   `unset` / `set_default` / `unset_default` (override vs. soft-set
 //   precedence).
 // * `:base_dir` -> `Options::base_dir` (anchors relative includes / docinfo).
+// * `:catalog_assets` -> `Options::catalog_assets` (see #95).
 // * `:safe` -> `Options::safe_mode`.
 // * `:standalone` -> `Options::standalone` / `embedded`.
 //
@@ -31,9 +32,8 @@ track_file!("ref/asciidoctor/docs/modules/api/pages/options.adoc");
 // * Ruby- and template-engine-specific options (`:converter`, `:eruby`,
 //   `:extensions`, `:extension_registry`, `:logger`, `:template_*`, `:timings`)
 //   have no place in this library.
-// * Parser behaviors this crate does not yet expose are tracked by GitHub
-//   issues, linked at their rows: `:catalog_assets` (#95) and
-//   `:parse_header_only` (#96).
+// * A parser behavior this crate does not yet expose is tracked by a GitHub
+//   issue, linked at its row: `:parse_header_only` (#96).
 // * `:parse` (deferred parsing) has no counterpart at all: all parse-time
 //   configuration is supplied up front through `Options`, and `load` returns a
 //   fully parsed, owned `Document`, so there is no unparsed object to configure
@@ -188,11 +188,13 @@ fn base_dir_sets_the_directory_relative_resources_resolve_against() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// `:catalog_assets` -- capturing images and links in the reference table -- has
-// no counterpart: `asciidoc-parser` does not expose an asset-cataloging toggle.
-// Tracked in https://github.com/asciidoc-rs/asciidoc-html5/issues/95.
-non_normative!(
-    r#"
+// `:catalog_assets` maps to `Options::catalog_assets`. Off by default;
+// enabling it records the images and links referenced in the document
+// alongside the IDs and footnotes the catalog always tracks.
+#[test]
+fn catalog_assets_records_images_and_links_when_enabled() {
+    verifies!(
+        r#"
 |`:catalog_assets`
 |If `true`, the parser captures images and links in the reference table.
 (Normally only IDs, footnotes and indexterms are included).
@@ -204,7 +206,31 @@ _(Experimental)._
 |_Boolean_
 
 "#
-);
+    );
+
+    // Default: images and links are not cataloged.
+    let default = load_with(
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
+        &Options::new(),
+    );
+    assert!(default.catalog().images().is_empty());
+    assert!(default.catalog().links().is_empty());
+
+    // Enabled: both are recorded, in document order.
+    let enabled = load_with(
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
+        &Options::new().catalog_assets(true),
+    );
+    assert_eq!(
+        enabled
+            .catalog()
+            .images()
+            .first()
+            .map(|i| i.target.as_str()),
+        Some("screenshot.png")
+    );
+    assert_eq!(enabled.catalog().links(), ["https://example.org"]);
+}
 
 // `:converter` selects a user-supplied Ruby converter class or instance. This
 // crate has a single built-in HTML5 converter and no pluggable-converter API,
