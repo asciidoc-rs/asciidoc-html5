@@ -1,0 +1,67 @@
+//! Coverage of Asciidoctor's *Add a Favicon* page.
+//!
+//! This page documents the `favicon` document attribute, which adds a
+//! `<link rel="icon">` reference to the `<head>` of a standalone document.
+//! This crate does not implement the `favicon` attribute yet — the `<head>`
+//! this crate builds has a stylesheet, icon-font, and syntax-highlighter
+//! entry, but no favicon step — so none of this page's claims are verifiable
+//! here. The whole page is tracked as non-normative.
+
+use crate::tests::sdd::*;
+
+track_file!("ref/asciidoctor/docs/modules/html-backend/pages/favicon.adoc");
+
+// The `favicon` attribute is not implemented (no favicon `<link>` is ever
+// emitted), so none of this page's claims have a counterpart to verify.
+non_normative!(
+    r#"
+= Add a Favicon
+
+When using Asciidoctor to generate a standalone HTML document (i.e., the `standalone` option is `true`), you can instruct the processor to include a link to a favicon by setting the favicon attribute in the document header.
+
+[,asciidoc]
+----
+= Document Title
+:favicon:
+----
+
+By default, the processor will add a link reference of type "icon" that refers to a file named _favicon.ico_ (relative to the HTML document):
+
+[,html]
+----
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+----
+
+This reference gets added inside the HTML `<head>` element (which explains why this feature is not available when generating an embeddable HTML document).
+
+To modify the name or location of the icon file, simply assign a value to the favicon attribute:
+
+[,asciidoc]
+----
+= Document Title
+:favicon: ./images/favicon/favicon.png
+----
+
+This will now produce the following HTML element:
+
+[,html]
+----
+<link rel="icon" type="image/png" href="./images/favicon/favicon.png">
+----
+
+Notice the mimetype is automatically set based on the file extension of the image.
+
+The value of the `iconsdir` attribute is not prepended to the favicon path as it is with icons in the content.
+If you want this directory to be included in the favicon path, you must reference it explicitly:
+
+[,asciidoc]
+----
+:favicon: {iconsdir}/favicon.png
+----
+
+TIP: If you're converting a set of AsciiDoc files in multiple directories for the purpose of making a website, and the favicon is located in a shared location, you'll likely want to use a forward slash (`/`) at the beginning of the favicon path.
+
+If you're looking for more control over how the favicon is declared, you should use a xref:ROOT:docinfo.adoc#head[head docinfo file].
+Keep in mind that if you add an icon link in a head docinfo file and also set the favicon attribute, you'll end up with two icon links in the generated HTML document.
+"#
+);

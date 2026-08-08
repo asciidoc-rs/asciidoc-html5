@@ -8,4 +8,11 @@
 
 mod custom_stylesheet;
 mod default_stylesheet;
+mod favicon;
 mod index;
+mod local_font_awesome;
+mod manage_images;
+mod skip_front_matter;
+mod source_highlighting_stylesheets;
+mod stylesheet_modes;
+mod verbatim_line_wrap;
