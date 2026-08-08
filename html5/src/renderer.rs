@@ -1912,7 +1912,7 @@ impl Renderer<'_> {
         // resolved document attributes, defaulting to Asciidoctor's `en` /
         // `article`. The footer's "Last updated" timestamp still needs a
         // docdatetime the caller supplies, so it stays deferred.
-        let doctitle = document.doctitle();
+        let doctitle_sanitized = document.doctitle_sanitized();
         let lang = attribute_str(document, "lang").unwrap_or_else(|| "en".to_string());
         let doctype = attribute_str(document, "doctype").unwrap_or_else(|| "article".to_string());
 
@@ -1971,10 +1971,12 @@ impl Renderer<'_> {
             ));
         }
 
-        // The <title> is the plain-text doctitle. The parser's `doctitle()` has
-        // had header substitutions applied (special characters escaped), which
-        // is what we want inside <title>.
-        if let Some(title) = doctitle {
+        // The <title> element can't carry markup, so it uses the sanitized
+        // doctitle — header substitutions applied (special characters escaped)
+        // and any rendered markup (`*bold*`, an inline image) stripped down to
+        // plain text — matching Asciidoctor's `Document#doctitle(sanitize:
+        // true)`. The <h1> doctitle below keeps the unsanitized form.
+        if let Some(title) = &doctitle_sanitized {
             self.line(&format!("<title>{title}</title>"));
         }
 
@@ -3986,14 +3988,13 @@ impl Renderer<'_> {
                         mode: ad.toc_mode(),
                         levels: ad.toc_levels(),
                         // The cell's `sectnumlevels` is read from its own nested
-                        // document (default 3), like the outline module's
+                        // document (default 3, or a cell-set override — the
+                        // parser has honored a cell-body assignment since
+                        // asciidoc-parser#1102), like the outline module's
                         // `attribute_usize`; the cell type is un-nameable here,
                         // so this reads it inline. `sectnumlevels` always
-                        // resolves to a `Value` (its default is `3`), so the
-                        // non-`Value` arm is a defensive fallback (hence
-                        // uncovered). The parser currently surfaces only the
-                        // default here, never a cell-set override (see
-                        // asciidoc-parser#1092).
+                        // resolves to a `Value`, so the non-`Value` arm is a
+                        // defensive fallback (hence uncovered).
                         sectnumlevels: match ad.attribute_value("sectnumlevels") {
                             InterpretedValue::Value(value) => value.parse().unwrap_or(3),
                             _ => 3,
@@ -5388,6 +5389,17 @@ mod tests {
     }
 
     #[test]
+    fn title_element_strips_markup_the_h1_keeps() {
+        // The <title> element can't carry markup, so it uses the sanitized
+        // doctitle (asciidoc-parser#1126): rendered formatting and inline
+        // macros are stripped down to plain text, unlike the <h1>, which
+        // keeps the rendered markup.
+        let html = convert("= *Bold* _Title_\n\nHi.");
+        assert!(html.contains("<title>Bold Title</title>"));
+        assert!(html.contains("<h1><strong>Bold</strong> <em>Title</em></h1>"));
+    }
+
+    #[test]
     fn footnotes_block_lists_registered_footnotes() {
         // A registered footnote renders both its inline `<sup>` reference and,
         // at the document level, a `#footnotes` definition block — in both the
@@ -5696,14 +5708,29 @@ mod tests {
     fn asciidoc_cell_toc_numbers_sections() {
         // With `:sectnums:`, the cell's TOC entries carry their section numbers,
         // resolved from the cell's own nested document, matching Asciidoctor
-        // 2.0.26. (The `sectnumlevels` cap is not honored inside a cell — the
-        // parser surfaces only the default; see asciidoc-parser#1092.)
+        // 2.0.26.
         let html = crate::convert_with(
             "|===\na|\n:toc:\n:sectnums:\n\n== Alpha\n\n== Bravo\n\nx\n|===\n",
             &Options::new(),
         );
         assert!(html.contains("<li><a href=\"#_alpha\">1. Alpha</a></li>"));
         assert!(html.contains("<li><a href=\"#_bravo\">2. Bravo</a></li>"));
+    }
+
+    #[test]
+    fn asciidoc_cell_toc_honors_sectnumlevels_cap() {
+        // A cell-set `:sectnumlevels:` caps which section levels carry a
+        // number, in both the cell's own headings and its TOC — honored since
+        // asciidoc-parser#1102 (a nested AsciiDoc cell previously always saw
+        // the built-in default instead of a cell-body override).
+        let html = crate::convert_with(
+            "|===\na|\n:toc:\n:sectnums:\n:sectnumlevels: 1\n\n== Alpha\n\n=== Beta\n\nx\n|===\n",
+            &Options::new(),
+        );
+        assert!(html.contains("<li><a href=\"#_alpha\">1. Alpha</a>"));
+        assert!(html.contains("<li><a href=\"#_beta\">Beta</a></li>"));
+        assert!(html.contains("<h2 id=\"_alpha\">1. Alpha</h2>"));
+        assert!(html.contains("<h3 id=\"_beta\">Beta</h3>"));
     }
 
     #[test]
