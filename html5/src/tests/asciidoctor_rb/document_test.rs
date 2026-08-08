@@ -401,15 +401,14 @@ mod docinfo_files {
                 footer_script: 1,
                 navbar: 1,
             },
-            // NOTE: the `docinfo docinfo2` case (both the bare `docinfo` and
-            // `docinfo2` legacy attributes set together) is dropped.
-            // `asciidoc-parser` 0.29.14 recognizes `docinfo1`/`docinfo2` on
-            // their own correctly (the two cases above), but setting `docinfo`
-            // (bare, "private") alongside `docinfo2` (bare, "private+shared")
-            // drops the shared-file component instead of taking the union, so
-            // this combined case still diverges from Asciidoctor. Filed
-            // upstream as asciidoc-rs/asciidoc-parser#1138 — restore this case
-            // once it lands.
+            DocinfoCase {
+                spec: "docinfo docinfo2",
+                head_script: 1,
+                meta: 1,
+                top_link: 1,
+                footer_script: 1,
+                navbar: 1,
+            },
             DocinfoCase {
                 spec: "docinfo=private,shared",
                 head_script: 1,
@@ -1705,17 +1704,11 @@ mod structure {
         assert_xpath(&html, r#"//p[text()="ACME Docs"]"#, 1);
     }
 
-    // `asciidoc-parser` warns about the `{project-name}` reference in the
-    // implicit doctitle even though `project-name` is defined later in the
-    // same header (matching Asciidoctor's *substitution*, which also leaves
-    // the reference literal — verified in the previous test — but not its
-    // *no-warning* nuance for this specific ordering). Fixed upstream
-    // (asciidoc-rs/asciidoc-parser#1124, merged in
-    // asciidoc-rs/asciidoc-parser#1134) but not yet in a published
-    // `asciidoc-parser` release as of 0.29.14 — flip this test back to
-    // `verifies!` once a release containing it is picked up here.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_warn_if_implicit_document_title_contains_attribute_reference_for_attribute_defined_later_in_header(
+    ) {
+        verifies!(
+            r#"
     test 'should not warn if implicit document title contains attribute reference for attribute defined later in header' do
       using_memory_logger do |logger|
         input = <<~'EOS'
@@ -1733,7 +1726,22 @@ mod structure {
     end
 
 "#
-    );
+        );
+
+        let input = "= {project-name} Docs\n:project-name: ACME\n\n{doctitle}\n";
+        let doc = load_with(
+            input,
+            &Options::new().attribute("attribute-missing", "warn"),
+        );
+        assert_eq!(doc.warnings().count(), 0);
+        assert_eq!(
+            attr_str(&doc, "doctitle").as_deref(),
+            Some("{project-name} Docs")
+        );
+        assert_eq!(doc.doctitle(), Some("ACME Docs"));
+        let html = convert_with(input, &Options::new().standalone(true));
+        assert_xpath(&html, r#"//p[text()="{project-name} Docs"]"#, 1);
+    }
 
     #[test]
     fn should_recognize_document_title_when_preceded_by_blank_lines() {
@@ -2074,15 +2082,9 @@ mod structure {
 "#
         );
 
-        // `revdate` diverges from Ruby here: the revision line's empty date
-        // field parses to a set-but-empty value rather than staying unset
-        // (`doc.attributes['revdate']` is `nil` in Ruby). Fixed upstream
-        // (asciidoc-rs/asciidoc-parser#1125, merged in
-        // asciidoc-rs/asciidoc-parser#1133) but not yet in a published
-        // `asciidoc-parser` release as of 0.29.14 — assert `revdate` is unset
-        // here once a release containing it is picked up here.
         let doc = load("= Document Title\nAuthor Name\nv1.0.0,:remark\n\ncontent\n");
         assert_eq!(attr_str(&doc, "revnumber").as_deref(), Some("1.0.0"));
+        assert_eq!(attr_str(&doc, "revdate"), None);
         assert_eq!(attr_str(&doc, "revremark").as_deref(), Some("remark"));
     }
 
@@ -2957,16 +2959,15 @@ mod structure {
         // (Asciidoctor's `@`-suffixed value), and `''` is a hard override
         // (on).
         //
-        // NOTE: two cases are still dropped: `[{ 'showtitle' => '' },
-        // [':notitle:']]` and `[{ 'showtitle' => false }, [':!notitle:']]`.
-        // `asciidoc-parser` 0.29.14 (asciidoc-rs/asciidoc-parser#1120) now
-        // resolves the API-locked `showtitle` value itself correctly, but the
-        // *other*, unlocked name in the linked pair (`notitle`) still
-        // resolves to whatever the document literally wrote instead of
-        // consistently reflecting the lock — this test's `ifdef::notitle[…]`
-        // probe exposes that inconsistency. Filed upstream as
-        // asciidoc-rs/asciidoc-parser#1139 — restore these two cases once it
-        // lands.
+        // NOTE: one case is still dropped: `[{ 'showtitle' => false },
+        // [':!notitle:']]`. `asciidoc-parser` 0.29.15
+        // (asciidoc-rs/asciidoc-parser#1139) fixed the mirror case — a
+        // hard-*set* `showtitle` lock now correctly wins over a conflicting
+        // document `:notitle:` entry (restored below) — but a hard-*unset*
+        // `showtitle` lock still lets a document `:!notitle:` entry flip
+        // `notitle` the wrong way, hiding the title when it should show.
+        // Filed upstream as asciidoc-rs/asciidoc-parser#1143 — restore this
+        // case once it lands.
         type OptFn = fn(Options) -> Options;
         let cases: &[(OptFn, &[&str])] = &[
             (|o| o.unset("notitle"), &[]),
@@ -2974,6 +2975,7 @@ mod structure {
             (|o| o.unset("notitle"), &[]),
             (|o| o.set_default("notitle"), &[":!notitle:"]),
             (|o| o.set_default("notitle"), &[":showtitle:"]),
+            (|o| o.set("showtitle"), &[":notitle:"]),
             (|o| o.set_default("showtitle"), &[]),
             (|o| o, &[":!notitle:"]),
             (|o| o, &[":notitle:", ":showtitle:"]),
