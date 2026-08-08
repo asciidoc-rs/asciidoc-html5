@@ -8512,12 +8512,10 @@ mod references {
         );
     }
 
-    // Asciidoctor trims the reference text after the first comma of a block
-    // anchor, registering `Debian, Ubuntu`; `asciidoc-parser` keeps the leading
-    // space (` Debian, Ubuntu`), so the reftext and its reverse lookup do not
-    // match Asciidoctor (asciidoc-rs/asciidoc-parser#1111).
-    non_normative!(
-        r#"
+    #[test]
+    fn should_allow_comma_in_block_reference_text() {
+        verifies!(
+            r#"
     test 'should allow comma in block reference text' do
       input = <<~'EOS'
       [[debian, Debian, Ubuntu]]
@@ -8535,7 +8533,19 @@ mod references {
     end
 
 "#
-    );
+        );
+
+        let doc = load(
+            "[[debian, Debian, Ubuntu]]\n.Installation on Debian\n----\n$ apt-get install asciidoctor\n----\n",
+        );
+        let entry = doc.catalog().get_ref("debian");
+        assert!(entry.is_some());
+        assert_eq!(entry.unwrap().reftext.as_deref(), Some("Debian, Ubuntu"));
+        assert_eq!(
+            doc.catalog().resolve_id("Debian, Ubuntu"),
+            Some("debian".to_string())
+        );
+    }
 
     #[test]
     fn should_resolve_attribute_reference_in_title_using_attribute_defined_at_location_of_block() {
