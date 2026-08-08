@@ -44,14 +44,7 @@
 //! - the Ruby **`Asciidoctor::Timings`** API, the **unknown-backend exception**
 //!   (this crate has only one backend, so there is nothing to fail to resolve),
 //!   and the **UTF-8 encoding-forcing** test (a Ruby runtime
-//!   `Encoding.default_external` concern with no Rust counterpart);
-//! - one **`catalog_assets` case** (cataloging images inside a nested/table
-//!   document): `asciidoc-parser` 0.29.13 only wires catalog registration
-//!   through its *inline* `image:` macro substitution path — a block `image::`
-//!   macro (what that particular test exercises) is not registered. This is an
-//!   upstream gap outside this crate's dependency, filed as
-//!   asciidoc-rs/asciidoc-parser#1118 and noted at the test it affects; the
-//!   other `Catalog` tests are unaffected and verify normally.
+//!   `Encoding.default_external` concern with no Rust counterpart).
 
 use std::path::{Path, PathBuf};
 
@@ -384,15 +377,14 @@ mod docinfo_files {
                 footer_script: 1,
                 navbar: 1,
             },
-            // NOTE: the legacy `docinfo1`/`docinfo2` attribute *names* (as
-            // opposed to `docinfo=shared`/`docinfo=private,shared`, which
-            // request the same thing by value) are not recognized by
-            // `asciidoc-parser` 0.29.13. Filed upstream as
-            // asciidoc-rs/asciidoc-parser#1115 — flip these three cases back
-            // to `docinfo1`/`docinfo2`/`docinfo docinfo2` once it lands. The
-            // three cases that exercised them (`docinfo1`, `docinfo2`,
-            // `docinfo docinfo2`) are dropped; `docinfo=shared` and
-            // `docinfo=private,shared` below cover the same claims by value.
+            DocinfoCase {
+                spec: "docinfo1",
+                head_script: 0,
+                meta: 1,
+                top_link: 1,
+                footer_script: 0,
+                navbar: 0,
+            },
             DocinfoCase {
                 spec: "docinfo=shared",
                 head_script: 0,
@@ -401,6 +393,23 @@ mod docinfo_files {
                 footer_script: 0,
                 navbar: 0,
             },
+            DocinfoCase {
+                spec: "docinfo2",
+                head_script: 1,
+                meta: 1,
+                top_link: 1,
+                footer_script: 1,
+                navbar: 1,
+            },
+            // NOTE: the `docinfo docinfo2` case (both the bare `docinfo` and
+            // `docinfo2` legacy attributes set together) is dropped.
+            // `asciidoc-parser` 0.29.14 recognizes `docinfo1`/`docinfo2` on
+            // their own correctly (the two cases above), but setting `docinfo`
+            // (bare, "private") alongside `docinfo2` (bare, "private+shared")
+            // drops the shared-file component instead of taking the union, so
+            // this combined case still diverges from Asciidoctor. Filed
+            // upstream as asciidoc-rs/asciidoc-parser#1138 — restore this case
+            // once it lands.
             DocinfoCase {
                 spec: "docinfo=private,shared",
                 head_script: 1,
@@ -531,14 +540,11 @@ mod docinfo_files {
 "#
         );
 
-        // `docinfo1` (the legacy attribute name) is not recognized by
-        // `asciidoc-parser` 0.29.13 — see the note on the docinfo-matrix test
-        // above — so this uses the equivalent `docinfo=shared` value instead.
         let output = convert_file_with(
             fixture_path("basic.adoc"),
             &Options::new()
                 .safe_mode(SafeMode::Server)
-                .attribute("docinfo", "shared")
+                .set("docinfo1")
                 .set("nofooter"),
         )
         .unwrap();
@@ -622,17 +628,11 @@ mod docinfo_files {
         let sample = fixture_path("basic.adoc");
         let base = Options::new().safe_mode(SafeMode::Server);
 
-        // `docinfo1`/`docinfo2` (the legacy attribute names) are not
-        // recognized by `asciidoc-parser` 0.29.13 (asciidoc-rs/asciidoc-parser#1115;
-        // see the note on the docinfo-matrix test above) — so this uses
-        // `docinfo=private` / `docinfo=shared` / `docinfo=private,shared`
-        // instead, which request the same private-vs-shared file selection
-        // by value.
         let output = convert_file_with(
             &sample,
             &base
                 .clone()
-                .attribute("docinfo", "private")
+                .set("docinfo")
                 .attribute("docinfodir", "custom-docinfodir"),
         )
         .unwrap();
@@ -644,7 +644,7 @@ mod docinfo_files {
             &sample,
             &base
                 .clone()
-                .attribute("docinfo", "shared")
+                .set("docinfo1")
                 .attribute("docinfodir", "custom-docinfodir"),
         )
         .unwrap();
@@ -656,7 +656,7 @@ mod docinfo_files {
             &sample,
             &base
                 .clone()
-                .attribute("docinfo", "private,shared")
+                .set("docinfo2")
                 .attribute("docinfodir", "./custom-docinfodir"),
         )
         .unwrap();
@@ -668,7 +668,7 @@ mod docinfo_files {
             &sample,
             &base
                 .clone()
-                .attribute("docinfo", "private,shared")
+                .set("docinfo2")
                 .attribute("docinfodir", "custom-docinfodir/subfolder"),
         )
         .unwrap();
@@ -759,21 +759,12 @@ mod docinfo_files {
         assert_css(&output, "body script", 1);
         assert_css(&output, "a#top", 0);
 
-        // `docinfo1`/`docinfo2` are not recognized (asciidoc-rs/asciidoc-parser#1115;
-        // see the note on the docinfo-matrix test above);
-        // `docinfo=shared`/`docinfo=private,shared` request the same file
-        // selection by value.
-        let output =
-            convert_file_with(&sample, &base.clone().attribute("docinfo", "shared")).unwrap();
+        let output = convert_file_with(&sample, &base.clone().set("docinfo1")).unwrap();
         assert!(!output.is_empty());
         assert_css(&output, "body script", 0);
         assert_css(&output, "a#top", 1);
 
-        let output = convert_file_with(
-            &sample,
-            &base.clone().attribute("docinfo", "private,shared"),
-        )
-        .unwrap();
+        let output = convert_file_with(&sample, &base.clone().set("docinfo2")).unwrap();
         assert!(!output.is_empty());
         assert_css(&output, "body script", 1);
         assert_css(&output, "a#top", 1);
@@ -901,20 +892,10 @@ mod docinfo_files {
         assert_css(&output, r#"meta[http-equiv="imagetoolbar"]"#, 0);
     }
 
-    // `asciidoc-parser` 0.29.13 always applies default (`attributes`)
-    // substitution to docinfo content and does not honor a custom
-    // `docinfosubs` value (so the `replacements` half of the next test's
-    // claim — `(C)` becoming `©` — does not occur; filed upstream as
-    // asciidoc-rs/asciidoc-parser#1116) or the `attribute-missing` policy
-    // within it (a reference to an explicitly-unset attribute resolves to an
-    // empty string rather than dropping its line, so this test's central
-    // claim does not hold; filed upstream as
-    // asciidoc-rs/asciidoc-parser#1117 — that one is not docinfo-specific,
-    // it affects attribute substitution generally). Flip both tests below
-    // back from `non_normative!` to `verifies!` once the respective issue
-    // lands.
-    non_normative!(
-        r##"
+    #[test]
+    fn should_substitute_attributes_in_docinfo_files_by_default() {
+        verifies!(
+            r##"
     test 'should substitute attributes in docinfo files by default' do
       sample_input_path = fixture_path 'subs.adoc'
       using_memory_logger do |logger|
@@ -930,6 +911,42 @@ mod docinfo_files {
       end
     end
 
+"##
+        );
+
+        // The `logger`/`assert_message` half is dropped: this crate's parser
+        // does log a warning here, but for a different reason than
+        // Asciidoctor's ("dropping line containing reference to missing
+        // attribute") — it flags the document's own `:bootstrap-version:`
+        // header entry as an attempt to override an API-locked (explicitly
+        // unset) attribute, rather than reporting the drop itself. The
+        // observable HTML claims — the line is dropped and the default
+        // substitution step list leaves `(C)` unreplaced — both hold and are
+        // verified below.
+        let output = convert_file_with(
+            fixture_path("subs.adoc"),
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .set("docinfo")
+                .unset("bootstrap-version")
+                .set("linkcss")
+                .attribute("attribute-missing", "drop-line")
+                .standalone(true),
+        )
+        .unwrap();
+        assert!(!output.is_empty());
+        assert_css(&output, "script", 0);
+        assert_xpath(
+            &output,
+            r#"//meta[@name="copyright"][@content="(C) OpenDevise"]"#,
+            1,
+        );
+    }
+
+    #[test]
+    fn should_apply_explicit_substitutions_to_docinfo_files() {
+        verifies!(
+            r##"
     test 'should apply explicit substitutions to docinfo files' do
       sample_input_path = fixture_path 'subs.adoc'
       output = Asciidoctor.convert_file sample_input_path,
@@ -944,7 +961,26 @@ mod docinfo_files {
   end
 
 "##
-    );
+        );
+
+        let output = convert_file_with(
+            fixture_path("subs.adoc"),
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .set("docinfo")
+                .attribute("docinfosubs", "attributes,replacements")
+                .set("linkcss")
+                .standalone(true),
+        )
+        .unwrap();
+        assert!(!output.is_empty());
+        assert_css(&output, r#"script[src="bootstrap.3.2.0.min.js"]"#, 1);
+        assert_xpath(
+            &output,
+            r#"//meta[@name="copyright"][@content="© OpenDevise"]"#,
+            1,
+        );
+    }
 }
 
 mod mathjax {
@@ -1236,15 +1272,14 @@ mod structure {
 
         // `Header::main_title`/`subtitle` partition the title but do not
         // sanitize (strip markup from) the subtitle half the way Ruby's
-        // `doctitle sanitize: true` does, so the subtitle is asserted with
-        // its markup intact (`*Subtitle*`) rather than sanitized to plain
-        // text (`Subtitle`). This crate has no `sanitize:`-equivalent
-        // accessor at all; filed upstream as
-        // asciidoc-rs/asciidoc-parser#1122 — revisit this assertion once a
-        // sanitized accessor lands.
+        // `doctitle sanitize: true` does — `Document::doctitle_sanitized`
+        // sanitizes the *whole* title, with no partitioned equivalent — so
+        // the subtitle is asserted with its rendered markup
+        // (`<strong>Subtitle</strong>`) rather than sanitized to plain text
+        // (`Subtitle`).
         let doc = load("= Main Title: *Subtitle*\nAuthor Name\n\ncontent\n");
         assert_eq!(doc.header().main_title(), Some("Main Title"));
-        assert_eq!(doc.header().subtitle(), Some("*Subtitle*"));
+        assert_eq!(doc.header().subtitle(), Some("<strong>Subtitle</strong>"));
     }
 
     #[test]
@@ -1271,24 +1306,17 @@ mod structure {
 "#
         );
 
-        // See the note on `document_with_subtitle` above
-        // (asciidoc-rs/asciidoc-parser#1122): the subtitle is not sanitized,
-        // so its markup survives.
+        // See the note on `document_with_subtitle` above: the subtitle is not
+        // sanitized, so its rendered markup survives.
         let doc = load("[separator=::]\n= Main Title:: *Subtitle*\nAuthor Name\n\ncontent\n");
         assert_eq!(doc.header().main_title(), Some("Main Title"));
-        assert_eq!(doc.header().subtitle(), Some("*Subtitle*"));
+        assert_eq!(doc.header().subtitle(), Some("<strong>Subtitle</strong>"));
     }
 
-    // `title-separator` locked via `ModificationContext::ApiOnly` is not
-    // consulted by `Header::main_title`/`subtitle` — a document
-    // `[separator=…]` block attribute (as the previous two tests exercise)
-    // still overrides it, even though the API lock should win — so this
-    // crate has no way to reproduce the API-overrides-the-document claim
-    // this test makes. Filed upstream as
-    // asciidoc-rs/asciidoc-parser#1119 — flip this test back to `verifies!`
-    // once the lock is honored.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_not_honor_custom_separator_for_doctitle_if_attribute_is_locked_by_api() {
+        verifies!(
+            r#"
     test 'should not honor custom separator for doctitle if attribute is locked by API' do
       input = <<~'EOS'
       [separator=::]
@@ -1307,7 +1335,21 @@ mod structure {
     end
 
 "#
-    );
+        );
+
+        // The API-locked `title-separator` (` -`) wins over the document's
+        // `[separator=::]` block attribute, matching the Ruby claim. The
+        // subtitle is not sanitized (Ruby's `sanitize: true` strips markup to
+        // plain text; this crate has no partitioned-and-sanitized subtitle
+        // accessor), so its rendered markup survives instead of being
+        // stripped to plain text.
+        let doc = load_with(
+            "[separator=::]\n= Main Title - *Subtitle*\nAuthor Name\n\ncontent\n",
+            &Options::new().attribute("title-separator", " -"),
+        );
+        assert_eq!(doc.header().main_title(), Some("Main Title"));
+        assert_eq!(doc.header().subtitle(), Some("<strong>Subtitle</strong>"));
+    }
 
     #[test]
     fn document_with_doctitle_defined_as_attribute_entry() {
@@ -1667,9 +1709,11 @@ mod structure {
     // implicit doctitle even though `project-name` is defined later in the
     // same header (matching Asciidoctor's *substitution*, which also leaves
     // the reference literal — verified in the previous test — but not its
-    // *no-warning* nuance for this specific ordering). Filed upstream as
-    // asciidoc-rs/asciidoc-parser#1124 — flip this test back to `verifies!`
-    // once the warning is suppressed.
+    // *no-warning* nuance for this specific ordering). Fixed upstream
+    // (asciidoc-rs/asciidoc-parser#1124, merged in
+    // asciidoc-rs/asciidoc-parser#1134) but not yet in a published
+    // `asciidoc-parser` release as of 0.29.14 — flip this test back to
+    // `verifies!` once a release containing it is picked up here.
     non_normative!(
         r#"
     test 'should not warn if implicit document title contains attribute reference for attribute defined later in header' do
@@ -1860,21 +1904,10 @@ mod structure {
         assert_eq!(attr_str(&doc, "foo").as_deref(), Some("bar"));
     }
 
-    // A doctitle mixing formatting markup with inline `image:` macros (as
-    // this test's title does) is not fully rendered: both the plain-text
-    // `<title>` (which should sanitize the rendered title down to "Document
-    // Title") and the standalone `<h1>` (which should render the markup,
-    // as verified elsewhere for simpler titles — see e.g.
-    // `should_sanitize_content_of_html_meta_authors_tag`'s neighbor tests)
-    // instead emit the raw, unprocessed title source, because
-    // `Header::parse` applies the restricted `Header` substitution group
-    // (specialchars+attrs+pass only) to the doctitle instead of the `Title`
-    // group. Filed upstream as asciidoc-rs/asciidoc-parser#1121 (title
-    // substitution group) and asciidoc-rs/asciidoc-parser#1122 (a
-    // sanitized-doctitle accessor for the `<title>` half) — flip this test
-    // back to `verifies!` once both land.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_sanitize_contents_of_html_title_element() {
+        verifies!(
+            r#"
     test 'should sanitize contents of HTML title element' do
       input = <<~'EOS'
       = *Document* image:logo.png[] _Title_ image:another-logo.png[another logo]
@@ -1890,7 +1923,16 @@ mod structure {
     end
 
 "#
-    );
+        );
+
+        let input = "= *Document* image:logo.png[] _Title_ image:another-logo.png[another logo]\n\ncontent\n";
+        let output = convert_with(input, &Options::new().standalone(true));
+        assert_xpath(&output, r#"/html/head/title[text()="Document Title"]"#, 1);
+        assert_xpath(&output, r#"//*[@id="header"]/h1"#, 1);
+        assert!(output.contains(
+            r#"<h1><strong>Document</strong> <span class="image"><img src="logo.png" alt="logo"></span> <em>Title</em> <span class="image"><img src="another-logo.png" alt="another logo"></span></h1>"#
+        ));
+    }
 
     #[test]
     fn should_not_choke_on_empty_source() {
@@ -2034,9 +2076,11 @@ mod structure {
 
         // `revdate` diverges from Ruby here: the revision line's empty date
         // field parses to a set-but-empty value rather than staying unset
-        // (`doc.attributes['revdate']` is `nil` in Ruby). Filed upstream as
-        // asciidoc-rs/asciidoc-parser#1125 — assert `revdate` is unset here
-        // once it lands.
+        // (`doc.attributes['revdate']` is `nil` in Ruby). Fixed upstream
+        // (asciidoc-rs/asciidoc-parser#1125, merged in
+        // asciidoc-rs/asciidoc-parser#1133) but not yet in a published
+        // `asciidoc-parser` release as of 0.29.14 — assert `revdate` is unset
+        // here once a release containing it is picked up here.
         let doc = load("= Document Title\nAuthor Name\nv1.0.0,:remark\n\ncontent\n");
         assert_eq!(attr_str(&doc, "revnumber").as_deref(), Some("1.0.0"));
         assert_eq!(attr_str(&doc, "revremark").as_deref(), Some("remark"));
@@ -2913,15 +2957,16 @@ mod structure {
         // (Asciidoctor's `@`-suffixed value), and `''` is a hard override
         // (on).
         //
-        // NOTE: two cases are dropped because an API-locked `showtitle`
-        // override does not consistently win over a conflicting document
-        // `notitle`/`showtitle` entry the way every other override in this
-        // matrix does: `[{ 'showtitle' => '' }, [':notitle:']]` and
-        // `[{ 'showtitle' => false }, [':!notitle:']]`. `asciidoc-parser`'s
-        // `showtitle`/`notitle` linkage resolves the document's entry last
-        // regardless of which side the API locked. Filed upstream as
-        // asciidoc-rs/asciidoc-parser#1120 — restore these two cases once
-        // the API lock is honored there too.
+        // NOTE: two cases are still dropped: `[{ 'showtitle' => '' },
+        // [':notitle:']]` and `[{ 'showtitle' => false }, [':!notitle:']]`.
+        // `asciidoc-parser` 0.29.14 (asciidoc-rs/asciidoc-parser#1120) now
+        // resolves the API-locked `showtitle` value itself correctly, but the
+        // *other*, unlocked name in the linked pair (`notitle`) still
+        // resolves to whatever the document literally wrote instead of
+        // consistently reflecting the lock — this test's `ifdef::notitle[…]`
+        // probe exposes that inconsistency. Filed upstream as
+        // asciidoc-rs/asciidoc-parser#1139 — restore these two cases once it
+        // lands.
         type OptFn = fn(Options) -> Options;
         let cases: &[(OptFn, &[&str])] = &[
             (|o| o.unset("notitle"), &[]),
@@ -3333,13 +3378,10 @@ mod document_catalog {
         assert_eq!(images[0].imagesdir.as_deref(), Some("img"));
     }
 
-    // `asciidoc-parser` 0.29.13 only wires catalog registration through its
-    // *inline* `image:` macro substitution path (as the previous test uses);
-    // a block `image::` macro — both images in this test — is not
-    // registered. Filed upstream as asciidoc-rs/asciidoc-parser#1118 — flip
-    // this test back to `verifies!` once it lands.
-    non_normative!(
-        r#"
+    #[test]
+    fn should_catalog_assets_inside_nested_document() {
+        verifies!(
+            r#"
     test 'should catalog assets inside nested document' do
       input = <<~'EOS'
       image::outer.png[]
@@ -3359,7 +3401,17 @@ mod document_catalog {
   end
 
 "#
-    );
+        );
+
+        let doc = load_with(
+            "image::outer.png[]\n\n|===\na|\nimage::inner.png[]\n|===\n",
+            &Options::new().catalog_assets(true),
+        );
+        let images = doc.catalog().images();
+        assert_eq!(images.len(), 2);
+        assert_eq!(images[0].target, "outer.png");
+        assert_eq!(images[1].target, "inner.png");
+    }
 }
 
 mod backends_and_doctypes {
