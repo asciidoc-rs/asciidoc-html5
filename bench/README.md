@@ -25,10 +25,12 @@ neither alone characterizes "performance" completely.
 
 Both comparisons convert the same documents, under `corpus/`: 15 synthetic
 AsciiDoc files in three size tiers (`small-*`, `medium-*`, `large-*`,
-roughly 1KB/2KB/23KB), mixing the constructs both converters render today —
-headings, formatted paragraphs, lists, a source block, a table, an
-admonition, a thematic break, a cross-reference. The corpus is checked into
-git so results are reproducible without regenerating it.
+roughly 1KB/2KB/23KB). Every document has headings, a cross-reference, and
+formatted paragraphs; across its sections it also draws from lists, a source
+block, a table, an admonition, and a thematic break, so the corpus as a
+whole — though not every individual document — exercises the constructs
+both converters render today. The corpus is checked into git so results are
+reproducible without regenerating it.
 
 Regenerate (or resize, via the `TIERS` constant) with:
 

@@ -12,7 +12,7 @@
 
 use std::{fs, path::PathBuf};
 
-use asciidoc_html5::convert;
+use asciidoc_html5::{convert_with, Options, SafeMode};
 use codspeed_criterion_compat::{black_box, criterion_group, criterion_main, Criterion};
 
 /// The shared corpus directory, resolved relative to this crate regardless of
@@ -50,12 +50,17 @@ fn load_corpus() -> Vec<String> {
 pub fn bulk(c: &mut Criterion) {
     let corpus = load_corpus();
 
+    // Unsafe mode, matching bench/bulk_ruby.rb's `safe: :unsafe` — `convert`'s
+    // plain default (`SafeMode::Secure`) would do less work than the Ruby
+    // side's explicit unsafe mode, so pin it here to keep the two comparable.
+    let options = Options::new().safe_mode(SafeMode::Unsafe);
+
     // One iteration converts every document in the corpus once, mirroring
     // bench/bulk_ruby.rb's inner loop body.
     c.bench_function("bulk/convert_corpus_once", |b| {
         b.iter(|| {
             for source in &corpus {
-                black_box(convert(black_box(source)));
+                black_box(convert_with(black_box(source), black_box(&options)));
             }
         })
     });
