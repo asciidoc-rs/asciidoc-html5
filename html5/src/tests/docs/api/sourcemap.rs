@@ -1,9 +1,12 @@
+use std::fs;
+
 use asciidoc_parser::{
     blocks::{FindBlocks, IsBlock},
-    HasSpan,
+    parser::SourceLine,
+    HasSpan, SafeMode,
 };
 
-use crate::{load, tests::sdd::*};
+use crate::{load, load_file_with, tests::sdd::*, Options};
 
 track_file!("docs/modules/api/pages/sourcemap.adoc");
 
@@ -149,17 +152,11 @@ the same document.
 
 // The "Translate a location through includes" example: with includes resolved
 // under `SafeMode::Safe`, the block's preprocessed line translates through the
-// source map back to the include file and its own line. `asciidoc-parser`
-// 0.29.16 through (at least) 0.29.18 records a *first-level* include's
-// `SourceMap` file name as a fully resolved absolute filesystem path instead
-// of the path as written/joined relative to the primary document (a
-// regression from #1146, which fixed multi-level nested includes but
-// over-applied its directory-joining to first-level includes too). The line
-// number half of the claim still holds; only the file-path half doesn't.
-// Filed upstream as asciidoc-rs/asciidoc-parser#1157 — restore this test
-// once it lands.
-non_normative!(
-    r#"
+// source map back to the include file and its own line.
+#[test]
+fn translate_a_location_through_includes() {
+    verifies!(
+        r#"
 == Translate a location through includes
 
 When a document pulls in other files with `include::`, the line a block reports is
@@ -203,7 +200,41 @@ The paragraph's location follows it into the include file, just as Asciidoctor's
 sourcemap reports `partials/section.adoc`, line 3.
 
 "#
-);
+    );
+
+    // Lay out `doc.adoc` and `partials/section.adoc` in a unique temp directory
+    // so the include resolves relative to the primary document.
+    let dir = std::env::temp_dir().join(format!(
+        "asciidoc-html5-docs-sourcemap-{}",
+        std::process::id()
+    ));
+    let partials = dir.join("partials");
+    fs::create_dir_all(&partials).expect("create temp dirs");
+    fs::write(
+        dir.join("doc.adoc"),
+        "= Document Title\n\ninclude::partials/section.adoc[]\n",
+    )
+    .expect("write doc.adoc");
+    fs::write(
+        partials.join("section.adoc"),
+        "== Section\n\nParagraph.\n\nAnother paragraph.\n",
+    )
+    .expect("write section.adoc");
+
+    let options = Options::default().safe_mode(SafeMode::Safe);
+    let doc =
+        load_file_with(dir.join("doc.adoc"), &options).expect("load_file_with reads the file");
+
+    let paragraph = first_paragraph(&doc);
+
+    let line = paragraph.span().line();
+    assert_eq!(
+        doc.source_map().original_file_and_line(line),
+        Some(SourceLine(Some("partials/section.adoc".to_string()), 3)),
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
 
 // The first limitation: a block's span begins at its first metadata line, not
 // at the first content line as Asciidoctor's sourcemap reports. Loading a
