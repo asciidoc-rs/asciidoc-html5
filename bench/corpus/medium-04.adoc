@@ -1,0 +1,47 @@
+= Medium Document 5
+:author: Bench Author
+:revdate: 2026-01-01
+
+[[Overview]]
+Dolore id qui irure labore mollit eu aliqua nulla incididunt sit ipsum. Eu cupidatat velit dolor sed enim deserunt minim irure sint culpa reprehenderit. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/377[project page] for more, or jump to <<Overview>>.
+
+== Section 1
+
+Culpa et ipsum aute reprehenderit cupidatat laborum ea nisi fugiat magna dolor. Non cillum esse sunt deserunt qui id ut proident consectetur incididunt sit. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/999[project page] for more, or jump to <<Overview>>.
+
+[cols="1,1,3",options="header"]
+|===
+| Key | Count | Note
+
+| row0 | 761 | Cillum consequat lorem.
+| row1 | 315 | Est irure laboris.
+| row2 | 801 | Tempor sit elit.
+| row3 | 26 | Sed quis voluptate.
+|===
+
+
+== Section 2
+
+Cillum ex nisi ipsum qui mollit laboris officia dolor laborum excepteur tempor. Qui pariatur deserunt reprehenderit ad in nisi incididunt sit non est labore. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/247[project page] for more, or jump to <<Overview>>.
+
+. Aliquip eu sit minim irure lorem.
+. Laboris nulla aute do elit reprehenderit.
+. Pariatur amet ipsum sunt reprehenderit nulla.
+
+== Section 3
+
+Non aliqua pariatur voluptate cillum sed duis nulla magna consequat do consectetur. Id cillum consequat sint aliqua dolore non ut culpa quis sed enim. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/420[project page] for more, or jump to <<Overview>>.
+
+* Dolor fugiat eu amet aliqua incididunt.
+* Commodo dolor sunt duis adipiscing tempor.
+* Commodo duis elit enim cupidatat qui.
+* Est ullamco aliquip mollit qui proident.
+
+== Section 4
+
+Nulla labore ea amet minim quis do adipiscing lorem culpa sint irure. Enim velit do aliqua commodo exercitation fugiat et excepteur consectetur labore irure. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/338[project page] for more, or jump to <<Overview>>.
+
+. Minim et sunt dolor laborum officia.
+. Commodo in eu non excepteur laborum.
+. Pariatur labore sed duis laboris culpa.
+

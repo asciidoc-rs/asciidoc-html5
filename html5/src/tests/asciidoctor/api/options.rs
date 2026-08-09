@@ -191,11 +191,11 @@ fn base_dir_sets_the_directory_relative_resources_resolve_against() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-// `:catalog_assets` maps to `Options::catalog_assets`: it enables recording
-// each referenced image (and link) in the document's catalog, which is empty
-// otherwise -- matching the documented default of `false`.
+// `:catalog_assets` maps to `Options::catalog_assets`. Off by default;
+// enabling it records the images and links referenced in the document
+// alongside the IDs and footnotes the catalog always tracks.
 #[test]
-fn catalog_assets_records_referenced_images_and_links_in_the_catalog() {
+fn catalog_assets_records_images_and_links_when_enabled() {
     verifies!(
         r#"
 |`:catalog_assets`
@@ -211,18 +211,28 @@ _(Experimental)._
 "#
     );
 
-    let input = "image:diagram.svg[] link:https://example.org[Example]";
+    // Default: images and links are not cataloged.
+    let default = load_with(
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
+        &Options::new(),
+    );
+    assert!(default.catalog().images().is_empty());
+    assert!(default.catalog().links().is_empty());
 
-    // Default (`false`): the catalog's image and link lists stay empty.
-    let doc = load_with(input, &Options::new());
-    assert!(doc.catalog().images().is_empty());
-    assert!(doc.catalog().links().is_empty());
-
-    // `catalog_assets(true)`: both are recorded.
-    let doc = load_with(input, &Options::new().catalog_assets(true));
-    assert_eq!(doc.catalog().images().len(), 1);
-    assert_eq!(doc.catalog().images()[0].target, "diagram.svg");
-    assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
+    // Enabled: both are recorded, in document order.
+    let enabled = load_with(
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
+        &Options::new().catalog_assets(true),
+    );
+    assert_eq!(
+        enabled
+            .catalog()
+            .images()
+            .first()
+            .map(|i| i.target.as_str()),
+        Some("screenshot.png")
+    );
+    assert_eq!(enabled.catalog().links(), ["https://example.org"]);
 }
 
 // `:converter` selects a user-supplied Ruby converter class or instance. This

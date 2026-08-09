@@ -43,7 +43,7 @@ documented behavior is guaranteed.
 
 |`:catalog_assets`
 |`catalog_assets`
-|Record each referenced image and link in the document's catalog.
+|Record referenced images and links in the document catalog.
 
 |`:safe`
 |`safe_mode`
@@ -214,18 +214,15 @@ reads.
 
 == Catalog referenced images and links
 
-`catalog_assets(true)` records each `image:`/`image::` and `link:` target the
-document references, so a caller can enumerate them without walking the
-rendered HTML. It's off by default, so the catalog's image and link lists stay
-empty unless you opt in:
+`catalog_assets(true)` records every referenced image and link in the document
+catalog, alongside the IDs and footnotes it always tracks:
 
 "#
 );
 
-// `catalog_assets(true)` records referenced images and links; it's off by
-// default, so the catalog's lists stay empty otherwise.
+// `catalog_assets(true)` records images and links in the document catalog.
 #[test]
-fn catalog_assets_records_referenced_images_and_links() {
+fn catalog_assets_records_images_and_links() {
     verifies!(
         r#"
 [,rust]
@@ -233,10 +230,12 @@ fn catalog_assets_records_referenced_images_and_links() {
 use asciidoc_html5::{load_with, Options};
 
 let opts = Options::new().catalog_assets(true);
-let doc = load_with("image:diagram.svg[] link:https://example.org[Example]", &opts);
-assert_eq!(doc.catalog().images().len(), 1);
-assert_eq!(doc.catalog().images()[0].target, "diagram.svg");
-assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
+let doc = load_with(
+    "image::screenshot.png[]\n\nSee https://example.org for details.",
+    &opts,
+);
+assert_eq!(doc.catalog().images()[0].target, "screenshot.png");
+assert_eq!(doc.catalog().links(), ["https://example.org"]);
 ----
 
 "#
@@ -244,16 +243,18 @@ assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
 
     let opts = Options::new().catalog_assets(true);
     let doc = load_with(
-        "image:diagram.svg[] link:https://example.org[Example]",
+        "image::screenshot.png[]\n\nSee https://example.org for details.",
         &opts,
     );
-    assert_eq!(doc.catalog().images().len(), 1);
-    assert_eq!(doc.catalog().images()[0].target, "diagram.svg");
-    assert_eq!(doc.catalog().links(), ["https://example.org".to_string()]);
+    assert_eq!(doc.catalog().images()[0].target, "screenshot.png");
+    assert_eq!(doc.catalog().links(), ["https://example.org"]);
 }
 
 non_normative!(
     r#"
+See xref:catalog-assets.adoc[Catalog Assets] for the full picture, including how
+an image entry's `imagesdir` field is populated.
+
 == Options without a counterpart
 
 Many Asciidoctor API options do not apply to this library:

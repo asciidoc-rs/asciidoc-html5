@@ -3084,13 +3084,16 @@ mod macros {
     }
 
     // Asserts the image cataloged from a section title (`catalog[:images]`).
-    // `asciidoc-parser` exposes both the image catalog
-    // (`Document::catalog().images()` / `ImageReference`) and the
-    // `catalog_assets` toggle (`Parser::with_catalog_assets`), but this crate's
-    // `Options` has no way to enable `catalog_assets`, so the catalog stays
-    // empty. Tracked by asciidoc-html5#95.
-    non_normative!(
-        r#"
+    // Attribute references in the target (`{iconsdir}`) are substituted before
+    // the target is recorded, and the entry carries no `imagesdir` since only
+    // `iconsdir` was set. `asciidoc-parser` catalogs eagerly at parse time (see
+    // `Options::catalog_assets`), so the assertion runs on the loaded document,
+    // with no separate conversion step needed the way Ruby's lazy `block_from_
+    // string` + `sub_macros` combination requires.
+    #[test]
+    fn should_substitute_attributes_in_target_of_inline_image_in_section_title() {
+        verifies!(
+            r#"
     test 'should substitute attributes in target of inline image in section title' do
       input = '== image:{iconsdir}/dot.gif[dot] Title'
 
@@ -3104,7 +3107,22 @@ mod macros {
     end
 
 "#
-    );
+        );
+
+        let doc = load_with(
+            "== image:{iconsdir}/dot.gif[dot] Title",
+            &Options::new()
+                .safe_mode(SafeMode::Server)
+                .attribute("iconsdir", "fixtures")
+                .catalog_assets(true),
+        );
+
+        let images = doc.catalog().images();
+        assert_eq!(images.len(), 1, "{images:?}");
+        assert_eq!(images[0].target, "fixtures/dot.gif");
+        assert_eq!(images[0].imagesdir, None);
+        assert_eq!(doc.warnings().count(), 0);
+    }
 
     #[test]
     fn an_icon_macro_should_be_interpreted_as_an_icon_if_icons_are_enabled() {

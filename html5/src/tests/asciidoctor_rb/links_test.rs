@@ -23,23 +23,34 @@
 //! (This crate collects that warning unconditionally, whereas Asciidoctor emits
 //! it only under the verbose mode the Ruby tests enter with `in_verbose_mode`.)
 //!
+//! The include-aware xref tests (an inter-document xref that collapses to an
+//! internal anchor once its target file has been included – #127) port
+//! against real fixture files under `fixturedir`, driven through
+//! [`Options::base_dir`](crate::Options::base_dir) and
+//! [`Document::catalog`](crate::Document::catalog)'s `was_included`/
+//! `include_is_full`. The two cases that hand-set `doc.catalog[:includes]`
+//! directly in Ruby (this crate has no API to inject that state) are adapted
+//! to drive the same claim through a real `include::` of a file that never
+//! defines the referenced fragment.
+//!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); the
 //! compat-mode xref-target tests, which are permanently out of scope – this
-//! crate will not implement compat mode; other inline behavior
+//! crate will not implement compat mode; and other inline behavior
 //! `asciidoc-parser` diverges on (not resolving a forward xref during
-//! parsing); and the tests that inject or resolve `catalog[:includes]` state,
-//! which need an include processed against a real fixture file (or hand-set
-//! catalog state this crate cannot inject). Every such divergence (DocBook and
-//! compat mode aside) cites the issue tracking the work to make it compatible
-//! (#127–#128).
+//! parsing – #128).
+
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use asciidoc_parser::warnings::WarningType;
 
 use crate::{
-    convert, convert_document, convert_with, load, load_with,
+    convert, convert_document, convert_with, load, load_file_with, load_with,
     tests::{assert_html::assert_xpath, sdd::*},
-    Options,
+    Options, SafeMode,
 };
 
 track_file!("ref/asciidoctor/test/links_test.rb");
@@ -52,6 +63,41 @@ fn assert_includes(html: &str, needle: &str) {
         html.contains(needle),
         "expected output to contain:\n{needle}\n\nbut it was:\n{html}"
     );
+}
+
+/// Resolves a name under Asciidoctor's vendored `test/fixtures/` tree – the
+/// counterpart to the Ruby suite's `fixturedir`/`fixture_path`, matching the
+/// helper of the same name in `api_test.rs`.
+fn fixture_path(name: &str) -> PathBuf {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ref/asciidoctor/test/fixtures");
+    if name.is_empty() {
+        fixtures
+    } else {
+        fixtures.join(name)
+    }
+}
+
+/// [`Options`] anchored at `fixturedir` under safe mode – the counterpart to
+/// the Ruby suite's `safe: :safe, base_dir: fixturedir`, used by the
+/// fixture-backed inter-document xref tests below.
+fn fixturedir_options() -> Options {
+    Options::new()
+        .safe_mode(SafeMode::Safe)
+        .base_dir(fixture_path(""))
+}
+
+/// Creates a fresh, empty scratch directory to write a synthetic `include::`
+/// target into for a test, named uniquely enough that parallel test runs
+/// don't collide.
+fn temp_include_dir(label: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "adoc-links-test-{label}-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create scratch include dir");
+    dir
 }
 
 non_normative!(
@@ -2820,12 +2866,15 @@ fn xref_using_angled_bracket_syntax_with_path_and_custom_relfilesuffix() {
     );
 }
 
-// Manipulates `doc.catalog[:includes]` on the parsed document by hand to
-// simulate an include; this crate cannot inject that catalog state, and the
-// include-aware xref resolution belongs to `asciidoc-parser`. Tracked by
-// #127.
-non_normative!(
-    r###"
+// The Ruby test hand-sets `doc.catalog[:includes]['tigers'] = true` after
+// parsing; this crate has no API to inject catalog state, so this drives the
+// same claim (a fully-included file's xref collapses to an internal anchor,
+// with a warning when the fragment itself isn't found) through a real
+// `include::` of a file that never defines `#about`.
+#[test]
+fn xref_using_angled_bracket_syntax_with_path_which_has_been_included_in_this_document() {
+    verifies!(
+        r###"
   test 'xref using angled bracket syntax with path which has been included in this document' do
     using_memory_logger do |logger|
       in_verbose_mode do
@@ -2839,14 +2888,40 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Manipulates `doc.catalog[:includes]` on the parsed document by hand to
-// simulate an include; this crate cannot inject that catalog state, and the
-// include-aware xref resolution belongs to `asciidoc-parser`. Tracked by
-// #127.
-non_normative!(
-    r###"
+    let dir = temp_include_dir("tigers-flat");
+    fs::write(dir.join("tigers.adoc"), "Nothing about anything.\n").expect("write tigers.adoc");
+    fs::write(
+        dir.join("main.adoc"),
+        "<<tigers#about,About Tigers>>\n\ninclude::tigers.adoc[]\n",
+    )
+    .expect("write main.adoc");
+
+    let doc = load_file_with(
+        dir.join("main.adoc"),
+        &Options::new().safe_mode(SafeMode::Safe),
+    )
+    .expect("load_file_with reads and parses");
+    assert!(doc.catalog().include_is_full("tigers"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#about"][text() = "About Tigers"]"####,
+        1,
+    );
+    assert!(doc
+        .warnings()
+        .any(|w| w.warning == WarningType::PossibleInvalidReference("about".to_string())));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+// Same adaptation as above, for a nested include target.
+#[test]
+fn xref_using_angled_bracket_syntax_with_nested_path_which_has_been_included_in_this_document() {
+    verifies!(
+        r###"
   test 'xref using angled bracket syntax with nested path which has been included in this document' do
     using_memory_logger do |logger|
       in_verbose_mode do
@@ -2860,7 +2935,39 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let dir = temp_include_dir("tigers-nested");
+    fs::create_dir_all(dir.join("part1")).expect("create part1 dir");
+    fs::write(
+        dir.join("part1").join("tigers.adoc"),
+        "Nothing about anything.\n",
+    )
+    .expect("write part1/tigers.adoc");
+    fs::write(
+        dir.join("main.adoc"),
+        "<<part1/tigers#about,About Tigers>>\n\ninclude::part1/tigers.adoc[]\n",
+    )
+    .expect("write main.adoc");
+
+    let doc = load_file_with(
+        dir.join("main.adoc"),
+        &Options::new().safe_mode(SafeMode::Safe),
+    )
+    .expect("load_file_with reads and parses");
+    assert!(doc.catalog().include_is_full("part1/tigers"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#about"][text() = "About Tigers"]"####,
+        1,
+    );
+    assert!(doc
+        .warnings()
+        .any(|w| w.warning == WarningType::PossibleInvalidReference("about".to_string())));
+
+    let _ = fs::remove_dir_all(&dir);
+}
 
 #[test]
 fn xref_using_angled_bracket_syntax_inline_with_text() {
@@ -3350,11 +3457,11 @@ fn should_warn_and_create_link_if_verbose_flag_is_set_and_reference_using_notati
         .any(|w| w.warning == WarningType::PossibleInvalidReference("foobaz".to_string())));
 }
 
-// Depends on include processing against test fixtures (`fixturedir`) and
-// `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
-// Tracked by #127.
-non_normative!(
-    r###"
+#[test]
+fn should_produce_an_internal_anchor_from_an_inter_document_xref_to_file_included_into_current_file(
+) {
+    verifies!(
+        r###"
   test 'should produce an internal anchor from an inter-document xref to file included into current file' do
     input = <<~'EOS'
     = Book Title
@@ -3378,13 +3485,21 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Depends on include processing against test fixtures (`fixturedir`) and
-// `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
-// Tracked by #127.
-non_normative!(
-    r###"
+    let input = "= Book Title\n:doctype: book\n\n[#ch1]\n== Chapter 1\n\nSo it begins.\n\nRead <<other-chapters.adoc#ch2>> to find out what happens next!\n\ninclude::other-chapters.adoc[]\n";
+    let doc = load_with(input, &fixturedir_options());
+    assert!(doc.catalog().was_included("other-chapters"));
+    assert!(doc.catalog().include_is_full("other-chapters"));
+    let output = convert_document(&doc);
+    assert_xpath(&output, r####"//a[@href="#ch2"][text()="Chapter 2"]"####, 1);
+}
+
+#[test]
+fn should_produce_an_internal_anchor_from_an_inter_document_xref_to_file_included_entirely_into_current_file_using_tags(
+) {
+    verifies!(
+        r###"
   test 'should produce an internal anchor from an inter-document xref to file included entirely into current file using tags' do
     input = <<~'EOS'
     = Book Title
@@ -3405,13 +3520,18 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Depends on include processing against test fixtures (`fixturedir`) and
-// `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
-// Tracked by #127.
-non_normative!(
-    r###"
+    let input = "= Book Title\n:doctype: book\n\n[#ch1]\n== Chapter 1\n\nSo it begins.\n\nRead <<other-chapters.adoc#ch2>> to find out what happens next!\n\ninclude::other-chapters.adoc[tags=**]\n";
+    let output = convert_with(input, &fixturedir_options());
+    assert_xpath(&output, r####"//a[@href="#ch2"][text()="Chapter 2"]"####, 1);
+}
+
+#[test]
+fn should_not_produce_an_internal_anchor_for_inter_document_xref_to_file_partially_included_into_current_file(
+) {
+    verifies!(
+        r###"
   test 'should not produce an internal anchor for inter-document xref to file partially included into current file' do
     input = <<~'EOS'
     = Book Title
@@ -3435,13 +3555,25 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Depends on include processing against test fixtures (`fixturedir`) and
-// `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
-// Tracked by #127.
-non_normative!(
-    r###"
+    let input = "= Book Title\n:doctype: book\n\n[#ch1]\n== Chapter 1\n\nSo it begins.\n\nRead <<other-chapters.adoc#ch2,the next chapter>> to find out what happens next!\n\ninclude::other-chapters.adoc[tags=ch2]\n";
+    let doc = load_with(input, &fixturedir_options());
+    assert!(doc.catalog().was_included("other-chapters"));
+    assert!(!doc.catalog().include_is_full("other-chapters"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="other-chapters.html#ch2"][text()="the next chapter"]"####,
+        1,
+    );
+}
+
+#[test]
+fn should_produce_an_internal_anchor_for_inter_document_xref_to_file_included_fully_and_partially()
+{
+    verifies!(
+        r###"
   test 'should produce an internal anchor for inter-document xref to file included fully and partially' do
     input = <<~'EOS'
     = Book Title
@@ -3467,7 +3599,19 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let input = "= Book Title\n:doctype: book\n\n[#ch1]\n== Chapter 1\n\nSo it begins.\n\nRead <<other-chapters.adoc#ch2,the next chapter>> to find out what happens next!\n\ninclude::other-chapters.adoc[]\n\ninclude::other-chapters.adoc[tag=ch2-noid]\n";
+    let doc = load_with(input, &fixturedir_options());
+    assert!(doc.catalog().was_included("other-chapters"));
+    assert!(doc.catalog().include_is_full("other-chapters"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#ch2"][text()="the next chapter"]"####,
+        1,
+    );
+}
 
 #[test]
 fn should_warn_and_create_link_if_debug_mode_is_enabled_inter_document_xref_points_to_current_doc_and_reference_not_found(
@@ -3710,11 +3854,10 @@ non_normative!(
 "###
 );
 
-// Depends on include processing against test fixtures (`fixturedir`) and
-// `asciidoc-parser`'s include-aware xref resolution; not reproduced here.
-// Tracked by #127.
-non_normative!(
-    r###"
+#[test]
+fn should_produce_an_internal_anchor_for_inter_document_xref_to_file_outside_of_base_directory() {
+    verifies!(
+        r###"
   test 'should produce an internal anchor for inter-document xref to file outside of base directory' do
     input = <<~'EOS'
     = Document Title
@@ -3731,7 +3874,24 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let input =
+        "= Document Title\n\nSee <<../section-a.adoc#section-a>>.\n\ninclude::../section-a.adoc[]\n";
+    let doc = load_with(
+        input,
+        &Options::new()
+            .safe_mode(SafeMode::Unsafe)
+            .base_dir(fixture_path("subdir")),
+    );
+    assert!(doc.catalog().was_included("../section-a"));
+    let output = convert_document(&doc);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#section-a"][text()="Section A"]"####,
+        1,
+    );
+}
 
 #[test]
 fn xref_uses_title_of_target_as_label_for_forward_and_backward_references_in_html_output() {

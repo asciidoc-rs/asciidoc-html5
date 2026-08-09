@@ -1,0 +1,44 @@
+= Medium Document 3
+:author: Bench Author
+:revdate: 2026-01-01
+
+[[Overview]]
+Amet elit minim exercitation anim sint qui sit ullamco incididunt cupidatat veniam. Excepteur commodo anim magna nostrud consectetur eu do nisi proident amet eiusmod. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/334[project page] for more, or jump to <<Overview>>.
+
+== Section 1
+
+Cillum fugiat sed lorem dolor elit labore excepteur laboris commodo nulla sit. Proident ea veniam fugiat dolore laborum pariatur est ut ex in aute. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/669[project page] for more, or jump to <<Overview>>.
+
+IMPORTANT: Ullamco esse voluptate reprehenderit non excepteur deserunt nisi irure est.
+
+== Section 2
+
+Consectetur nisi laboris deserunt dolor do et ipsum lorem elit id commodo. Consectetur sed nostrud culpa nulla id qui deserunt sit commodo minim do. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/706[project page] for more, or jump to <<Overview>>.
+
+. Dolor pariatur ea quis minim elit.
+. Nisi quis dolore occaecat et laboris.
+. Sed veniam fugiat ea dolor culpa.
+
+== Section 3
+
+Est labore dolore officia ad dolor elit et ea duis sint in. Sit non fugiat proident ad consectetur anim elit pariatur sint culpa commodo. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/911[project page] for more, or jump to <<Overview>>.
+
+[cols="1,1,3",options="header"]
+|===
+| Key | Count | Note
+
+| row0 | 649 | Cupidatat sunt dolor.
+| row1 | 765 | Laboris ad proident.
+| row2 | 697 | Sint reprehenderit ipsum.
+| row3 | 724 | Reprehenderit elit ex.
+|===
+
+
+== Section 4
+
+Mollit labore id quis esse duis voluptate dolore ullamco ad nulla anim. Anim voluptate irure mollit ad do consequat enim ex veniam qui officia. This word is *bold*, this one is _italic_, and this is `monospace`. See the https://example.org/622[project page] for more, or jump to <<Overview>>.
+
+'''
+
+Minim do ut veniam esse proident ea et eiusmod aute commodo aliquip. Pariatur ex amet sit nulla lorem consectetur ullamco commodo magna aliqua do. Reprehenderit adipiscing nostrud sit sint cillum irure commodo culpa deserunt quis officia. Deserunt laboris minim tempor quis cupidatat lorem dolore fugiat cillum reprehenderit magna.
+
