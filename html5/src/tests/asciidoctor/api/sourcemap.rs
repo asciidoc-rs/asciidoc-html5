@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use asciidoc_parser::{
     blocks::{Block, FindBlocks, IsBlock},
@@ -246,7 +246,16 @@ puts first_paragraph.lineno
 
 // Moving the section into an include file: the paragraph's location follows it
 // into that file. The source map translates the paragraph's preprocessed line
-// back to `partials/section.adoc`, line 3 -- the Cursor's `path` and `lineno`.
+// back to the include file, line 3.
+//
+// Divergence: Asciidoctor's Cursor carries the include's location two ways --
+// `@path`, relative to the docdir (`partials/section.adoc`, shown below), and
+// `@file`, the full resolved path (`/path/to/docdir/partials/section.adoc`).
+// `SourceLine` has only one file field, and it always matches `@file`: since
+// `load_file_with` resolves the primary document to its full canonical path
+// before parsing (see `Options::input_file`), every include reached from it is
+// reported the same way, as a full filesystem path -- never the shorter
+// docdir-relative form `@path` shows here.
 #[test]
 fn source_location_follows_a_block_into_an_include_file() {
     verifies!(
@@ -302,10 +311,18 @@ then the source location will follow the paragraph into that file:
     let paragraph = first_paragraph(&doc);
     let line = paragraph.span().line();
 
-    assert_eq!(
-        doc.source_map().original_file_and_line(line),
-        Some(SourceLine(Some("partials/section.adoc".to_string()), 3)),
-    );
+    // The exact string isn't asserted here — a symlinked temp dir (macOS) or a
+    // canonicalized verbatim prefix (Windows' `\\?\C:\...`) could shift its
+    // literal text — only that it is rooted (`Path::is_absolute`) and still
+    // names the right file relative to that root.
+    let SourceLine(file, lineno) = doc
+        .source_map()
+        .original_file_and_line(line)
+        .expect("include has a source location");
+    let file = file.expect("include has a file");
+    assert!(Path::new(&file).is_absolute(), "{file}");
+    assert!(file.ends_with("partials/section.adoc"), "{file}");
+    assert_eq!(lineno, 3);
 
     let _ = fs::remove_dir_all(&dir);
 }

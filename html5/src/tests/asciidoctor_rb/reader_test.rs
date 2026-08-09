@@ -31,21 +31,15 @@
 //! `non_normative!`.
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
-//! this crate diverges from the Asciidoctor oracle. One divergence is
-//! permanent: compat-mode role handling on a replacement link is out of scope –
-//! this crate will not implement compat mode. The rest are tracked by a
-//! follow-up issue rather than asserting the divergent output:
-//!
-//! - a three-level nested include from a subdirectory leaves the inner include
-//!   unresolved — [#131]
+//! this crate diverges from the Asciidoctor oracle, permanently: compat-mode
+//! role handling on a replacement link is out of scope – this crate will not
+//! implement compat mode.
 //!
 //! An undeclared non-UTF-8 include file is a further, permanent divergence:
 //! Asciidoctor rejects it by raising `invalid byte sequence in UTF-8`, but this
 //! crate's include handlers cannot raise mid-parse, so the include is left
 //! unresolved instead (asserted directly below). A non-UTF-8 file named with a
 //! matching `encoding` attribute *is* transcoded and its content rendered.
-//!
-//! [#131]: https://github.com/asciidoc-rs/asciidoc-html5/issues/131
 
 use std::path::PathBuf;
 
@@ -1758,10 +1752,10 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: a nested include from a subdirectory leaves the inner include
-        // unresolved (#131).
-        non_normative!(
-            r#"
+        #[test]
+        fn nested_include_directives_are_resolved_relative_to_current_file() {
+            verifies!(
+                r#"
       test 'nested include directives are resolved relative to current file' do
         input = <<~'EOS'
         ....
@@ -1787,7 +1781,13 @@ mod preprocessor_reader {
       end
 
 "#
-        );
+            );
+
+            let html =
+                convert_safe_with_fixtures("....\ninclude::fixtures/outer-include.adoc[]\n....\n");
+            let expected = "first line of outer\n\nfirst line of middle\n\nfirst line of inner\n\nlast line of inner\n\nlast line of middle\n\nlast line of outer";
+            assert!(html.contains(expected), "{html}");
+        }
 
         // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
         // (remote-fetch-not-planned).

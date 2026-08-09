@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use asciidoc_parser::{
     blocks::{FindBlocks, IsBlock},
@@ -165,8 +165,8 @@ includes are spliced in. To recover the original file and line, pass that line t
 https://docs.rs/asciidoc-parser/latest/asciidoc_parser/parser/struct.SourceMap.html[`Document::source_map`]
 and call `original_file_and_line`. It returns a
 https://docs.rs/asciidoc-parser/latest/asciidoc_parser/parser/struct.SourceLine.html[`SourceLine`],
-whose first field is the include's path (or `None` for the top-level input) and
-whose second field is the 1-based line within that file.
+whose first field is the include's resolved path (or `None` for the top-level
+input) and whose second field is the 1-based line within that file.
 
 Include resolution runs only outside the most restrictive safe modes, so load the
 file under `SafeMode::Safe` (the counterpart to Asciidoctor's `safe: :safe`):
@@ -190,14 +190,18 @@ let paragraph = doc
     .unwrap();
 
 let line = paragraph.span().line();
-assert_eq!(
-    doc.source_map().original_file_and_line(line),
-    Some(SourceLine(Some("partials/section.adoc".to_string()), 3)),
-);
+let SourceLine(file, lineno) = doc.source_map().original_file_and_line(line).unwrap();
+let file = file.unwrap();
+assert!(std::path::Path::new(&file).is_absolute());
+assert!(file.ends_with("partials/section.adoc"));
+assert_eq!(lineno, 3);
 ----
 
-The paragraph's location follows it into the include file, just as Asciidoctor's
-sourcemap reports `partials/section.adoc`, line 3.
+The paragraph's location follows it into the include file, on line 3.
+`load_file_with` resolves `doc.adoc` to its full, canonical path before parsing, so
+every include it pulls in -- `partials/section.adoc` here -- is reported the same
+way: as a full filesystem path anchored at `doc.adoc`'s own directory, not just the
+target as written on the `include::` directive.
 
 "#
     );
@@ -228,10 +232,23 @@ sourcemap reports `partials/section.adoc`, line 3.
     let paragraph = first_paragraph(&doc);
 
     let line = paragraph.span().line();
-    assert_eq!(
-        doc.source_map().original_file_and_line(line),
-        Some(SourceLine(Some("partials/section.adoc".to_string()), 3)),
-    );
+
+    // `load_file_with` canonicalizes `doc.adoc` to its full path before
+    // parsing, so the include it pulls in is reported the same way: a full
+    // filesystem path anchored at `doc.adoc`'s own directory, not just
+    // `partials/section.adoc` as written on the directive. The exact string
+    // isn't asserted here — a symlinked temp dir (macOS) or a canonicalized
+    // verbatim prefix (Windows' `\\?\C:\...`) could shift its literal text —
+    // only that it is rooted (`Path::is_absolute`) and still names the right
+    // file relative to that root.
+    let SourceLine(file, lineno) = doc
+        .source_map()
+        .original_file_and_line(line)
+        .expect("include has a source location");
+    let file = file.expect("include has a file");
+    assert!(Path::new(&file).is_absolute(), "{file}");
+    assert!(file.ends_with("partials/section.adoc"), "{file}");
+    assert_eq!(lineno, 3);
 
     let _ = fs::remove_dir_all(&dir);
 }
