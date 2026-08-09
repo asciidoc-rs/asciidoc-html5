@@ -171,6 +171,25 @@ id="email">` (numbered for co-authors) and `<span id="revnumber/revdate/
 revremark">`, matching the shapes asserted in
 [`ref/asciidoctor/test/document_test.rb`](../ref/asciidoctor/test/document_test.rb).
 
+The `<head>`'s `app-name`, `description`, `keywords`, `copyright`, and
+`favicon` values are attribute *entries*, so the parser's
+`specialcharacters` substitution has already escaped `&`, `<`, and `>` by the
+time `convert_document` sees them — but, matching Asciidoctor, it never
+escapes a plain `"`. Asciidoctor's own `html5.rb` interpolates these values
+into their `content="…"`/`href="…"` attributes with no further escaping, so a
+document with e.g. `:app-name: bar"baz` can break out of the attribute in
+Asciidoctor's own output. This crate diverges deliberately: `convert_document`
+runs each of these five values through `escape_quote` (a quote-only pass —
+running the already-partially-escaped value through the general
+`escape_attribute` would double-escape the entities `specialcharacters`
+already produced) before interpolating it. This is hardening, not a closed
+security boundary — a document author who controls these attributes already
+has strictly stronger injection tools (passthroughs) available in any safe
+mode, since safe mode gates file/network access, not HTML output — but
+escaping is free (these values are not expected to carry a literal `"`) and
+closes an easy, easy-to-miss injection vector. See
+[#318](https://github.com/asciidoc-rs/asciidoc-html5/issues/318).
+
 ### Footnotes
 
 `footnotes()` emits the document-level `<div id="footnotes">` block — an `<hr>`
