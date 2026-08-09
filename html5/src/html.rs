@@ -25,6 +25,24 @@ pub(crate) fn escape_attribute(value: &str) -> String {
     out
 }
 
+/// Escapes a bare `"` for inclusion inside a double-quoted HTML attribute,
+/// without touching `&`, `<`, or `>`.
+///
+/// Some attribute values — the document-metadata `<meta>`/`<link>` values
+/// `Renderer::convert_document` builds from `app-name`, `description`,
+/// `keywords`, `copyright`, and `favicon` attribute *entries* — have already
+/// passed through the parser's `specialcharacters` substitution, which
+/// escapes `&`, `<`, and `>` but, matching Asciidoctor, never touches a plain
+/// double quote. Running such a value through [`escape_attribute`] would
+/// double-escape what `specialcharacters` already produced (`&amp;` becoming
+/// `&amp;amp;`). This escapes only the one character `specialcharacters`
+/// leaves behind, closing the gap that otherwise lets a `"` in an
+/// attribute-entry value break out of the double-quoted HTML attribute it's
+/// interpolated into.
+pub(crate) fn escape_quote(value: &str) -> String {
+    value.replace('"', "&quot;")
+}
+
 /// Builds the ` id="…"` fragment for a block wrapper, or an empty string when
 /// the block has no id. The leading space is included so call sites can splice
 /// the result directly into an opening tag.
@@ -60,7 +78,7 @@ pub(crate) fn class_attribute(base: &str, roles: &[&str]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{class_attribute, escape_attribute, id_attribute};
+    use super::{class_attribute, escape_attribute, escape_quote, id_attribute};
 
     #[test]
     fn escape_attribute_escapes_markup_characters() {
@@ -69,6 +87,15 @@ mod tests {
             "a &amp; b &lt; c &gt; d &quot; e"
         );
         assert_eq!(escape_attribute("plain"), "plain");
+    }
+
+    #[test]
+    fn escape_quote_escapes_only_the_quote_character() {
+        assert_eq!(
+            escape_quote("a &amp; b &lt; c &gt; d \" e"),
+            "a &amp; b &lt; c &gt; d &quot; e"
+        );
+        assert_eq!(escape_quote("plain"), "plain");
     }
 
     #[test]

@@ -43,7 +43,7 @@ use asciidoc_parser::{
 };
 
 use crate::{
-    html::{class_attribute, escape_attribute, id_attribute},
+    html::{class_attribute, escape_attribute, escape_quote, id_attribute},
     svg_file_handler,
 };
 
@@ -1965,21 +1965,37 @@ impl Renderer<'_> {
         // `authors`, and finally `copyright`. Every value here except `authors`
         // comes from an attribute *entry*, so the parser has already applied
         // header substitutions (special characters escaped) — they are emitted
-        // verbatim, exactly as Asciidoctor does, so an `app-name`/`copyright` of
-        // `<script>` reaches the page as `&lt;script&gt;`, not as live markup.
-        // Only `authors` (built from the author info line, not an entry) arrives
-        // raw and is escaped below.
+        // verbatim except for a final `escape_quote` pass, so an
+        // `app-name`/`copyright` of `<script>` reaches the page as
+        // `&lt;script&gt;`, not as live markup. Only `authors` (built from the
+        // author info line, not an entry) arrives raw and is escaped below.
+        //
+        // `specialcharacters` escapes `&`, `<`, and `>` but — matching
+        // Asciidoctor — never a plain double quote, so a value such as
+        // `:app-name: bar"baz` would otherwise let `"` break out of the
+        // double-quoted `content="…"` attribute it's interpolated into. This
+        // crate closes that gap with `escape_quote` (quote-only, so it doesn't
+        // double-escape the entities `specialcharacters` already produced) even
+        // though Asciidoctor's own `html5.rb` does not: an author who controls
+        // these attributes already has strictly stronger injection tools
+        // (passthroughs) in any safe mode — safe mode gates file/network
+        // access, not HTML output — so this is deliberate hardening rather than
+        // a closed security boundary, and a documented, intentional divergence
+        // from the parity oracle (see `html5/ARCHITECTURE.md`).
         if let Some(app_name) = attribute_str(document, "app-name") {
+            let app_name = escape_quote(&app_name);
             self.line(&format!(
                 "<meta name=\"application-name\" content=\"{app_name}\">"
             ));
         }
         if let Some(description) = attribute_str(document, "description") {
+            let description = escape_quote(&description);
             self.line(&format!(
                 "<meta name=\"description\" content=\"{description}\">"
             ));
         }
         if let Some(keywords) = attribute_str(document, "keywords") {
+            let keywords = escape_quote(&keywords);
             self.line(&format!("<meta name=\"keywords\" content=\"{keywords}\">"));
         }
         if !document.authors().is_empty() {
@@ -2007,6 +2023,7 @@ impl Renderer<'_> {
             self.line(&format!("<meta name=\"author\" content=\"{joined}\">"));
         }
         if let Some(copyright) = attribute_str(document, "copyright") {
+            let copyright = escape_quote(&copyright);
             self.line(&format!(
                 "<meta name=\"copyright\" content=\"{copyright}\">"
             ));
@@ -2019,7 +2036,12 @@ impl Renderer<'_> {
         // value is used verbatim as the `href`, with the type derived from its
         // file extension (`.ico` maps to `image/x-icon`; anything else becomes
         // `image/<ext>`, with no extension also falling back to `image/x-icon`).
+        // `favicon` is an attribute entry like the metas above, so both `href`
+        // and the extension-derived `icon_type` get the same `escape_quote`
+        // pass before landing in their double-quoted attributes.
         if let Some((href, icon_type)) = favicon_link(document) {
+            let href = escape_quote(&href);
+            let icon_type = escape_quote(&icon_type);
             self.line(&format!(
                 "<link rel=\"icon\" type=\"{icon_type}\" href=\"{href}\">"
             ));
@@ -7343,9 +7365,10 @@ mod tests {
     fn app_name_and_copyright_metas_escape_markup() {
         // `app-name` and `copyright` come from attribute entries, so the parser
         // has already special-char-escaped their values and the renderer emits
-        // them verbatim. A value containing markup therefore reaches the page
-        // escaped — not as live markup — matching Asciidoctor. (Escaping here
-        // would double-escape and diverge from the oracle.)
+        // them through `escape_quote` alone (not the full `escape_attribute`,
+        // which would double-escape the entities `specialcharacters` already
+        // produced). A value containing markup therefore reaches the page
+        // escaped — not as live markup — matching Asciidoctor.
         let html =
             convert("= Doc\n:app-name: <script>x</script>\n:copyright: A & <b>B</b>\n\nBody.");
         assert!(
@@ -7356,6 +7379,36 @@ mod tests {
         );
         assert!(
             html.contains("<meta name=\"copyright\" content=\"A &amp; &lt;b&gt;B&lt;/b&gt;\">"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn document_metadata_metas_escape_a_bare_quote() {
+        // `specialcharacters` escapes `&`, `<`, and `>` but never a plain `"`
+        // (matching Asciidoctor), so `app-name`, `description`, `keywords`, and
+        // `copyright` values reach the renderer with any `"` still literal. A
+        // deliberate, documented divergence from Asciidoctor's own html5.rb
+        // (see html5/ARCHITECTURE.md) escapes it here so it can't break out of
+        // the double-quoted `content="…"` attribute — see
+        // https://github.com/asciidoc-rs/asciidoc-html5/issues/318.
+        let html = convert(
+            "= Doc\n:app-name: bar\"baz\n:description: a \"quote\"\n:keywords: x\"y\n:copyright: Corp \"Inc\"\n\nBody.",
+        );
+        assert!(
+            html.contains("<meta name=\"application-name\" content=\"bar&quot;baz\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"description\" content=\"a &quot;quote&quot;\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"keywords\" content=\"x&quot;y\">"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<meta name=\"copyright\" content=\"Corp &quot;Inc&quot;\">"),
             "{html}"
         );
     }
@@ -7403,6 +7456,19 @@ mod tests {
         // An explicit unset (`:favicon!:`) also emits nothing.
         let html = convert("= Doc\n:favicon!:\n\nBody.");
         assert!(!html.contains("rel=\"icon\""), "{html}");
+    }
+
+    #[test]
+    fn favicon_link_escapes_a_bare_quote_in_href() {
+        // `favicon` is an attribute entry like the metas above: `"` survives
+        // `specialcharacters` untouched, so the renderer's own `escape_quote`
+        // pass is what keeps it from breaking out of the double-quoted `href`
+        // — see https://github.com/asciidoc-rs/asciidoc-html5/issues/318.
+        let html = convert("= Doc\n:favicon: icon\".png\n\nBody.");
+        assert!(
+            html.contains("<link rel=\"icon\" type=\"image/png\" href=\"icon&quot;.png\">"),
+            "{html}"
+        );
     }
 
     #[test]
