@@ -1982,15 +1982,29 @@ impl Renderer<'_> {
         if let Some(keywords) = attribute_str(document, "keywords") {
             self.line(&format!("<meta name=\"keywords\" content=\"{keywords}\">"));
         }
-        if let Some(authors) = attribute_str(document, "authors") {
-            // Unlike the parser-escaped `description`/`keywords`, the `authors`
-            // value arrives raw, so escape it for the attribute context. This
-            // matches Asciidoctor, which escapes (rather than strips) any angle
-            // brackets that appear in the author `<meta>` content.
-            self.line(&format!(
-                "<meta name=\"author\" content=\"{}\">",
-                escape_attribute(&authors)
-            ));
+        if !document.authors().is_empty() {
+            // Unlike the parser-escaped `description`/`keywords`, each author
+            // name arrives raw, so escape it for the attribute context first —
+            // matching Asciidoctor, which escapes (rather than strips) any
+            // angle brackets that appear in the author `<meta>` content.
+            // Asciidoctor's byline additionally runs the replacements step on
+            // the name (see the `<div id="header">` byline below); apply that
+            // *after* escaping so it only ever inserts well-formed entities
+            // (e.g. `&#8217;`) rather than escaping the `&` those entities
+            // start with.
+            let replacements =
+                SubstitutionGroup::Custom(vec![SubstitutionStep::CharacterReplacements]);
+            let byline_parser = Parser::default();
+            let joined = document
+                .authors()
+                .iter()
+                .map(|author| {
+                    byline_parser
+                        .apply_substitutions(&escape_attribute(author.name()), &replacements)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            self.line(&format!("<meta name=\"author\" content=\"{joined}\">"));
         }
         if let Some(copyright) = attribute_str(document, "copyright") {
             self.line(&format!(
@@ -2172,14 +2186,12 @@ impl Renderer<'_> {
     /// details, which an embedded document does not show. The body itself is
     /// not wrapped in `<div id="content">`.
     ///
-    /// The title toggle is the resolved `showtitle` attribute, which defaults
-    /// off for embedded output. `asciidoc-parser` links `showtitle` and
-    /// `notitle` as inverse spellings of the same toggle (its port of
-    /// Asciidoctor's linkage), so unsetting `notitle` (`:!notitle:`) enables
-    /// the title just as `:showtitle:` does, and when both are given the last
-    /// assignment wins — reading `showtitle` alone captures all of it.
+    /// The title toggle is resolved through [`Document::show_title`], which
+    /// defaults off for embedded output — the canonical resolution of the
+    /// linked `showtitle`/`notitle` pair, rather than a raw read of either
+    /// attribute (see its doc comment and asciidoc-rs/asciidoc-parser#1148).
     fn embedded_document(&mut self, document: &Document<'_>) {
-        if document.is_attribute_set("showtitle") {
+        if document.show_title(false) {
             if let Some(title) = document.doctitle() {
                 self.line(&format!("<h1>{title}</h1>"));
             }
@@ -2294,15 +2306,14 @@ impl Renderer<'_> {
     fn header(&mut self, document: &Document<'_>, max_width: &str) {
         let header: &Header<'_> = document.header();
 
-        // A standalone document shows its title as the header `<h1>` by default;
-        // the `notitle` attribute suppresses it. (`noheader`, which drops the
-        // whole header, is handled by the caller.) This is the section title,
-        // matching Asciidoctor's `node.header.title` — not the effective
-        // `doctitle`, so a `title` attribute entry (which overrides only the
-        // HTML `<title>` element) does not change the `<h1>`.
-        let title = header
-            .title()
-            .filter(|_| !document.is_attribute_set("notitle"));
+        // A standalone document shows its title as the header `<h1>` by
+        // default; the resolved `showtitle`/`notitle` toggle (see
+        // [`Document::show_title`]) suppresses it. (`noheader`, which drops
+        // the whole header, is handled by the caller.) This is the section
+        // title, matching Asciidoctor's `node.header.title` — not the
+        // effective `doctitle`, so a `title` attribute entry (which overrides
+        // only the HTML `<title>` element) does not change the `<h1>`.
+        let title = header.title().filter(|_| document.show_title(true));
 
         // The byline is driven entirely by resolved attributes, matching
         // Asciidoctor's `html5` backend: `authors` (from the author line *or*
