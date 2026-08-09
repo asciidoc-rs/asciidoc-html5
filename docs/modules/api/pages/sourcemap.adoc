@@ -121,7 +121,8 @@ let paragraph = doc
 let line = paragraph.span().line();
 let SourceLine(file, lineno) = doc.source_map().original_file_and_line(line).unwrap();
 let file = file.unwrap();
-assert!(std::path::Path::new(&file).is_absolute());
+let file = std::path::Path::new(&file);
+assert!(file.is_absolute());
 assert!(file.ends_with("partials/section.adoc"));
 assert_eq!(lineno, 3);
 ----

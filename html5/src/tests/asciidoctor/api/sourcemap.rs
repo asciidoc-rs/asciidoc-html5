@@ -320,8 +320,13 @@ then the source location will follow the paragraph into that file:
         .original_file_and_line(line)
         .expect("include has a source location");
     let file = file.expect("include has a file");
-    assert!(Path::new(&file).is_absolute(), "{file}");
-    assert!(file.ends_with("partials/section.adoc"), "{file}");
+    let file = Path::new(&file);
+    assert!(file.is_absolute(), "{}", file.display());
+    assert!(
+        file.ends_with("partials/section.adoc"),
+        "{}",
+        file.display()
+    );
     assert_eq!(lineno, 3);
 
     let _ = fs::remove_dir_all(&dir);

@@ -192,7 +192,8 @@ let paragraph = doc
 let line = paragraph.span().line();
 let SourceLine(file, lineno) = doc.source_map().original_file_and_line(line).unwrap();
 let file = file.unwrap();
-assert!(std::path::Path::new(&file).is_absolute());
+let file = std::path::Path::new(&file);
+assert!(file.is_absolute());
 assert!(file.ends_with("partials/section.adoc"));
 assert_eq!(lineno, 3);
 ----
@@ -246,8 +247,13 @@ target as written on the `include::` directive.
         .original_file_and_line(line)
         .expect("include has a source location");
     let file = file.expect("include has a file");
-    assert!(Path::new(&file).is_absolute(), "{file}");
-    assert!(file.ends_with("partials/section.adoc"), "{file}");
+    let file = Path::new(&file);
+    assert!(file.is_absolute(), "{}", file.display());
+    assert!(
+        file.ends_with("partials/section.adoc"),
+        "{}",
+        file.display()
+    );
     assert_eq!(lineno, 3);
 
     let _ = fs::remove_dir_all(&dir);
