@@ -2958,16 +2958,6 @@ mod structure {
         // `nil`/`false` is a hard override (off), `'@'` is a *soft* override
         // (Asciidoctor's `@`-suffixed value), and `''` is a hard override
         // (on).
-        //
-        // NOTE: one case is still dropped: `[{ 'showtitle' => false },
-        // [':!notitle:']]`. `asciidoc-parser` 0.29.15
-        // (asciidoc-rs/asciidoc-parser#1139) fixed the mirror case — a
-        // hard-*set* `showtitle` lock now correctly wins over a conflicting
-        // document `:notitle:` entry (restored below) — but a hard-*unset*
-        // `showtitle` lock still lets a document `:!notitle:` entry flip
-        // `notitle` the wrong way, hiding the title when it should show.
-        // Filed upstream as asciidoc-rs/asciidoc-parser#1143 — restore this
-        // case once it lands.
         type OptFn = fn(Options) -> Options;
         let cases: &[(OptFn, &[&str])] = &[
             (|o| o.unset("notitle"), &[]),
@@ -2977,6 +2967,7 @@ mod structure {
             (|o| o.set_default("notitle"), &[":showtitle:"]),
             (|o| o.set("showtitle"), &[":notitle:"]),
             (|o| o.set_default("showtitle"), &[]),
+            (|o| o.unset("showtitle"), &[":!notitle:"]),
             (|o| o, &[":!notitle:"]),
             (|o| o, &[":notitle:", ":showtitle:"]),
             (|o| o, &[":showtitle:"]),
