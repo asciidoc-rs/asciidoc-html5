@@ -13,10 +13,10 @@
 //!
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - the per-cell, order-dependent form of `cellbgcolor` (set through inline
-//!   attribute entries, `{set:cellbgcolor:…}`) – permanently out of scope,
+//!   attribute entries, `{set:cellbgcolor:…}`) — permanently out of scope,
 //!   because `asciidoc-parser` does not implement inline attribute entries; the
 //!   `cellbgcolor` document attribute is honored instead;
-//! - compat-mode inline emphasis (single-quote `'text'`) – permanently out of
+//! - compat-mode inline emphasis (single-quote `'text'`) — permanently out of
 //!   scope; this crate will not implement compat mode;
 //! - a test that asserts only on parser-model state (`to_dir` inheritance) with
 //!   no rendered-HTML claim.
@@ -3493,13 +3493,13 @@ fn error_about_unresolved_preprocessor_directive_on_first_line_of_an_asciidoc_ta
     let doc = load_with(&input, &options);
 
     // The unresolved directive on the cell's first line is expanded into a
-    // message naming the file it came from – the included temp file. This crate
+    // message naming the file it came from — the included temp file. This crate
     // emits the parser's richer `… - include::<target>[]` form, which still
     // contains the substring Asciidoctor's `assert_includes` checks.
     let has_message = output.contains(&format!("Unresolved directive in {tmp_include_path}"));
 
-    // The one warning is `include file not found`, and its cursor resolves –
-    // through the document source map – to line 5 of the included temp file (the
+    // The one warning is `include file not found`, and its cursor resolves —
+    // through the document source map — to line 5 of the included temp file (the
     // cell's first line, where the failing `include::` lives). Asciidoctor's
     // logged message names the *resolved* absolute path of the missing target;
     // this crate carries the directive's raw target on the warning instead.
@@ -3782,7 +3782,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// permanently out of scope – this crate will not implement compat mode.
+// permanently out of scope — this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode can be activated in AsciiDoc table cell' do
@@ -3803,7 +3803,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// permanently out of scope – this crate will not implement compat mode.
+// permanently out of scope — this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell inherits from parent document' do
@@ -3833,7 +3833,7 @@ non_normative!(
 );
 
 // Compat-mode inline emphasis (a single-quoted phrase renders as `<em>`) is
-// permanently out of scope – this crate will not implement compat mode.
+// permanently out of scope — this crate will not implement compat mode.
 non_normative!(
     r#"
     test 'compat mode in AsciiDoc table cell can be unset if set in parent document' do
@@ -4147,7 +4147,7 @@ fn document_in_an_asciidoc_table_cell_should_not_see_doctitle_of_parent() {
 
 // `cellbgcolor` cell background styling is supported only through the
 // `cellbgcolor` *document attribute* (`:cellbgcolor: …`), which colors every
-// cell in the document uniformly – see the `cellbgcolor_*` renderer tests. This
+// cell in the document uniformly — see the `cellbgcolor_*` renderer tests. This
 // Asciidoctor case instead exercises the per-cell, order-dependent form driven
 // by *inline attribute entries* (`{set:cellbgcolor:…}` / `{set:cellbgcolor!}`).
 // That form is permanently out of scope: `asciidoc-parser` does not implement

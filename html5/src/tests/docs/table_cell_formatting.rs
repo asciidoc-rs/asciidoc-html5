@@ -40,7 +40,7 @@ documented behavior is guaranteed.
 "#
 );
 
-// Each style letter wraps the cell content in the matching element – `<em>`,
+// Each style letter wraps the cell content in the matching element — `<em>`,
 // `<strong>`, `<code>`, or a literal `<pre>`.
 #[test]
 fn cell_styles() {

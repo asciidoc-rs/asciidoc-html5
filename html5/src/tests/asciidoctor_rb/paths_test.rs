@@ -1,7 +1,7 @@
 //! Port of Asciidoctor's `paths_test.rb`.
 //!
 //! This file is tracked but entirely `non_normative!`. Every test here
-//! exercises `Asciidoctor::PathResolver` – the core class that resolves web
+//! exercises `Asciidoctor::PathResolver` — the core class that resolves web
 //! paths (`web_path`) and filesystem paths (`system_path`, `relative_path`,
 //! `normalize_system_path`), including jail/security enforcement, Windows and
 //! UNC path handling, JRuby classloader URIs, and logger warnings. It is a

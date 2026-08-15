@@ -30,8 +30,8 @@ fn unix_seconds_counts_forward_from_the_epoch() {
     );
 }
 
-// `unix_seconds` returns a negative count for an instant before the epoch – a
-// source file whose modification time predates 1970 – flooring a fractional
+// `unix_seconds` returns a negative count for an instant before the epoch — a
+// source file whose modification time predates 1970 — flooring a fractional
 // pre-epoch instant toward the earlier second rather than truncating toward
 // zero (which would round it up by a second).
 #[test]

@@ -4,7 +4,7 @@
 //! methods on `Asciidoctor::Helpers` (and the `Asciidoctor::UriSniffRx` regex),
 //! not rendered behavior. This crate is an HTML5 renderer: it neither exposes
 //! nor reimplements `Helpers`, so almost every claim here is tracked
-//! `non_normative!` – its subject is a helper's isolated return value, which
+//! `non_normative!` — its subject is a helper's isolated return value, which
 //! has no `convert`-driven form to verify (see the "test rendered output, not
 //! internals" rule in this directory's README).
 //!
@@ -15,7 +15,7 @@
 //! select non-word characters" claim (`-.` passes through unchanged) is checked
 //! through a rendered mailto link rather than deferred.
 //!
-//! Its sibling – "should URI encode non-word characters generally" – stays
+//! Its sibling — "should URI encode non-word characters generally" — stays
 //! `non_normative!`, because the only rendered surface cannot reproduce the
 //! helper's raw claim. A mailto subject runs the special-characters
 //! substitution first, so the test's `&` becomes `&amp;` *before* encoding: our
@@ -26,7 +26,7 @@
 //!
 //! The remaining contexts have no rendered form here at all:
 //!
-//! - **URIs and Paths** – `rootname`, `extname?`, `uriish?`, and matching
+//! - **URIs and Paths** — `rootname`, `extname?`, `uriish?`, and matching
 //!   against `UriSniffRx` are internal string helpers. Where the renderer needs
 //!   the same logic it has its own port covered by its own tests:
 //!   [`crate::renderer::looks_like_uri`] mirrors `UriSniffRx`, and
@@ -34,7 +34,7 @@
 //!   derivation in `options.rs` (`file_extension_matches_asciidoctor_extname`).
 //!   Neither is reachable through `convert`, so these tests are not
 //!   re-expressed here.
-//! - **Type Resolution** – `class_for_name` / `resolve_class` resolve a Ruby
+//! - **Type Resolution** — `class_for_name` / `resolve_class` resolve a Ruby
 //!   class from a `String` name via reflection. This statically-typed Rust
 //!   crate has no equivalent, so the whole context is scaffolding.
 
@@ -67,7 +67,7 @@ mod uri_encoding {
     // subject/body, and that text is special-characters-escaped before it is
     // encoded. So this test's `&` renders as `&amp;` → `%26amp%3B` (parity with
     // Asciidoctor 2.0.26 confirmed), never the raw `%26` the helper unit test
-    // asserts – there is no faithful rendered form of this claim.
+    // asserts — there is no faithful rendered form of this claim.
     non_normative!(
         r#"
     test 'should URI encode non-word characters generally' do

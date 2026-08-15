@@ -29,7 +29,7 @@ fn convert(source: &str) -> String {
     convert_with(source, &Options::new().standalone(true))
 }
 
-// Renders embeddable, body-only output – the mode the page's limitations
+// Renders embeddable, body-only output — the mode the page's limitations
 // section describes (`header_footer` false).
 fn convert_embedded(source: &str) -> String {
     crate::convert(source)
@@ -217,7 +217,7 @@ image::toc-preamble.png[Display the table of contents below the preamble,role=sc
 );
 
 // The `preamble` placement is conditional: a document with no preamble produces
-// no TOC at all. (The remediation – leave the value empty or use `auto` – is
+// no TOC at all. (The remediation — leave the value empty or use `auto` — is
 // covered by the default placement verified on the *Automatic Table of
 // Contents* page.)
 #[test]
@@ -237,7 +237,7 @@ To fix this problem, set the `toc` attribute to an empty value (i.e., leave the 
     assert_css(&output, r#"div#toc"#, 0);
 }
 
-// Assigning `macro` places the TOC wherever the `toc::[]` block macro appears –
+// Assigning `macro` places the TOC wherever the `toc::[]` block macro appears —
 // here inside the first section, after its title. The TOC macro is honored only
 // when `toc` is set to `macro`: otherwise the macro is ignored entirely.
 #[test]

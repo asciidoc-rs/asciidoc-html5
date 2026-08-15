@@ -206,7 +206,7 @@ fn sectnumlevels_two_leaves_deeper_titles_unnumbered() {
 // Book-doctype behavior (level 1 sections becoming chapters, the
 // `sectnumlevels` 4→3-levels-per-chapter translation) and the multi-part
 // `sectnumlevels -1` / `partnums` case are out of scope for 1.0 (article is the
-// only structural doctype modeled – see issue #188), so this is tracked
+// only structural doctype modeled — see issue #188), so this is tracked
 // non-normatively.
 non_normative!(
     r#"

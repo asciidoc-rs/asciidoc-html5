@@ -32,7 +32,7 @@
 //!
 //! A handful of *document-visible* tests are also kept `non_normative!` because
 //! this crate diverges from the Asciidoctor oracle, permanently: compat-mode
-//! role handling on a replacement link is out of scope – this crate will not
+//! role handling on a replacement link is out of scope — this crate will not
 //! implement compat mode.
 //!
 //! An undeclared non-UTF-8 include file is a further, permanent divergence:
@@ -947,7 +947,7 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="include-file.adoc"]"#, 1);
         }
 
-        // Non-normative: compat-mode role handling is permanently out of scope –
+        // Non-normative: compat-mode role handling is permanently out of scope —
         // this crate will not implement compat mode, so it does not drop the
         // include role on the replacement link.
         non_normative!(
@@ -1001,8 +1001,8 @@ mod preprocessor_reader {
             );
 
             // Under a non-secure safe mode a remote target whose `allow-uri-read`
-            // is unset falls back to a link macro carrying the `include` role –
-            // the same rewrite the secure safe mode applies – and raises no
+            // is unset falls back to a link macro carrying the `include` role —
+            // the same rewrite the secure safe mode applies — and raises no
             // warning.
             let src = "include::https://example.org/dist/info.adoc[]";
             let html = convert_safe_with_fixtures(src);
@@ -1016,7 +1016,7 @@ mod preprocessor_reader {
         }
 
         // Non-normative: compat-mode role suppression is permanently out of scope
-        // – this crate does not implement compat mode, so it does not drop the
+        // — this crate does not implement compat mode, so it does not drop the
         // `include` role from the replacement link.
         non_normative!(
             r#"
@@ -1352,7 +1352,7 @@ mod preprocessor_reader {
 
         // Non-normative: Asciidoctor rejects an undeclared non-UTF-8 include by
         // raising `invalid byte sequence in UTF-8`. This crate's include handlers
-        // cannot raise mid-parse, so it diverges – the include is left unresolved
+        // cannot raise mid-parse, so it diverges — the include is left unresolved
         // rather than aborting the parse. That divergent behavior is asserted in
         // `undeclared_non_utf8_include_is_left_unresolved` below.
         non_normative!(
@@ -1376,7 +1376,7 @@ mod preprocessor_reader {
         );
 
         // The divergence documented above, asserted: an undeclared non-UTF-8
-        // include cannot be decoded as UTF-8, so it is left unresolved – the
+        // include cannot be decoded as UTF-8, so it is left unresolved — the
         // ISO-8859-1 content never appears, an "Unresolved directive" message
         // takes the directive's place, and an include-file-not-decodable warning
         // is raised (naming the real cause, rather than "not found"). A matching

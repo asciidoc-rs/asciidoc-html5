@@ -3068,7 +3068,7 @@ mod structure {
     }
 
     // `parse_header_only` (stopping the parser after the header) is a
-    // permanent non-goal – this crate will not implement it, since it would
+    // permanent non-goal — this crate will not implement it, since it would
     // require a change to the pinned `asciidoc-parser` dependency (a
     // crates.io version, not a workspace member this repo can extend). See
     // #96.

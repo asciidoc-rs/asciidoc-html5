@@ -24,7 +24,7 @@
 //! it only under the verbose mode the Ruby tests enter with `in_verbose_mode`.)
 //!
 //! The include-aware xref tests (an inter-document xref that collapses to an
-//! internal anchor once its target file has been included – #127) port
+//! internal anchor once its target file has been included — #127) port
 //! against real fixture files under `fixturedir`, driven through
 //! [`Options::base_dir`](crate::Options::base_dir) and
 //! [`Document::catalog`](crate::Document::catalog)'s `was_included`/
@@ -35,10 +35,10 @@
 //!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
 //! DocBook-backend tests (this crate targets only the `html5` backend); the
-//! compat-mode xref-target tests, which are permanently out of scope – this
+//! compat-mode xref-target tests, which are permanently out of scope — this
 //! crate will not implement compat mode; and other inline behavior
 //! `asciidoc-parser` diverges on (not resolving a forward xref during
-//! parsing – #128).
+//! parsing — #128).
 
 use std::{
     fs,
@@ -65,7 +65,7 @@ fn assert_includes(html: &str, needle: &str) {
     );
 }
 
-/// Resolves a name under Asciidoctor's vendored `test/fixtures/` tree – the
+/// Resolves a name under Asciidoctor's vendored `test/fixtures/` tree — the
 /// counterpart to the Ruby suite's `fixturedir`/`fixture_path`, matching the
 /// helper of the same name in `api_test.rs`.
 fn fixture_path(name: &str) -> PathBuf {
@@ -77,7 +77,7 @@ fn fixture_path(name: &str) -> PathBuf {
     }
 }
 
-/// [`Options`] anchored at `fixturedir` under safe mode – the counterpart to
+/// [`Options`] anchored at `fixturedir` under safe mode — the counterpart to
 /// the Ruby suite's `safe: :safe, base_dir: fixturedir`, used by the
 /// fixture-backed inter-document xref tests below.
 fn fixturedir_options() -> Options {
@@ -394,7 +394,7 @@ fn qualified_url_with_label_containing_square_brackets_using_link_macro() {
 "###
     );
 
-    // Lines 63-64 assert the DocBook rendering of the same input; this crate
+    // Lines 63–64 assert the DocBook rendering of the same input; this crate
     // renders only the html5 backend.
     non_normative!(
         r###"
@@ -2372,7 +2372,7 @@ fn xref_using_angled_bracket_syntax_with_quoted_label() {
     );
 }
 
-// Compat-mode xref-target handling is permanently out of scope – this crate
+// Compat-mode xref-target handling is permanently out of scope — this crate
 // will not implement compat mode; the parser renders the inter-document form
 // instead of the plain internal reference.
 non_normative!(
@@ -2741,7 +2741,7 @@ fn xref_using_angled_bracket_syntax_with_path_and_extension_with_fragment() {
     );
 }
 
-// Compat-mode xref-target handling is permanently out of scope – this crate
+// Compat-mode xref-target handling is permanently out of scope — this crate
 // will not implement compat mode; the parser renders the inter-document form
 // instead of the plain internal reference.
 non_normative!(
@@ -3642,7 +3642,7 @@ fn should_warn_and_create_link_if_debug_mode_is_enabled_inter_document_xref_poin
     // The `<<test.adoc#foobaz>>` target's path names the current document (via
     // the `docname` attribute), so it collapses to a same-document reference to
     // `#foobaz`; that fragment is undefined, so it renders as a broken link and
-    // records a `possible invalid reference` warning – the counterpart to
+    // records a `possible invalid reference` warning — the counterpart to
     // `assert_message logger, :INFO, …`. (This crate always collects the
     // warning; Asciidoctor gates it on the verbose mode the Ruby enters via
     // `in_verbose_mode`.)

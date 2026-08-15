@@ -2,7 +2,7 @@
 //!
 //! The `preface` section style requires `:doctype: book` (it precedes the first
 //! chapter of a book or book part). This renderer pins the doctype to `article`
-//! (book is out of scope for 1.0 – see issue #188), so nothing on this page is
+//! (book is out of scope for 1.0 — see issue #188), so nothing on this page is
 //! verifiable here and the whole page is tracked non-normatively.
 
 use crate::tests::sdd::*;
@@ -12,7 +12,7 @@ track_file!("ref/asciidoc-lang/docs/modules/sections/pages/preface.adoc");
 // The `preface` section style is book-doctype behavior (it can only be used
 // when the doctype is `book`, and its level depends on whether the book has
 // parts), which is out of scope for 1.0 (article is the only structural doctype
-// modeled – see issue #188), so this whole page is tracked non-normatively.
+// modeled — see issue #188), so this whole page is tracked non-normatively.
 non_normative!(
     r#"
 = Preface

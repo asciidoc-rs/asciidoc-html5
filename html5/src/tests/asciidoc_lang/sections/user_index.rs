@@ -4,8 +4,8 @@
 //! built-in HTML5 converter does not generate an index catalog (only
 //! Asciidoctor PDF and the DocBook toolchain do), so the `[index]` seed section
 //! and catalog population produce no HTML here and are tracked non-normatively.
-//! The one behavior this backend does implement – the visibility of the two
-//! index-term forms – is verified: a flow index term is rendered as visible
+//! The one behavior this backend does implement — the visibility of the two
+//! index-term forms — is verified: a flow index term is rendered as visible
 //! text, while a concealed index term (and the equivalent macros) produces no
 //! visible output, matching Asciidoctor 2.0.26.
 

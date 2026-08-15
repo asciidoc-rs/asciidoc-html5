@@ -1,4 +1,4 @@
-//! Tracks Asciidoctor's `api_test.rb` – exercises of the public
+//! Tracks Asciidoctor's `api_test.rb` — exercises of the public
 //! `Asciidoctor.load` / `convert` Ruby API surface.
 //!
 //! `api_test.rb` is mostly a statement about Asciidoctor's *Ruby* object model:
@@ -13,7 +13,7 @@
 //! `non_normative!` with a reason, honestly accounting for the lines rather
 //! than counting them uncovered.
 //!
-//! What this crate *does* own – and so verifies here – is the library-facing
+//! What this crate *does* own — and so verifies here — is the library-facing
 //! behavior: the `docfile`/`docdir`/`docfilesuffix` input-file attribute family
 //! (via [`Document::attribute_value`](crate::Document::attribute_value)),
 //! author metadata ([`Document::authors`](crate::Document::authors)), the
@@ -48,7 +48,7 @@ track_file!("ref/asciidoctor/test/api_test.rb");
 /// content and asserts it is non-empty).
 const DEFAULT_STYLESHEET_MARKER: &str = "Asciidoctor default stylesheet";
 
-/// Resolves a name under Asciidoctor's vendored `test/fixtures/` tree – the
+/// Resolves a name under Asciidoctor's vendored `test/fixtures/` tree — the
 /// counterpart to the Ruby suite's `fixture_path`. The fixtures live under the
 /// pinned `ref/asciidoctor` tree, so we point at them rather than re-vendoring
 /// copies into this crate.
@@ -58,7 +58,7 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
-/// Extracts a resolved attribute's string value, panicking if it is not set –
+/// Extracts a resolved attribute's string value, panicking if it is not set —
 /// the counterpart to the Ruby suite reading `doc.attr('name')`.
 fn attr_str(doc: &Document, name: &str) -> String {
     match doc.attribute_value(name) {
@@ -136,8 +136,8 @@ mod load {
         let doc = load_file_with(&path, &Options::new().safe_mode(SafeMode::Safe))
             .expect("read fixtures/sample.adoc");
 
-        // The setext `doctitle` assertion is intentionally not reproduced – this
-        // crate does not recognize setext (two-line) titles – so verify instead
+        // The setext `doctitle` assertion is intentionally not reproduced — this
+        // crate does not recognize setext (two-line) titles — so verify instead
         // the input-file attribute family this test derives: Asciidoctor's
         // `File.expand_path` of the source path, its directory, and the suffix.
         // The suffix comparisons normalize `\` to `/` so they hold on Windows.
@@ -191,8 +191,8 @@ mod load {
             .expect("read fixtures/sample-alt-extension.asciidoc");
 
         // As with the `.adoc` case above, the setext `doctitle` assertion is not
-        // reproduced (setext is unsupported); the behavior under test – that the
-        // `docfilesuffix` follows the alternate `.asciidoc` extension – is what
+        // reproduced (setext is unsupported); the behavior under test — that the
+        // `docfilesuffix` follows the alternate `.asciidoc` extension — is what
         // we verify. The suffix comparisons normalize `\` to `/` for Windows.
         assert!(attr_str(&doc, "docfile")
             .replace('\\', "/")

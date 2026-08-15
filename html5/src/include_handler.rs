@@ -252,7 +252,7 @@ pub(crate) enum ReadOutcome {
 ///
 /// Mirrors [`ReadOutcome`] but carries undecoded bytes for the transcoding path
 /// that honors a non-UTF-8 `encoding` attribute. Because there is no UTF-8
-/// decoding step, no content is rejected as non-UTF-8 – the caller transcodes
+/// decoding step, no content is rejected as non-UTF-8 — the caller transcodes
 /// the bytes. The failure reasons map onto the same [`IncludeResolution`]
 /// variants.
 pub(crate) enum ReadBytesOutcome {
@@ -329,8 +329,8 @@ fn confined_target(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<PathB
 /// Reads `path` as UTF-8 text, classifying failure the way Asciidoctor does: a
 /// path that is not a regular file is [`ReadOutcome::NotFound`] (Asciidoctor
 /// gates on `File.file?` before reading). A regular file that then fails to
-/// decode as UTF-8 – this being the UTF-8 read path, taken when no recognized
-/// `encoding` attribute asks for transcoding – is
+/// decode as UTF-8 — this being the UTF-8 read path, taken when no recognized
+/// `encoding` attribute asks for transcoding — is
 /// [`ReadOutcome::NotDecodable`]; any other read failure is
 /// [`ReadOutcome::NotReadable`].
 fn read_file(path: &Path) -> ReadOutcome {
@@ -341,8 +341,8 @@ fn read_file(path: &Path) -> ReadOutcome {
     // The `is_file` gate already reports a missing/non-regular target as "not
     // found", so a failure now is one of two things. Invalid UTF-8 is "not
     // decodable": this handler does not transcode without a recognized
-    // `encoding`, matching the parser's contract. Anything else – typically a
-    // permission error, or the rare race where the file is removed in between –
+    // `encoding`, matching the parser's contract. Anything else — typically a
+    // permission error, or the rare race where the file is removed in between —
     // is "not readable".
     match fs::read_to_string(path) {
         Ok(content) => ReadOutcome::Read(content),
@@ -364,8 +364,8 @@ fn read_file_bytes(path: &Path) -> ReadBytesOutcome {
 
     // The `is_file` gate already reports a missing or non-regular target as "not
     // found", so any failure reading a path that just passed it is a genuine read
-    // failure – typically a permission error, or the rare race where the file is
-    // removed in between – and reads as "not readable".
+    // failure — typically a permission error, or the rare race where the file is
+    // removed in between — and reads as "not readable".
     match fs::read(path) {
         Ok(bytes) => ReadBytesOutcome::Read(bytes),
         Err(_) => ReadBytesOutcome::NotReadable,
@@ -458,9 +458,9 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         // A non-UTF-8 `encoding` this handler recognizes (e.g. `iso-8859-1`) is
         // honored by reading the raw bytes and transcoding them to UTF-8; the
         // content is returned via `IncludeContent::transcoded` so the parser
-        // suppresses its non-UTF-8 include-encoding warning. Every other case –
+        // suppresses its non-UTF-8 include-encoding warning. Every other case —
         // no `encoding`, an explicit `utf-8`, or an unrecognized label (which
-        // Asciidoctor ignores) – falls back to reading the file as UTF-8 and
+        // Asciidoctor ignores) — falls back to reading the file as UTF-8 and
         // returning it via `IncludeContent::new`. A missing/non-regular file
         // maps to `NotFound` and an unreadable one to `NotReadable` in both
         // paths; on the UTF-8 path a file whose bytes are not valid UTF-8 maps to

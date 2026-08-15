@@ -299,8 +299,8 @@ fn should_parse_source_and_convert_to_html5_article_by_default() {
 
 // Not exposed: the test reads implicit doc-info attributes off the `Document`
 // object. The date/time members (`docdate`, `doctime`, `docdatetime`,
-// `docyear`) now surface in the footer's "Last updated" stamp – covered by the
-// override and `SOURCE_DATE_EPOCH` tests below – but the path members
+// `docyear`) now surface in the footer's "Last updated" stamp — covered by the
+// override and `SOURCE_DATE_EPOCH` tests below — but the path members
 // (`docname`, `docfile`, `docdir`) appear nowhere in `adoc`'s rendered HTML, so
 // the whole-`Document` assertion this test makes has no `adoc` analog.
 non_normative!(
@@ -1054,7 +1054,7 @@ fn should_output_to_file_specified() {
 // Non-normative: despite its name, this Ruby test invokes with
 // `source-highlighter=coderay` and asserts Asciidoctor copies *both* the
 // default `asciidoctor.css` and the CodeRay `coderay-asciidoctor.css` next to
-// the output. `adoc` deliberately diverges – server-side syntax highlighting
+// the output. `adoc` deliberately diverges — server-side syntax highlighting
 // (CodeRay, Pygments, Rouge) is not planned, so it emits no CodeRay spans and
 // copies no CodeRay stylesheet, and the bundled CodeRay assertion can no longer
 // hold. The default-stylesheet copy itself is verified at the library level in
@@ -1088,7 +1088,7 @@ non_normative!(
 );
 
 // Non-normative: this Ruby test checks CodeRay's "was anything highlighted?"
-// gate – no source block means no `coderay-asciidoctor.css` copy. `adoc` never
+// gate — no source block means no `coderay-asciidoctor.css` copy. `adoc` never
 // copies a CodeRay stylesheet at all (server-side syntax highlighting is not
 // planned), so there is no gate to verify; it would only pass vacuously.
 non_normative!(
@@ -2055,7 +2055,7 @@ fn should_print_timings_when_t_flag_is_specified() {
 // to check timezone formatting. `adoc` rejects the `inline` doctype (an
 // unsupported structural doctype, like `book`/`manpage`), so there is no way to
 // emit the two bare attribute lines this test reads. The UTC case would in fact
-// hold – an unpinned `adoc` clock reads as UTC – but the offset counterpart
+// hold — an unpinned `adoc` clock reads as UTC — but the offset counterpart
 // below cannot, as this toolchain carries no timezone database.
 non_normative!(
     r#"
@@ -2072,7 +2072,7 @@ non_normative!(
 
 // Not implemented: the offset-timezone counterpart of the previous test. It
 // needs the same `-d inline` mode `adoc` lacks, and additionally a local
-// timezone offset derived from the system `TZ` – which this toolchain cannot
+// timezone offset derived from the system `TZ` — which this toolchain cannot
 // compute, having no timezone database (an unpinned clock reads as UTC).
 non_normative!(
     r#"
@@ -2088,7 +2088,7 @@ non_normative!(
 );
 
 // `SOURCE_DATE_EPOCH` seeds the `doc*` and `local*` date/time attributes for
-// reproducible builds – `adoc` honors it, and the derived `docdatetime`
+// reproducible builds — `adoc` honors it, and the derived `docdatetime`
 // surfaces in the footer's "Last updated" stamp. This is verified without
 // mutating the shared process environment (which every concurrent `adoc` run
 // reads on startup, so a stray value would race the whole test binary): the
@@ -2133,7 +2133,7 @@ fn should_use_source_date_epoch_as_modified_time_of_input_file_and_local_time() 
 
     // Pinning the clock there (with no input mtime) drives both the `doc*` and
     // `local*` families, so the footer's docdatetime reads
-    // "2009-02-08 20:03:32 UTC" – matching the Ruby assertions on both
+    // "2009-02-08 20:03:32 UTC" — matching the Ruby assertions on both
     // docdatetime and localdatetime.
     let options = Options::new()
         .standalone(true)
@@ -2147,7 +2147,7 @@ fn should_use_source_date_epoch_as_modified_time_of_input_file_and_local_time() 
     );
 }
 
-// An empty (or all-whitespace) `SOURCE_DATE_EPOCH` is ignored – the clock falls
+// An empty (or all-whitespace) `SOURCE_DATE_EPOCH` is ignored — the clock falls
 // back to the wall clock rather than being pinned. Verified against the CLI's
 // parse directly, for the same process-environment reason as above.
 #[test]

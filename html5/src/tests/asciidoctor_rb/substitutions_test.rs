@@ -35,7 +35,7 @@
 //!   `Block.new(subs: …)` constructor plumbing exercise parser-model APIs this
 //!   crate does not surface.
 //! * Server-side source-highlighting backends (**coderay**, **pygments**) are
-//!   not planned – the renderer never tokenizes source into highlighted markup.
+//!   not planned — the renderer never tokenizes source into highlighted markup.
 
 use asciidoc_parser::warnings::WarningType;
 

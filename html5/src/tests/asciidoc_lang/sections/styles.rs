@@ -3,8 +3,8 @@
 //!
 //! This page is a catalog: it enumerates which special-section styles are
 //! permitted in the `article` and `book` document types. It introduces no new
-//! rendering rule of its own – every listed style is documented and verified on
-//! its own dedicated page – so the whole page is tracked non-normatively.
+//! rendering rule of its own — every listed style is documented and verified on
+//! its own dedicated page — so the whole page is tracked non-normatively.
 
 use crate::tests::sdd::*;
 
@@ -15,7 +15,7 @@ track_file!("ref/asciidoc-lang/docs/modules/sections/pages/styles.adoc");
 // (abstract, appendix, glossary, bibliography, index) is covered on its own
 // dedicated page, and the book-only styles and structure (colophon, dedication,
 // acknowledgments, preface, partintro, part, chapter) are out of scope for 1.0
-// (article is the only structural doctype modeled – see issue #188). The whole
+// (article is the only structural doctype modeled — see issue #188). The whole
 // page is therefore non-normative.
 non_normative!(
     r#"

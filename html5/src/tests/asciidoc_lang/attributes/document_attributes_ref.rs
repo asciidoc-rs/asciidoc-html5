@@ -610,8 +610,8 @@ Alternately, you can use the SOURCE_DATE_EPOCH environment variable, which sets 
 "#
     );
 
-    // `reproducible` prevents the last-updated date – and the equally
-    // build-volatile `generator` meta – from being added to the HTML output. A
+    // `reproducible` prevents the last-updated date — and the equally
+    // build-volatile `generator` meta — from being added to the HTML output. A
     // pinned reference time keeps the comparison deterministic and standalone
     // output exposes the head and footer: without the attribute the footer
     // stamps "Last updated …" and the head carries the `generator` meta;

@@ -3449,7 +3449,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // Not verified: builds sections via the Section.new API and checks sectnum —
     // parser-model, no rendered form.
     non_normative!(
         r#"
@@ -3463,7 +3463,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // Not verified: builds sections via the Section.new API and checks sectnum —
     // parser-model, no rendered form.
     non_normative!(
         r#"
@@ -3479,7 +3479,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // Not verified: builds sections via the Section.new API and checks sectnum —
     // parser-model, no rendered form.
     non_normative!(
         r#"
@@ -3497,7 +3497,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum –
+    // Not verified: builds sections via the Section.new API and checks sectnum —
     // parser-model, no rendered form.
     non_normative!(
         r#"
@@ -3515,7 +3515,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: checks Section#sectnum delimiter/append options – parser-model,
+    // Not verified: checks Section#sectnum delimiter/append options — parser-model,
     // no rendered form.
     non_normative!(
         r#"
@@ -3789,7 +3789,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: checks the parser numeral on book parts – parser-model plus
+    // Not verified: checks the parser numeral on book parts — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -3911,7 +3911,7 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: checks the parser block level accessor – parser-model, no
+    // Not verified: checks the parser block level accessor — parser-model, no
     // rendered form.
     non_normative!(
         r#"
@@ -7443,7 +7443,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser sectname for each section type – parser-model
+    // Not verified: checks the parser sectname for each section type — parser-model
     // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -7514,7 +7514,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context – parser-model plus
+    // Not verified: checks the parser partintro style/context — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -7545,7 +7545,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context – parser-model plus
+    // Not verified: checks the parser partintro style/context — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -7572,7 +7572,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context – parser-model plus
+    // Not verified: checks the parser partintro style/context — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -7599,7 +7599,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context – parser-model plus
+    // Not verified: checks the parser partintro style/context — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
@@ -7628,7 +7628,7 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context – parser-model plus
+    // Not verified: checks the parser partintro style/context — parser-model plus
     // non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"

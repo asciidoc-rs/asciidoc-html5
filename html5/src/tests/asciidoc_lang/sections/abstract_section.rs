@@ -65,7 +65,7 @@ include::example$abstract.adoc[]
 // The see-also xref points to the abstract block style page, and the commented
 // `////` … `////` block describes the book-doctype abstract syntax (parts and
 // chapters), which is out of scope for 1.0 (article is the only structural
-// doctype modeled – see issue #188). Both are non-normative.
+// doctype modeled — see issue #188). Both are non-normative.
 non_normative!(
     r#"
 If you want to style a paragraph or an open block as an abstract, instead of a whole section, see the xref:abstract-block.adoc[abstract block style] documentation.

@@ -2,7 +2,7 @@
 //!
 //! Parts (level 0 sections that make a book multi-part), part intros, and the
 //! special-section-as-part-sibling rules only exist under `:doctype: book`.
-//! This renderer pins the doctype to `article` (book is out of scope for 1.0 –
+//! This renderer pins the doctype to `article` (book is out of scope for 1.0 —
 //! see issue #188), so nothing on this page is verifiable here and the whole
 //! page is tracked non-normatively.
 
@@ -11,10 +11,10 @@ use crate::tests::sdd::*;
 track_file!("ref/asciidoc-lang/docs/modules/sections/pages/parts.adoc");
 
 // Book parts are book-doctype behavior (parts can only be used when the
-// document type is `book`, and everything on this page – part intros,
-// part-sibling special sections, multipart level coercion – depends on it),
+// document type is `book`, and everything on this page — part intros,
+// part-sibling special sections, multipart level coercion — depends on it),
 // which is out of scope for 1.0 (article is the only structural doctype modeled
-// – see issue #188), so this whole page is tracked non-normatively.
+// — see issue #188), so this whole page is tracked non-normatively.
 non_normative!(
     r#"
 = Book Parts

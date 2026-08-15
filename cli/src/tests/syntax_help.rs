@@ -83,9 +83,9 @@ fn the_crib_sheet_renders_without_unsupported_markers() {
 
 // Guards that the crib sheet's block-styled constructs keep their block
 // treatment rather than degrading to plain paragraphs. Several sit directly
-// below an explanatory `//` comment – the pattern that asciidoc-parser#995 once
+// below an explanatory `//` comment — the pattern that asciidoc-parser#995 once
 // mis-parsed, surfacing the attribute line as paragraph text (fixed in 0.28.1).
-// If that regresses – or a parser bump reintroduces the bug – these assertions
+// If that regresses — or a parser bump reintroduces the bug — these assertions
 // fail loudly instead of the preview silently losing styling.
 #[test]
 fn the_crib_sheet_keeps_its_block_styles() {
