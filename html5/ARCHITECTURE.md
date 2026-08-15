@@ -290,7 +290,7 @@ planned**: reproducing their per-language tokenizer output byte-for-byte would
 mean either an in-process highlighter (a heavy dependency this library's
 `asciidoc-parser`-only constraint forbids) or shelling out, so a source block
 that requests one keeps its default unhighlighted shape. Nothing keys off the
-`coderay`/`pygments`/`rouge` names – no highlighter stylesheet is linked,
+`coderay`/`pygments`/`rouge` names — no highlighter stylesheet is linked,
 embedded, or copied (a deliberate divergence from Asciidoctor, which links and
 copies `coderay-asciidoctor.css` for the CodeRay spans it emits and this crate
 does not).
@@ -300,7 +300,7 @@ Because a highlighter emits `<link>`/`<script>` tags whose origin a document
 `Server` and above a *document-set* `:source-highlighter:` is locked to unset in
 [`Options::apply`](Options) (mirroring Asciidoctor's `attr_overrides['source-
 highlighter'] ||= nil`), so only a trusted API/CLI `-a source-highlighter=…`
-opt-in can turn one on – which is still honored under `Secure`, matching
+opt-in can turn one on — which is still honored under `Secure`, matching
 Asciidoctor 2.0.26. This is the document-lock half of
 [#45](https://github.com/asciidoc-rs/asciidoc-html5/issues/45).
 
