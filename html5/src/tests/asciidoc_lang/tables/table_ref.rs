@@ -2,9 +2,9 @@
 //! Reference* page.
 //!
 //! The page is a single reference table listing every table attribute, its
-//! values, and notes. The table exercises several table features at once –
+//! values, and notes. The table exercises several table features at once —
 //! computed column widths from the `cols` spec, an implicit header row, and
-//! cells that span multiple rows via the `.N+` row-span shorthand – so the
+//! cells that span multiple rows via the `.N+` row-span shorthand — so the
 //! whole table is verified through `convert`. The page title and navtitle
 //! attribute carry no rendering rule and are tracked as non-normative.
 

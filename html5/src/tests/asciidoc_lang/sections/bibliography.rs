@@ -112,7 +112,7 @@ You can also define it as a deeper section, in which case the doctype doesn't ma
 );
 
 // Book-doctype behavior (parts and the whole-book level-0 special section) is
-// out of scope for 1.0 (article is the only structural doctype modeled – see
+// out of scope for 1.0 (article is the only structural doctype modeled — see
 // issue #188), so this level-0 variant is tracked non-normatively.
 non_normative!(
     r#"

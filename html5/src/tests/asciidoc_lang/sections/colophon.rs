@@ -2,7 +2,7 @@
 //!
 //! The `colophon` section style requires `:doctype: book` (it is a level 0 or
 //! level 1 special section of a book). This renderer pins the doctype to
-//! `article` (book is out of scope for 1.0 – see issue #188), so nothing on
+//! `article` (book is out of scope for 1.0 — see issue #188), so nothing on
 //! this page is verifiable here and the whole page is tracked non-normatively.
 
 use crate::tests::sdd::*;
@@ -11,7 +11,7 @@ track_file!("ref/asciidoc-lang/docs/modules/sections/pages/colophon.adoc");
 
 // The `colophon` section style is book-doctype behavior (it requires
 // `:doctype: book` and its level depends on whether the book has parts), which
-// is out of scope for 1.0 (article is the only structural doctype modeled – see
+// is out of scope for 1.0 (article is the only structural doctype modeled — see
 // issue #188), so this whole page is tracked non-normatively.
 non_normative!(
     r#"

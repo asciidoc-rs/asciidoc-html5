@@ -26,7 +26,7 @@
 //!   `arbitrary block` test reaches for the `PreprocessorReader` /
 //!   `Parser.next_block` Ruby APIs (its verse-`<pre>` behavior is already
 //!   covered by the paragraphs suite).
-//! * *Compat mode* is permanently out of scope – this crate will not implement
+//! * *Compat mode* is permanently out of scope — this crate will not implement
 //!   it. A test that carries both a compat-mode and a modern assertion is split
 //!   *within* its `#[test]`: the modern lines sit in `verifies!` blocks (driven
 //!   in Rust) and the compat-mode lines in interleaved `non_normative!` blocks,
@@ -251,7 +251,7 @@ fn single_and_double_quoted_text() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the first form's two assertions stay non-normative rather than
     // counted as verified.
     non_normative!(
@@ -287,7 +287,7 @@ fn multiple_double_quoted_text_on_a_single_line() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the first `assert_equal` stays non-normative rather than counted as
     // verified.
     non_normative!(
@@ -546,7 +546,7 @@ fn emphasized_text_with_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the first assertion stays non-normative rather than counted as
     // verified.
     non_normative!(
@@ -581,7 +581,7 @@ fn emphasized_text_with_escaped_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the first assertion stays non-normative rather than counted as
     // verified.
     non_normative!(
@@ -632,7 +632,7 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the two compat-mode assertions stay non-normative rather than
     // counted as verified.
     non_normative!(
@@ -737,7 +737,7 @@ fn backticks_and_straight_quotes_in_text() {
 "#
     );
 
-    // Compat mode is permanently out of scope – this crate will not implement
+    // Compat mode is permanently out of scope — this crate will not implement
     // it, so the first assertion stays non-normative rather than counted as
     // verified.
     non_normative!(
@@ -901,7 +901,7 @@ mod basic_styling {
         );
 
         // The second assertion is compat-mode, which is permanently out of scope
-        // – this crate will not implement it, so it stays non-normative rather
+        // — this crate will not implement it, so it stays non-normative rather
         // than counted as verified.
         non_normative!(
             r#"
@@ -932,7 +932,7 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is permanently out of scope – this crate will not
+        // Compat mode is permanently out of scope — this crate will not
         // implement it, so its output and two assertions stay non-normative
         // rather than counted as verified.
         non_normative!(
@@ -973,7 +973,7 @@ mod basic_styling {
 "#
         );
 
-        // Compat mode is permanently out of scope – this crate will not
+        // Compat mode is permanently out of scope — this crate will not
         // implement it, so its output and four assertions stay non-normative
         // rather than counted as verified.
         non_normative!(

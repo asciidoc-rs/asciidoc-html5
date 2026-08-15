@@ -113,7 +113,7 @@ Your journey begins here.
 
 // The TIP describes wrapping a quote at the start of a book chapter, which is
 // book-doctype behavior out of scope for 1.0 (article is the only structural
-// doctype modeled – see issue #188). The final line is a see-also xref to the
+// doctype modeled — see issue #188). The final line is a see-also xref to the
 // abstract section style page. Both are non-normative.
 non_normative!(
     r#"

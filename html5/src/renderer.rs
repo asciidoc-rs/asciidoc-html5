@@ -86,8 +86,8 @@ const MATHJAX_VERSION: &str = "2.7.9";
 /// `<head>` and a `<script>` before `</body>` — no new dependency, matching the
 /// library's "depend only on `asciidoc-parser`" constraint. The server-side
 /// highlighters (`coderay`, `pygments`, `rouge`), which emit tokenized `<span>`
-/// markup, are **not planned** – reproducing their tokenizer output would need
-/// an in-process highlighter that constraint forbids, or a subprocess – so a
+/// markup, are **not planned** — reproducing their tokenizer output would need
+/// an in-process highlighter that constraint forbids, or a subprocess — so a
 /// source block that requests one keeps its default unhighlighted shape here.
 #[derive(Clone, Copy, PartialEq)]
 enum Highlighter {
@@ -2516,8 +2516,8 @@ impl Renderer<'_> {
     fn highlighter_head(&mut self, document: &Document<'_>) {
         let href = match self.source_highlighter {
             // No client-side highlighter, and the server-side ones
-            // (`coderay`/`pygments`/`rouge`) are not supported – they emit no
-            // stylesheet docinfo here – so there is nothing to link.
+            // (`coderay`/`pygments`/`rouge`) are not supported — they emit no
+            // stylesheet docinfo here — so there is nothing to link.
             None => return,
 
             Some(Highlighter::HighlightJs) => {
@@ -3370,7 +3370,7 @@ impl Renderer<'_> {
     ///
     /// With the `icons` document attribute unset (the default), the caption
     /// label is shown as text (`<div class="title">Note</div>`). With `icons`
-    /// set to `font` – and no per-block `icon` attribute – a Font Awesome glyph
+    /// set to `font` — and no per-block `icon` attribute — a Font Awesome glyph
     /// is emitted (`<i class="fa icon-note" title="Note">`). Otherwise (image
     /// mode, or a per-block `icon` override) an `<img>` points at the resolved
     /// icon URI. The image target is a port of `AbstractNode#icon_uri`: a
@@ -3531,9 +3531,9 @@ impl Renderer<'_> {
     /// Without icons the items render as a plain `<ol>` of `<li><p>…</p></li>`
     /// (the same item shape as [`list_item`](Self::list_item)). When the
     /// document sets `icons` the list becomes a two-column `<table>` whose
-    /// first cell holds the callout number – a Font Awesome `<i
+    /// first cell holds the callout number — a Font Awesome `<i
     /// class="conum">`/`<b>` pair under `:icons: font`, or an `<img>` of
-    /// the numbered callout icon otherwise – and whose second cell holds
+    /// the numbered callout icon otherwise — and whose second cell holds
     /// the item's text and any attached blocks.
     fn colist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
         // Asciidoctor's classes are `['colist', node.style, node.role]`; a
@@ -3608,7 +3608,7 @@ impl Renderer<'_> {
     }
 
     /// Renders `blocks` into a standalone string using the current renderer
-    /// state, with no trailing newline – the counterpart to Asciidoctor's
+    /// state, with no trailing newline — the counterpart to Asciidoctor's
     /// `item.content` (its child blocks' output joined by line feeds). Returns
     /// an empty string when there are no blocks.
     fn render_blocks_to_string<'src>(
@@ -7183,7 +7183,7 @@ mod tests {
     fn input_mtime_drives_the_footer_stamp_over_the_reference_time() {
         // The footer's docdatetime belongs to the `doc*` family, which follows a
         // pinned input mtime even as the reference time ("now", the `local*`
-        // family) differs – mirroring Asciidoctor's `input_mtime`.
+        // family) differs — mirroring Asciidoctor's `input_mtime`.
         let html = convert_with(
             "= Doc\n\nBody.",
             &Options::new()
@@ -7203,8 +7203,8 @@ mod tests {
 
     #[test]
     fn reproducible_suppresses_the_footer_stamp_and_generator_meta() {
-        // `reproducible` drops the two build-volatile pieces – the "Last
-        // updated" stamp and the `generator` meta – so the output is stable
+        // `reproducible` drops the two build-volatile pieces — the "Last
+        // updated" stamp and the `generator` meta — so the output is stable
         // across builds, matching Asciidoctor.
         let html = convert_with(
             "= Doc\n:reproducible:\n\nBody.",
@@ -7565,8 +7565,8 @@ mod tests {
 
     #[test]
     fn revision_line_with_only_a_date_omits_the_version() {
-        // A revision line that carries no version number – just a date, which
-        // does not match the `v<digit>` standalone-revision shape – yields no
+        // A revision line that carries no version number — just a date, which
+        // does not match the `v<digit>` standalone-revision shape — yields no
         // `revnumber`, so only the `revdate` span is emitted. Matches
         // Asciidoctor 2.0.26.
         let html = convert("= Doc\nJane Doe\n2026-01-01\n\nBody.");
@@ -8136,7 +8136,7 @@ mod tests {
     fn document_set_source_highlighter_is_ignored_at_server_and_above() {
         // A document that both enables a highlighter and points its asset dir at
         // an attacker origin must render neither the highlighter nor the script
-        // when converted under `Server` or `Secure` – it falls back to the plain
+        // when converted under `Server` or `Secure` — it falls back to the plain
         // unhighlighted shape.
         for mode in [SafeMode::Server, SafeMode::Secure] {
             let html = convert_with(
@@ -9200,8 +9200,8 @@ mod tests {
     #[test]
     fn cellbgcolor_document_attribute_styles_every_cell() {
         // The `cellbgcolor` document attribute stamps
-        // `style="background-color: …;"` on every cell – header (`<th>`) and
-        // body (`<td>`) alike – matching Asciidoctor 2.0.26.
+        // `style="background-color: …;"` on every cell — header (`<th>`) and
+        // body (`<td>`) alike — matching Asciidoctor 2.0.26.
         let html = crate::convert(
             ":cellbgcolor: red\n\n[cols=\"1,1\", options=\"header\"]\n|===\n|H1 |H2\n|a |b\n|===\n",
         );

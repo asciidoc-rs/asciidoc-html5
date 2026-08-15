@@ -112,7 +112,7 @@ fn help_syntax_prints_the_crib_sheet() {
 
     let sheet = String::from_utf8(output.stdout).expect("stdout is UTF-8");
 
-    // The topic prints the crib sheet itself – a well-formed AsciiDoc document –
+    // The topic prints the crib sheet itself — a well-formed AsciiDoc document —
     // rather than clap's usage statement.
     assert!(
         sheet.starts_with("= AsciiDoc Syntax\n"),

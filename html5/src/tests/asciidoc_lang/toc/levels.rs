@@ -91,7 +91,7 @@ These values represent the section levels.
 }
 
 // When `toclevels` is unset it defaults to `2`, so the TOC lists level-1 (`==`)
-// and level-2 (`===`) titles and stops there – a level-3 (`====`) section is
+// and level-2 (`===`) titles and stops there — a level-3 (`====`) section is
 // omitted. (The line's multipart-book clause, level-0 part titles, relies on
 // the book doctype, a known limitation of this crate, and is not exercised
 // here.)

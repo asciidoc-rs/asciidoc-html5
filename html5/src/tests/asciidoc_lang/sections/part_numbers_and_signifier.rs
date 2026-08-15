@@ -3,7 +3,7 @@
 //!
 //! Part numbering (`partnums`, Roman numerals) and the `part-signifier` prefix
 //! only exist for book parts under `:doctype: book`. This renderer pins the
-//! doctype to `article` (book is out of scope for 1.0 – see issue #188), so
+//! doctype to `article` (book is out of scope for 1.0 — see issue #188), so
 //! nothing on this page is verifiable here and the whole page is tracked
 //! non-normatively.
 
@@ -14,7 +14,7 @@ track_file!("ref/asciidoc-lang/docs/modules/sections/pages/part-numbers-and-sign
 // Part numbering (`partnums`, Roman numerals) and the `part-signifier` prefix
 // are book-doctype behavior (they apply only to book parts, which require
 // `:doctype: book`), which is out of scope for 1.0 (article is the only
-// structural doctype modeled – see issue #188), so this whole page is tracked
+// structural doctype modeled — see issue #188), so this whole page is tracked
 // non-normatively.
 non_normative!(
     r#"

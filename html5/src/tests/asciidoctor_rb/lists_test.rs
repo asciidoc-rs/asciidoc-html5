@@ -19,16 +19,16 @@
 //! context is verified too (checklist rendering — the default ballot-box,
 //! `%interactive`, and `icons=font` markers — is implemented).
 //!
-//! Callout lists (`:colist`) render too – the default `<div class="colist
+//! Callout lists (`:colist`) render too — the default `<div class="colist
 //! arabic"><ol>…` and the icon-based `<table>` variants (`icons`/`icons=font`),
 //! with the callout numbers substituted into the preceding verbatim block by
-//! `asciidoc-parser` – so that context ports directly as well, including the
+//! `asciidoc-parser` — so that context ports directly as well, including the
 //! `NoCalloutFound`/`CalloutListItemOutOfSequence` parse-model warnings.
 //!
 //! What stays `non_normative!` here:
 //! - DocBook-backend tests (this crate targets only the `html5` backend);
 //! - `coderay` source-highlighter tests (server-side syntax highlighting is not
-//!   planned – the renderer never tokenizes source into `<span>` markup);
+//!   planned — the renderer never tokenizes source into `<span>` markup);
 //! - `asciidoc-parser` parser-model assertions that have no rendered-output
 //!   counterpart (`document_from_string` + `find_by(...).level`, the colist
 //!   `.style` check), reproduced but not re-expressed;

@@ -23,7 +23,7 @@ non_normative!(
 :navtitle: Titles and Captions
 :description: Adding a title to a table and controlling its caption label.
 
-Give a table a title with the block-title syntax – a line beginning with `.`
+Give a table a title with the block-title syntax — a line beginning with `.`
 directly above the table. The processor renders it as a `<caption>` and, by
 default, prefixes it with an automatic label such as `Table 1.`, matching
 Asciidoctor's `html5` backend.

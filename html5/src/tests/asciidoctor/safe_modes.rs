@@ -22,9 +22,9 @@ track_file!("ref/asciidoctor/docs/modules/ROOT/pages/safe-modes.adoc");
 // concealment under `SERVER`/`SECURE`. Other mode effects this crate honors —
 // the `docinfo`, `backend`, `doctype`, and `source-highlighter` restrictions,
 // and (through asciidoc-parser's own safe mode, which this crate sets; see #37)
-// include directives and URI reads – are exercised by unit tests elsewhere, so
+// include directives and URI reads — are exercised by unit tests elsewhere, so
 // their spans stay non-normative here (the `source-highlighter`, `icons`, and
-// `data-uri` bullets excepted – all three are verified below). The SVG
+// `data-uri` bullets excepted — all three are verified below). The SVG
 // interactive/inline referencing modes are likewise surfaced and honor the safe
 // mode (below `SECURE` they render an `<object>`/`<svg>`; at `SECURE` a plain
 // `<img>`), exercised by unit tests elsewhere.
@@ -118,7 +118,7 @@ Its integer value is `1`.
 // value enables either. Backend and doctype go further than the page: because
 // html5 is the only backend this crate produces and `article` the only doctype
 // it models, `backend` is pinned to `html5` and `doctype` to `article`, each
-// locked against the document (and the API) in *every* safe mode – subsuming
+// locked against the document (and the API) in *every* safe mode — subsuming
 // SERVER's restriction rather than merely matching it. Docinfo, backend,
 // doctype, source-highlighter, docfile, and docdir are all covered by unit
 // tests in `options.rs`; the source-highlighter lock (#215, the renderer's
@@ -158,7 +158,7 @@ This level trims `docfile` to its relative path and prevents the document from:
 
 // SERVER prevents the document from *setting* attributes that affect
 // conversion. `doctype`/`docinfo`/`backend` are enforced and covered by the
-// `Options` tests; `source-highlighter` is now enforced too (#215) – a document
+// `Options` tests; `source-highlighter` is now enforced too (#215) — a document
 // that enables a highlighter under SERVER is ignored, so no highlighter class
 // or asset `<script>` is emitted and its origin cannot be steered by the
 // document.
@@ -176,7 +176,7 @@ fn server_prevents_the_document_from_setting_source_highlighter() {
         &Options::new().safe_mode(SafeMode::Server),
     );
     // The source block falls back to the default unhighlighted shape, and no
-    // highlighter asset – from the attacker origin or the CDN – is emitted. (The
+    // highlighter asset — from the attacker origin or the CDN — is emitted. (The
     // default stylesheet names a `pre.highlightjs` CSS rule, so the checks target
     // the highlighter markup itself, not the bare word.)
     assert!(

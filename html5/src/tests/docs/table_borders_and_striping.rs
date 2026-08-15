@@ -186,7 +186,7 @@ in the header instead.
 fn roles() {
     verifies!(
         r#"
-A role – set with the shorthand dot prefix – adds your own class to the table,
+A role — set with the shorthand dot prefix — adds your own class to the table,
 appended after the built-in classes:
 
 [,asciidoc]

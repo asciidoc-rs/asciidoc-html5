@@ -12,5 +12,5 @@ ref/asciidoctor/data/stylesheets/coderay-asciidoctor.css text eol=lf
 
 # The `adoc --help syntax` crib sheet is embedded via `include_str!` and the
 # tests assert its exact bytes (it opens with `= AsciiDoc Syntax\n`), so it must
-# stay LF too – a CRLF checkout would embed `\r\n` and break those assertions.
+# stay LF too — a CRLF checkout would embed `\r\n` and break those assertions.
 cli/assets/syntax.adoc text eol=lf

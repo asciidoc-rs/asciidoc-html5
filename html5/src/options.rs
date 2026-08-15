@@ -405,8 +405,8 @@ impl Options {
     /// This drives the `local*` family (`localdate`, `localtime`,
     /// `localdatetime`, `localyear`) and, unless an
     /// [`input_mtime`](Self::input_mtime) is also set, the `doc*` family too.
-    /// Pinning it makes the computed attributes – and any output derived from
-    /// them, such as the footer's "Last updated" line – reproducible, mirroring
+    /// Pinning it makes the computed attributes — and any output derived from
+    /// them, such as the footer's "Last updated" line — reproducible, mirroring
     /// Asciidoctor's handling of the `SOURCE_DATE_EPOCH` environment variable.
     /// See [`ReferenceTime`].
     pub fn reference_time(mut self, reference_time: ReferenceTime) -> Self {
@@ -420,7 +420,7 @@ impl Options {
     /// This is Asciidoctor's `input_mtime` option: the `local*` attributes keep
     /// following the reference time (the real clock, or a
     /// [`reference_time`](Self::reference_time)), while the `doc*` attributes
-    /// reflect the given instant – normally the modification time of the source
+    /// reflect the given instant — normally the modification time of the source
     /// file. See [`ReferenceTime`].
     pub fn input_mtime(mut self, input_mtime: ReferenceTime) -> Self {
         self.input_mtime = Some(input_mtime);
@@ -620,13 +620,13 @@ impl Options {
 
         // Matching Asciidoctor: `Server` and above forbid the *document* from
         // setting `source-highlighter` (Asciidoctor's SERVER "restrict document
-        // from setting … source-highlighter" – `attr_overrides['source-
+        // from setting … source-highlighter" — `attr_overrides['source-
         // highlighter'] ||= nil`). This is a real security boundary: a
         // highlighter emits `<link>`/`<script>` tags into the output whose origin
         // a document `:highlightjsdir:`/`:prettifydir:` can steer, so an
         // untrusted document must not be able to turn one on. Re-seed it silently
         // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
-        // API did not touch it – so a document `:source-highlighter:` is dropped
+        // API did not touch it — so a document `:source-highlighter:` is dropped
         // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
         // opt-in) is still honored, even under `Secure`. This adds the
         // `source-highlighter` piece of the SERVER attribute lock; note
@@ -652,12 +652,12 @@ impl Options {
 
         // Matching Asciidoctor: `Secure` (and above) forbids the *document* from
         // enabling `icons` (Asciidoctor's SECURE "restrict document from enabling
-        // icons" – `attr_overrides['icons'] ||= nil`). An icon-mode admonition or
+        // icons" — `attr_overrides['icons'] ||= nil`). An icon-mode admonition or
         // callout list points at `{iconsdir}` for its image sources, which a
         // document `:iconsdir:` can steer at an arbitrary origin, so an untrusted
         // document must not be able to turn icons on. Re-seed `icons` silently
         // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
-        // API did not touch it – so a document `:icons:`/`:icons: font` is dropped
+        // API did not touch it — so a document `:icons:`/`:icons: font` is dropped
         // with no warning while an API/CLI `-a icons=…` (a trusted opt-in) is
         // still honored. This is the `icons` piece of the SECURE attribute lock
         // (#50). Unlike `source-highlighter`, the icons
@@ -1947,8 +1947,8 @@ mod tests {
 
     // An end-to-end guard that the primary-file-name path reaches the parser's
     // inter-document xref self-reference resolution: naming the primary file
-    // `test.adoc` derives `docname=test`, so `xref:test.adoc[]` – whose path
-    // names the current document – collapses to a same-document reference
+    // `test.adoc` derives `docname=test`, so `xref:test.adoc[]` — whose path
+    // names the current document — collapses to a same-document reference
     // (`href="#"`) with the doctitle as fallback text. The Ruby-port cases in
     // `links_test.rs` drive the same behavior through the `docname` attribute
     // directly (mirroring Asciidoctor's tests); this one covers the

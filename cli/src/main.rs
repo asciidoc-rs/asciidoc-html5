@@ -515,7 +515,7 @@ fn run_with_streams_using(
     check_doctype(cli)?;
 
     // Unlike the library's string API (embedded by default), the CLI defaults to
-    // a standalone document – matching Asciidoctor's command, which writes a full
+    // a standalone document — matching Asciidoctor's command, which writes a full
     // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
     // body-only output. Setting the mode explicitly here also makes `-e` produce
     // embedded output when writing to a file, not just to standard output.
@@ -1303,7 +1303,7 @@ const SOURCE_DATE_EPOCH: &str = "SOURCE_DATE_EPOCH";
 /// Per the [reproducible-builds specification], the variable holds a count of
 /// seconds since the Unix epoch (interpreted as UTC) that fixes the document's
 /// time-dependent attributes. `adoc` honors it the way Asciidoctor does: a
-/// valid value pins the whole clock – both the `local*` and `doc*` families –
+/// valid value pins the whole clock — both the `local*` and `doc*` families —
 /// so it overrides any input file's modification time; an unset or empty value
 /// is ignored (`Ok(None)`); and a *malformed* value fails the run rather than
 /// silently falling back to the wall clock.
@@ -1385,7 +1385,7 @@ fn source_date_epoch_error(value: &str) -> io::Error {
 ///
 /// The time is read as UTC: this toolchain carries no timezone database, so the
 /// computed `doctime`/`docdatetime` print a `UTC` zone rather than a local
-/// offset – the same convention `asciidoc-parser` uses for an unpinned clock.
+/// offset — the same convention `asciidoc-parser` uses for an unpinned clock.
 /// Returns `None` when the file's metadata or modification time is unavailable,
 /// leaving the `doc*` attributes to fall back to the wall clock.
 fn input_file_mtime(path: &Path) -> Option<ReferenceTime> {

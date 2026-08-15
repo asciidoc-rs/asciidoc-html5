@@ -3,7 +3,7 @@
 //!
 //! This page is a cross-backend summary table for the `toc`, `toclevels`,
 //! `toc-title`, and `toc-class` attributes. The concrete html-backend behaviors
-//! it tabulates are verified in detail on the other `toc` module pages – the
+//! it tabulates are verified in detail on the other `toc` module pages — the
 //! default depth of `toclevels` on the *Adjust the TOC Depth* page, the default
 //! `toc-title` on the *Customize the TOC Title* page, and the accepted `toc`
 //! placements on the *Position the TOC* page. Here the html-backend defaults
@@ -39,7 +39,7 @@ const DOC: &str = "\
 === Section Two
 ";
 
-// The page title, the en-dash attribute entry, and the table's opening – the
+// The page title, the en-dash attribute entry, and the table's opening — the
 // commented-out column spec, the `%autowidth` option, and the header row.
 non_normative!(
     r#"

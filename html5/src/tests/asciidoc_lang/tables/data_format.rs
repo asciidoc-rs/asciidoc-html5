@@ -1,8 +1,8 @@
 //! Coverage of the AsciiDoc language description's *Table Data Formats* page.
 //!
-//! The page describes the `format` attribute – the default prefix-separated
+//! The page describes the `format` attribute — the default prefix-separated
 //! values (PSV) format plus the comma-separated (CSV), tab-separated (TSV), and
-//! delimiter-separated (DSV) formats – along with escaping the cell separator,
+//! delimiter-separated (DSV) formats — along with escaping the cell separator,
 //! overriding it with the `separator` attribute, and the `,===` / `:===`
 //! shorthand block delimiters. Each rendered example is verified through
 //! `convert`: PSV escaping, the CSV and DSV tables (built from the shared

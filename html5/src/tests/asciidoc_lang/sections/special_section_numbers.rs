@@ -63,7 +63,7 @@ The assignment of appendix numbers isn't affected by `sectnums` as their section
 }
 
 // Book parts and their `partnums` numbering are out of scope for 1.0 (article
-// is the only structural doctype modeled – see issue #188), so this is tracked
+// is the only structural doctype modeled — see issue #188), so this is tracked
 // non-normatively.
 non_normative!(
     r#"

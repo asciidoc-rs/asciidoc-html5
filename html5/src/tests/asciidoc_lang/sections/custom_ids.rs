@@ -3,10 +3,10 @@
 //!
 //! The page describes assigning a custom ID and optional reference text to a
 //! section, and registering auxiliary inline anchors on a section title. The
-//! verifiable rendering rules – the custom-ID shorthand, the ID-plus-reftext
+//! verifiable rendering rules — the custom-ID shorthand, the ID-plus-reftext
 //! shorthand and its block-anchor equivalent (driven through an unlabeled
 //! xref), and auxiliary inline anchors at the beginning, at the end, and
-//! alongside an explicit primary ID – are checked through `convert`. The
+//! alongside an explicit primary ID — are checked through `convert`. The
 //! descriptive prose and the reftext-quoting, XML-Name, UTF-8/a2x, and
 //! "auxiliary IDs are not registered" notes are tracked non-normative.
 
@@ -187,7 +187,7 @@ These additional anchor points don't interfere with the declaration of the prima
         r#"<h2 id="_section_title"><a id="secondary-id"></a><a id="tertiary-id"></a>Section Title</h2>"#
     ));
 
-    // Anchors at the end follow the title text – the anchor lands where it is
+    // Anchors at the end follow the title text — the anchor lands where it is
     // placed in the source.
     let end = convert("== Section Title[[secondary-id]][[tertiary-id]]");
 

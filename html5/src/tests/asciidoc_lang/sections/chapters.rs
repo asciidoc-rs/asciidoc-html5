@@ -2,7 +2,7 @@
 //!
 //! Chapters (a level 1 section without a block style under the book doctype)
 //! and the `chapter-signifier` prefix only exist under `:doctype: book`. This
-//! renderer pins the doctype to `article` (book is out of scope for 1.0 – see
+//! renderer pins the doctype to `article` (book is out of scope for 1.0 — see
 //! issue #188), so nothing on this page is verifiable here and the whole page
 //! is tracked non-normatively.
 
@@ -12,7 +12,7 @@ track_file!("ref/asciidoc-lang/docs/modules/sections/pages/chapters.adoc");
 
 // Chapters and the `chapter-signifier` prefix are book-doctype behavior (a
 // chapter is a level 1 section under `:doctype: book`), which is out of scope
-// for 1.0 (article is the only structural doctype modeled – see issue #188),
+// for 1.0 (article is the only structural doctype modeled — see issue #188),
 // so this whole page is tracked non-normatively.
 non_normative!(
     r#"

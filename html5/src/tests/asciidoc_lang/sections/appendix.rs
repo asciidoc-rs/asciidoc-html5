@@ -108,7 +108,7 @@ include::example$appendix.adoc[tag=appx-article-out]
 
 // The book (and multi-part book) appendix examples require the book doctype,
 // which is out of scope for 1.0 (article is the only structural doctype modeled
-// – see issue #188), so this is tracked non-normatively.
+// — see issue #188), so this is tracked non-normatively.
 non_normative!(
     r#"
 For books, the appendix must be defined as a level 1 section (`==`) if you want the appendix to be a adjacent to the chapters.
@@ -141,7 +141,7 @@ non_normative!(
 );
 
 /// A rendered appendix title is built from a label (the `appendix-caption`
-/// value), a letter, a colon, and the section title – for example,
+/// value), a letter, a colon, and the section title — for example,
 /// `Appendix A: Data Access Matrix`.
 #[test]
 fn appendix_label_components() {

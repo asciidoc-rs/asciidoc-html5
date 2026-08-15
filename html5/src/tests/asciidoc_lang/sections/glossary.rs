@@ -64,7 +64,7 @@ The glossary section is defined as a level 1 section (`==`) when:
 }
 
 // Book-doctype behavior (parts and the whole-book level-0 special section) is
-// out of scope for 1.0 (article is the only structural doctype modeled – see
+// out of scope for 1.0 (article is the only structural doctype modeled — see
 // issue #188), so this level-0 variant is tracked non-normatively.
 non_normative!(
     r#"
