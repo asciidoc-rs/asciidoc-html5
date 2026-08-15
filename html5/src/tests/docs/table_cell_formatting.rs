@@ -24,7 +24,7 @@ non_normative!(
 :navtitle: Cell Formatting
 :description: Cell styles, alignment, spans, and duplication in asciidoc-html5 tables.
 
-A cell specifier – the operators between the `|` and the cell content – controls
+A cell specifier — the operators between the `|` and the cell content — controls
 a cell's style, alignment, and how many columns or rows it spans.
 `asciidoc-html5` renders the same cell markup as Asciidoctor's `html5` backend.
 
@@ -62,7 +62,7 @@ l|literal
 |===
 ----
 
-Each style wraps the content in the matching element – `<em>`, `<strong>`,
+Each style wraps the content in the matching element — `<em>`, `<strong>`,
 `<code>`, or a literal `<pre>`:
 
 [,html]
@@ -290,8 +290,8 @@ non_normative!(
 fn asciidoc_cells() {
     verifies!(
         r#"
-An `a` cell holds full block content – lists, delimited blocks, and block macros
-– rendered as a nested document inside a `<div class="content">`:
+An `a` cell holds full block content — lists, delimited blocks, and block macros
+— rendered as a nested document inside a `<div class="content">`:
 
 [,asciidoc]
 ----

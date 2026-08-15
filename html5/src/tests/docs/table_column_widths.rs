@@ -271,7 +271,7 @@ non_normative!(
 
 Column sizing is fully supported: proportional `cols` widths, a fixed table
 `width`, the `autowidth` option, and per-column `~` autowidth all match
-Asciidoctor's output. To set the columns themselves – their alignment and style –
+Asciidoctor's output. To set the columns themselves — their alignment and style —
 see xref:table-cell-formatting.adoc[].
 "#
 );
