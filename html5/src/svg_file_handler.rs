@@ -29,7 +29,10 @@
 
 use std::path::{Path, PathBuf};
 
-use asciidoc_parser::{parser::SvgFileHandler, Parser, SafeMode};
+use asciidoc_parser::{
+    parser::{RenderContext, SvgFileHandler},
+    SafeMode,
+};
 
 use crate::include_handler::{read_confined, resolve, ReadOutcome};
 
@@ -66,7 +69,7 @@ impl FsSvgFileHandler {
 }
 
 impl SvgFileHandler for FsSvgFileHandler {
-    fn resolve_svg(&self, target: &str, _parser: &Parser) -> Option<String> {
+    fn resolve_svg(&self, target: &str, _context: &RenderContext) -> Option<String> {
         read_svg_file(&self.base_dir, self.safe, target)
     }
 }
@@ -277,9 +280,9 @@ mod tests {
         sync::atomic::{AtomicU64, Ordering},
     };
 
-    use asciidoc_parser::{parser::SvgFileHandler, Parser, SafeMode};
+    use asciidoc_parser::SafeMode;
 
-    use super::FsSvgFileHandler;
+    use super::read_svg_file;
 
     /// Writes `files` (name → content) into a fresh temp directory and returns
     /// its canonical path, so the handler's jail comparisons share one absolute
@@ -304,15 +307,28 @@ mod tests {
         dir.canonicalize().expect("canonicalize scratch dir")
     }
 
-    fn handler(dir: &std::path::Path, safe: SafeMode) -> FsSvgFileHandler {
-        FsSvgFileHandler::new(dir.to_path_buf(), safe)
+    /// Resolves `target` the way [`FsSvgFileHandler`] anchored at `dir` under
+    /// `safe` would.
+    ///
+    /// [`SvgFileHandler::resolve_svg`] takes a
+    /// [`RenderContext`](asciidoc_parser::parser::RenderContext), which only
+    /// the parser can construct, so these tests drive the reading path the
+    /// impl delegates to instead. The impl is that delegation and nothing
+    /// else; the wiring itself is covered end to end by the inline-SVG
+    /// rendering tests.
+    ///
+    /// [`FsSvgFileHandler`]: super::FsSvgFileHandler
+    /// [`SvgFileHandler::resolve_svg`]:
+    ///     asciidoc_parser::parser::SvgFileHandler::resolve_svg
+    fn resolve_svg(dir: &std::path::Path, safe: SafeMode, target: &str) -> Option<String> {
+        read_svg_file(dir, safe, target)
     }
 
     #[test]
     fn reads_an_svg_from_the_base_directory_verbatim() {
         let dir = scratch(&[("circle.svg", "<svg><circle/></svg>")]);
 
-        let got = handler(&dir, SafeMode::Server).resolve_svg("circle.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "circle.svg");
 
         assert_eq!(got.as_deref(), Some("<svg><circle/></svg>"));
         let _ = fs::remove_dir_all(&dir);
@@ -324,8 +340,7 @@ mod tests {
         // subdirectory in the target resolves under the base directory.
         let dir = scratch(&[("images/circle.svg", "<svg/>")]);
 
-        let got =
-            handler(&dir, SafeMode::Server).resolve_svg("images/circle.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "images/circle.svg");
 
         assert_eq!(got.as_deref(), Some("<svg/>"));
         let _ = fs::remove_dir_all(&dir);
@@ -335,7 +350,7 @@ mod tests {
     fn a_missing_file_resolves_to_none() {
         let dir = scratch(&[]);
 
-        let got = handler(&dir, SafeMode::Server).resolve_svg("absent.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "absent.svg");
 
         assert_eq!(got, None);
         let _ = fs::remove_dir_all(&dir);
@@ -348,8 +363,7 @@ mod tests {
         // `circle.svg` inside the base, so the in-base file is read.
         let dir = scratch(&[("circle.svg", "<svg/>")]);
 
-        let got =
-            handler(&dir, SafeMode::Server).resolve_svg("../../circle.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "../../circle.svg");
 
         assert_eq!(got.as_deref(), Some("<svg/>"));
         let _ = fs::remove_dir_all(&dir);
@@ -363,9 +377,10 @@ mod tests {
         let base = scratch(&[]);
         let other = scratch(&[("secret.svg", "<svg/>")]);
 
-        let got = handler(&base, SafeMode::Server).resolve_svg(
+        let got = resolve_svg(
+            &base,
+            SafeMode::Server,
             other.join("secret.svg").to_str().unwrap(),
-            &Parser::default(),
         );
 
         assert_eq!(got, None);
@@ -380,9 +395,10 @@ mod tests {
         let base = scratch(&[]);
         let other = scratch(&[("secret.svg", "<svg>OUTSIDE</svg>")]);
 
-        let got = handler(&base, SafeMode::Unsafe).resolve_svg(
+        let got = resolve_svg(
+            &base,
+            SafeMode::Unsafe,
             other.join("secret.svg").to_str().unwrap(),
-            &Parser::default(),
         );
 
         assert_eq!(got.as_deref(), Some("<svg>OUTSIDE</svg>"));
@@ -396,7 +412,7 @@ mod tests {
     fn reads_normalize_the_trailing_newline_away() {
         let dir = scratch(&[("circle.svg", "<svg><circle/></svg>\n")]);
 
-        let got = handler(&dir, SafeMode::Server).resolve_svg("circle.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "circle.svg");
 
         assert_eq!(got.as_deref(), Some("<svg><circle/></svg>"));
         let _ = fs::remove_dir_all(&dir);
@@ -408,7 +424,7 @@ mod tests {
     fn an_empty_file_resolves_to_none() {
         let dir = scratch(&[("blank.svg", "   \n")]);
 
-        let got = handler(&dir, SafeMode::Server).resolve_svg("blank.svg", &Parser::default());
+        let got = resolve_svg(&dir, SafeMode::Server, "blank.svg");
 
         assert_eq!(got, None);
         let _ = fs::remove_dir_all(&dir);
