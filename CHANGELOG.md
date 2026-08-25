@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.7...asciidoc-html5-v0.1.8)
+_25 August 2026_
+
+### Documented
+
+* Revise usage of em and en dashes ([#323](https://github.com/asciidoc-rs/asciidoc-html5/pull/323))
+
+### Updated dependencies
+
+* *(deps)* Bump asciidoc-parser from 0.29.19 to 0.30.0 ([#324](https://github.com/asciidoc-rs/asciidoc-html5/pull/324))
+
 ## [0.1.7](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.6...asciidoc-html5-v0.1.7)
 _09 August 2026_
 
