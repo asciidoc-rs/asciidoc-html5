@@ -37,6 +37,6 @@ pub(super) fn ran_in_header(setup: &str, author_first: &str, marker: &str) -> bo
     };
 
     let span = &html[start..];
-    let end = span.find("</span>").map_or(span.len(), |i| i);
+    let end = span.find("</span>").unwrap_or(span.len());
     span[..end].contains(marker)
 }
