@@ -15,5 +15,8 @@ version = "0.1.8"
 # feature branch (asciidoc-rs/asciidoc-parser#1059) until it merges and ships in
 # a release, then return to a plain crates.io version. The `version` key keeps
 # cargo-deny's wildcard ban satisfied while the `git` source is in effect.
-asciidoc-parser = { version = "0.30.0", git = "https://github.com/asciidoc-rs/asciidoc-parser", branch = "inline-ast" }
+# (Currently pinned to the branch of asciidoc-rs/asciidoc-parser#1334 — the
+# inline-ast performance fix — so CI benchmarks measure it; move back to
+# `branch = "inline-ast"` once that PR merges.)
+asciidoc-parser = { version = "0.30.0", git = "https://github.com/asciidoc-rs/asciidoc-parser", branch = "perf-inline-builder-regex-hot-path" }
 scraper = "0.27"

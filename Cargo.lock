@@ -114,7 +114,7 @@ dependencies = [
 [[package]]
 name = "asciidoc-parser"
 version = "0.30.0"
-source = "git+https://github.com/asciidoc-rs/asciidoc-parser?branch=inline-ast#25ad4070d867b23a3043e7ddc831760aeecfcaba"
+source = "git+https://github.com/asciidoc-rs/asciidoc-parser?branch=perf-inline-builder-regex-hot-path#3bf8e74d8b5e93338552597a7e1a9367ec9c1b5d"
 dependencies = [
  "bytecount",
  "memchr",
