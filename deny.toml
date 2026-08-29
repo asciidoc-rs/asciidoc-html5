@@ -26,7 +26,10 @@ allow = ["Apache-2.0", "MIT", "Unicode-DFS-2016", "Unicode-3.0"]
 confidence-threshold = 0.9
 
 [sources]
-allow-git = []
+# TEMPORARY — remove before merging to main: the workspace tracks
+# asciidoc-parser's `inline-ast` feature branch (asciidoc-rs/asciidoc-parser#1059).
+# Restore `allow-git = []` when the dependency returns to crates.io.
+allow-git = ["https://github.com/asciidoc-rs/asciidoc-parser"]
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 unknown-git = "deny"
 unknown-registry = "deny"

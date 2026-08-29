@@ -2,8 +2,9 @@
 //!
 //! # How the walk works
 //!
-//! The parser applies *inline* substitutions eagerly: by the time we hold a
-//! [`Document`], every block's content and title is already an
+//! The parser turns each block's *inline* content into an inline AST and
+//! memoizes its built-in HTML fold: by the time we hold a [`Document`], every
+//! block's `rendered_html_content()` and title is already an
 //! Asciidoctor-compatible HTML *fragment* (with `<strong>`, `<a href>`, escaped
 //! special characters, and so on). This crate therefore never parses inline
 //! markup itself — its whole job is to wrap those fragments in the block-level
@@ -159,7 +160,7 @@ fn renders_nothing(block: &Block<'_>) -> bool {
     // not a comment — so it renders as `<p></p>`.
     matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
         && block
-            .rendered_content()
+            .rendered_html_content()
             .unwrap_or_default()
             .trim()
             .is_empty()
@@ -976,7 +977,7 @@ fn as_list_item<'src>(block: &'src Block<'src>) -> Option<&'src ListItem<'src>> 
 /// `DefinedTerm`, so the `None` case never arises during rendering.
 fn dlist_term_text(list_item: &ListItem<'_>) -> Option<String> {
     match list_item.list_item_marker() {
-        ListItemMarker::DefinedTerm { term, .. } => Some(term.rendered().to_string()),
+        ListItemMarker::DefinedTerm { term, .. } => Some(term.rendered_html().to_string()),
         _ => None,
     }
 }
@@ -1133,8 +1134,8 @@ const MAX_TAB_SIZE: i64 = 16;
 ///
 /// A literal paragraph detected from indentation has its content flattened by
 /// the parser: it strips the first line's indent from every line before the
-/// renderer sees it (via `rendered_content`). Asciidoctor instead removes only
-/// the *common* (minimum) indent, so an over-indented first line keeps the
+/// renderer sees it (via `rendered_html_content`). Asciidoctor instead removes
+/// only the *common* (minimum) indent, so an over-indented first line keeps the
 /// extra. Re-applying each source line's true leading whitespace here lets the
 /// common-indent removal in [`adjust_indentation`] reproduce that (#168).
 ///
@@ -1204,14 +1205,15 @@ fn common_leading_indent(lines: &[&str]) -> Option<usize> {
 /// `lines` from its raw source span, reproducing Asciidoctor's dedent.
 ///
 /// `asciidoc-parser` rewrites the leading whitespace of a list item's wrapped
-/// principal lines before the renderer sees it via `rendered_content`, and does
-/// so inconsistently, so the correct indentation is recovered here from the raw
-/// span instead. Asciidoctor keeps the item's inline marker/term text (its
-/// first line) verbatim and runs `Parser.adjust_indentation!` over the *folded*
-/// continuation lines that follow — removing their common (minimum) indent, or
-/// nothing when any of them is flush left. When the item has **no** inline text
-/// (a description-list term whose text folds up from a subsequent line), there
-/// is no verbatim first line and the whole principal is the folded paragraph.
+/// principal lines before the renderer sees it via `rendered_html_content`, and
+/// does so inconsistently, so the correct indentation is recovered here from
+/// the raw span instead. Asciidoctor keeps the item's inline marker/term text
+/// (its first line) verbatim and runs `Parser.adjust_indentation!` over the
+/// *folded* continuation lines that follow — removing their common (minimum)
+/// indent, or nothing when any of them is flush left. When the item has **no**
+/// inline text (a description-list term whose text folds up from a subsequent
+/// line), there is no verbatim first line and the whole principal is the folded
+/// paragraph.
 ///
 /// `has_inline_text` says which case applies: the caller sets it from whether
 /// the principal's first source line coincides with the marker line (a flush-
@@ -1274,10 +1276,10 @@ fn restore_list_principal_indent(lines: &mut [String], raw_span: &str, has_inlin
 
 /// The indent-corrected principal (first attached block) text of a list item,
 /// the counterpart to Asciidoctor's `item.text`. It is the block's
-/// `rendered_content` with a wrapped principal line's hanging indent restored
-/// (see [`restore_list_principal_indent`]); indent recovery applies only to a
-/// simple paragraph — the shape list principal text always takes — so any
-/// other block is returned verbatim.
+/// `rendered_html_content` with a wrapped principal line's hanging indent
+/// restored (see [`restore_list_principal_indent`]); indent recovery applies
+/// only to a simple paragraph — the shape list principal text always takes — so
+/// any other block is returned verbatim.
 ///
 /// `item_line` is the source line of the item's marker (its `HasSpan` line):
 /// the principal carries inline marker/term text exactly when its own first
@@ -1291,7 +1293,7 @@ fn restore_list_principal_indent(lines: &mut [String], raw_span: &str, has_inlin
 /// keeping this allocation-free off the hot path; only a multi-line paragraph
 /// pays for the split/restore/join.
 fn list_principal_content<'src>(block: &'src Block<'src>, item_line: usize) -> Cow<'src, str> {
-    let content = block.rendered_content().unwrap_or_default();
+    let content = block.rendered_html_content().unwrap_or_default();
 
     if !content.contains('\n')
         || !matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
@@ -2303,18 +2305,19 @@ impl Renderer<'_> {
     ///
     /// This mirrors Asciidoctor's inline doctype, which "converts a single
     /// paragraph, verbatim, or raw block" — the block kinds that expose
-    /// rendered inline content ([`IsBlock::rendered_content`]). When the first
-    /// block is one of those, its content (already substituted by the parser)
-    /// is emitted directly; when it is anything else — a compound block, a
-    /// list, a section — there is no inline candidate, and this emits nothing.
-    /// (Asciidoctor additionally logs a warning and returns `nil` in that case;
-    /// this crate has no logger, so it produces the empty output without the
-    /// warning.) Any blocks after the first are ignored, as in Asciidoctor.
+    /// rendered inline content ([`IsBlock::rendered_html_content`]). When the
+    /// first block is one of those, its content (already substituted by the
+    /// parser) is emitted directly; when it is anything else — a compound
+    /// block, a list, a section — there is no inline candidate, and this
+    /// emits nothing. (Asciidoctor additionally logs a warning and returns
+    /// `nil` in that case; this crate has no logger, so it produces the
+    /// empty output without the warning.) Any blocks after the first are
+    /// ignored, as in Asciidoctor.
     fn inline_document(&mut self, document: &Document<'_>) {
         if let Some(content) = document
             .child_blocks()
             .next()
-            .and_then(|block| block.rendered_content())
+            .and_then(|block| block.rendered_html_content())
         {
             self.line(content);
         }
@@ -2894,7 +2897,7 @@ impl Renderer<'_> {
     fn paragraph<'src>(&mut self, block: &'src Block<'src>) {
         self.open_block_wrapper(block, "paragraph");
         self.block_title(block);
-        let content = block.rendered_content().unwrap_or_default();
+        let content = block.rendered_html_content().unwrap_or_default();
         self.line(&format!("<p>{content}</p>"));
         self.line("</div>");
     }
@@ -3052,7 +3055,7 @@ impl Renderer<'_> {
     /// other verbatim/raw content, leading and trailing blank lines are
     /// trimmed.
     fn pass_block<'src>(&mut self, block: &'src Block<'src>) {
-        let content = block.rendered_content().unwrap_or_default();
+        let content = block.rendered_html_content().unwrap_or_default();
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
         strip_surrounding_blank_lines(&mut lines);
         self.line(&lines.join("\n"));
@@ -3099,7 +3102,10 @@ impl Renderer<'_> {
         self.block_title(block);
         self.line("<div class=\"content\">");
 
-        let mut equation = block.rendered_content().unwrap_or_default().to_string();
+        let mut equation = block
+            .rendered_html_content()
+            .unwrap_or_default()
+            .to_string();
 
         if stem_type == StemType::AsciiMath && equation.contains('\n') {
             equation = rewrite_asciimath_breaks(&equation, open, close);
@@ -3127,7 +3133,7 @@ impl Renderer<'_> {
     /// the document `source-indent` attribute supplies a default indent, which
     /// Asciidoctor applies only to source blocks.
     fn verbatim_content<'src>(&self, block: &'src Block<'src>, is_source: bool) -> String {
-        let content = block.rendered_content().unwrap_or_default();
+        let content = block.rendered_html_content().unwrap_or_default();
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
 
         // An *implicit* literal paragraph — one detected from indentation rather
@@ -3285,7 +3291,7 @@ impl Renderer<'_> {
             QuoteType::Verse => {
                 self.open_block_wrapper(block, "verseblock");
                 self.block_title(block);
-                let content = block.rendered_content().unwrap_or_default();
+                let content = block.rendered_html_content().unwrap_or_default();
                 self.line(&format!("<pre class=\"content\">{content}</pre>"));
             }
         }
@@ -4107,14 +4113,14 @@ impl Renderer<'_> {
                 if is_head {
                     // A header cell is plain inline text, never paragraph-split
                     // or style-wrapped.
-                    simple.rendered().to_string()
+                    simple.rendered_html().to_string()
                 } else if cell.style() == ColumnStyle::Literal {
                     format!(
                         "<div class=\"literal\"><pre>{}</pre></div>",
-                        simple.rendered()
+                        simple.rendered_html()
                     )
                 } else {
-                    cell_paragraphs(cell, simple.rendered())
+                    cell_paragraphs(cell, simple.rendered_html())
                 }
             }
         };
@@ -4173,7 +4179,7 @@ impl Renderer<'_> {
         if block.content_model() == ContentModel::Compound {
             self.blocks(block.child_blocks());
         } else {
-            let content = block.rendered_content().unwrap_or_default();
+            let content = block.rendered_html_content().unwrap_or_default();
             self.line(content);
         }
     }
@@ -5281,7 +5287,7 @@ fn render_cell_document<'s>(
         // real first paragraph is what shows.
         return blocks
             .iter()
-            .find_map(|block| block.rendered_content())
+            .find_map(|block| block.rendered_html_content())
             .unwrap_or_default()
             .to_string();
     }

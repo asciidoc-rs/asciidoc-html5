@@ -424,13 +424,13 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 ///
 /// # Inline substitution is the parser's job
 ///
-/// `asciidoc-parser` applies inline substitutions (quotes, replacements,
-/// macros, cross references, attribute references) *eagerly*, at parse time,
-/// through its default HTML [`InlineSubstitutionRenderer`]. Every block's
-/// [`rendered_content`] and [`title`] is therefore already an
-/// Asciidoctor-compatible inline HTML fragment. This crate does not
-/// re-implement inline formatting; it only assembles block structure around
-/// those fragments.
+/// `asciidoc-parser` parses each block's inline content (quotes, replacements,
+/// macros, cross references, attribute references) into an inline AST and
+/// exposes its built-in HTML fold — the work of its default
+/// [`InlineRenderer`] — as the block's [`rendered_html_content`] and
+/// [`title`]: each is already an Asciidoctor-compatible inline HTML fragment.
+/// This crate does not re-implement inline formatting; it only assembles block
+/// structure around those fragments.
 ///
 /// # Baseline coverage
 ///
@@ -465,8 +465,8 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// SVG is unaffected either way: `asciidoc-parser` reads and embeds it at parse
 /// time, so it is already present in the [`Document`] this renders.
 ///
-/// [`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
-/// [`rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
+/// [`InlineRenderer`]: asciidoc_parser::parser::InlineRenderer
+/// [`rendered_html_content`]: asciidoc_parser::blocks::IsBlock::rendered_html_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
     renderer::render_document(document, None, false, None)
