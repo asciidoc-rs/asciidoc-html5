@@ -145,8 +145,8 @@ Type `ls` to view the files in the directory or navigate to the directory in a f
 "#
     );
 
-    // Listing the directory shows the derived _my-document.html_ file, whose name
-    // Asciidoctor takes from the input document.
+    // Listing the directory shows the derived _my-document.html_ file, whose
+    // name Asciidoctor takes from the input document.
     verifies!(
         r#"
 You should see a new file named [.path]_my-document.html_.
@@ -217,8 +217,8 @@ fn previews_html_on_stdout() {
 "#
     );
 
-    // Drive `adoc <file> -o -`: the dash forces the HTML to standard output, and
-    // no derived file is written.
+    // Drive `adoc <file> -o -`: the dash forces the HTML to standard output,
+    // and no derived file is written.
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "adoc-html-backend-stdout-{}.adoc",

@@ -106,8 +106,9 @@ As with the default stylesheet, you can set the `linkcss` document attribute and
 "#
     );
 
-    // The page sets both attributes from the CLI (`-a stylesheet=… -a linkcss`);
-    // we supply them the same way through `Options`, the API `adoc -a` feeds.
+    // The page sets both attributes from the CLI (`-a stylesheet=… -a
+    // linkcss`); we supply them the same way through `Options`, the API
+    // `adoc -a` feeds.
     let html = convert_with(
         "= Doc\n\ntext",
         &Options::new()
@@ -116,7 +117,8 @@ As with the default stylesheet, you can set the `linkcss` document attribute and
     );
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-stylesheet.css\">"));
 
-    // A custom stylesheet gets neither the default stylesheet nor the web fonts.
+    // A custom stylesheet gets neither the default stylesheet nor the web
+    // fonts.
     assert!(!html.contains("./asciidoctor.css"));
     assert!(!html.contains("fonts.googleapis.com"));
 }
@@ -209,8 +211,9 @@ If you invoke Asciidoctor as follows:
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./my-styles/my-stylesheet.css\">"));
 
     // The shown HTML snippet is illustrative and uses the *default* file name
-    // (`asciidoctor.css`) rather than the custom one; the authoritative behavior
-    // (mirrored `stylesdir` + the actual stylesheet name) is asserted above.
+    // (`asciidoctor.css`) rather than the custom one; the authoritative
+    // behavior (mirrored `stylesdir` + the actual stylesheet name) is
+    // asserted above.
     non_normative!(
         r#"
 Then when you inspect the HTML, you will see:

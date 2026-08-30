@@ -140,8 +140,8 @@ fn writes_to_stdout_with_dash() {
 "#
     );
 
-    // Drive `adoc <file> -o -`: the dash forces the HTML to standard output, and
-    // no derived file is written.
+    // Drive `adoc <file> -o -`: the dash forces the HTML to standard output,
+    // and no derived file is written.
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "adoc-first-file-stdout-{}.adoc",

@@ -79,8 +79,8 @@ This is a sidebar with a role assigned to it, rolename.
             "[.rolename]\n****\nThis is a sidebar with a role assigned to it, rolename.\n****\n",
         );
 
-        // The dot shorthand sets the `role`, which the renderer emits as an HTML
-        // class alongside the block's context class.
+        // The dot shorthand sets the `role`, which the renderer emits as an
+        // HTML class alongside the block's context class.
         assert_css(&output, "div.sidebarblock.rolename", 1);
     }
 
@@ -108,7 +108,8 @@ The role values are turned into a space-separated list of values, `role1 role2`.
             "[.role1.role2]\n****\nThis is a sidebar with two roles assigned to it, role1 and role2.\n****\n",
         );
 
-        // Each dotted value becomes its own class: `class="sidebarblock role1 role2"`.
+        // Each dotted value becomes its own class: `class="sidebarblock role1
+        // role2"`.
         assert_css(&output, "div.sidebarblock.role1.role2", 1);
     }
 
@@ -137,7 +138,8 @@ This is a sidebar with one role assigned to it, rolename.
             "[role=rolename]\n****\nThis is a sidebar with one role assigned to it, rolename.\n****\n",
         );
 
-        // The formal `role=` syntax produces the same class as the shorthand dot.
+        // The formal `role=` syntax produces the same class as the shorthand
+        // dot.
         assert_css(&output, "div.sidebarblock.rolename", 1);
     }
 

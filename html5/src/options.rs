@@ -590,11 +590,12 @@ impl Options {
         // affects the HTML.
 
         // Matching Asciidoctor: `Server` and above forbid the *document* from
-        // controlling docinfo — only the API may (Asciidoctor's SERVER "prevents
-        // the document from setting … docinfo"). Re-seed docinfo *silently*
-        // locked (`ApiOnly`) at whatever value the API directives resolved to,
-        // or unset when the API did not touch it, so any document `:docinfo:` is
-        // dropped with no warning and a docinfo file is read only when the API
+        // controlling docinfo — only the API may (Asciidoctor's SERVER
+        // "prevents the document from setting … docinfo"). Re-seed
+        // docinfo *silently* locked (`ApiOnly`) at whatever value the
+        // API directives resolved to, or unset when the API did not
+        // touch it, so any document `:docinfo:` is dropped with no
+        // warning and a docinfo file is read only when the API
         // asked for it. This runs after the directive loop, so it wins — and,
         // unlike a plain `mentions` check, it also covers a *soft* default: a
         // soft API value seeds `docinfo` as document-overridable, which would
@@ -622,13 +623,14 @@ impl Options {
         // setting `source-highlighter` (Asciidoctor's SERVER "restrict document
         // from setting … source-highlighter" — `attr_overrides['source-
         // highlighter'] ||= nil`). This is a real security boundary: a
-        // highlighter emits `<link>`/`<script>` tags into the output whose origin
-        // a document `:highlightjsdir:`/`:prettifydir:` can steer, so an
-        // untrusted document must not be able to turn one on. Re-seed it silently
-        // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
-        // API did not touch it — so a document `:source-highlighter:` is dropped
-        // with no warning while an API/CLI `-a source-highlighter=…` (a trusted
-        // opt-in) is still honored, even under `Secure`. This adds the
+        // highlighter emits `<link>`/`<script>` tags into the output whose
+        // origin a document `:highlightjsdir:`/`:prettifydir:` can
+        // steer, so an untrusted document must not be able to turn one
+        // on. Re-seed it silently locked (`ApiOnly`) at whatever the
+        // API resolved to, or unset when the API did not touch it — so
+        // a document `:source-highlighter:` is dropped with no warning
+        // while an API/CLI `-a source-highlighter=…` (a trusted opt-in)
+        // is still honored, even under `Secure`. This adds the
         // `source-highlighter` piece of the SERVER attribute lock; note
         // Asciidoctor 2.0.26 does *not* additionally disable an API-set
         // highlighter under `Secure` (verified against the oracle), so neither
@@ -650,19 +652,21 @@ impl Options {
             };
         }
 
-        // Matching Asciidoctor: `Secure` (and above) forbids the *document* from
-        // enabling `icons` (Asciidoctor's SECURE "restrict document from enabling
-        // icons" — `attr_overrides['icons'] ||= nil`). An icon-mode admonition or
-        // callout list points at `{iconsdir}` for its image sources, which a
-        // document `:iconsdir:` can steer at an arbitrary origin, so an untrusted
+        // Matching Asciidoctor: `Secure` (and above) forbids the *document*
+        // from enabling `icons` (Asciidoctor's SECURE "restrict
+        // document from enabling icons" — `attr_overrides['icons'] ||=
+        // nil`). An icon-mode admonition or callout list points at
+        // `{iconsdir}` for its image sources, which a document `:
+        // iconsdir:` can steer at an arbitrary origin, so an untrusted
         // document must not be able to turn icons on. Re-seed `icons` silently
         // locked (`ApiOnly`) at whatever the API resolved to, or unset when the
-        // API did not touch it — so a document `:icons:`/`:icons: font` is dropped
-        // with no warning while an API/CLI `-a icons=…` (a trusted opt-in) is
-        // still honored. This is the `icons` piece of the SECURE attribute lock
-        // (#50). Unlike `source-highlighter`, the icons
-        // restriction begins at `Secure`, not `Server` — `Server` still allows
-        // the document to enable icons, matching the oracle.
+        // API did not touch it — so a document `:icons:`/`:icons: font` is
+        // dropped with no warning while an API/CLI `-a icons=…` (a
+        // trusted opt-in) is still honored. This is the `icons` piece
+        // of the SECURE attribute lock (#50). Unlike
+        // `source-highlighter`, the icons restriction begins at
+        // `Secure`, not `Server` — `Server` still allows the document
+        // to enable icons, matching the oracle.
         if mode >= SafeMode::Secure {
             let ctx = ModificationContext::ApiOnly;
             parser = match self.last_action("icons") {
@@ -681,12 +685,12 @@ impl Options {
         }
 
         // Note: `data-uri` is deliberately *not* re-seeded here. Asciidoctor's
-        // SECURE keeps the `data-uri` attribute set and instead gates the actual
-        // image embedding in the converter (`safe < SECURE && (attr? 'data-uri')`
-        // in `abstract_node.rb`), so `{data-uri}` still resolves for a document
-        // that reads it. This crate matches that attribute state; data-uri image
-        // embedding itself is out of scope
-        // (https://github.com/asciidoc-rs/asciidoc-html5/issues/51).
+        // SECURE keeps the `data-uri` attribute set and instead gates the
+        // actual image embedding in the converter (`safe < SECURE &&
+        // (attr? 'data-uri')` in `abstract_node.rb`), so `{data-uri}`
+        // still resolves for a document that reads it. This crate
+        // matches that attribute state; data-uri image embedding itself
+        // is out of scope (https://github.com/asciidoc-rs/asciidoc-html5/issues/51).
 
         // Surface the input-file attribute family — `docfile`, `docdir`,
         // `docname`, `docfilesuffix` — the way Asciidoctor's loader does,
@@ -694,17 +698,19 @@ impl Options {
         // path; `asciidoc-parser` does not originate them, so this crate seeds
         // them. `docfile`/`docdir` reveal the host location, so the safe mode
         // sanitizes them: below `Server` they carry the input file's absolute
-        // path and directory (Asciidoctor's `File.absolute_path`/`File.dirname`);
-        // `Server` and above conceal the host — `docfile` is trimmed to its
-        // basename and `docdir` is emptied. `Secure`, being higher than
+        // path and directory (Asciidoctor's
+        // `File.absolute_path`/`File.dirname`); `Server` and above
+        // conceal the host — `docfile` is trimmed to its basename and
+        // `docdir` is emptied. `Secure`, being higher than
         // `Server`, inherits the same sanitization (both modes leave `docdir`
         // empty and `docfile` a bare basename, matching Asciidoctor and the
         // AsciiDoc attributes reference). `docname` (the file stem) and
-        // `docfilesuffix` (the file extension) expose no more than the concealed
-        // `docfile` already does, so they carry no safe-mode nuance and are set
-        // the same in every mode. All are locked (`ApiOnly`) so the document
-        // cannot reassign them, and seeded silently so re-seeding over a
-        // caller-supplied value or the directive loop raises no lock warning.
+        // `docfilesuffix` (the file extension) expose no more than the
+        // concealed `docfile` already does, so they carry no safe-mode
+        // nuance and are set the same in every mode. All are locked
+        // (`ApiOnly`) so the document cannot reassign them, and seeded
+        // silently so re-seeding over a caller-supplied value or the
+        // directive loop raises no lock warning.
         let conceal = mode >= SafeMode::Server;
 
         // The source document's path: a caller-supplied `docfile` value or,
@@ -718,8 +724,8 @@ impl Options {
                 .map(|path| canonicalize_or(path).to_string_lossy().into_owned())
         });
         if let Some(source) = &docfile_source {
-            // `docfile` names the source document; `Server` and above trim it to
-            // its basename to conceal the host location.
+            // `docfile` names the source document; `Server` and above trim it
+            // to its basename to conceal the host location.
             let docfile = if conceal {
                 file_basename(source)
             } else {
@@ -731,9 +737,10 @@ impl Options {
                 ModificationContext::ApiOnly,
             );
 
-            // `docfilesuffix` is the file extension (leading dot included, empty
-            // when the name has none) and `docname` the basename with that
-            // suffix removed — Asciidoctor's `Helpers.extname`/`Helpers.basename`.
+            // `docfilesuffix` is the file extension (leading dot included,
+            // empty when the name has none) and `docname` the
+            // basename with that suffix removed — Asciidoctor's
+            // `Helpers.extname`/`Helpers.basename`.
             // A caller-supplied value wins over the derived one.
             let docfilesuffix = self
                 .last_value("docfilesuffix")
@@ -779,12 +786,13 @@ impl Options {
         // html5 is the only backend this crate produces, so `backend` is pinned
         // to `html5` in *every* safe mode and locked against the document.
         // Seeding it as a *silent* `ApiOnly` intrinsic drops any document
-        // `:backend:` with no warning; running after the directive loop makes it
-        // win over an API `backend` directive or a *soft* API default too. This
-        // goes further than Asciidoctor — whose SERVER "disallows the document
-        // from setting attributes that would affect conversion" (backend among
-        // them) and whose SECURE "sets the backend to html5," while lower modes
-        // honor a document `:backend:` — precisely because a non-html5 backend
+        // `:backend:` with no warning; running after the directive loop makes
+        // it win over an API `backend` directive or a *soft* API
+        // default too. This goes further than Asciidoctor — whose
+        // SERVER "disallows the document from setting attributes that
+        // would affect conversion" (backend among them) and whose
+        // SECURE "sets the backend to html5," while lower modes honor a
+        // document `:backend:` — precisely because a non-html5 backend
         // is out of scope here: the `{backend}` intrinsic always reflects what
         // is actually rendered.
         parser = parser.with_intrinsic_attribute_silent(
@@ -846,9 +854,10 @@ impl Options {
         // derive the `docname` for private docinfo; supplying a base directory
         // (given directly or derived from the primary file) installs the
         // filesystem include, docinfo, and SVG handlers, each confined by the
-        // safe mode. Under `secure` the parser converts includes to links, drops
-        // docinfo, and renders SVG images as plain `<img>` without consulting any
-        // handler, so installing them there is harmless.
+        // safe mode. Under `secure` the parser converts includes to links,
+        // drops docinfo, and renders SVG images as plain `<img>`
+        // without consulting any handler, so installing them there is
+        // harmless.
         if let Some(primary) = &self.primary_file {
             parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
         }
@@ -1079,7 +1088,8 @@ mod tests {
         crate::convert_with(source, &options.clone().standalone(true))
     }
 
-    // The default web-font family, present when `webfonts` is set with no value.
+    // The default web-font family, present when `webfonts` is set with no
+    // value.
     const DEFAULT_FAMILY: &str = "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CDroid+Sans+Mono:400,700";
 
     fn font_link(family: &str) -> String {
@@ -1130,7 +1140,8 @@ mod tests {
         assert!(!html.contains("from-header"));
     }
 
-    // An override to unset locks the attribute off even when the header sets it.
+    // An override to unset locks the attribute off even when the header sets
+    // it.
     #[test]
     fn override_unset_beats_a_header_value() {
         let source = "= Doc\n:webfonts: from-header\n\nBody.";
@@ -1174,7 +1185,8 @@ mod tests {
         assert!(html.contains(&font_link("second")));
     }
 
-    // Attribute names are case-insensitive, matching how the parser stores them.
+    // Attribute names are case-insensitive, matching how the parser stores
+    // them.
     #[test]
     fn attribute_names_are_lowercased() {
         let html = convert_with("= Doc\n\nBody.", &Options::new().unset("WebFonts"));
@@ -1205,8 +1217,8 @@ mod tests {
         assert!(overridden.contains("<style>"));
     }
 
-    // A soft-unset (`unset_default`) turns an attribute off when the document is
-    // silent, but yields to a document assignment of the same name.
+    // A soft-unset (`unset_default`) turns an attribute off when the document
+    // is silent, but yields to a document assignment of the same name.
     #[test]
     fn unset_default_is_soft() {
         // Applies when the document does not touch `webfonts`.
@@ -1294,11 +1306,11 @@ mod tests {
     }
 
     // Docinfo is read from the base directory only when docinfo is enabled and
-    // the safe mode permits it: below `Server` a document `:docinfo:` enables it;
-    // `Server` and above require an API-set value (a document `:docinfo:` is
-    // ignored); `Secure` drops docinfo entirely — matching Asciidoctor. These
-    // exercise the wiring in `apply`; the handler's own resolution and jail are
-    // covered in `docinfo_handler`.
+    // the safe mode permits it: below `Server` a document `:docinfo:` enables
+    // it; `Server` and above require an API-set value (a document
+    // `:docinfo:` is ignored); `Secure` drops docinfo entirely — matching
+    // Asciidoctor. These exercise the wiring in `apply`; the handler's own
+    // resolution and jail are covered in `docinfo_handler`.
 
     /// Creates a fresh temp directory named after `tag`, populated with `files`
     /// (name → content), for a docinfo test to point a base directory at.
@@ -1433,8 +1445,9 @@ mod tests {
 
     #[test]
     fn docinfo_is_disabled_under_the_secure_default() {
-        // Secure is the default; docinfo is dropped without any file being read,
-        // even with a base directory and the `docinfo` attribute set.
+        // Secure is the default; docinfo is dropped without any file being
+        // read, even with a base directory and the `docinfo` attribute
+        // set.
         let dir = docinfo_scratch("secure", &[("docinfo.html", "<meta name=\"x\">")]);
 
         let html = convert_with(
@@ -1487,8 +1500,9 @@ mod tests {
 
     #[test]
     fn document_set_source_highlighter_is_ignored_under_server() {
-        // A document that enables a highlighter itself is ignored under `Server`,
-        // so no highlighter class is emitted on the source block.
+        // A document that enables a highlighter itself is ignored under
+        // `Server`, so no highlighter class is emitted on the source
+        // block.
         let html = convert_with(
             "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
             &Options::new().safe_mode(SafeMode::Server),
@@ -1500,8 +1514,9 @@ mod tests {
     #[test]
     fn api_set_source_highlighter_still_applies_under_server() {
         // The restriction is on the *document*, not the API: an API-set
-        // `source-highlighter` is honored under `Server` (and, being the default,
-        // under `Secure` too), with the document not mentioning it.
+        // `source-highlighter` is honored under `Server` (and, being the
+        // default, under `Secure` too), with the document not
+        // mentioning it.
         let html = convert_with(
             "= Doc\n\n[source,ruby]\n----\nputs 1\n----",
             &Options::new()
@@ -1514,11 +1529,12 @@ mod tests {
 
     #[test]
     fn api_bare_set_source_highlighter_locks_out_the_document_under_server() {
-        // A *bare* API `source-highlighter` (a set with no value, `Action::Set`)
-        // is seeded locked under `Server` just like a valued one, exercising the
-        // `Some(Action::Set)` arm. Being valueless it names no client-side
-        // highlighter, so nothing is rendered — but, crucially, it locks the
-        // attribute so the document's own `:source-highlighter: highlightjs` is
+        // A *bare* API `source-highlighter` (a set with no value,
+        // `Action::Set`) is seeded locked under `Server` just like a
+        // valued one, exercising the `Some(Action::Set)` arm. Being
+        // valueless it names no client-side highlighter, so nothing is
+        // rendered — but, crucially, it locks the attribute so the
+        // document's own `:source-highlighter: highlightjs` is
         // dropped rather than taking effect.
         let html = convert_with(
             "= Doc\n:source-highlighter: highlightjs\n\n[source,ruby]\n----\nputs 1\n----",
@@ -1556,15 +1572,16 @@ mod tests {
         assert!(html.contains("highlightjs highlight"), "{html}");
     }
 
-    // Under `Secure`, the document cannot enable `icons`: an icon-mode admonition
-    // or callout list draws its images from `{iconsdir}`, whose origin a document
-    // `:iconsdir:` can steer, so an untrusted document must not turn icons on.
-    // Mirrors Asciidoctor's `attr_overrides['icons'] ||= nil` under SECURE
-    // (#50). A NOTE admonition renders a font glyph
-    // (`<i class="fa icon-note">`) with icons on and a text label
-    // (`<div class="title">Note</div>`) with icons off, so it is the observable
-    // probe for whether icons took effect. Unlike `source-highlighter`, the
-    // restriction begins at `Secure`, not `Server`.
+    // Under `Secure`, the document cannot enable `icons`: an icon-mode
+    // admonition or callout list draws its images from `{iconsdir}`, whose
+    // origin a document `:iconsdir:` can steer, so an untrusted document
+    // must not turn icons on. Mirrors Asciidoctor's
+    // `attr_overrides['icons'] ||= nil` under SECURE (#50). A NOTE
+    // admonition renders a font glyph (`<i class="fa icon-note">`) with
+    // icons on and a text label (`<div class="title">Note</div>`) with
+    // icons off, so it is the observable probe for whether icons took
+    // effect. Unlike `source-highlighter`, the restriction begins at
+    // `Secure`, not `Server`.
 
     #[test]
     fn document_set_icons_is_ignored_under_secure() {
@@ -1592,9 +1609,9 @@ mod tests {
     fn api_bare_set_icons_locks_out_the_document_under_secure() {
         // A *bare* API `icons` (a set with no value, `Action::Set`) enables
         // image icons under `Secure` and locks the attribute, so the document's
-        // own `:icons: font` is dropped rather than switching to font mode. This
-        // exercises the `Some(Action::Set)` arm, distinct from the valued
-        // `attribute("icons", …)` path above.
+        // own `:icons: font` is dropped rather than switching to font mode.
+        // This exercises the `Some(Action::Set)` arm, distinct from the
+        // valued `attribute("icons", …)` path above.
         let html = convert_with(
             "= Doc\n:icons: font\n\nNOTE: Heed this.",
             &Options::new().set("icons"),
@@ -1610,8 +1627,8 @@ mod tests {
 
     #[test]
     fn document_icons_cannot_override_an_api_unset_under_secure() {
-        // An API unset locks icons off; the document's own `:icons: font` cannot
-        // turn them back on under `Secure`.
+        // An API unset locks icons off; the document's own `:icons: font`
+        // cannot turn them back on under `Secure`.
         let html = convert_with(
             "= Doc\n:icons: font\n\nNOTE: Heed this.",
             &Options::new().unset("icons"),
@@ -1769,9 +1786,10 @@ mod tests {
     #[test]
     fn an_explicit_base_dir_outranks_docdir_for_includes() {
         // When both are supplied, the base directory (`-B`) wins over `docdir`,
-        // mirroring Asciidoctor's resolution order: the `base_dir` option first,
-        // the `docdir` attribute only as a fallback. Each directory holds a
-        // different `part.adoc`, so the resolved include reveals which won.
+        // mirroring Asciidoctor's resolution order: the `base_dir` option
+        // first, the `docdir` attribute only as a fallback. Each
+        // directory holds a different `part.adoc`, so the resolved
+        // include reveals which won.
         let base =
             std::env::temp_dir().join(format!("adoc-options-basedir-{}", std::process::id()));
         let doc = std::env::temp_dir().join(format!("adoc-options-docdir-{}", std::process::id()));
@@ -1800,11 +1818,11 @@ mod tests {
 
     #[test]
     fn a_relative_docdir_yields_an_absolute_base_directory() {
-        // The include and docinfo handlers require an absolute base directory. A
-        // relative `docdir` (or `-B`) naming a directory not on disk must still
-        // resolve to an absolute jail root rather than reaching the handlers as
-        // a relative path, so the jailed comparison against a canonicalized
-        // target stays sound.
+        // The include and docinfo handlers require an absolute base directory.
+        // A relative `docdir` (or `-B`) naming a directory not on disk
+        // must still resolve to an absolute jail root rather than
+        // reaching the handlers as a relative path, so the jailed
+        // comparison against a canonicalized target stays sound.
         let cwd = std::env::current_dir().expect("cwd");
 
         let from_docdir = Options::new()
@@ -1968,8 +1986,8 @@ mod tests {
 
     #[test]
     fn an_extensionless_name_has_an_empty_docfilesuffix() {
-        // With no extension, `docfilesuffix` is empty and `docname` is the whole
-        // basename (Asciidoctor's `Helpers.extname` fallback).
+        // With no extension, `docfilesuffix` is empty and `docname` is the
+        // whole basename (Asciidoctor's `Helpers.extname` fallback).
         let html = convert_with(
             "= Doc\n\nname={docname} suffix=[{docfilesuffix}]",
             &Options::new()
@@ -2071,15 +2089,15 @@ mod tests {
     }
 
     // The doctype the document sees is reachable through the `{doctype}`
-    // intrinsic reference (and drives the `<body class>`). `article` is the only
-    // doctype this renderer models, so `apply` pins `doctype` to `article` in
-    // every safe mode and locks it against the document and the API alike —
-    // going further than Asciidoctor, which only restricts the document at
-    // `Server`/`Secure`.
+    // intrinsic reference (and drives the `<body class>`). `article` is the
+    // only doctype this renderer models, so `apply` pins `doctype` to
+    // `article` in every safe mode and locks it against the document and
+    // the API alike — going further than Asciidoctor, which only restricts
+    // the document at `Server`/`Secure`.
 
     // A helper document that sets a non-`article` doctype and echoes the
-    // resolved `doctype` intrinsic into the body, where it lands in the rendered
-    // output alongside the `<body class>`.
+    // resolved `doctype` intrinsic into the body, where it lands in the
+    // rendered output alongside the `<body class>`.
     const DOCTYPE_ECHO: &str = "= Doc\n:doctype: book\n\ndoctype={doctype}";
 
     #[test]

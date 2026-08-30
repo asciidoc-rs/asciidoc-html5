@@ -184,8 +184,8 @@ d|``wj``^[3]^
     // Referencing each attribute expands it to its documented replacement.
     // Note that the page's "Replacement text" column is illustrative: the value
     // substituted for `cpp`/`cxx` is `C&#43;&#43;` (so the `+` characters are
-    // not subject to further substitution), even though the column renders it as
-    // `C++`.
+    // not subject to further substitution), even though the column renders it
+    // as `C++`.
     let cases: &[(&str, &str)] = &[
         ("blank", ""),
         ("empty", ""),
@@ -232,8 +232,9 @@ d|``wj``^[3]^
 #[test]
 fn reference_a_character_replacement_attribute() {
     // An attribute reference is replaced with the attribute's value, so `{deg}`
-    // renders as the numeric character reference `&#176;` (and the apostrophe is
-    // turned into a right single quotation mark by the replacements step).
+    // renders as the numeric character reference `&#176;` (and the apostrophe
+    // is turned into a right single quotation mark by the replacements
+    // step).
     let output = convert("Wolpertingers don't like temperatures above 100{deg}C.");
 
     assert_eq!(

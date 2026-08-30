@@ -71,9 +71,9 @@ Bold c**hara**cter**s** within a word.
     );
     assert_css(&unconstrained, "strong", 2);
 
-    // The single-asterisk (constrained) form still applies when the bold word is
-    // directly followed by each common punctuation mark the page names: `;`,
-    // `"`, and `!`.
+    // The single-asterisk (constrained) form still applies when the bold word
+    // is directly followed by each common punctuation mark the page names:
+    // `;`, `"`, and `!`.
     let punctuation = convert("A *word*; a *word*\" and a *word*!\n");
     assert!(punctuation.contains(
         "A <strong>word</strong>; a <strong>word</strong>\" and a <strong>word</strong>!"

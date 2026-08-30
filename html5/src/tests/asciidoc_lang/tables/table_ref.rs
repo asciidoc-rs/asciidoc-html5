@@ -250,15 +250,15 @@ d|user defined value
     assert_css(&output, r#"col[style="width: 12.5%;"]"#, 2);
     assert_css(&output, r#"col[style="width: 25%;"]"#, 3);
 
-    // The first row, entered on the line after the delimiter, becomes an implicit
-    // header of five cells.
+    // The first row, entered on the line after the delimiter, becomes an
+    // implicit header of five cells.
     assert_css(&output, "table > thead > tr > th", 5);
     assert_xpath(&output, r#"//thead//th[text()="Attribute"]"#, 1);
     assert_xpath(&output, r#"//thead//th[text()="Notes"]"#, 1);
     assert_xpath(&output, r#"//thead//th[text()="Description"]"#, 2);
 
-    // The `.N+|` shorthand spans a cell down N rows: e.g. `.4+|format` renders a
-    // body cell carrying `rowspan="4"`.
+    // The `.N+|` shorthand spans a cell down N rows: e.g. `.4+|format` renders
+    // a body cell carrying `rowspan="4"`.
     assert_css(&output, r#"td[rowspan="4"]"#, 11);
     assert_xpath(&output, r#"//td[@rowspan="4"]/p/code[text()="format"]"#, 1);
 }

@@ -177,8 +177,9 @@ Specifically, this syntax sets the ID to `rules`, adds the role `prominent`, and
 "#
         );
 
-        // `#rules` sets the id and `.prominent` the role class; the `incremental`
-        // option has no rendered effect on the list container.
+        // `#rules` sets the id and `.prominent` the role class; the
+        // `incremental` option has no rendered effect on the list
+        // container.
         let output =
             convert("[#rules.prominent%incremental]\n* Work hard\n* Play hard\n* Be happy");
         assert_css(&output, "div#rules.ulist.prominent", 1);

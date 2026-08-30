@@ -176,9 +176,9 @@ fn server_prevents_the_document_from_setting_source_highlighter() {
         &Options::new().safe_mode(SafeMode::Server),
     );
     // The source block falls back to the default unhighlighted shape, and no
-    // highlighter asset — from the attacker origin or the CDN — is emitted. (The
-    // default stylesheet names a `pre.highlightjs` CSS rule, so the checks target
-    // the highlighter markup itself, not the bare word.)
+    // highlighter asset — from the attacker origin or the CDN — is emitted.
+    // (The default stylesheet names a `pre.highlightjs` CSS rule, so the
+    // checks target the highlighter markup itself, not the bare word.)
     assert!(
         html.contains(
             "<pre class=\"highlight\">\
@@ -406,7 +406,8 @@ Its integer value is `20`.
 
     assert_eq!(SafeMode::Secure as u8, 20);
 
-    // The API default (no safe mode set) is `Secure`, which links the stylesheet.
+    // The API default (no safe mode set) is `Secure`, which links the
+    // stylesheet.
     let linked = convert("= Doc\n\nBody.");
     assert!(linked.contains("./asciidoctor.css"));
     assert!(!linked.contains("<style>"));

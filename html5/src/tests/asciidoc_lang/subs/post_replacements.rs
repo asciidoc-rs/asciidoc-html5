@@ -196,8 +196,8 @@ For inline elements, the built-in values `p` or `post_replacements` can be appli
 "#
     );
 
-    // The inline `p` shorthand on the pass macro adds the post replacements step
-    // to the enclosed text, so the trailing `+` becomes a line break.
+    // The inline `p` shorthand on the pass macro adds the post replacements
+    // step to the enclosed text, so the trailing `+` becomes a line break.
     let inline = convert("pass:p[a +\nb]\n");
     assert!(inline.contains("a<br>\nb"));
 

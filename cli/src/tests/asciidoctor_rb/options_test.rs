@@ -150,10 +150,10 @@ fn help_flag_with_unknown_topic_prints_usage_and_returns_zero() {
 "#
     );
 
-    // An unrecognized help topic is not the `syntax` crib sheet, so `adoc` falls
-    // through to clap, where the `-h` flag still wins over the trailing word and
-    // displays usage with exit code 0 — matching Ruby's fallback to the usage
-    // statement for an unknown topic.
+    // An unrecognized help topic is not the `syntax` crib sheet, so `adoc`
+    // falls through to clap, where the `-h` flag still wins over the
+    // trailing word and displays usage with exit code 0 — matching Ruby's
+    // fallback to the usage statement for an unknown topic.
     assert!(!syntax_help_topic(&argv(["adoc", "-h", "unknown"])));
 
     let err = Cli::try_parse_from(["adoc", "-h", "unknown"]).expect_err("`-h` displays help");
@@ -252,9 +252,10 @@ fn invalid_option_is_rejected() {
 "#
     );
 
-    // clap rejects an unknown option, naming it in the error. clap's usage-error
-    // exit code is 2 (where the Ruby CLI uses 1), so the assertion is on the
-    // error kind and that it names `--foobar`, not on the numeric code.
+    // clap rejects an unknown option, naming it in the error. clap's
+    // usage-error exit code is 2 (where the Ruby CLI uses 1), so the
+    // assertion is on the error kind and that it names `--foobar`, not on
+    // the numeric code.
     let err = Cli::try_parse_from(["adoc", "--foobar"]).expect_err("unknown option is rejected");
     assert_eq!(err.kind(), ErrorKind::UnknownArgument);
     assert_ne!(err.exit_code(), 0);
@@ -405,11 +406,12 @@ fn standard_attribute_assignment() {
 "#
     );
 
-    // The Ruby test reads the parsed attribute values; `adoc` surfaces them only
-    // through the conversion. `-a docinfosubs=attributes,replacements` gives the
-    // attribute that value, observed by referencing `{docinfosubs}`; the bare
-    // `-a icons` sets `icons` to the empty string, observed by an `ifdef::icons`
-    // whose body appears only when the attribute is set.
+    // The Ruby test reads the parsed attribute values; `adoc` surfaces them
+    // only through the conversion. `-a docinfosubs=attributes,replacements`
+    // gives the attribute that value, observed by referencing
+    // `{docinfosubs}`; the bare `-a icons` sets `icons` to the empty
+    // string, observed by an `ifdef::icons` whose body appears only when
+    // the attribute is set.
     let out = render(
         &[
             "-a",
@@ -441,9 +443,9 @@ fn multiple_attribute_arguments() {
 "#
     );
 
-    // Two `-a` options apply together: `imagesdir=images` prefixes image targets
-    // with `images/` (observed on a rendered `image::` target), and the bare `-a
-    // icons` sets `icons` (observed through `ifdef::icons`).
+    // Two `-a` options apply together: `imagesdir=images` prefixes image
+    // targets with `images/` (observed on a rendered `image::` target), and
+    // the bare `-a icons` sets `icons` (observed through `ifdef::icons`).
     let out = render(
         &["-a", "imagesdir=images", "-a", "icons", "-e", "-o", "-"],
         "image::pic.png[]\n\nifdef::icons[icons-set]\n",
@@ -517,9 +519,10 @@ fn attribute_value_preserves_utf8() {
     );
 
     // The Ruby test guards against a byte string mislabeled as ASCII-8BIT; Rust
-    // `String`s are always UTF-8, so the encoding-object assertion has no analog
-    // and the value simply round-trips. Passing `-a platform-name=云平台` and
-    // referencing `{platform-name}` yields the multibyte value unchanged.
+    // `String`s are always UTF-8, so the encoding-object assertion has no
+    // analog and the value simply round-trips. Passing `-a
+    // platform-name=云平台` and referencing `{platform-name}` yields the
+    // multibyte value unchanged.
     let out = render(
         &["-a", "platform-name=云平台", "-e", "-o", "-"],
         "{platform-name}\n",
@@ -539,8 +542,8 @@ fn allows_safe_mode_to_be_specified() {
 "#
     );
 
-    // `-S safe` resolves to `SafeMode::Safe`, the same level the Ruby test reads
-    // off `options[:safe]`.
+    // `-S safe` resolves to `SafeMode::Safe`, the same level the Ruby test
+    // reads off `options[:safe]`.
     let cli = Cli::parse_from(["adoc", "-S", "safe", "test/fixtures/sample.adoc"]);
     assert_eq!(
         resolve_safe_mode(&cli).expect("safe mode resolves"),
@@ -574,8 +577,8 @@ fn article_doctype_assignment() {
 "#
     );
 
-    // `article` is the doctype `adoc` supports: it is captured at parse time and
-    // accepted by `check_doctype`.
+    // `article` is the doctype `adoc` supports: it is captured at parse time
+    // and accepted by `check_doctype`.
     let cli = Cli::parse_from(["adoc", "-d", "article", "test/fixtures/sample.adoc"]);
     assert_eq!(cli.doctype.as_deref(), Some("article"));
     check_doctype(&cli).expect("article is a supported doctype");
@@ -755,8 +758,8 @@ fn failure_level_fatal_abbreviations() {
     );
 
     // Matching Asciidoctor's option completion, `adoc` accepts any unambiguous
-    // abbreviation of `fatal` (case-insensitively), so `f`, `fatal`, and `FATAL`
-    // all resolve to `LogLevel::Fatal`.
+    // abbreviation of `fatal` (case-insensitively), so `f`, `fatal`, and
+    // `FATAL` all resolve to `LogLevel::Fatal`.
     for val in ["f", "fatal", "FATAL"] {
         let arg = format!("--failure-level={val}");
         let cli = Cli::parse_from(["adoc", &arg, "test/fixtures/sample.adoc"]);
@@ -836,8 +839,8 @@ fn failure_level_rejects_unknown_value() {
 "#
     );
 
-    // clap accepts any string for `--failure-level`, so `adoc` validates it when
-    // the run begins: `foobar` is no abbreviation of any level, so
+    // clap accepts any string for `--failure-level`, so `adoc` validates it
+    // when the run begins: `foobar` is no abbreviation of any level, so
     // `parse_failure_level` rejects it with an error naming the value.
     let cli = Cli::parse_from([
         "adoc",

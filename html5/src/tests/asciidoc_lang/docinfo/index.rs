@@ -92,8 +92,8 @@ Which docinfo files are consumed depends on the value of the `docinfo` attribute
 "#
     );
 
-    // Without the `docinfo` attribute, the file sitting in the base directory is
-    // ignored.
+    // Without the `docinfo` attribute, the file sitting in the base directory
+    // is ignored.
     let off = with_docinfo(
         "enable-off",
         "= Doc\n\nBody.",
@@ -625,8 +625,8 @@ To specify which file(s) you want to apply, set the `docinfo` attribute to any c
     );
     assert!(!private_head.contains("class=\"pf\""), "{private_head}");
 
-    // `shared-footer` consumes only the shared footer file; the shared head file
-    // is left untouched.
+    // `shared-footer` consumes only the shared footer file; the shared head
+    // file is left untouched.
     let shared_footer = with_docinfo(
         "enable-shared-footer",
         "= Doc\n:docinfo: shared-footer\n\nBody.",
@@ -759,8 +759,8 @@ By default, docinfo files are searched for in the same directory as the document
 "#
     );
 
-    // The default: with the primary file `mydoc.adoc`, the sibling `docinfo.html`
-    // in that same directory is found.
+    // The default: with the primary file `mydoc.adoc`, the sibling
+    // `docinfo.html` in that same directory is found.
     let default = with_docinfo(
         "resolve-default",
         "= Doc\n:docinfo: shared\n\nBody.",
@@ -825,8 +825,8 @@ If the value is an absolute path, that value is used as is.
     );
 
     // An absolute `docinfodir` is used as is. The jailed safe modes recover an
-    // absolute path back into the base directory, so this uses `Unsafe`, where an
-    // absolute path outside the document directory is honored.
+    // absolute path back into the base directory, so this uses `Unsafe`, where
+    // an absolute path outside the document directory is honored.
     let base =
         std::env::temp_dir().join(format!("adoc-lang-docinfo-abs-base-{}", std::process::id()));
     let elsewhere =
@@ -916,7 +916,8 @@ If this attribute is not set, it has an implied default value of `attributes` (i
 
     let docinfo = &[("docinfo.html", "<meta name=\"app\" content=\"{project}\">")];
 
-    // Unset: the implied default `attributes` applies, so the reference resolves.
+    // Unset: the implied default `attributes` applies, so the reference
+    // resolves.
     let default = with_docinfo(
         "subs-default",
         "= Doc\n:docinfo: shared\n:project: Widgets\n\nBody.",

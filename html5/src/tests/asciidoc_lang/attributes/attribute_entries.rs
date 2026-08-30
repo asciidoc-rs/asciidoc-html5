@@ -67,8 +67,8 @@ Attribute references in the value of an attribute entry are resolved immediately
 "#
     );
 
-    // `{url-org}` is resolved when `url-project` is defined, so a later reference
-    // to `url-project` sees the composed URL.
+    // `{url-org}` is resolved when `url-project` is defined, so a later
+    // reference to `url-project` sees the composed URL.
     let output = crate::convert(
         ":url-org: https://example.org/projects\n:url-project: {url-org}/project-name\n\n{url-project}",
     );

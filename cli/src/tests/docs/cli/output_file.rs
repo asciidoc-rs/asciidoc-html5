@@ -85,7 +85,8 @@ alongside the input.
 "#
     );
 
-    // The derived name keeps the input's directory, `.adoc` swapped for `.html`.
+    // The derived name keeps the input's directory, `.adoc` swapped for
+    // `.html`.
     assert_eq!(
         output_file(&["adoc", "sub/mydoc.adoc"]),
         Some(PathBuf::from("sub/mydoc.html"))
@@ -244,7 +245,8 @@ into [.path]_build_:
         Some(PathBuf::from("build/mydoc.html"))
     );
 
-    // A relative `-o` is resolved inside `-D`; an absolute `-o` is used as given.
+    // A relative `-o` is resolved inside `-D`; an absolute `-o` is used as
+    // given.
     assert_eq!(
         output_file(&["adoc", "-D", "build", "-o", "out.html", "mydoc.adoc"]),
         Some(PathBuf::from("build/out.html"))
@@ -254,8 +256,8 @@ into [.path]_build_:
         Some(PathBuf::from("/abs/out.html"))
     );
 
-    // End to end: the destination directory does not exist yet; `adoc` creates it
-    // and writes the derived name inside.
+    // End to end: the destination directory does not exist yet; `adoc` creates
+    // it and writes the derived name inside.
     let dir = sandbox("destination-dir");
     let input = dir.join("mydoc.adoc");
     std::fs::write(&input, "= Doc\n\nBody.\n").expect("write input");
@@ -319,8 +321,8 @@ destination directory there is nowhere to build the tree.
 "#
     );
 
-    // An input under the source root has its subdirectory recreated inside `-D`;
-    // the `--source-dir` longhand behaves the same.
+    // An input under the source root has its subdirectory recreated inside
+    // `-D`; the `--source-dir` longhand behaves the same.
     assert_eq!(
         output_file(&["adoc", "-D", "out", "-R", "src", "src/guide/intro.adoc"]),
         Some(PathBuf::from("out/guide/intro.html"))
@@ -337,8 +339,9 @@ destination directory there is nowhere to build the tree.
         Some(PathBuf::from("out/guide/intro.html"))
     );
 
-    // An input that is not under the source root keeps the flat `-D` output, and
-    // `-R` without `-D` is inert (the derived name is written beside the input).
+    // An input that is not under the source root keeps the flat `-D` output,
+    // and `-R` without `-D` is inert (the derived name is written beside
+    // the input).
     assert_eq!(
         output_file(&["adoc", "-D", "out", "-R", "other", "src/guide/intro.adoc"]),
         Some(PathBuf::from("out/intro.html"))
@@ -348,8 +351,8 @@ destination directory there is nowhere to build the tree.
         Some(PathBuf::from("src/guide/intro.html"))
     );
 
-    // End to end: the mirrored subdirectory is created under the destination and
-    // the HTML is written inside it.
+    // End to end: the mirrored subdirectory is created under the destination
+    // and the HTML is written inside it.
     let dir = sandbox("source-dir");
     let input = dir.join("src").join("guide").join("intro.adoc");
     std::fs::create_dir_all(input.parent().unwrap()).expect("create src tree");

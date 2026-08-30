@@ -172,8 +172,8 @@ Asciidoctor handles the glob matching in a manner that is portable across platfo
     let b = project.write("b.adoc", "= B\n");
     let c = project.write("sub/c.adoc", "= C\n");
 
-    // A quoted pattern reaches `adoc` verbatim: the argument is the glob itself,
-    // not a shell-expanded list of file names.
+    // A quoted pattern reaches `adoc` verbatim: the argument is the glob
+    // itself, not a shell-expanded list of file names.
     let star = project.pattern("*.adoc");
     let sub_star = project.pattern("*/*.adoc");
     assert_eq!(
@@ -181,8 +181,8 @@ Asciidoctor handles the glob matching in a manner that is portable across platfo
         vec![PathBuf::from(&star), PathBuf::from(&sub_star)]
     );
 
-    // `adoc` then expands the patterns itself: `*.adoc` matches the two files in
-    // the directory, `*/*.adoc` the one in the direct subfolder.
+    // `adoc` then expands the patterns itself: `*.adoc` matches the two files
+    // in the directory, `*/*.adoc` the one in the direct subfolder.
     assert_eq!(resolve(&[&star]), vec![a.clone(), b.clone()]);
     assert_eq!(resolve(&[&sub_star]), vec![c.clone()]);
 

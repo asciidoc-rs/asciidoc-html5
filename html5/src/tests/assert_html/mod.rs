@@ -55,9 +55,10 @@ use scraper::{Html, Selector};
 /// [`rewrite_root_for_fragment`]).
 fn parse(html: &str) -> (Html, bool) {
     let head = html.trim_start();
-    // Compare on bytes, not a `head[..n]` string slice: an embedded fragment can
-    // begin with a multi-byte character (e.g. `<h1>人</h1>`), and slicing to a
-    // fixed byte length that lands inside such a character would panic.
+    // Compare on bytes, not a `head[..n]` string slice: an embedded fragment
+    // can begin with a multi-byte character (e.g. `<h1>人</h1>`), and
+    // slicing to a fixed byte length that lands inside such a character
+    // would panic.
     let starts_with_ci = |prefix: &str| {
         head.len() >= prefix.len()
             && head.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
@@ -97,11 +98,11 @@ fn rewrite_root_for_fragment(selector: &str) -> String {
         "assert_css does not support `:root` combined with a selector group (got `{selector}`)"
     );
 
-    // Every `:root` marks its compound as a fragment top-level node, which under
-    // `scraper`'s synthetic `<html>` wrapper means a direct child of that
-    // wrapper. Dropping all `:root` and anchoring the leading compound with
-    // `html >` places it — and, through any sibling combinators, its `:root`
-    // siblings — at that level, recovering Nokogiri's meaning.
+    // Every `:root` marks its compound as a fragment top-level node, which
+    // under `scraper`'s synthetic `<html>` wrapper means a direct child of
+    // that wrapper. Dropping all `:root` and anchoring the leading compound
+    // with `html >` places it — and, through any sibling combinators, its
+    // `:root` siblings — at that level, recovering Nokogiri's meaning.
     let stripped = selector.replace(":root", "");
 
     format!("html > {stripped}")
@@ -117,9 +118,10 @@ fn rewrite_root_for_fragment(selector: &str) -> String {
 pub(crate) fn assert_css(html: &str, selector: &str, expected: usize) {
     let (document, is_fragment) = parse(html);
 
-    // `scraper`'s selector engine treats a fragment's synthetic `<html>` wrapper
-    // as the root, so `:root` never matches a fragment's top-level elements the
-    // way Nokogiri does; rewrite it to the equivalent wrapper-anchored selector.
+    // `scraper`'s selector engine treats a fragment's synthetic `<html>`
+    // wrapper as the root, so `:root` never matches a fragment's top-level
+    // elements the way Nokogiri does; rewrite it to the equivalent
+    // wrapper-anchored selector.
     let rewritten;
     let selector = if is_fragment && selector.contains(":root") {
         rewritten = rewrite_root_for_fragment(selector);
@@ -252,9 +254,9 @@ mod tests {
 
     #[test]
     fn xpath_leading_slash_matches_fragment_top_level() {
-        // A leading `/` is a child step from the (wrapperless) fragment root, so
-        // it matches the fragment's own top-level elements — not scraper's
-        // synthetic `<html>`.
+        // A leading `/` is a child step from the (wrapperless) fragment root,
+        // so it matches the fragment's own top-level elements — not
+        // scraper's synthetic `<html>`.
         assert_xpath(SIBLINGS, r#"/*[@class="paragraph"]"#, 2);
         assert_xpath(SIBLINGS, r#"/*[@class="paragraph"]/p"#, 2);
         assert_xpath(FRAGMENT, r#"/*[@id="content"]"#, 1);
@@ -262,8 +264,8 @@ mod tests {
 
     #[test]
     fn xpath_grouped_positional_is_global() {
-        // `(//p)[N]` picks the Nth paragraph across the whole document, unlike a
-        // per-context `//p[N]`.
+        // `(//p)[N]` picks the Nth paragraph across the whole document, unlike
+        // a per-context `//p[N]`.
         assert_xpath(SIBLINGS, r#"(//p)[1][text()="Paragraph."]"#, 1);
         assert_xpath(SIBLINGS, r#"(//p)[2][text()="Winning."]"#, 1);
         assert_xpath(SIBLINGS, r#"(//p)[2][text()="Paragraph."]"#, 0);
@@ -325,9 +327,9 @@ mod tests {
 
     #[test]
     fn xpath_grouped_predicate_value_may_contain_brackets_and_parens() {
-        // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding the
-        // group's closing `)`; otherwise a legitimate predicate value throws off
-        // the counters and the query panics.
+        // The group scanner must skip quoted `[`, `]`, `(`, `)` when finding
+        // the group's closing `)`; otherwise a legitimate predicate
+        // value throws off the counters and the query panics.
         let html = r#"<p>x]y(z</p>
 <p>plain</p>"#;
         assert_xpath(html, r#"(//p[text()="x]y(z"])[1]"#, 1);
@@ -386,9 +388,9 @@ Famous quote.
 
     #[test]
     fn css_root_on_a_sibling_chain_matches_top_level_siblings() {
-        // A run of top-level siblings can each be pinned with `:root`, mirroring
-        // Nokogiri — the shape the embedded-TOC assertions use
-        // (`h1:root + #toc:root + #preamble:root`).
+        // A run of top-level siblings can each be pinned with `:root`,
+        // mirroring Nokogiri — the shape the embedded-TOC assertions
+        // use (`h1:root + #toc:root + #preamble:root`).
         const CHAIN: &str = r#"<h1>Article</h1>
 <div id="toc" class="toc"><div id="toctitle">Contents</div></div>
 <div id="preamble"><div class="sectionbody"></div></div>"#;
@@ -403,14 +405,15 @@ Famous quote.
     #[should_panic(expected = "leading compound")]
     fn css_root_on_inner_compound_panics() {
         // `:root` reached through a descendant/child step (not a sibling
-        // combinator) is unsupported; it must fail loudly rather than anchor the
-        // wrong element.
+        // combinator) is unsupported; it must fail loudly rather than anchor
+        // the wrong element.
         assert_css(FRAGMENT, "#content .paragraph:root", 0);
     }
 
     #[test]
     fn xpath_following_sibling_axis() {
-        // The preamble's following sibling is the section, which contains the h2.
+        // The preamble's following sibling is the section, which contains the
+        // h2.
         assert_xpath(
             FRAGMENT,
             r#"//*[@id="preamble"]/following-sibling::*//h2[@id="_first_section"]"#,
@@ -437,7 +440,8 @@ Famous quote.
     fn xpath_positional_and_text() {
         assert_xpath(FRAGMENT, r#"//div[@class="paragraph"]/p"#, 2);
         assert_xpath(FRAGMENT, r#"//p[text()="Preamble."]"#, 1);
-        // `[1]` is per-context: the first `p` of each of the two paragraph divs.
+        // `[1]` is per-context: the first `p` of each of the two paragraph
+        // divs.
         assert_xpath(FRAGMENT, r#"//div[@class="paragraph"]/p[1]"#, 2);
     }
 
@@ -453,8 +457,9 @@ Famous quote.
     fn xpath_following_sibling_text_node_and_starts_with() {
         // A link followed by trailing punctuation: the punctuation is a text
         // node on the link's `following-sibling::text()` axis, and
-        // `starts-with(., "…")` filters to it. This is the shape the Links suite
-        // uses to assert that a bare URL does not absorb its trailing character.
+        // `starts-with(., "…")` filters to it. This is the shape the Links
+        // suite uses to assert that a bare URL does not absorb its
+        // trailing character.
         let html = r#"<p>See <a href="https://example.org">https://example.org</a>.)</p>"#;
         assert_xpath(html, r#"//a[@href="https://example.org"]"#, 1);
         assert_xpath(
@@ -499,7 +504,8 @@ Famous quote.
 
     #[test]
     fn xpath_child_text_axis() {
-        // An empty anchor has no `child::text()`; one with text has exactly one.
+        // An empty anchor has no `child::text()`; one with text has exactly
+        // one.
         let html = r#"<a id="empty"></a><a id="full">label</a>"#;
         assert_xpath(html, r#"//a[@id="empty"]/child::text()"#, 0);
         assert_xpath(html, r#"//a[@id="full"]/child::text()"#, 1);
@@ -580,8 +586,9 @@ second wrapped line</p></li>
 
     #[test]
     fn xpath_node_text_concatenates_a_multi_node_match() {
-        // With an expected count above one, the helper concatenates each match's
-        // text in document order — mirroring Nokogiri's `NodeSet#text`.
+        // With an expected count above one, the helper concatenates each
+        // match's text in document order — mirroring Nokogiri's
+        // `NodeSet#text`.
         let html = r#"<p>one</p><p>two</p>"#;
         assert_eq!(xpath_node_text(html, "//p", 2), "onetwo");
     }

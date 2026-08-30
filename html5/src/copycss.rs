@@ -194,8 +194,9 @@ mod tests {
     }
 
     // With `linkcss` and `copycss` set, the default stylesheet is copied as
-    // `asciidoctor.css` with the embedded default CSS as its content. Asciidoctor
-    // `rstrip`s that CSS, so the copy carries no trailing newline.
+    // `asciidoctor.css` with the embedded default CSS as its content.
+    // Asciidoctor `rstrip`s that CSS, so the copy carries no trailing
+    // newline.
     #[test]
     fn default_stylesheet_is_copied_as_asciidoctor_css() {
         let options = Options::new()
@@ -208,8 +209,9 @@ mod tests {
         assert!(!content.ends_with('\n'));
     }
 
-    // The default stylesheet is copied under `stylesdir`, mirroring the web path
-    // the head links it at (`./css/asciidoctor.css` -> `css/asciidoctor.css`).
+    // The default stylesheet is copied under `stylesdir`, mirroring the web
+    // path the head links it at (`./css/asciidoctor.css` ->
+    // `css/asciidoctor.css`).
     #[test]
     fn default_stylesheet_honors_stylesdir() {
         let options = Options::new()
@@ -223,8 +225,8 @@ mod tests {
     }
 
     // Under `secure` the stylesheet is linked but never copied, even though the
-    // parser sets `copycss` by default and `linkcss` is on — the safe-mode gate,
-    // not the attribute, is what suppresses the copy.
+    // parser sets `copycss` by default and `linkcss` is on — the safe-mode
+    // gate, not the attribute, is what suppresses the copy.
     #[test]
     fn no_copy_under_secure() {
         let options = Options::new().safe_mode(SafeMode::Secure);
@@ -320,8 +322,8 @@ mod tests {
 
     // `relative_web_path` keeps only web paths that stay within the output
     // directory: it strips the `./` a contained path carries and rejects an
-    // empty result, an absolute path, a climbing `../` path, and a URI — none of
-    // which `normalize_web_path` prefixes with `./`.
+    // empty result, an absolute path, a climbing `../` path, and a URI — none
+    // of which `normalize_web_path` prefixes with `./`.
     #[test]
     fn relative_web_path_selects_contained_targets() {
         use super::relative_web_path;

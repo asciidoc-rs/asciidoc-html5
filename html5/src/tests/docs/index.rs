@@ -108,10 +108,11 @@ gives you back a complete HTML5 document you can publish.
 "#
     );
 
-    // The simplest case: `convert_file` reads the document from disk and returns
-    // a complete, standalone HTML5 document — the same result a standalone
-    // string conversion produces for the same source. (The plain string
-    // `convert` is embedded by default, so we compare against a standalone one.)
+    // The simplest case: `convert_file` reads the document from disk and
+    // returns a complete, standalone HTML5 document — the same result a
+    // standalone string conversion produces for the same source. (The plain
+    // string `convert` is embedded by default, so we compare against a
+    // standalone one.)
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "asciidoc-html5-introduction-basic-usage-{}.adoc",
@@ -192,8 +193,9 @@ let html = asciidoc_html5::convert_document(&doc);
 "#
     );
 
-    // `load` parses the document separately; rendering it with `convert_document`
-    // gives the same embedded output as `convert` of the same source.
+    // `load` parses the document separately; rendering it with
+    // `convert_document` gives the same embedded output as `convert` of the
+    // same source.
     let source = "= Hello\n\nWorld.";
     let doc = load(source);
     let html = convert_document(&doc);

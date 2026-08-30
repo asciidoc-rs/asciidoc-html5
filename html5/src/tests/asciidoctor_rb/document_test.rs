@@ -3462,13 +3462,14 @@ mod backends_and_doctypes {
     // - **`xhtml`/`xhtml5` backend aliasing and `htmlsyntax`**: not implemented
     //   (see the `xhtml-not-supported` project memory).
     // - **the DocBook backend**: this crate targets only `html5`.
-    // - **the `:backend`/`:doctype` constructor option keys**: `backend` is pinned
-    //   to `html5` in every safe mode and `doctype` accepts only `article`/`inline`
-    //   (see `Options::doctype`), so there is no other backend/doctype value for an
-    //   option key to set or for an attribute to be overridden by.
-    // - **setext (two-line) titles** (`attribute entry can appear immediately after
-    //   document title` / `…before author line…`): `asciidoc-parser` recognizes
-    //   only the ATX (`=`) form.
+    // - **the `:backend`/`:doctype` constructor option keys**: `backend` is
+    //   pinned to `html5` in every safe mode and `doctype` accepts only
+    //   `article`/`inline` (see `Options::doctype`), so there is no other
+    //   backend/doctype value for an option key to set or for an attribute to
+    //   be overridden by.
+    // - **setext (two-line) titles** (`attribute entry can appear immediately
+    //   after document title` / `…before author line…`): `asciidoc-parser`
+    //   recognizes only the ATX (`=`) form.
     // - **the `manpage` doctype**: out of scope for 1.0, like the rest of the
     //   `asciidoctor_rb` suite (see `manpage_test.rs`).
     non_normative!(

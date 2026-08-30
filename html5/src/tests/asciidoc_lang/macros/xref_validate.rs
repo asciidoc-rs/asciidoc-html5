@@ -58,8 +58,8 @@ See <<foobar>>.
 
     // The reference `<<foobar>>` does not resolve to any anchor in the document
     // (the defined anchor is `foobaz`), so loading it records a
-    // `PossibleInvalidReference` warning for `foobar`. This crate always collects
-    // the warning; Asciidoctor gates it on verbose mode.
+    // `PossibleInvalidReference` warning for `foobar`. This crate always
+    // collects the warning; Asciidoctor gates it on verbose mode.
     let doc = load("See <<foobar>>.\n\n[#foobaz]\n== Foobaz\n");
     assert!(doc
         .warnings()

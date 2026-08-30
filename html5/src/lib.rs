@@ -159,22 +159,22 @@ pub fn convert_with_writer(
 /// [`convert_with`] does. Shared by the string entry points with and without an
 /// [`AssetWriter`].
 fn render(document: &Document<'_>, options: &Options) -> String {
-    // A custom, embedded stylesheet takes its CSS from the caller when supplied,
-    // otherwise from disk. Keeping this a separate binding keeps the borrow of
-    // `document` from the read helper separate from the render call. (Embedded
-    // output emits no stylesheet, so this is unused there — but resolving it is
-    // cheap and keeps the render call uniform.)
+    // A custom, embedded stylesheet takes its CSS from the caller when
+    // supplied, otherwise from disk. Keeping this a separate binding keeps
+    // the borrow of `document` from the read helper separate from the
+    // render call. (Embedded output emits no stylesheet, so this is unused
+    // there — but resolving it is cheap and keeps the render call uniform.)
     let stylesheet = options
         .custom_stylesheet()
         .map(str::to_owned)
         .or_else(|| read_embedded_stylesheet(document, options));
 
-    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`) read,
-    // and the `data-uri` embedding of images and icons, at the same base
-    // directory and safe mode the include/docinfo handlers use; with no base
-    // directory (the plain string `convert`), such an SVG is left unreadable and
-    // falls back to its alt text, and a `data-uri` image embeds as an empty data
-    // URI.
+    // Anchor a block image's inline-embedded SVG (`image::…[opts=inline]`)
+    // read, and the `data-uri` embedding of images and icons, at the same
+    // base directory and safe mode the include/docinfo handlers use; with
+    // no base directory (the plain string `convert`), such an SVG is left
+    // unreadable and falls back to its alt text, and a `data-uri` image
+    // embeds as an empty data URI.
     let svg_source = options
         .effective_base_dir()
         .map(|base| renderer::SvgSource::new(base, options.safe_mode_or_default()));
@@ -514,9 +514,10 @@ pub fn convert_document_with_writer(
 ) -> io::Result<String> {
     let html = render(document, options);
 
-    // Embedded output emits no stylesheet, so there is nothing to copy alongside
-    // it — matching Asciidoctor, which skips the `copycss` copy for embeddable
-    // output. Only a standalone document can reference a copied stylesheet.
+    // Embedded output emits no stylesheet, so there is nothing to copy
+    // alongside it — matching Asciidoctor, which skips the `copycss` copy
+    // for embeddable output. Only a standalone document can reference a
+    // copied stylesheet.
     if options.is_standalone() {
         emit_stylesheet_copy(document, options, writer)?;
     }
@@ -675,9 +676,9 @@ mod writer_tests {
         assert!(writer.written.is_empty());
     }
 
-    // `convert_file_with_writer` anchors the custom stylesheet read at the input
-    // file's own directory, so a linked custom stylesheet is copied to its web
-    // path with the on-disk contents.
+    // `convert_file_with_writer` anchors the custom stylesheet read at the
+    // input file's own directory, so a linked custom stylesheet is copied
+    // to its web path with the on-disk contents.
     #[test]
     fn file_writer_copies_a_custom_stylesheet_from_the_input_directory() {
         let dir = std::env::temp_dir().join(format!("adoc-lib-copycss-{}", std::process::id()));
@@ -706,7 +707,8 @@ mod writer_tests {
     // (Asciidoctor's copy/link split): the bytes are read from the `copycss`
     // path, but the copy is written to — and the HTML links — the `stylesheet`
     // web path. This is the API-surface counterpart to the `adoc` copy/link
-    // split the CLI crate verifies and the `stylesheet_copy` unit test resolves.
+    // split the CLI crate verifies and the `stylesheet_copy` unit test
+    // resolves.
     #[test]
     fn file_writer_honors_the_copycss_read_from_override() {
         let dir =
@@ -725,11 +727,12 @@ mod writer_tests {
         let html = convert_file_with_writer(dir.join("main.adoc"), &options, &mut writer)
             .expect("convert");
 
-        // The HTML links the stylesheet at its own web path, not the copycss one.
+        // The HTML links the stylesheet at its own web path, not the copycss
+        // one.
         assert!(html.contains(r#"<link rel="stylesheet" href="./published.css">"#));
 
-        // The copy is written to that same web path, but its bytes come from the
-        // copycss read-from path.
+        // The copy is written to that same web path, but its bytes come from
+        // the copycss read-from path.
         assert_eq!(writer.written.len(), 1);
         let (path, content) = &writer.written[0];
         assert_eq!(path.to_string_lossy().replace('\\', "/"), "published.css");
@@ -749,8 +752,8 @@ mod load_tests {
     };
 
     // `load` returns the parsed document, and rendering it with
-    // `convert_document` reproduces `convert` — the load and convert steps split
-    // apart and reassembled match the combined path.
+    // `convert_document` reproduces `convert` — the load and convert steps
+    // split apart and reassembled match the combined path.
     #[test]
     fn load_then_convert_document_matches_convert() {
         let source = "= Hello\n\nWorld.";
@@ -782,8 +785,8 @@ mod load_tests {
         assert_eq!(convert_document(&doc), convert_with(source, &opts));
     }
 
-    // `load_file` reads and parses a file into an owned document, the file-based
-    // counterpart to `load`.
+    // `load_file` reads and parses a file into an owned document, the
+    // file-based counterpart to `load`.
     #[test]
     fn load_file_reads_and_parses() {
         let source = "= From File\n\nBody.";
@@ -800,8 +803,8 @@ mod load_tests {
     }
 
     // `load_file_with` records the file as the primary document, so a relative
-    // top-level `include::` resolves against the file's own directory — the same
-    // anchoring `convert_file_with` performs.
+    // top-level `include::` resolves against the file's own directory — the
+    // same anchoring `convert_file_with` performs.
     #[test]
     fn load_file_with_anchors_includes_at_the_file_directory() {
         let dir = std::env::temp_dir().join(format!("adoc-load-file-inc-{}", std::process::id()));
@@ -816,7 +819,8 @@ mod load_tests {
         )
         .expect("load_file_with reads and parses");
 
-        // The include resolved, so the rendered document carries the included text.
+        // The include resolved, so the rendered document carries the included
+        // text.
         assert!(convert_document(&doc).contains("Included body."));
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -825,11 +829,12 @@ mod load_tests {
     // A *block* image's inline SVG (`image::…[opts=inline]`) is read at render
     // time, so it needs the base directory only `Options` carries. The
     // options-free `convert_document` has none, so it degrades the block image
-    // to its alt text — while `convert_document_with`, given `Options` that name
-    // the file, supplies the base directory and embeds the file's `<svg>`. This
-    // locks the limitation and its documented workaround (see
-    // `convert_document`). An *inline* `image:` SVG is embedded at parse time, so
-    // it is present either way and is covered separately in the SVG Images page.
+    // to its alt text — while `convert_document_with`, given `Options` that
+    // name the file, supplies the base directory and embeds the file's
+    // `<svg>`. This locks the limitation and its documented workaround (see
+    // `convert_document`). An *inline* `image:` SVG is embedded at parse time,
+    // so it is present either way and is covered separately in the SVG
+    // Images page.
     #[test]
     fn block_inline_svg_embedding_needs_a_base_directory() {
         let dir = std::env::temp_dir().join(format!("adoc-load-svg-{}", std::process::id()));
@@ -849,7 +854,8 @@ mod load_tests {
         let opts = Options::new().safe_mode(SafeMode::Unsafe);
         let doc = load_file_with(&main, &opts).expect("load_file_with reads and parses");
 
-        // Options-free: no base directory, so the block SVG degrades to alt text.
+        // Options-free: no base directory, so the block SVG degrades to alt
+        // text.
         let without = convert_document(&doc);
         assert!(
             without.contains("<span class=\"alt\">Diagram</span>"),
@@ -871,8 +877,9 @@ mod load_tests {
     // `load_file_with` populates the input-file attribute family on the loaded
     // document — `docfile`, `docdir`, `docname`, `docfilesuffix` — the way
     // Asciidoctor's `load_file` does, honoring the safe mode. This is the
-    // load-path counterpart to the `Options` unit tests for the same intrinsics:
-    // the attributes are observable directly on the returned `Document`.
+    // load-path counterpart to the `Options` unit tests for the same
+    // intrinsics: the attributes are observable directly on the returned
+    // `Document`.
     #[test]
     fn load_file_with_populates_the_input_file_attributes() {
         let dir = std::env::temp_dir().join(format!("adoc-load-file-attrs-{}", std::process::id()));
@@ -883,8 +890,9 @@ mod load_tests {
         let canonical_file = file.canonicalize().expect("canonicalize file");
         let canonical_dir = dir.canonicalize().expect("canonicalize dir");
 
-        // Below `Server`, `docfile`/`docdir` are the absolute path and directory,
-        // matching Asciidoctor's `load_file` under `safe: :safe`.
+        // Below `Server`, `docfile`/`docdir` are the absolute path and
+        // directory, matching Asciidoctor's `load_file` under `safe:
+        // :safe`.
         let doc = load_file_with(&file, &Options::new().safe_mode(SafeMode::Safe))
             .expect("load_file_with");
         assert_eq!(

@@ -152,7 +152,8 @@ Sets the safe mode level of the document according to the assigned level (`UNSAF
         assert_eq!(safe_mode_for(&["adoc", "-S", name, "doc.adoc"]), mode);
     }
 
-    // End to end, `--safe-mode=secure` links the stylesheet instead of embedding.
+    // End to end, `--safe-mode=secure` links the stylesheet instead of
+    // embedding.
     let html = run_adoc("secure", &["--safe-mode=secure"], "= Doc\n\nBody.");
     assert!(html.contains("./asciidoctor.css"));
     assert!(!html.contains("<style>"));

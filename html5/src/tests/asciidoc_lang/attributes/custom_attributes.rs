@@ -108,8 +108,8 @@ Now, you can xref:reference-attributes.adoc#reference-custom[reference these att
 "#
         );
 
-        // The soft-wrapped `disclaimer` value folds into a single line when it is
-        // referenced.
+        // The soft-wrapped `disclaimer` value folds into a single line when it
+        // is referenced.
         let output = convert(
             ":disclaimer: Don't pet the wild Wolpertingers. If you let them into your system, we're \\\nnot responsible for any loss of hair, chocolate, or purple socks.\n:url-repo: https://github.com/asciidoctor/asciidoctor\n\n{disclaimer}",
         );

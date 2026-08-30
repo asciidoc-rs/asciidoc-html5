@@ -299,9 +299,9 @@ If you want Asciidoctor to generate HTML that links to the default stylesheet in
 "#
     );
 
-    // The page sets `linkcss` from the CLI (`-a linkcss`); we supply it the same
-    // way — as an external attribute — through `Options::set`, the API the
-    // `adoc -a` option feeds into.
+    // The page sets `linkcss` from the CLI (`-a linkcss`); we supply it the
+    // same way — as an external attribute — through `Options::set`, the API
+    // the `adoc -a` option feeds into.
     let html = convert_with("= Doc\n\nBody.", &Options::new().set("linkcss"));
     assert!(html.contains("<link rel=\"stylesheet\" href=\"./asciidoctor.css\">"));
     assert!(!html.contains("<style>"));
@@ -381,10 +381,11 @@ You can disable this link by unsetting the `webfonts` document attribute from th
 "#
     );
 
-    // The page shows `-a webfonts!` on the CLI; we unset it the same way — as an
-    // external attribute — through `Options::unset`, the API the `adoc -a`
-    // option feeds into. Under an embedding safe mode so the stylesheet stays
-    // inline (the point here is the absent font link, not embed-vs-link).
+    // The page shows `-a webfonts!` on the CLI; we unset it the same way — as
+    // an external attribute — through `Options::unset`, the API the `adoc
+    // -a` option feeds into. Under an embedding safe mode so the stylesheet
+    // stays inline (the point here is the absent font link, not
+    // embed-vs-link).
     let html = convert_with(
         "= Doc\n\nBody.",
         &Options::new().unset("webfonts").safe_mode(SafeMode::Unsafe),
@@ -425,9 +426,9 @@ You would set the `webfonts` attribute as follows:
 "#
     );
 
-    // The page sets `webfonts` from the CLI (`-a webfonts=...`); we supply it the
-    // same way — as an external attribute — through `Options::attribute`, the API
-    // the `adoc -a` option feeds into.
+    // The page sets `webfonts` from the CLI (`-a webfonts=...`); we supply it
+    // the same way — as an external attribute — through
+    // `Options::attribute`, the API the `adoc -a` option feeds into.
     let webfonts =
         "Open+Sans:300,300italic,400,400italic,600,600italic%7CNoto+Serif:400,400italic,700,700italic%7CUbuntu+Mono:400";
     let html = convert_with(
@@ -522,10 +523,10 @@ The `<style>` element in your docinfo file will be inserted directly below the d
 
     let _ = std::fs::remove_dir_all(&dir);
 
-    // The default stylesheet's closing `</style>` is immediately followed by the
-    // docinfo `<style>`, which in turn is immediately followed by `</head>`: the
-    // docinfo styles sit directly below the default stylesheet, at the bottom of
-    // the head.
+    // The default stylesheet's closing `</style>` is immediately followed by
+    // the docinfo `<style>`, which in turn is immediately followed by
+    // `</head>`: the docinfo styles sit directly below the default
+    // stylesheet, at the bottom of the head.
     assert!(html.contains(&format!("</style>\n{docinfo}\n</head>")));
 }
 

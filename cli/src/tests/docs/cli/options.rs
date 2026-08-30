@@ -60,9 +60,9 @@ documented behavior is guaranteed.
     );
 
     // clap surfaces a help request as a `DisplayHelp` "error" carrying the
-    // rendered help. Both the long `--help` and the short `-h` include the usage
-    // statement and the `Options:` section that lists the supported options, and
-    // `-h` is the shorter of the two.
+    // rendered help. Both the long `--help` and the short `-h` include the
+    // usage statement and the `Options:` section that lists the supported
+    // options, and `-h` is the shorter of the two.
     let long = Cli::try_parse_from(["adoc", "--help"]).expect_err("--help displays help");
     assert_eq!(long.kind(), clap::error::ErrorKind::DisplayHelp);
     assert!(long.to_string().contains("Usage: adoc"));
@@ -192,7 +192,8 @@ unnumbered.
         "the heading is unnumbered by default"
     );
 
-    // An explicit `-a sectnums!` overrides `-n`, leaving the heading unnumbered.
+    // An explicit `-a sectnums!` overrides `-n`, leaving the heading
+    // unnumbered.
     assert!(
         convert(&["adoc", "-n", "-a", "sectnums!", "-o", "-"])
             .contains(r#"<h2 id="_one">One</h2>"#),

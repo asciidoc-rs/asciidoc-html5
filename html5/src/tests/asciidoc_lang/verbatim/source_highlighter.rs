@@ -266,7 +266,8 @@ include::example$source.adoc[tag=src-para]
 "#
     );
 
-    // The `src-para` snippet: a source paragraph followed by a normal paragraph.
+    // The `src-para` snippet: a source paragraph followed by a normal
+    // paragraph.
     let output = convert(
         "[source,xml]\n<meta name=\"viewport\"\n  content=\"width=device-width, initial-scale=1.0\">\n\nThis is normal content.\n",
     );
@@ -279,7 +280,8 @@ include::example$source.adoc[tag=src-para]
     );
     assert!(output.contains("&lt;meta name=\"viewport\""));
 
-    // The text after the blank line is a normal paragraph, not part of the block.
+    // The text after the blank line is a normal paragraph, not part of the
+    // block.
     assert_xpath(
         &output,
         r#"//div[@class="paragraph"]/p[text()="This is normal content."]"#,
@@ -409,7 +411,8 @@ include::example$source.adoc[tag=linenums-option]
 "#
     );
 
-    // The `linenums-option` snippet, displayed with the `ex-linenums-option` id.
+    // The `linenums-option` snippet, displayed with the `ex-linenums-option`
+    // id.
     let option = convert(
         "[source#ex-linenums-option]\n....\n[%linenums,ruby]\n----\nputs 1\nputs 2\nputs 3\n----\n....\n",
     );
@@ -420,7 +423,8 @@ include::example$source.adoc[tag=linenums-option]
     );
     assert!(option.contains("[%linenums,ruby]"));
 
-    // The `linenums-posattr` snippet, displayed with the `ex-linenums-posattr` id.
+    // The `linenums-posattr` snippet, displayed with the `ex-linenums-posattr`
+    // id.
     let posattr = convert(
         "[source#ex-linenums-posattr]\n....\n[,ruby,linenums]\n----\nputs 1\nputs 2\nputs 3\n----\n....\n",
     );

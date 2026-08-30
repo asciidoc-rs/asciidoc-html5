@@ -65,9 +65,9 @@ fn query_grouped<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNode> 
     let inner = &path[1..close];
     let mut nodes = query(root, inner);
 
-    // Predicates directly after the `)` apply to the group as a whole: a numeric
-    // one selects the Nth match globally, a filter one keeps the matches that
-    // satisfy it.
+    // Predicates directly after the `)` apply to the group as a whole: a
+    // numeric one selects the Nth match globally, a filter one keeps the
+    // matches that satisfy it.
     let mut rest = path[close + 1..].trim_start();
     while let Some(after_open) = rest.strip_prefix('[') {
         let end = find_predicate_close(after_open)
@@ -80,7 +80,8 @@ fn query_grouped<'a>(root: &'a VirtualNode, path: &str) -> Vec<&'a VirtualNode> 
         return nodes;
     }
 
-    // Whatever follows is a relative path evaluated from the group's result set.
+    // Whatever follows is a relative path evaluated from the group's result
+    // set.
     assert!(
         rest.starts_with('/'),
         "expected `/` or a predicate after a grouped XPath expression in `{path}`"
@@ -548,8 +549,8 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
         // (`((…)[N])/self::div[@class="…"]`).
         (Axis::Itself, rest)
     } else if let Some(rest) = token.strip_prefix("child::") {
-        // The explicit `child::` axis is the same as the default child step; the
-        // suite writes it only to reach the `text()` node test
+        // The explicit `child::` axis is the same as the default child step;
+        // the suite writes it only to reach the `text()` node test
         // (`a/child::text()`).
         (Axis::Child, rest)
     } else if let Some(rest) = token.strip_prefix("following-sibling::") {
@@ -563,8 +564,9 @@ fn parse_step(comb: Combinator, token: &str) -> Step {
     } else {
         // A `::` still in the node-test name (before any predicate) is an axis
         // the engine does not implement. Fail loudly rather than treating, say,
-        // `ancestor::div` as a tag literally named "ancestor::div" — which would
-        // silently match nothing and could make a "count 0" assertion pass.
+        // `ancestor::div` as a tag literally named "ancestor::div" — which
+        // would silently match nothing and could make a "count 0"
+        // assertion pass.
         let name = token.split('[').next().unwrap_or(token);
         assert!(
             !name.contains("::"),

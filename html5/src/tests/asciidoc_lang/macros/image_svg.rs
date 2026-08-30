@@ -173,8 +173,8 @@ To allow SVG content reachable by JavaScript in the main DOM or to inherit style
     assert!(convert_unsafe("image::sample.svg[Diagram,300]")
         .contains(r#"<img src="sample.svg" alt="Diagram" width="300">"#));
 
-    // `interactive`: an `<object>` (block image, below Secure), with the alt text
-    // nested as the fallback.
+    // `interactive`: an `<object>` (block image, below Secure), with the alt
+    // text nested as the fallback.
     assert!(convert_unsafe("image::sample.svg[Diagram,300,opts=interactive]").contains(
         r#"<object type="image/svg+xml" data="sample.svg" width="300"><span class="alt">Diagram</span></object>"#
     ));
@@ -235,7 +235,8 @@ If the value of the fallback attribute is a relative path, it will be prefixed w
             r#"<object type="image/svg+xml" data="sample.svg"><img src="fallback.png" alt="Diagram"></object>"#
         ));
 
-    // A relative `fallback` path (and the target) are resolved under `imagesdir`.
+    // A relative `fallback` path (and the target) are resolved under
+    // `imagesdir`.
     assert!(
         convert_unsafe(":imagesdir: img\n\nimage::sample.svg[Diagram,opts=interactive,fallback=fallback.png]")
             .contains(
