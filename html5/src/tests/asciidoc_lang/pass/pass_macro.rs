@@ -237,7 +237,8 @@ An attribute reference within a word, such as dev++{conf}++, is not replaced.
 "#
     );
 
-    // The link target keeps its double underscores rather than forming an emphasis.
+    // The link target keeps its double underscores rather than forming an
+    // emphasis.
     let link = convert("For example, link:++https://example.org/now_this__link_works.html++[].\n");
     assert_xpath(
         &link,
@@ -246,7 +247,8 @@ An attribute reference within a word, such as dev++{conf}++, is not replaced.
     );
     assert_css(&link, "a em", 0);
 
-    // A bare formatting mark and an in-word attribute reference are left literal.
+    // A bare formatting mark and an in-word attribute reference are left
+    // literal.
     let mark = convert("You can also escape formatting marks, like all-natural++*++.\n");
     assert_xpath(
         &mark,

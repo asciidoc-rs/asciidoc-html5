@@ -88,10 +88,10 @@ fn default_macros_substitution() {
     // An inline link renders as `<a href=…>` when the macros step runs.
     let applies = |body: &str| ran("", body, "href");
 
-    // Attribute entry values: only the inline pass macro is processed. A regular
-    // macro in an attribute value is left literal, while a pass macro is
-    // applied. Isolated with `[subs=attributes]` so the block adds no macros
-    // processing of its own.
+    // Attribute entry values: only the inline pass macro is processed. A
+    // regular macro in an attribute value is left literal, while a pass
+    // macro is applied. Isolated with `[subs=attributes]` so the block adds
+    // no macros processing of its own.
     assert!(
         !convert(":v: link:https://example.org[t]\n[subs=attributes]\n....\n{v}\n....\n")
             .contains("href")

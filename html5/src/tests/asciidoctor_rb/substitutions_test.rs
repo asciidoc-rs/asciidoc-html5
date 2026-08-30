@@ -2662,9 +2662,9 @@ mod macros {
     // Inline SVG (`opts=inline`) embeds the SVG file's contents as an `<svg>`
     // element. This crate installs a filesystem-backed `SvgFileHandler` (see
     // `FsSvgFileHandler`), so the SVG is read from disk (honoring the safe-mode
-    // jail), its XML preamble is stripped, and the explicit `100` width replaces
-    // the file's own `width`/`height`/`style` — matching Asciidoctor. Resolves
-    // asciidoc-html5#52.
+    // jail), its XML preamble is stripped, and the explicit `100` width
+    // replaces the file's own `width`/`height`/`style` — matching
+    // Asciidoctor. Resolves asciidoc-html5#52.
     #[test]
     fn an_image_macro_with_an_inline_svg_image_should_be_converted_to_an_svg_element() {
         verifies!(
@@ -2684,8 +2684,9 @@ mod macros {
         let result = inline_svg_subs(false);
         assert_eq!(result, CIRCLE_SVG_INLINE);
 
-        // The Ruby test's regex assertions, spelled out: the `<svg>` tag carries
-        // `width="100"` and the file's own `width`/`height`/`style` are gone.
+        // The Ruby test's regex assertions, spelled out: the `<svg>` tag
+        // carries `width="100"` and the file's own
+        // `width`/`height`/`style` are gone.
         assert!(result.contains(r#"width="100""#));
         assert!(!result.contains(r#"width="500""#));
         assert!(!result.contains(r#"height="500""#));
@@ -2693,8 +2694,8 @@ mod macros {
     }
 
     // The `inline` embedding ignores `data-uri` (there is no `src` to embed —
-    // the SVG contents are inlined directly), so setting `data-uri` produces the
-    // same `<svg>` element. Resolves asciidoc-html5#52.
+    // the SVG contents are inlined directly), so setting `data-uri` produces
+    // the same `<svg>` element. Resolves asciidoc-html5#52.
     #[test]
     fn an_image_macro_with_an_inline_svg_image_should_be_converted_to_an_svg_element_even_when_data_uri_is_set(
     ) {
@@ -5277,9 +5278,9 @@ mod passthroughs {
 
     // Asserts the extracted passthrough collection directly via
     // `Content::passthroughs()`: `+++…+++` stores the text verbatim with an
-    // empty (`None`) subs list. The convert check confirms the rendered parity —
-    // no subs means the special characters pass through unescaped. (Matches
-    // Asciidoctor 2.0.26.)
+    // empty (`None`) subs list. The convert check confirms the rendered parity
+    // — no subs means the special characters pass through unescaped.
+    // (Matches Asciidoctor 2.0.26.)
     #[test]
     fn collect_inline_triple_plus_passthroughs() {
         verifies!(
@@ -5311,10 +5312,10 @@ mod passthroughs {
         );
     }
 
-    // Asserts the extracted collection directly: `+++…+++` stores the multi-line
-    // text verbatim (embedded newline preserved) with an empty (`None`) subs
-    // list. The convert check confirms the rendered parity. (Matches Asciidoctor
-    // 2.0.26.)
+    // Asserts the extracted collection directly: `+++…+++` stores the
+    // multi-line text verbatim (embedded newline preserved) with an empty
+    // (`None`) subs list. The convert check confirms the rendered parity.
+    // (Matches Asciidoctor 2.0.26.)
     #[test]
     fn collect_multi_line_inline_triple_plus_passthroughs() {
         verifies!(
@@ -5349,8 +5350,8 @@ mod passthroughs {
     // Asserts the extracted collection directly: `$$…$$` stores the text
     // verbatim and resolves subs to `Verbatim` (Asciidoctor's
     // `[:specialcharacters]`). The convert check confirms the rendered parity —
-    // special characters escaped, `{code}` left unexpanded. (Matches Asciidoctor
-    // 2.0.26.)
+    // special characters escaped, `{code}` left unexpanded. (Matches
+    // Asciidoctor 2.0.26.)
     #[test]
     fn collect_inline_double_dollar_passthroughs() {
         verifies!(
@@ -5478,8 +5479,9 @@ mod passthroughs {
     }
 
     // Asserts the extracted collection directly: the multi-line `$$…$$` content
-    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs. The
-    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs.
+    // The convert check confirms the rendered parity. (Matches Asciidoctor
+    // 2.0.26.)
     #[test]
     fn collect_multi_line_inline_double_dollar_passthroughs() {
         verifies!(
@@ -5512,8 +5514,9 @@ mod passthroughs {
     }
 
     // Asserts the extracted collection directly: the multi-line `++…++` content
-    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs. The
-    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    // is stored verbatim (embedded newlines preserved) with `Verbatim` subs.
+    // The convert check confirms the rendered parity. (Matches Asciidoctor
+    // 2.0.26.)
     #[test]
     fn collect_multi_line_inline_double_plus_passthroughs() {
         verifies!(
@@ -5545,10 +5548,11 @@ mod passthroughs {
         );
     }
 
-    // Asserts the extracted collection directly: the `\]` escape yields a literal
-    // `]` in the stored text, and the `specialcharacters,quotes` list resolves to
-    // a `Custom` subs group (Asciidoctor's `[:specialcharacters, :quotes]`). The
-    // convert check confirms the rendered parity. (Matches Asciidoctor 2.0.26.)
+    // Asserts the extracted collection directly: the `\]` escape yields a
+    // literal `]` in the stored text, and the `specialcharacters,quotes`
+    // list resolves to a `Custom` subs group (Asciidoctor's
+    // `[:specialcharacters, :quotes]`). The convert check confirms the
+    // rendered parity. (Matches Asciidoctor 2.0.26.)
     #[test]
     fn collect_passthroughs_from_inline_pass_macro() {
         verifies!(
@@ -5583,10 +5587,10 @@ mod passthroughs {
         );
     }
 
-    // Asserts the extracted collection directly: the multi-line macro content is
-    // stored verbatim (embedded newline preserved, `\]` → literal `]`) with a
-    // `Custom` subs group. The convert check confirms the rendered parity.
-    // (Matches Asciidoctor 2.0.26.)
+    // Asserts the extracted collection directly: the multi-line macro content
+    // is stored verbatim (embedded newline preserved, `\]` → literal `]`)
+    // with a `Custom` subs group. The convert check confirms the rendered
+    // parity. (Matches Asciidoctor 2.0.26.)
     #[test]
     fn collect_multi_line_passthroughs_from_inline_pass_macro() {
         verifies!(
@@ -5639,10 +5643,10 @@ mod passthroughs {
 
     // Asserts the resolved `q,a` shorthand directly: it maps to a `Custom` subs
     // group of `[Quotes, AttributeReferences]` (Asciidoctor's
-    // `[:quotes, :attributes]`). The convert check confirms the restore result —
-    // `q` renders `*…*` as `<strong>`, `a` expands `{backend}` to `html5`, and
-    // specialcharacters is *not* applied, so the angle brackets stay literal.
-    // (Matches Asciidoctor 2.0.26.)
+    // `[:quotes, :attributes]`). The convert check confirms the restore result
+    // — `q` renders `*…*` as `<strong>`, `a` expands `{backend}` to
+    // `html5`, and specialcharacters is *not* applied, so the angle
+    // brackets stay literal. (Matches Asciidoctor 2.0.26.)
     #[test]
     fn resolves_sub_shorthands_on_inline_pass_macro() {
         verifies!(
@@ -5677,8 +5681,8 @@ mod passthroughs {
     // The `n,-a` list (normal minus attributes) collects a single passthrough
     // storing `<{backend}>`. The Ruby test asserts the count and the
     // `restore_passthroughs` result but not the resolved subs list (an
-    // incremental-resolution detail), so this asserts the count/text directly and
-    // the restore result via `convert`: the angle brackets are escaped
+    // incremental-resolution detail), so this asserts the count/text directly
+    // and the restore result via `convert`: the angle brackets are escaped
     // (specialcharacters is part of `normal`) while `{backend}` is left
     // unexpanded (attributes removed). (Matches Asciidoctor 2.0.26.)
     #[test]
@@ -5753,16 +5757,17 @@ mod passthroughs {
     // Drives `extract_passthroughs`/`restore_passthroughs` on empty content
     // directly — a parser-model API this crate does not surface — so the Ruby
     // test body itself stays non-normative. The observable equivalent,
-    // `convert("pass:[]")` rendering an empty `<p></p>` (asciidoc-html5#200), is
-    // verified in `renderer`'s
+    // `convert("pass:[]")` rendering an empty `<p></p>` (asciidoc-html5#200),
+    // is verified in `renderer`'s
     // `empty_inline_passthrough_paragraph_renders_an_empty_p`.
     //
     // NOTE: this is a deliberate split — the page's claim is now observably
-    // true, but verifying it *here* would mean marking the `extract_passthroughs`
-    // / `restore_passthroughs` lines `verifies!` while actually driving `convert`
-    // instead, which overstates what these lines exercise. If page-tracked
-    // coverage is preferred, replace this block with a `#[test]` whose
-    // `verifies!` reproduces these lines and asserts `convert("pass:[]")`.
+    // true, but verifying it *here* would mean marking the
+    // `extract_passthroughs` / `restore_passthroughs` lines `verifies!`
+    // while actually driving `convert` instead, which overstates what these
+    // lines exercise. If page-tracked coverage is preferred, replace this
+    // block with a `#[test]` whose `verifies!` reproduces these lines and
+    // asserts `convert("pass:[]")`.
     non_normative!(
         r#"
     test 'should allow content of inline pass macro to be empty' do
@@ -5780,9 +5785,9 @@ mod passthroughs {
     // The Ruby test hand-injects a no-subs `@passthroughs` entry and drives
     // `restore_passthroughs` in isolation. The observable equivalent — now that
     // the collection is surfaced (asciidoc-parser 0.29.1) — is a real no-subs
-    // (`+++…+++`) passthrough embedded in surrounding text: the collection stores
-    // the same text with `None` subs, and `convert` restores it verbatim into the
-    // paragraph. (Matches Asciidoctor 2.0.26.)
+    // (`+++…+++`) passthrough embedded in surrounding text: the collection
+    // stores the same text with `None` subs, and `convert` restores it
+    // verbatim into the paragraph. (Matches Asciidoctor 2.0.26.)
     #[test]
     fn restore_inline_passthroughs_without_subs() {
         verifies!(
@@ -5814,13 +5819,14 @@ mod passthroughs {
         );
     }
 
-    // The Ruby test hand-injects two `specialcharacters` `@passthroughs` entries
-    // and drives `restore_passthroughs` in isolation. The observable equivalent —
-    // now that the collection is surfaced (asciidoc-parser 0.29.1) — is two real
-    // `++…++` passthroughs embedded in surrounding text: the collection stores
-    // both texts with `Verbatim` subs, and `convert` restores them with special
-    // characters escaped (`{language}` is inside a passthrough, so it stays
-    // literal). (Matches Asciidoctor 2.0.26.)
+    // The Ruby test hand-injects two `specialcharacters` `@passthroughs`
+    // entries and drives `restore_passthroughs` in isolation. The
+    // observable equivalent — now that the collection is surfaced
+    // (asciidoc-parser 0.29.1) — is two real `++…++` passthroughs embedded
+    // in surrounding text: the collection stores both texts with `Verbatim`
+    // subs, and `convert` restores them with special characters escaped
+    // (`{language}` is inside a passthrough, so it stays literal). (Matches
+    // Asciidoctor 2.0.26.)
     #[test]
     fn restore_inline_passthroughs_with_subs() {
         verifies!(
@@ -5913,9 +5919,9 @@ mod passthroughs {
 
     // Asserts the collected `:text` of each passthrough directly: both forms —
     // the `$$…$$` literal and the `pass:specialcharacters[…]` macro whose `\]`
-    // escapes yield literal `]` — collect the *same* unescaped text. The convert
-    // checks confirm they then render identically (special characters escaped).
-    // (Matches Asciidoctor 2.0.26.)
+    // escapes yield literal `]` — collect the *same* unescaped text. The
+    // convert checks confirm they then render identically (special
+    // characters escaped). (Matches Asciidoctor 2.0.26.)
     #[test]
     fn complex_inline_passthrough_macro() {
         verifies!(

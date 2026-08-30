@@ -61,7 +61,8 @@ include::example$row.adoc[tag=base-h]
 "#
     );
 
-    // A `width` attribute becomes an inline width style on the `<table>` itself.
+    // A `width` attribute becomes an inline width style on the `<table>`
+    // itself.
     let output = convert(&format!("[width=75%]\n{BASE_H}"));
 
     assert_css(&output, "table[style=\"width: 75%;\"]", 1);
@@ -97,7 +98,8 @@ include::example$row.adoc[tag=base-h]
     );
 
     // The `autowidth` option applies the `fit-content` class to the table, and
-    // the columns inherit it: every `<col>` is emitted bare, with no width style.
+    // the columns inherit it: every `<col>` is emitted bare, with no width
+    // style.
     let output = convert(&format!("[%autowidth]\n{BASE_H}"));
 
     assert_css(&output, "table.fit-content", 1);
@@ -185,8 +187,8 @@ In this case, width values are assumed to be a percentage value (i.e., 100-based
 "#
     );
 
-    // The `25h` specifier fixes the first column at 25%, while each `~` column is
-    // autowidth and emits a bare `<col>` with no width style.
+    // The `25h` specifier fixes the first column at 25%, while each `~` column
+    // is autowidth and emits a bare `<col>` with no width style.
     let output = convert(
         "[cols=\"25h,~,~\"]\n|===\n|small |as big as the column needs to be |the rest\n|===",
     );

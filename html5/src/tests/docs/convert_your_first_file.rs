@@ -74,10 +74,10 @@ fn converts_a_file_to_html5() {
     );
 
     // The example document the page uses — a title, a paragraph, and a section.
-    // Reading it with `convert_file` yields a complete, standalone HTML5 document
-    // — the same one a standalone string conversion produces for the same source.
-    // (The plain string `convert` is embedded by default, so we compare against a
-    // standalone one.)
+    // Reading it with `convert_file` yields a complete, standalone HTML5
+    // document — the same one a standalone string conversion produces for
+    // the same source. (The plain string `convert` is embedded by default,
+    // so we compare against a standalone one.)
     let source = "= My First Document\n\n\
         Converting AsciiDoc to HTML5 with adoc takes a single command.\n\n\
         == Getting Started\n\n\

@@ -392,8 +392,8 @@ fn should_accept_document_from_stdin_and_write_to_stdout() {
     );
 
     // The document-model date attributes the Ruby test compares aren't exposed
-    // by `adoc`; the rendered body is, and piping `content` through `-e -` yields
-    // the single `content` paragraph.
+    // by `adoc`; the rendered body is, and piping `content` through `-e -`
+    // yields the single `content` paragraph.
     let output = String::from_utf8(run_stdin(&["-e", "-"], "content").expect("adoc converts"))
         .expect("output is UTF-8");
     assert!(output.contains(r#"<div class="paragraph">"#));
@@ -478,8 +478,8 @@ fn should_fail_if_input_file_matches_resolved_output_file() {
 "#
     );
 
-    // `-a outfilesuffix=.adoc` derives the output name `sample.adoc` — the input
-    // itself — so `adoc` refuses to convert the file onto itself.
+    // `-a outfilesuffix=.adoc` derives the output name `sample.adoc` — the
+    // input itself — so `adoc` refuses to convert the file onto itself.
     let project = Project::new("input-eq-resolved-output");
     let input = project.write("sample.adoc", "= Doc\n\nBody.\n");
     let err = project
@@ -555,9 +555,10 @@ fn should_allow_docdir_to_be_specified_when_input_is_a_string() {
     );
 
     // The Ruby test reads `docdir`/`base_dir` off the document; `adoc` exposes
-    // the parsed option instead. `--base-dir` (Asciidoctor's `-B`) sets the base
-    // directory even when the source is a stream. Its include-resolution effect
-    // is covered by the io-piping page suite; here the parse is the claim.
+    // the parsed option instead. `--base-dir` (Asciidoctor's `-B`) sets the
+    // base directory even when the source is a stream. Its
+    // include-resolution effect is covered by the io-piping page suite;
+    // here the parse is the claim.
     let cli = Cli::parse_from(["adoc", "-e", "--base-dir", "test/fixtures", "-o", "-", "-"]);
     assert_eq!(cli.base_dir, Some(PathBuf::from("test/fixtures")));
 }
@@ -583,9 +584,9 @@ fn should_display_version_and_exit() {
     );
 
     // Asciidoctor prints `Asciidoctor <version> [https://asciidoctor.org] ...`;
-    // `adoc` prints its own identity, `adoc <version>`. Both `--version` and its
-    // short `-V` render the line and exit (clap reports this as a `DisplayVersion`
-    // parse outcome rather than an error).
+    // `adoc` prints its own identity, `adoc <version>`. Both `--version` and
+    // its short `-V` render the line and exit (clap reports this as a
+    // `DisplayVersion` parse outcome rather than an error).
     for switch in ["--version", "-V"] {
         let err = Cli::try_parse_from(["adoc", switch])
             .expect_err("--version exits before producing a Cli");
@@ -638,10 +639,10 @@ fn should_not_emit_any_unexpected_warnings() {
 "#
     );
 
-    // `-w`/`--warnings` is accepted for compatibility (Asciidoctor's `-w` toggles
-    // the Ruby interpreter's script warnings, which have no analog here). A clean
-    // document emits nothing on stderr under it — the parser reports no warnings,
-    // and `-w` does not manufacture any.
+    // `-w`/`--warnings` is accepted for compatibility (Asciidoctor's `-w`
+    // toggles the Ruby interpreter's script warnings, which have no analog
+    // here). A clean document emits nothing on stderr under it — the parser
+    // reports no warnings, and `-w` does not manufacture any.
     let project = Project::new("no-unexpected-warnings");
     let input = project.write("basic.adoc", "= Document Title\n\nBody paragraph.\n");
     let out = project.path("basic.html");
@@ -759,10 +760,11 @@ fn should_return_non_zero_exit_code_if_failure_level_is_reached() {
     );
 
     // `--failure-level=WARN` makes a warning fail the run: the out-of-sequence
-    // list item raises one, so `adoc` exits non-zero (the `failure_reached` flag
-    // the binary maps to a `1` exit code). `-q` still silences the stream, so the
-    // failure is signaled without any message — matching the Ruby test's assertion
-    // that the exit code is 1 while stderr stays empty.
+    // list item raises one, so `adoc` exits non-zero (the `failure_reached`
+    // flag the binary maps to a `1` exit code). `-q` still silences the
+    // stream, so the failure is signaled without any message — matching the
+    // Ruby test's assertion that the exit code is 1 while stderr stays
+    // empty.
     let (failed, stderr) = run_stdin_streams(
         &["-q", "--failure-level=WARN", "-o", "-"],
         "1. first\n3. third\n",
@@ -786,10 +788,11 @@ fn should_report_usage_if_no_input_file_given() {
     );
 
     // With no input argument at an interactive terminal, `adoc` prints usage
-    // rather than blocking on standard input, matching Asciidoctor, which prints
-    // its option summary when no input file is given. Drive the whole pipeline:
-    // `run_with_streams` diverts to writing the `Usage:` summary to stderr and
-    // reports a non-zero exit, reading no standard input and producing no output.
+    // rather than blocking on standard input, matching Asciidoctor, which
+    // prints its option summary when no input file is given. Drive the
+    // whole pipeline: `run_with_streams` diverts to writing the `Usage:`
+    // summary to stderr and reports a non-zero exit, reading no standard
+    // input and producing no output.
     let cli = Cli::parse_from(["adoc"]);
     let mut stdin = std::io::empty();
     let mut stdout = Vec::new();
@@ -875,8 +878,9 @@ fn should_treat_extra_arguments_as_files() {
 "#
     );
 
-    // `extra` and `arguments` name no file, so — like Asciidoctor treating extra
-    // arguments as inputs — `adoc` tries to read `extra` first and fails.
+    // `extra` and `arguments` name no file, so — like Asciidoctor treating
+    // extra arguments as inputs — `adoc` tries to read `extra` first and
+    // fails.
     let project = Project::new("extra-args");
     let sample = project.write("sample.adoc", "= Doc\n\nBody.\n");
     let out = project.path("out.html");
@@ -918,8 +922,8 @@ fn should_output_to_file_name_based_on_input_file_name() {
 "#
     );
 
-    // With no `-o`, `adoc` derives the output name by swapping the extension for
-    // `.html`, writing `sample.html` next to the input.
+    // With no `-o`, `adoc` derives the output name by swapping the extension
+    // for `.html`, writing `sample.html` next to the input.
     let project = Project::new("derived-name");
     let input = project.write("sample.adoc", "= Document Title\n\n== Section A\n\nx\n");
     project
@@ -990,10 +994,11 @@ fn should_preserve_directory_structure_in_destination_directory_if_source_direct
 "#
     );
 
-    // `-R`/`--source-dir` names a source root so that `-D` recreates the input's
-    // subdirectory beneath it. Here the input `fixtures/subdir/index.adoc` sits
-    // one level under the source root `fixtures`, so its output lands in the
-    // mirrored `subdir` under the destination, not flat in it.
+    // `-R`/`--source-dir` names a source root so that `-D` recreates the
+    // input's subdirectory beneath it. Here the input
+    // `fixtures/subdir/index.adoc` sits one level under the source root
+    // `fixtures`, so its output lands in the mirrored `subdir` under the
+    // destination, not flat in it.
     let project = Project::new("source-dir");
     let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
     let dest = project.path("test_output");
@@ -1010,8 +1015,8 @@ fn should_preserve_directory_structure_in_destination_directory_if_source_direct
     assert!(project.path("test_output/subdir").is_dir());
     assert!(project.exists("test_output/subdir/index.html"));
 
-    // Without `-R`, the same input flattens to the destination directory by base
-    // name — the behavior `-R` opts out of.
+    // Without `-R`, the same input flattens to the destination directory by
+    // base name — the behavior `-R` opts out of.
     let project = Project::new("source-dir-flat");
     let input = project.write("fixtures/subdir/index.adoc", "= Index\n\nBody.\n");
     let dest = project.path("test_output");
@@ -1277,8 +1282,8 @@ fn should_not_copy_custom_stylesheet_to_target_directory_if_stylesdir_is_a_uri()
 "#
     );
 
-    // A URI `stylesdir` is not a local directory, so nothing is copied under the
-    // output.
+    // A URI `stylesdir` is not a local directory, so nothing is copied under
+    // the output.
     let project = Project::new("custom-css-uri");
     let input = project.write("sample.adoc", "= Doc\n\nBody.\n");
     let out = project.path("output/sample-output.html");
@@ -1353,8 +1358,8 @@ fn options_should_not_be_modified_when_processing_multiple_files() {
     );
 
     // Converting several files does not mutate the shared options: each is
-    // written into the `-D` destination under its own derived name, here with the
-    // `outfilesuffix=.htm` override applied to both.
+    // written into the `-D` destination under its own derived name, here with
+    // the `outfilesuffix=.htm` override applied to both.
     let project = Project::new("multi-file-options");
     let basic = project.write("basic.adoc", "= Basic\n\nBody.\n");
     let sample = project.write("sample.adoc", "= Sample\n\nBody.\n");
@@ -1453,10 +1458,10 @@ fn should_suppress_header_footer_if_specified() {
 "#
     );
 
-    // The Ruby test iterates `-e` and its legacy alias `-s`; `adoc` accepts both
-    // (`-e`/`--embedded` primary, `-s`/`--no-header-footer` as compatibility
-    // aliases). Each drops the `<html>` shell yet, for a titled document with a
-    // section, still emits the preamble wrapper.
+    // The Ruby test iterates `-e` and its legacy alias `-s`; `adoc` accepts
+    // both (`-e`/`--embedded` primary, `-s`/`--no-header-footer` as
+    // compatibility aliases). Each drops the `<html>` shell yet, for a
+    // titled document with a section, still emits the preamble wrapper.
     for flag in ["-e", "-s", "--no-header-footer"] {
         let output = String::from_utf8(
             run_stdin(&[flag, "-"], "= T\n\nPreamble.\n\n== Section\n\nbody\n")
@@ -1598,10 +1603,11 @@ fn should_set_doctype_to_article_if_specified() {
     );
 
     // `article` is the only doctype `adoc` models, and its default, so `-d
-    // article` is accepted for `asciidoctor` compatibility as a no-op (the other
-    // doctypes are rejected — see below). The Ruby test reads `doctype` off the
-    // document model; `adoc` exposes only the rendered output, which carries the
-    // same fact: a standalone article renders with an `article` body class.
+    // article` is accepted for `asciidoctor` compatibility as a no-op (the
+    // other doctypes are rejected — see below). The Ruby test reads
+    // `doctype` off the document model; `adoc` exposes only the rendered
+    // output, which carries the same fact: a standalone article renders
+    // with an `article` body class.
     let project = Project::new("doctype-article");
     let input = project.write("sample.adoc", "= Document Title\n\nBody paragraph.\n");
     let output = String::from_utf8(
@@ -1727,8 +1733,8 @@ fn should_set_attribute_with_value() {
     );
 
     // Asciidoctor passes `--trace`; `adoc` has no such flag, so it is dropped.
-    // `-a idprefix=id` overrides the id prefix, so the section's generated id is
-    // `idsection_a`.
+    // `-a idprefix=id` overrides the id prefix, so the section's generated id
+    // is `idsection_a`.
     let output = String::from_utf8(
         run_stdin(
             &["-a", "idprefix=id", "-e", "-"],
@@ -1756,9 +1762,10 @@ fn should_set_attribute_with_value_containing_equal_sign() {
     );
 
     // Asciidoctor verifies `toc-title=t=o=c` through the rendered TOC (not yet
-    // rendered here). The claim under test is that the value keeps every `=` after
-    // the first — `adoc` splits an `-a` spec on the first `=` only — shown here by
-    // substituting the whole `a=b=c` value through an attribute reference.
+    // rendered here). The claim under test is that the value keeps every `=`
+    // after the first — `adoc` splits an `-a` spec on the first `=` only —
+    // shown here by substituting the whole `a=b=c` value through an
+    // attribute reference.
     let output = String::from_utf8(
         run_stdin(&["-a", "myattr=a=b=c", "-e", "-"], "= T\n\n{myattr}\n").expect("adoc converts"),
     )
@@ -1782,9 +1789,9 @@ fn should_set_attribute_with_quoted_value_containing_a_space() {
 "#
     );
 
-    // The shell strips the quotes, handing `adoc` a single `note-caption=Note to
-    // self:` argument; the space survives in the value and becomes the caption of
-    // the NOTE admonition.
+    // The shell strips the quotes, handing `adoc` a single `note-caption=Note
+    // to self:` argument; the space survives in the value and becomes the
+    // caption of the NOTE admonition.
     let output = String::from_utf8(
         run_stdin(
             &["-a", "note-caption=Note to self:", "-e", "-"],
@@ -2041,9 +2048,9 @@ fn should_print_timings_when_t_flag_is_specified() {
 
     // `-t`/`--timings` prints a timing report to standard error after the
     // conversion. The Ruby test discards the HTML with `-o /dev/null`; `adoc`
-    // writes it to `-o -`/stdout, which this helper discards, and asserts on the
-    // report that lands on stderr — its `Total time` line matching the Ruby
-    // regex.
+    // writes it to `-o -`/stdout, which this helper discards, and asserts on
+    // the report that lands on stderr — its `Total time` line matching the
+    // Ruby regex.
     let (_failed, stderr) = run_stdin_streams(&["-t", "-o", "-"], "Sample *AsciiDoc*");
     assert!(
         stderr.contains("Total time"),
@@ -2175,8 +2182,8 @@ fn should_ignore_source_date_epoch_if_value_is_empty() {
 "#
     );
 
-    // An empty or whitespace-only value parses to `None` (ignored), so the clock
-    // is left unpinned and the dates fall back to the current time.
+    // An empty or whitespace-only value parses to `None` (ignored), so the
+    // clock is left unpinned and the dates fall back to the current time.
     assert!(matches!(crate::parse_source_date_epoch(""), Ok(None)));
     assert!(matches!(crate::parse_source_date_epoch("   "), Ok(None)));
 }

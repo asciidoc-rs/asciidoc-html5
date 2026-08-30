@@ -131,7 +131,8 @@ The section number does not increment in regions of the document where section n
     let html = convert(NUM_OFF);
 
     // The `num-out` illustration: the first section is `1.`, the three sections
-    // in the off region carry no number, and numbering resumes at `2.` (not `4.`).
+    // in the off region carry no number, and numbering resumes at `2.` (not
+    // `4.`).
     assert!(html.contains(">1. Numbered Section<"), "{html}");
     assert!(html.contains(">Unnumbered Section<"), "{html}");
     assert!(html.contains(">2. Numbered Section<"), "{html}");

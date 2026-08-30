@@ -141,8 +141,9 @@ When converting this document, the AsciiDoc processor will look for images in th
 "#
     );
 
-    // With `iconsdir` set to `icons`, both the icon macro and an admonition icon
-    // resolve under that directory instead of the default `./images/icons`.
+    // With `iconsdir` set to `icons`, both the icon macro and an admonition
+    // icon resolve under that directory instead of the default
+    // `./images/icons`.
     assert!(convert(":icons: image\n:iconsdir: icons\n\nicon:note[]")
         .contains(r#"<img src="icons/note.png" alt="note">"#));
     assert!(convert(":icons: image\n:iconsdir: icons\n\nNOTE: x")

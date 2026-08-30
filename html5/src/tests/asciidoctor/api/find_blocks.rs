@@ -435,8 +435,8 @@ top_level_sections = doc.find_by(context: :section) {|section| section.level == 
         .count();
     assert_eq!(top_level_sections, 2);
 
-    // The refined form: pre-select sections with a selector, then apply the same
-    // level filter.
+    // The refined form: pre-select sections with a selector, then apply the
+    // same level filter.
     let combined = doc
         .find_blocks(&BlockSelector::new().context("section"))
         .filter(|block| matches!(block, Block::Section(s) if s.level() == 1))

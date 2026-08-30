@@ -121,9 +121,10 @@ impl AssetWriter for DirAssetWriter {
 
             // The fold above keeps `dest` within the root *lexically*, but a
             // symlink already present in the output tree could still redirect
-            // the real write outside it. Resolve the real parent and refuse when
-            // it escapes the real root — the same stricter-than-Asciidoctor
-            // symlink containment the include handler applies to reads.
+            // the real write outside it. Resolve the real parent and refuse
+            // when it escapes the real root — the same
+            // stricter-than-Asciidoctor symlink containment the
+            // include handler applies to reads.
             let root = self.root.canonicalize()?;
             if !parent.canonicalize()?.starts_with(&root) {
                 return Err(io::Error::new(
@@ -240,8 +241,8 @@ mod tests {
     #[test]
     fn destination_without_a_parent_skips_directory_creation() {
         // Root `.` with a path that clamps to nothing leaves the destination at
-        // `.`, whose parent is empty; writing to a directory fails, but the point
-        // is that no `create_dir_all("")` is attempted first.
+        // `.`, whose parent is empty; writing to a directory fails, but the
+        // point is that no `create_dir_all("")` is attempted first.
         let mut writer = DirAssetWriter::new(".");
         assert!(writer.write_asset(Path::new(".."), b"z").is_err());
     }

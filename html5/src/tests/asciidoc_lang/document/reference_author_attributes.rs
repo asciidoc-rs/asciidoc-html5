@@ -138,8 +138,8 @@ You can contact {firstname} at {email}.
     // `{author_2}` / `{lastname_2}` -> B. Steppenwolf.
     assert!(output.contains("About B. Steppenwolf"));
     assert!(output.contains("Mr. Steppenwolf lives in the Rocky Mountains."));
-    // `{author_3}` / `{firstname_3}` / `{authorinitials_3}` -> Pax Draeke / Pax /
-    // PD.
+    // `{author_3}` / `{firstname_3}` / `{authorinitials_3}` -> Pax Draeke / Pax
+    // / PD.
     assert!(output.contains("About Pax Draeke"));
     assert!(output.contains("Pax, also known as PD, loves to surf."));
     // The unsuffixed names still resolve to the first author.

@@ -116,8 +116,8 @@ include::example$ui.adoc[tag=menu]
 "#
     );
 
-    // The `tag=menu` snippet: a bare menu item (`menu:File[Save]`) and a submenu
-    // path (`menu:View[Zoom > Reset]`).
+    // The `tag=menu` snippet: a bare menu item (`menu:File[Save]`) and a
+    // submenu path (`menu:View[Zoom > Reset]`).
     let output = convert(
         ":experimental:\n\n\
          ====\n\
@@ -214,17 +214,18 @@ Subsequent menu items don't have this requirement and thus can start with any ch
     );
 
     // The example above (`example$ui.adoc[tag=menu-charref]`) uses the
-    // *shorthand* menu syntax, which this crate does not implement (see the note
-    // on the shorthand block above), so it stays literal text rather than a menu.
-    // Starting the menu with a character reference is verified for the macro form
+    // *shorthand* menu syntax, which this crate does not implement (see the
+    // note on the shorthand block above), so it stays literal text rather
+    // than a menu. Starting the menu with a character reference is verified
+    // for the macro form
     // in `first_menu_item_must_start_with_word_char_or_ampersand` above.
     let shorthand = convert(
         ":experimental:\n\nSelect \"&#8942; > More Tools > Extensions\" to find and enable extensions.",
     );
     assert_css(&shorthand, "span.menuseq", 0);
 
-    // Unlike the first menu item, subsequent items (submenus and the final item)
-    // may start with any character, including a non-word character.
+    // Unlike the first menu item, subsequent items (submenus and the final
+    // item) may start with any character, including a non-word character.
     let output = convert(":experimental:\n\nmenu:View[.zoom > .reset]");
     assert_css(&output, "span.menuseq", 1);
     assert_xpath(&output, r#"//b[@class="submenu"][text()=".zoom"]"#, 1);

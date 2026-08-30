@@ -81,8 +81,9 @@ However, the processor will issue a warning if a matching closing delimiter is n
         "********\nThis is an invalid sidebar block because the delimiter lines are different lengths.\n****\n";
     let output = convert(source);
 
-    // The shorter `****` is treated as an opening delimiter rather than a close,
-    // so the remainder nests inside the outer (unterminated) sidebar.
+    // The shorter `****` is treated as an opening delimiter rather than a
+    // close, so the remainder nests inside the outer (unterminated)
+    // sidebar.
     assert_css(&output, "div.sidebarblock div.sidebarblock", 1);
 
     let doc = load(source);

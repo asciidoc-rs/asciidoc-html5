@@ -306,8 +306,8 @@ Content is top-aligned by default.
 "#
     );
 
-    // A `.>` at the front of a column specifier bottom-aligns every cell in that
-    // column; the second column stays top-aligned.
+    // A `.>` at the front of a column specifier bottom-aligns every cell in
+    // that column; the second column stays top-aligned.
     let bottom = convert(
         r#"[cols=".>2,1"]
 |===
@@ -380,8 +380,8 @@ The table from <<ex-vertical-multiplier>> is rendered below.
 "#
     );
 
-    // A `.^` in a column specifier vertically centers every cell in that column;
-    // the second column stays top-aligned.
+    // A `.^` in a column specifier vertically centers every cell in that
+    // column; the second column stays top-aligned.
     let vertical = convert(
         r#"[cols=".^2,1"]
 |===
@@ -394,8 +394,8 @@ Content is top-aligned by default.
     assert_css(&vertical, "td.tableblock.halign-left.valign-middle", 1);
     assert_css(&vertical, "td.tableblock.halign-left.valign-top", 1);
 
-    // With the columns declared via a multiplier, `2*.^` vertically centers both
-    // columns' cells, header cells included.
+    // With the columns declared via a multiplier, `2*.^` vertically centers
+    // both columns' cells, header cells included.
     let multiplier = convert(
         r#"[cols="2*.^",options=header]
 |===
@@ -470,9 +470,10 @@ centered vertically.
 "#
     );
 
-    // Each column specifier carries a horizontal operator before a vertical one:
-    // `^.>` centers horizontally and bottom-aligns, the unmarked middle column
-    // stays left/top, and `>.^` right-aligns and centers vertically.
+    // Each column specifier carries a horizontal operator before a vertical
+    // one: `^.>` centers horizontally and bottom-aligns, the unmarked
+    // middle column stays left/top, and `>.^` right-aligns and centers
+    // vertically.
     let center = convert(
         r#"[cols="^.>2,1,>.^1"]
 |===

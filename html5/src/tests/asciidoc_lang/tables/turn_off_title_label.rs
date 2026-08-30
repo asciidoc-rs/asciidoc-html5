@@ -71,8 +71,8 @@ When `table-caption` is unset, table titles aren't preceded by a label and label
 "#
     );
 
-    // Unsetting `table-caption` with a trailing `!` drops the label entirely, so
-    // the caption is just the title text with no `Table <n>.` prefix.
+    // Unsetting `table-caption` with a trailing `!` drops the label entirely,
+    // so the caption is just the title text with no `Table <n>.` prefix.
     let output = convert(
         "= Title of Document\n:table-caption!:\n\n.A table with a title but no label\n|===\n|Value |Result |Notes\n\n|Null |A mystery |See Appendix R\n|===",
     );
@@ -129,8 +129,9 @@ The table from the previous example is displayed below.
 "#
     );
 
-    // Assigning an empty value to `caption` drops the label for this table only,
-    // so the caption is just the title text with no `Table <n>.` prefix.
+    // Assigning an empty value to `caption` drops the label for this table
+    // only, so the caption is just the title text with no `Table <n>.`
+    // prefix.
     let output = convert(
         "[caption=]\n.A table with a title but no label\n[cols=\"2,1\"]\n|===\n|Lots and lots of data |A little data\n\n|834,734 |3\n|3,999,271.5601 |5\n|===",
     );

@@ -256,7 +256,8 @@ If you don't want the AsciiDoc processor to emit a warning, but rather drop the 
         "{warnings:?}"
     );
 
-    // With `opts=optional`, the missing include is dropped without a message ...
+    // With `opts=optional`, the missing include is dropped without a message
+    // ...
     let optional_src = "include::no-such-file.adoc[opts=optional]\n\ntrailing content";
     let optional = convert_including(optional_src);
     assert!(!optional.contains("Unresolved directive"), "{optional}");

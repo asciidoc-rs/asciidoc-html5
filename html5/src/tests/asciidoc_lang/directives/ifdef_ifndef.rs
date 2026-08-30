@@ -232,9 +232,9 @@ Otherwise, the content is not included.
 "#
     );
 
-    // The page's example names `backend-html5`, which this renderer always sets;
-    // to exercise both branches of the "or" cleanly, use two attributes that are
-    // not set by default.
+    // The page's example names `backend-html5`, which this renderer always
+    // sets; to exercise both branches of the "or" cleanly, use two
+    // attributes that are not set by default.
     let src = "ifdef::feature-preview,feature-beta[Shown when either feature attribute is set.]";
 
     let one = convert_with_attrs(src, &[("feature-preview", "")]);

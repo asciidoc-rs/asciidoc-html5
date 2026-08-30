@@ -325,9 +325,9 @@ A negated single wildcard has different meaning depending on whether it comes be
 "#
     );
 
-    // The double wildcard is applied first regardless of position: `!foo;**` and
-    // `**;!foo` select the same lines (all lines but the `foo` region, minus the
-    // tag-directive lines).
+    // The double wildcard is applied first regardless of position: `!foo;**`
+    // and `**;!foo` select the same lines (all lines but the `foo` region,
+    // minus the tag-directive lines).
     let leading = convert_including("....\ninclude::foo-bar.rb[tags=!foo;**]\n....\n");
     let trailing = convert_including("....\ninclude::foo-bar.rb[tags=**;!foo]\n....\n");
     for out in [&leading, &trailing] {
@@ -342,9 +342,10 @@ A negated single wildcard has different meaning depending on whether it comes be
     assert!(!negated.contains("outside before"), "{negated}");
     assert!(!negated.contains("foo start"), "{negated}");
 
-    // A negated single wildcard means different things by position: before a tag
-    // name (`!*;foo`) it keeps the non-tagged regions and the `foo` region;
-    // after one (`foo;!*`) it keeps only `foo` minus its nested tagged regions.
+    // A negated single wildcard means different things by position: before a
+    // tag name (`!*;foo`) it keeps the non-tagged regions and the `foo`
+    // region; after one (`foo;!*`) it keeps only `foo` minus its nested
+    // tagged regions.
     let before = convert_including("....\ninclude::foo-bar.rb[tags=!*;foo]\n....\n");
     assert!(before.contains("outside before"), "{before}");
     assert!(before.contains("foo start"), "{before}");
@@ -495,8 +496,8 @@ A leading inclusion implicitly starts by selecting no lines.
 "#
     );
 
-    // A leading exclusion (`!foo`) starts from all lines, so the non-tagged lines
-    // outside `foo` survive.
+    // A leading exclusion (`!foo`) starts from all lines, so the non-tagged
+    // lines outside `foo` survive.
     let leading_exclusion = convert_including("....\ninclude::foo-bar.rb[tag=!foo]\n....\n");
     assert!(
         leading_exclusion.contains("outside before"),
@@ -507,8 +508,8 @@ A leading inclusion implicitly starts by selecting no lines.
         "{leading_exclusion}"
     );
 
-    // A leading inclusion (`foo`) starts from no lines, so only the named region
-    // is selected — the non-tagged lines are not.
+    // A leading inclusion (`foo`) starts from no lines, so only the named
+    // region is selected — the non-tagged lines are not.
     let leading_inclusion = convert_including("....\ninclude::foo-bar.rb[tag=foo]\n....\n");
     assert!(
         leading_inclusion.contains("foo start"),

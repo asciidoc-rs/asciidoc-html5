@@ -81,8 +81,8 @@ include::example$table.adoc[tag=nested]
 |==="#,
     );
 
-    // The nested table renders inside the AsciiDoc (`a`) cell's nested document,
-    // for two tables in all.
+    // The nested table renders inside the AsciiDoc (`a`) cell's nested
+    // document, for two tables in all.
     assert_css(&output, "table", 2);
     assert_css(&output, "td div.content table", 1);
 

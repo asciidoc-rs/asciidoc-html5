@@ -42,9 +42,9 @@ You can assign one or more options to a block using the shorthand or formal synt
 "#
     );
 
-    // Shorthand `%option` on a sidebar: the option is unrecognized and therefore
-    // ignored, producing no distinct rendered output. The shorthand parsing is
-    // verified in `asciidoc-parser`.
+    // Shorthand `%option` on a sidebar: the option is unrecognized and
+    // therefore ignored, producing no distinct rendered output. The
+    // shorthand parsing is verified in `asciidoc-parser`.
     non_normative!(
         r#"
 === Shorthand options syntax for blocks
@@ -64,8 +64,8 @@ This is a sidebar with an option assigned to it, named option.
 "#
     );
 
-    // Multiple unrecognized shorthand options: still no rendered effect (parsing
-    // verified in `asciidoc-parser`).
+    // Multiple unrecognized shorthand options: still no rendered effect
+    // (parsing verified in `asciidoc-parser`).
     non_normative!(
         r#"
 You can assign multiple options to a block by prefixing each value with a percent sign (`%`).
@@ -109,16 +109,16 @@ For instance, consider a table with the three built-in option values, `header`, 
             "[%header%footer%autowidth,cols=2*~]\n|===\n|Cell A1 |Cell B1\n\n|Cell A2 |Cell B2\n\n|Cell A3 |Cell B3\n|===",
         );
 
-        // `header` promotes the first row to a `<thead>`, `footer` moves the last
-        // row to a `<tfoot>`, and `autowidth` renders the table with the
-        // `fit-content` class instead of a fixed width.
+        // `header` promotes the first row to a `<thead>`, `footer` moves the
+        // last row to a `<tfoot>`, and `autowidth` renders the table
+        // with the `fit-content` class instead of a fixed width.
         assert_css(&output, "table.tableblock.fit-content", 1);
         assert_css(&output, "table > thead > tr > th", 2);
         assert_css(&output, "table > tfoot", 1);
     }
 
-    // Formal `opts=option` on a sidebar: unrecognized option, no rendered effect
-    // (parsing verified in `asciidoc-parser`).
+    // Formal `opts=option` on a sidebar: unrecognized option, no rendered
+    // effect (parsing verified in `asciidoc-parser`).
     non_normative!(
         r#"
 === Formal options syntax for blocks
@@ -230,10 +230,10 @@ The role and options attributes can be set in either order, i.e., `[horizontal%s
             "[horizontal.properties%step]\nproperty 1:: does stuff\nproperty 2:: does different stuff",
         );
 
-        // The `horizontal` style renders the description list as a table, and the
-        // dotted `properties` role becomes a class on the enclosing element. The
-        // `step` option is not recognized on a description list and has no
-        // rendered effect.
+        // The `horizontal` style renders the description list as a table, and
+        // the dotted `properties` role becomes a class on the enclosing
+        // element. The `step` option is not recognized on a description
+        // list and has no rendered effect.
         assert_css(&output, "div.hdlist.properties", 1);
         assert_css(&output, "div.hdlist > table", 1);
     }

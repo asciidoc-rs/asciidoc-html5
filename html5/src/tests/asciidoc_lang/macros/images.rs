@@ -177,7 +177,8 @@ To turn off figure caption labels and numbers, unset the `figure-caption` attrib
 "#
     );
 
-    // With `figure-caption` set (the default), the title is prefixed and numbered.
+    // With `figure-caption` set (the default), the title is prefixed and
+    // numbered.
     assert!(convert(".A mountain sunset\nimage::sunset.jpg[Sunset]")
         .contains(r#"<div class="title">Figure 1. A mountain sunset</div>"#));
 

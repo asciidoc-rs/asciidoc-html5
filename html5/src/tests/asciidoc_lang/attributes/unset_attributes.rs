@@ -83,7 +83,8 @@ When `sectids` is unset, the AsciiDoc processor will not generate IDs from secti
 "#
         );
 
-        // With `sectids` unset, the section heading carries no auto-generated id.
+        // With `sectids` unset, the section heading carries no auto-generated
+        // id.
         let output = convert("= Document Title\n:!sectids:\n\n== First Section\n\nText.");
         assert_css(&output, "h2", 1);
         assert_css(&output, "h2[id]", 0);
@@ -165,7 +166,8 @@ All of the sections below where the attribute is unset will not be numbered.
         );
 
         // Numbering is on for the first section, off for the section (and its
-        // subsection) after `sectnums` is unset, and on again after it is reset.
+        // subsection) after `sectnums` is unset, and on again after it is
+        // reset.
         assert_xpath(&output, r#"//h2[text()="1. Section Title"]"#, 1);
         assert_xpath(&output, r#"//h2[text()="Section Title"]"#, 1);
         assert_xpath(&output, r#"//h3[text()="Section Title"]"#, 1);

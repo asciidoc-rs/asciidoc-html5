@@ -331,14 +331,15 @@ const SYNTAX_CRIB_SHEET: &str = include_str!("../assets/syntax.adoc");
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
 
-    // Asciidoctor's `--help syntax` prints an AsciiDoc syntax crib sheet. clap's
-    // derived `--help` is a plain flag that ignores any trailing topic, so the
-    // topic is handled here, before clap parses the rest.
+    // Asciidoctor's `--help syntax` prints an AsciiDoc syntax crib sheet.
+    // clap's derived `--help` is a plain flag that ignores any trailing
+    // topic, so the topic is handled here, before clap parses the rest.
     if syntax_help_topic(&args) {
         let mut stdout = io::stdout().lock();
 
-        // Ignore a broken pipe, so `adoc --help syntax | head` (or piping into a
-        // reader that closes early) exits cleanly rather than panicking.
+        // Ignore a broken pipe, so `adoc --help syntax | head` (or piping into
+        // a reader that closes early) exits cleanly rather than
+        // panicking.
         let _ = stdout.write_all(SYNTAX_CRIB_SHEET.as_bytes());
         return ExitCode::SUCCESS;
     }
@@ -347,8 +348,9 @@ fn main() -> ExitCode {
 
     // Whether standard input is an interactive terminal decides the bare-
     // invocation case inside [`run_with_streams`]: with no input argument and a
-    // terminal there is nothing piped in, so it prints usage instead of blocking
-    // on the read. Sampled before locking, though the lock does not change it.
+    // terminal there is nothing piped in, so it prints usage instead of
+    // blocking on the read. Sampled before locking, though the lock does
+    // not change it.
     let stdin_is_terminal = io::stdin().is_terminal();
 
     let mut stdin = io::stdin().lock();
@@ -509,16 +511,17 @@ fn run_with_streams_using(
     stderr: &mut dyn Write,
 ) -> io::Result<bool> {
     // Reject an unsupported backend or doctype before reading or converting
-    // anything, so an `-b docbook5` or `-d book` invocation fails cleanly without
-    // touching the input.
+    // anything, so an `-b docbook5` or `-d book` invocation fails cleanly
+    // without touching the input.
     check_backend(cli)?;
     check_doctype(cli)?;
 
-    // Unlike the library's string API (embedded by default), the CLI defaults to
-    // a standalone document — matching Asciidoctor's command, which writes a full
-    // document even when piping STDIN to STDOUT. `-e`/`--embedded` opts into
-    // body-only output. Setting the mode explicitly here also makes `-e` produce
-    // embedded output when writing to a file, not just to standard output.
+    // Unlike the library's string API (embedded by default), the CLI defaults
+    // to a standalone document — matching Asciidoctor's command, which
+    // writes a full document even when piping STDIN to STDOUT.
+    // `-e`/`--embedded` opts into body-only output. Setting the mode
+    // explicitly here also makes `-e` produce embedded output when writing
+    // to a file, not just to standard output.
     let mut base_options = build_options(cli.section_numbers, &cli.attribute)?
         .safe_mode(resolve_safe_mode(cli)?)
         .standalone(!cli.embedded);
@@ -537,16 +540,17 @@ fn run_with_streams_using(
     let reporter = WarningReporter::from_cli(cli)?;
 
     // A bare invocation (no input argument) at an interactive terminal would
-    // otherwise block reading standard input, which reads as a freeze. Print the
-    // usage summary and exit non-zero instead, matching Asciidoctor's behavior
-    // when no input file is given. Piped or redirected input (standard input is
-    // not a terminal), and an explicit `-`, fall through and read standard input,
-    // so the piping design keeps working.
+    // otherwise block reading standard input, which reads as a freeze. Print
+    // the usage summary and exit non-zero instead, matching Asciidoctor's
+    // behavior when no input file is given. Piped or redirected input
+    // (standard input is not a terminal), and an explicit `-`, fall through
+    // and read standard input, so the piping design keeps working.
     //
-    // This runs *after* the option checks above so that an invalid `-b`/`-d`/`-S`/
-    // `-a`/`--failure-level` still reports its own specific error rather than
-    // being masked by generic usage — none of those checks read or block on
-    // standard input, so surfacing them first is safe.
+    // This runs *after* the option checks above so that an invalid
+    // `-b`/`-d`/`-S`/ `-a`/`--failure-level` still reports its own specific
+    // error rather than being masked by generic usage — none of those
+    // checks read or block on standard input, so surfacing them first is
+    // safe.
     if should_report_usage(&cli.inputs, stdin_is_terminal) {
         print_usage(stderr)?;
         return Ok(true);
@@ -554,9 +558,9 @@ fn run_with_streams_using(
 
     let sources = resolve_inputs(&cli.inputs)?;
 
-    // Every on-disk input in this invocation. A source's resolved output must not
-    // name any of them — not only its own input — or converting one source would
-    // truncate another (or itself) before that source is read.
+    // Every on-disk input in this invocation. A source's resolved output must
+    // not name any of them — not only its own input — or converting one
+    // source would truncate another (or itself) before that source is read.
     let input_paths: Vec<PathBuf> = sources
         .iter()
         .filter_map(InputSource::file)
@@ -570,17 +574,19 @@ fn run_with_streams_using(
     // input's path — while keeping that input's original identity reachable
     // through the output path — cannot slip it past the check: its identity was
     // already captured here, so re-resolving the (now-changed) path can neither
-    // point the check at a replacement nor drop it. Inputs whose identity cannot
-    // be read are omitted (an unreadable input exposes no identity to protect);
-    // see [`FileId`] for how identity is captured on each platform.
+    // point the check at a replacement nor drop it. Inputs whose identity
+    // cannot be read are omitted (an unreadable input exposes no identity
+    // to protect); see [`FileId`] for how identity is captured on each
+    // platform.
     let input_ids: Vec<FileId> = input_paths
         .iter()
         .filter_map(|path| FileId::from_path(path))
         .collect();
 
-    // A single source reaching the failure level fails the whole invocation, but
-    // every source is still converted first — matching Asciidoctor, which sets
-    // its exit code from the highest severity seen across all inputs.
+    // A single source reaching the failure level fails the whole invocation,
+    // but every source is still converted first — matching Asciidoctor,
+    // which sets its exit code from the highest severity seen across all
+    // inputs.
     let mut failure_reached = false;
     for source in &sources {
         failure_reached |= convert_source(
@@ -645,26 +651,26 @@ fn convert_source(
 
     let target = output_target_for(cli, input);
 
-    // Refuse to write the output onto any input file in this invocation, matching
-    // Asciidoctor's refusal to convert a file onto itself — and extending it
-    // across a multi-file run, where one source's resolved output (named with
-    // `-o` or derived, e.g. via an `outfilesuffix` landing on an input's
-    // extension) could otherwise truncate a sibling input before it is read. The
-    // comparison (see [`same_file`]) tests file identity, so an output that
-    // aliases an input through a symlink or a hard link is caught too. Fail
-    // before reading or converting.
+    // Refuse to write the output onto any input file in this invocation,
+    // matching Asciidoctor's refusal to convert a file onto itself — and
+    // extending it across a multi-file run, where one source's resolved
+    // output (named with `-o` or derived, e.g. via an `outfilesuffix`
+    // landing on an input's extension) could otherwise truncate a sibling
+    // input before it is read. The comparison (see [`same_file`]) tests
+    // file identity, so an output that aliases an input through a symlink
+    // or a hard link is caught too. Fail before reading or converting.
     //
     // This up-front check is best-effort against *accidental* clobbering: it
-    // runs before the input is read, so a typo (`-o doc.adoc` on `doc.adoc`), an
-    // `outfilesuffix` landing on an input's extension, or a pre-existing alias
-    // fails fast, before any conversion work. It is not itself race-free — the
-    // actual write happens after the input is read and converted, so a
-    // concurrent process could swap the output path for an alias to an input in
-    // between (the identity checked here is not bound to the file finally
-    // opened). That narrow TOCTOU window is closed at write time by
-    // [`write_output`], which re-verifies the *opened* output handle's identity
-    // against the inputs' identities frozen before conversion (`input_ids`)
-    // before truncating.
+    // runs before the input is read, so a typo (`-o doc.adoc` on `doc.adoc`),
+    // an `outfilesuffix` landing on an input's extension, or a pre-existing
+    // alias fails fast, before any conversion work. It is not itself
+    // race-free — the actual write happens after the input is read and
+    // converted, so a concurrent process could swap the output path for an
+    // alias to an input in between (the identity checked here is not bound
+    // to the file finally opened). That narrow TOCTOU window is closed at
+    // write time by [`write_output`], which re-verifies the *opened* output
+    // handle's identity against the inputs' identities frozen before
+    // conversion (`input_ids`) before truncating.
     if let OutputTarget::File(path) = &target {
         if input_paths.iter().any(|input| same_file(path, input)) {
             return Err(io::Error::new(
@@ -676,14 +682,14 @@ fn convert_source(
 
     // Measure the read and the parse together, matching Asciidoctor's timings
     // report, which combines them into one "read and parse" figure. The clocks
-    // are always read (the cost is negligible); the report is only printed under
-    // `-t`/`--timings`.
+    // are always read (the cost is negligible); the report is only printed
+    // under `-t`/`--timings`.
     let read_parse_start = Instant::now();
     let source_text = read_input(input, stdin)?;
 
     // Load the document once so its warnings can be surfaced to `stderr`, then
-    // render that same parse — rather than parsing a second time — to `stdout` or
-    // the output file. The reporter both prints the warnings (subject to
+    // render that same parse — rather than parsing a second time — to `stdout`
+    // or the output file. The reporter both prints the warnings (subject to
     // `-q`/`-v`) and reports whether any reached the failure level.
     let document = asciidoc_html5::load_with(&source_text, &options);
     let read_parse = read_parse_start.elapsed();
@@ -696,16 +702,17 @@ fn convert_source(
         OutputTarget::File(path) => {
             let dir = output_dir(&path);
 
-            // Create the output directory if it is missing, matching Asciidoctor,
-            // which makes the destination directory (named by `-D`, or embedded
-            // in an `-o` path like `build/out.html`) before writing to it.
+            // Create the output directory if it is missing, matching
+            // Asciidoctor, which makes the destination directory
+            // (named by `-D`, or embedded in an `-o` path like
+            // `build/out.html`) before writing to it.
             fs::create_dir_all(&dir)?;
 
             // Write any companion stylesheet (`copycss`) into the output file's
             // directory, so a linked stylesheet lands next to the HTML that
             // references it — matching Asciidoctor, which copies only when
-            // converting to a file. The guard keeps the copy from clobbering the
-            // output file itself when the two paths coincide.
+            // converting to a file. The guard keeps the copy from clobbering
+            // the output file itself when the two paths coincide.
             let mut writer = OutputGuard {
                 inner: DirAssetWriter::new(dir),
                 output: path.clone(),
@@ -867,14 +874,15 @@ fn resolve_inputs(inputs: &[PathBuf]) -> io::Result<Vec<InputSource>> {
                  when it is the only input"
             );
         } else if arg.is_file() {
-            // An argument naming an existing file is taken literally; Asciidoctor
-            // only globs when the file is not found.
+            // An argument naming an existing file is taken literally;
+            // Asciidoctor only globs when the file is not found.
             sources.push(InputSource::File(arg.clone()));
         } else {
             let matches = expand_glob(arg)?;
             if matches.is_empty() {
-                // No matches: keep the literal argument so the read step reports
-                // it as missing, exactly as a plain misspelled filename would.
+                // No matches: keep the literal argument so the read step
+                // reports it as missing, exactly as a plain
+                // misspelled filename would.
                 sources.push(InputSource::File(arg.clone()));
             } else {
                 sources.extend(matches.into_iter().map(InputSource::File));
@@ -978,9 +986,10 @@ impl AssetWriter for OutputGuard {
 /// all, that check is a no-op, so the write proceeds — no worse than the
 /// pre-guard behavior on such a platform.
 fn write_output(path: &Path, html: &str, input_ids: &[FileId]) -> io::Result<()> {
-    // Open (creating if absent) *without* truncating, so a substituted symlink or
-    // hard link to an input is opened but its contents are left intact — the
-    // identity check below can then reject it before any data is written.
+    // Open (creating if absent) *without* truncating, so a substituted symlink
+    // or hard link to an input is opened but its contents are left intact —
+    // the identity check below can then reject it before any data is
+    // written.
     let mut file = fs::OpenOptions::new()
         .create(true)
         .write(true)
@@ -998,8 +1007,8 @@ fn write_output(path: &Path, html: &str, input_ids: &[FileId]) -> io::Result<()>
         ));
     }
 
-    // The handle aliases no input; truncate the (possibly pre-existing) file now
-    // and write the rendered HTML from the start.
+    // The handle aliases no input; truncate the (possibly pre-existing) file
+    // now and write the rendered HTML from the start.
     file.set_len(0)?;
     file.write_all(html.as_bytes())
 }
@@ -1627,9 +1636,10 @@ impl WarningReporter {
         for warning in document.warnings() {
             let severity = warning_severity(&warning.warning);
 
-            // The failure code follows every diagnostic's severity, even one `-q`
-            // keeps off the screen — matching Asciidoctor, whose quiet logger
-            // still records the highest severity it saw.
+            // The failure code follows every diagnostic's severity, even one
+            // `-q` keeps off the screen — matching Asciidoctor,
+            // whose quiet logger still records the highest severity
+            // it saw.
             if severity >= self.failure_level {
                 failure_reached = true;
             }
@@ -1883,8 +1893,9 @@ fn output_target_for(cli: &Cli, input: Option<&Path>) -> OutputTarget {
 fn destination_dir_for(cli: &Cli, input: Option<&Path>) -> Option<PathBuf> {
     let dest = cli.destination_dir.as_deref()?;
 
-    // `-R` only recreates structure when both a source root and an on-disk input
-    // are present; otherwise the destination is the `-D` directory unchanged.
+    // `-R` only recreates structure when both a source root and an on-disk
+    // input are present; otherwise the destination is the `-D` directory
+    // unchanged.
     match (cli.source_dir.as_deref(), input) {
         (Some(source_dir), Some(input)) => match relative_subdir(source_dir, input) {
             Some(subdir) => Some(dest.join(subdir)),

@@ -497,9 +497,9 @@ wrapped content']"#,
             assert!(!output.contains("* Foo"));
         }
 
-        // Non-normative: this test also asserts `ul dl` for the nested `term:: def`
-        // list, which needs description-list rendering (#154); the `ul ol` half
-        // already renders correctly.
+        // Non-normative: this test also asserts `ul dl` for the nested `term::
+        // def` list, which needs description-list rendering (#154); the
+        // `ul ol` half already renders correctly.
         non_normative!(
             r#"
     test 'a list item for a different list terminates non-indented paragraph for text of list item' do
@@ -660,9 +660,9 @@ wrapped content']"#,
             );
         }
 
-        // Non-normative: like its non-indented sibling above, asserts `ul dl` for
-        // the nested `term:: def` list — description-list rendering is not built
-        // yet (#154).
+        // Non-normative: like its non-indented sibling above, asserts `ul dl`
+        // for the nested `term:: def` list — description-list rendering
+        // is not built yet (#154).
         non_normative!(
             r#"
     test 'a list item for a different list terminates indented paragraph for text of list item' do
@@ -1090,7 +1090,8 @@ wrapped text"]"#,
                 1,
             );
 
-            // The attached literal keeps its `  literal` first-line indent (#168).
+            // The attached literal keeps its `  literal` first-line indent
+            // (#168).
             assert_xpath(
                 &output,
                 r#"((//ul/li)[1]/*[@class="literalblock"])[1]//pre[text() = "  literal
@@ -1205,7 +1206,8 @@ literal']"#,
                 1,
             );
 
-            // The attached literal keeps its `  literal` first-line indent (#168).
+            // The attached literal keeps its `  literal` first-line indent
+            // (#168).
             assert_xpath(
                 &output,
                 r#"((//ul/li)[1]/*[@class='literalblock'])[1]//pre[text() = '  literal
@@ -1519,10 +1521,10 @@ more text"]"#,
 
 "#
             );
-            // The Ruby fixture uses a setext (two-line) doctitle (`List\n====`),
-            // intentionally out of scope here; drive the same
-            // list-terminates-before-a-section behavior with an equivalent ATX
-            // doctitle (`= List`).
+            // The Ruby fixture uses a setext (two-line) doctitle
+            // (`List\n====`), intentionally out of scope here;
+            // drive the same list-terminates-before-a-section
+            // behavior with an equivalent ATX doctitle (`= List`).
             let output =
                 convert_standalone("= List\n\n* first\nitem\n* second\nitem\n\n== Section\n");
             assert_xpath(&output, r#"//ul"#, 1);
@@ -2187,8 +2189,8 @@ more text"]"#,
         }
 
         // Non-normative: parser-model only — asserts `find_by(context:
-        // :ulist)[i].level`, which has no rendered-output counterpart (list level
-        // is covered by the parser crate's own tests).
+        // :ulist)[i].level`, which has no rendered-output counterpart (list
+        // level is covered by the parser crate's own tests).
         non_normative!(
             r#"
     test 'level of unordered list should match section level' do
@@ -2321,8 +2323,8 @@ more text"]"#,
         }
 
         // Non-normative: parser-model only — asserts `find_by(context:
-        // :olist)[i].level`, which has no rendered-output counterpart (list level
-        // is covered by the parser crate's own tests).
+        // :olist)[i].level`, which has no rendered-output counterpart (list
+        // level is covered by the parser crate's own tests).
         non_normative!(
             r#"
     test 'level of ordered list should match section level' do
@@ -10504,8 +10506,8 @@ context 'Callout lists' do
 
 "##
         );
-        // Driven with no source highlighter; the Ruby test's `coderay` iteration
-        // renders identically here.
+        // Driven with no source highlighter; the Ruby test's `coderay`
+        // iteration renders identically here.
         let output = convert(
             "[source,ruby]\n----\nputs 'Hello, world!' # <1>\n----\n<1> Ruby\n\n\
              [source,groovy]\n----\nprintln 'Hello, world!' // <1>\n----\n<1> Groovy\n\n\
@@ -10625,8 +10627,8 @@ context 'Callout lists' do
 
     // Non-normative: requires the `coderay` source highlighter to tokenize the
     // block. Server-side syntax highlighting is not planned (an in-process
-    // highlighter would breach the library's `asciidoc-parser`-only constraint),
-    // so the renderer never runs coderay.
+    // highlighter would breach the library's `asciidoc-parser`-only
+    // constraint), so the renderer never runs coderay.
     non_normative!(
         r##"
   test 'should allow line comment chars preceding callout number to be configurable when source-highlighter is coderay' do

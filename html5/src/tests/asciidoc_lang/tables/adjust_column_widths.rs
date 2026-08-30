@@ -78,7 +78,8 @@ As seen below, the columns stretch across the width of the page according to the
     );
 
     // The three integer specifiers 2, 1, and 3 divide the table's width into
-    // proportional shares, each emitted as a computed percentage on its `<col>`.
+    // proportional shares, each emitted as a computed percentage on its
+    // `<col>`.
     let output = convert(
         "[cols=\"2,1,3\"]\n|===\n|Column 1 |Column 2 |Column 3\n\n|This column has a proportional width of 2\n|This column has a proportional width of 1\n|This column has a proportional width of 3\n|===",
     );
@@ -126,8 +127,8 @@ Below, the result of <<ex-increase>> shows that column 1 is now much wider than 
 "#
     );
 
-    // Raising column 1's specifier from 2 to 6 widens it: the shares 6, 1, and 3
-    // sum to 10, so the columns compute to a clean 60%, 10%, and 30%.
+    // Raising column 1's specifier from 2 to 6 widens it: the shares 6, 1, and
+    // 3 sum to 10, so the columns compute to a clean 60%, 10%, and 30%.
     let output = convert(
         "[cols=\"6,1,3\"]\n|===\n|Column 1 |Column 2 |Column 3\n\n|This column has a proportional width of 6\n|This column has a proportional width of 1\n|This column has a proportional width of 3\n|===",
     );

@@ -114,7 +114,8 @@ image::logo.png[Logo,link=https://example.org,window=_blank,opts=nofollow]
 
     let output =
         convert("image::logo.png[Logo,link=https://example.org,window=_blank,opts=nofollow]");
-    // `_blank` sets the target and auto-adds `noopener`; `nofollow` is also set.
+    // `_blank` sets the target and auto-adds `noopener`; `nofollow` is also
+    // set.
     assert!(output.contains(
         r#"<a class="image" href="https://example.org" target="_blank" rel="nofollow noopener"><img src="logo.png" alt="Logo"></a>"#
     ));

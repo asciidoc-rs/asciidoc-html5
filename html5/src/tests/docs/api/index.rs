@@ -97,8 +97,8 @@ Both paths produce the same HTML5 for the same source.
     // Together: `convert` loads and converts the string in one call.
     let together = convert(source);
 
-    // Separately: `load` parses into a document, then `convert_document` renders
-    // it.
+    // Separately: `load` parses into a document, then `convert_document`
+    // renders it.
     let doc = load(source);
     let separately = convert_document(&doc);
 
@@ -207,7 +207,8 @@ links to `showtitle` as its inverse.
 "#
     );
 
-    // The string default is embedded (body-only); the file default is standalone.
+    // The string default is embedded (body-only); the file default is
+    // standalone.
     let embedded = convert("= Doc\n\nBody.");
     assert!(!embedded.starts_with("<!DOCTYPE html>"));
     assert!(embedded.contains("<p>Body.</p>"));
@@ -283,8 +284,8 @@ or off, matching Asciidoctor's `name` and `name!`.
 "#
     );
 
-    // The exact example from the page. (`webfonts` is a `<head>` feature, so the
-    // example renders a standalone document.)
+    // The exact example from the page. (`webfonts` is a `<head>` feature, so
+    // the example renders a standalone document.)
     let opts = Options::new()
         .standalone(true)
         .attribute("webfonts", "Ubuntu+Mono:400");

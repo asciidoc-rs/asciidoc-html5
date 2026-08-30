@@ -197,9 +197,9 @@ mod undefined {
     use super::*;
 
     // The `{set:name!}` inline undefine expression is not implemented by this
-    // renderer (nor by `asciidoc-parser`); it is passed through as literal text,
-    // so the `attribute-undefined` setting has no observable effect and this
-    // whole section is tracked as non-normative.
+    // renderer (nor by `asciidoc-parser`); it is passed through as literal
+    // text, so the `attribute-undefined` setting has no observable effect
+    // and this whole section is tracked as non-normative.
     non_normative!(
         r#"
 [#undefined]

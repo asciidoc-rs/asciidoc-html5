@@ -32,8 +32,8 @@ fn an_unknown_failure_level_is_rejected() {
     assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     assert!(err.to_string().contains("invalid failure level 'bogus'"));
 
-    // Every documented level parses, in either the `warn`/`warning` spelling and
-    // regardless of case.
+    // Every documented level parses, in either the `warn`/`warning` spelling
+    // and regardless of case.
     for level in ["info", "WARN", "Warning", "error", "FATAL"] {
         assert!(parse_failure_level(level).is_ok(), "{level} should parse");
     }
@@ -86,8 +86,8 @@ fn a_failing_warning_stream_propagates_the_error() {
 // dropped.
 #[test]
 fn a_failing_usage_stream_propagates_the_error() {
-    // No input argument with `stdin_is_terminal` set diverts to printing usage on
-    // stderr, which here refuses every write.
+    // No input argument with `stdin_is_terminal` set diverts to printing usage
+    // on stderr, which here refuses every write.
     let cli = Cli::parse_from(["adoc"]);
     let mut stdin = io::empty();
     let mut stdout = Vec::new();
@@ -138,9 +138,9 @@ fn a_warning_from_an_included_directive_names_its_origin_file() {
     let (_failed, stderr) = run_file(&[main.to_str().unwrap(), "-o", "-"]);
     let _ = std::fs::remove_dir_all(&dir);
 
-    // The warning names `cond.adoc` (the included file), line 1 — the origin the
-    // parser pre-resolved for the buried directive — rather than the cell's line
-    // in `main.adoc`.
+    // The warning names `cond.adoc` (the included file), line 1 — the origin
+    // the parser pre-resolved for the buried directive — rather than the
+    // cell's line in `main.adoc`.
     assert!(
         stderr.contains("cond.adoc: line 1:"),
         "expected the warning to name the included file's origin, got: {stderr}"

@@ -338,8 +338,8 @@ https://example.org[Google, DuckDuckGo, Ecosia^]
         r#"<a href="https://example.org" class="btn" target="_blank" rel="noopener">Google, DuckDuckGo, Ecosia</a>"#
     ));
 
-    // Without named attributes the text is not quoted, and the caret still opens
-    // a new window.
+    // Without named attributes the text is not quoted, and the caret still
+    // opens a new window.
     assert!(convert("https://example.org[Google, DuckDuckGo, Ecosia^]").contains(
         r#"<a href="https://example.org" target="_blank" rel="noopener">Google, DuckDuckGo, Ecosia</a>"#
     ));

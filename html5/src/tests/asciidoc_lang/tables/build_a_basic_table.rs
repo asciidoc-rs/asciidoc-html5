@@ -132,8 +132,8 @@ It contains two columns and three rows of text positioned and styled using the d
     assert_css(&output, "thead", 0);
 
     // Entering the cells one per line and entering both cells of a row on the
-    // same line produce the identical result: the processor starts a new cell at
-    // each vertical bar.
+    // same line produce the identical result: the processor starts a new cell
+    // at each vertical bar.
     let same_line = convert(
         "[cols=\"1,1\"]\n|===\n|Cell in column 1, row 1 |Cell in column 2, row 1\n|Cell in column 1, row 2 |Cell in column 2, row 2\n|Cell in column 1, row 3 |Cell in column 2, row 3\n|===",
     );

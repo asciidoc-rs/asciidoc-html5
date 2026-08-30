@@ -219,9 +219,10 @@ mod layout_breaks {
 "#
         );
 
-        // The renderer emits a deterministic `style="page-break-after: always;"`,
-        // so the Ruby `translate(@style, ";", "")` normalization is re-expressed
-        // as an exact attribute match on that value.
+        // The renderer emits a deterministic `style="page-break-after:
+        // always;"`, so the Ruby `translate(@style, ";", "")`
+        // normalization is re-expressed as an exact attribute match on
+        // that value.
         let output = convert("page 1\n\n<<<\n\npage 2");
         assert_xpath(&output, r#"/*[@style="page-break-after: always;"]"#, 1);
         assert_xpath(
@@ -273,9 +274,9 @@ mod comments {
 "#
         );
 
-        // A lone `// line comment` survives parsing as an empty paragraph, which
-        // the renderer drops (see `renderer::renders_nothing`), so only the two
-        // real paragraphs remain.
+        // A lone `// line comment` survives parsing as an empty paragraph,
+        // which the renderer drops (see `renderer::renders_nothing`),
+        // so only the two real paragraphs remain.
         let output = convert("first paragraph\n\n// line comment\n\nsecond paragraph\n");
         assert!(!output.contains("line comment"));
         assert_xpath(&output, "//p", 2);
@@ -884,8 +885,9 @@ mod quote_and_verse_blocks {
             r#"//*[@class="quoteblock"]/*[@class="attribution"]/cite[text()="Famous Book (1999)"]"#,
             1,
         );
-        // The `attribution.children.first` author-text check is re-expressed as a
-        // `contains` on the attribution's own text ("— Famous Person").
+        // The `attribution.children.first` author-text check is re-expressed as
+        // a `contains` on the attribution's own text ("— Famous
+        // Person").
         assert_xpath(
             &output,
             r#"//*[@class="quoteblock"]/*[@class="attribution"][contains(text(),"Famous Person")]"#,
@@ -1788,9 +1790,9 @@ mod example_blocks {
         );
 
         // The `numeral`/`number`/`example-number` checks are `asciidoc-parser`
-        // model assertions; only the rendered captions are re-expressed here. An
-        // alphabetic counter seed (`:example-number: @`, one before `A`) advances
-        // the caption numeral through the letters.
+        // model assertions; only the rendered captions are re-expressed here.
+        // An alphabetic counter seed (`:example-number: @`, one before
+        // `A`) advances the caption numeral through the letters.
         let output = convert(
             ":example-number: @\n\n.Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n\n.Writing Docs with DocBook\n====\nHere's how you write DocBook.\n\nYou futz with XML.\n====\n",
         );
@@ -1837,10 +1839,11 @@ mod example_blocks {
 "#
         );
 
-        // An API-supplied attribute is locked (override precedence), yet a caption
-        // counter still advances it: seeded one before `a` (`` ` ``), the two
-        // examples number `a` and `b`. The `example-number` model assertion is an
-        // `asciidoc-parser` check; only the rendered captions are re-expressed.
+        // An API-supplied attribute is locked (override precedence), yet a
+        // caption counter still advances it: seeded one before `a` (``
+        // ` ``), the two examples number `a` and `b`. The
+        // `example-number` model assertion is an `asciidoc-parser`
+        // check; only the rendered captions are re-expressed.
         let output = convert_with(
             ".Writing Docs with AsciiDoc\n====\nHere's how you write AsciiDoc.\n\nYou just write.\n====\n\n.Writing Docs with DocBook\n====\nHere's how you write DocBook.\n\nYou futz with XML.\n====\n",
             &Options::new().attribute("example-number", "`"),
@@ -1932,10 +1935,11 @@ mod example_blocks {
 "#
         );
 
-        // A set-but-empty document `caption` (`:caption:`) suppresses the caption
-        // and consumes no counter, so the second example shows only its title and
-        // the third — after `:caption!:` restores auto-numbering and
-        // `:example-caption: Exhibit` relabels it — is "Exhibit 2".
+        // A set-but-empty document `caption` (`:caption:`) suppresses the
+        // caption and consumes no counter, so the second example shows
+        // only its title and the third — after `:caption!:` restores
+        // auto-numbering and `:example-caption: Exhibit` relabels it —
+        // is "Exhibit 2".
         let output = convert(
             ".first example\n====\nan example\n====\n\n:caption:\n\n.second example\n====\nanother example\n====\n\n:caption!:\n:example-caption: Exhibit\n\n.third example\n====\nyet another example\n====\n",
         );
@@ -1951,8 +1955,9 @@ mod example_blocks {
             1,
         );
         // Pinned to the exact numeral (stronger than the reference's
-        // `starts-with(…, "Exhibit ")`): the empty `:caption:` above must consume
-        // no counter, so the third example is "Exhibit 2", not "Exhibit 3".
+        // `starts-with(…, "Exhibit ")`): the empty `:caption:` above must
+        // consume no counter, so the third example is "Exhibit 2", not
+        // "Exhibit 3".
         assert_xpath(
             &output,
             r#"(/*[@class="exampleblock"])[3]/*[@class="title"][text()="Exhibit 2. third example"]"#,
@@ -2067,8 +2072,8 @@ mod example_blocks {
 "#
         );
 
-        // Only the rendered title is re-expressed; `blocks[0].caption`/`attr` are
-        // `asciidoc-parser` model assertions.
+        // Only the rendered title is re-expressed; `blocks[0].caption`/`attr`
+        // are `asciidoc-parser` model assertions.
         let output = convert("[caption=\"Look! \"]\n.No caption here\n--\ncontent\n--\n");
         assert_xpath(
             &output,
@@ -2650,11 +2655,11 @@ mod preformatted_blocks {
 "#
         );
 
-        // The `block.lines` assertion inspects the parser's line buffer (verified
-        // in `asciidoc-parser`); here we drive the rendered output. The
-        // `subs="attributes"` step expands `{empty}` to nothing (the parser's
-        // job), leaving a run of trailing blank lines the renderer then trims
-        // along with the leading ones.
+        // The `block.lines` assertion inspects the parser's line buffer
+        // (verified in `asciidoc-parser`); here we drive the rendered
+        // output. The `subs="attributes"` step expands `{empty}` to
+        // nothing (the parser's job), leaving a run of trailing blank
+        // lines the renderer then trims along with the leading ones.
         let output = convert(
             "[subs=\"attributes\"]\n....\n\n\n  first line\n\nlast line\n\n{empty}\n\n....\n",
         );
@@ -2808,9 +2813,9 @@ mod preformatted_blocks {
 "#
         );
 
-        // `expected` replaces the four-space block indent with a single space on
-        // each of the five content lines: ` def names`, ``, `   @names.split`,
-        // ``, ` end`.
+        // `expected` replaces the four-space block indent with a single space
+        // on each of the five content lines: ` def names`, ``, `
+        // @names.split`, ``, ` end`.
         let output =
             convert("[indent=\"1\"]\n----\n    def names\n\n      @names.split\n\n    end\n----\n");
         assert_css(&output, "pre", 1);
@@ -3047,8 +3052,8 @@ mod preformatted_blocks {
 "#
         );
 
-        // `block.subs` is an `asciidoc-parser` model assertion; only the rendered
-        // HTML is re-expressed.
+        // `block.subs` is an `asciidoc-parser` model assertion; only the
+        // rendered HTML is re-expressed.
         let output = convert(
             "[subs=\"verbatim,quotes\"]\n----\nMap<String, String> *attributes*; //<1>\n----\n",
         );
@@ -3076,8 +3081,8 @@ mod preformatted_blocks {
 "#
         );
 
-        // `block.subs` is an `asciidoc-parser` model assertion; only the rendered
-        // HTML is re-expressed.
+        // `block.subs` is an `asciidoc-parser` model assertion; only the
+        // rendered HTML is re-expressed.
         let output = convert("[subs=\"specialcharacters\"]\n----\nNo callout here <1>\n----\n");
         assert_xpath(&output, r#"//pre/b[text()="(1)"]"#, 0);
     }
@@ -3702,14 +3707,16 @@ mod passthrough_blocks {
 "#
         );
 
-        // The `block.lines` assertion inspects the parser's line buffer (verified
-        // in `asciidoc-parser`); here we drive the rendered output. Each raw
-        // block trims its own leading and trailing blank lines, so the three
-        // passthrough blocks emit only their non-blank content.
+        // The `block.lines` assertion inspects the parser's line buffer
+        // (verified in `asciidoc-parser`); here we drive the rendered
+        // output. Each raw block trims its own leading and trailing
+        // blank lines, so the three passthrough blocks emit only their
+        // non-blank content.
         let input = "++++\nline above\n++++\n\n++++\n\n\n  first line\n\nlast line\n\n\n++++\n\n++++\nline below\n++++\n";
 
-        // Ruby's `result` has no trailing newline; the crate's embedded output —
-        // matching the `asciidoctor` CLI — carries the usual single trailing one.
+        // Ruby's `result` has no trailing newline; the crate's embedded output
+        // — matching the `asciidoctor` CLI — carries the usual single
+        // trailing one.
         let expected = "line above\n  first line\n\nlast line\nline below\n";
 
         assert_eq!(convert(input), expected);
@@ -3762,9 +3769,9 @@ mod math_blocks {
         );
 
         // `doc.blocks[0].content` maps to the first top-level block's
-        // post-substitution content, reached through `load`. An empty raw block —
-        // both the bare `++++` (pass) and the `[stem]` form — has an empty
-        // content string.
+        // post-substitution content, reached through `load`. An empty raw block
+        // — both the bare `++++` (pass) and the `[stem]` form — has an
+        // empty content string.
         for input in ["++++\n++++", "[stem]\n++++\n++++"] {
             let doc = load(input);
             let block = doc.child_blocks().next().expect("one top-level block");
@@ -3830,9 +3837,9 @@ mod math_blocks {
         );
     }
 
-    // The DocBook backend emits an `<informalequation>` with the raw equation in
-    // a CDATA `<alt>`/`<mathphrase>`; this crate targets only the `html5`
-    // backend, so there is no DocBook output to assert.
+    // The DocBook backend emits an `<informalequation>` with the raw equation
+    // in a CDATA `<alt>`/`<mathphrase>`; this crate targets only the
+    // `html5` backend, so there is no DocBook output to assert.
     non_normative!(
         r#"
     test 'should display latexmath block in alt of equation in DocBook backend' do
@@ -4369,7 +4376,8 @@ mod math_blocks {
 
         let input = "[stem]\n++++\n\\sqrt{3x-1}+(1+x)^2 < y\n++++\n";
 
-        // The `latexmath`, `latex`, and `tex` aliases all select LaTeX notation.
+        // The `latexmath`, `latex`, and `tex` aliases all select LaTeX
+        // notation.
         for html in [
             convert_with(input, &Options::new().attribute("stem", "latexmath")),
             convert_with(input, &Options::new().attribute("stem", "latex")),
@@ -4567,10 +4575,11 @@ mod metadata {
 "#
         );
 
-        // As of `asciidoc-parser` 0.29.6, a block title above the document title
-        // demotes it to a level-0 section: no document header, the title becomes
-        // an `<h1 class="sect0">` in the content, and the block title carries
-        // onto the following paragraph. The `:ERROR:` log maps to the parser's
+        // As of `asciidoc-parser` 0.29.6, a block title above the document
+        // title demotes it to a level-0 section: no document header,
+        // the title becomes an `<h1 class="sect0">` in the content, and
+        // the block title carries onto the following paragraph. The
+        // `:ERROR:` log maps to the parser's
         // `Level0SectionHeadingNotSupported` warning at line 2.
         let input = ".Block title\n= Section Title\n\nsection paragraph\n";
         let html = convert_with(input, &Options::new().standalone(true));
@@ -4615,8 +4624,8 @@ mod metadata {
         );
 
         // The block title demotes the document title to a level-0 section, so
-        // there is no document title (`refute doc.header?`), and the block title
-        // carries onto the first block of the first section.
+        // there is no document title (`refute doc.header?`), and the block
+        // title carries onto the first block of the first section.
         let input =
             ":doctype: book\n.Block title\n= Document Title\n\n== First Section\n\nparagraph\n";
         assert!(load(input).doctitle().is_none());
@@ -4718,8 +4727,8 @@ mod metadata {
         );
 
         // `asciidoc-parser` 0.29.3 ignores an empty block anchor
-        // (asciidoc-rs/asciidoc-parser#1023), so `[[]]` no longer leaks into the
-        // rendered open block.
+        // (asciidoc-rs/asciidoc-parser#1023), so `[[]]` no longer leaks into
+        // the rendered open block.
         let html = convert("[[]]\n--\nBlock content\n--\n");
         assert!(html.contains("Block content"), "{html}");
         assert!(!html.contains("[[]]"), "{html}");
@@ -5053,8 +5062,8 @@ width="500px" height="500px">
                 .safe_mode(SafeMode::Server)
                 .base_dir(fx.dir()),
         );
-        // The `<svg>` file contents are embedded with the explicit `100` width applied
-        // and the file's own `width`/`height`/`style` stripped.
+        // The `<svg>` file contents are embedded with the explicit `100` width
+        // applied and the file's own `width`/`height`/`style` stripped.
         assert!(html.contains(CIRCLE_SVG_INLINE_100), "{html}");
         assert!(!html.contains(r#"width="500""#), "{html}");
         assert!(!html.contains(r#"height="500""#), "{html}");
@@ -5090,10 +5099,11 @@ width="500px" height="500px">
     }
 
     // Ruby-specific: the test builds the block, then `set_attr 'width', 50`
-    // stores an *Integer* width to prove the inline-SVG path does not crash on a
-    // non-string width. This crate has no post-parse `set_attr` API, and its
-    // attribute values are always strings, so the integer-coercion hazard cannot
-    // arise; the string-width inline path is covered by the tests above.
+    // stores an *Integer* width to prove the inline-SVG path does not crash on
+    // a non-string width. This crate has no post-parse `set_attr` API, and
+    // its attribute values are always strings, so the integer-coercion
+    // hazard cannot arise; the string-width inline path is covered by the
+    // tests above.
     non_normative!(
         r#"
     test 'should not crash if explicit width on SVG image block is an integer' do
@@ -5139,8 +5149,9 @@ width="500px" height="500px">
                 .safe_mode(SafeMode::Server)
                 .base_dir(fx.dir()),
         );
-        // `data-uri` does not disturb inline SVG: the file contents are embedded
-        // directly (there is no `src` to turn into a `data:` URI).
+        // `data-uri` does not disturb inline SVG: the file contents are
+        // embedded directly (there is no `src` to turn into a `data:`
+        // URI).
         assert!(html.contains(CIRCLE_SVG_INLINE_100), "{html}");
     }
 
@@ -5167,9 +5178,10 @@ width="500px" height="500px">
         assert_xpath(&html, "//svg", 0);
         assert_xpath(&html, r#"//span[@class="alt"][text()="nada"]"#, 1);
 
-        // The `assert_message` WARN ("contents of SVG is empty") is a render-time
-        // diagnostic that this crate performs silently while falling back to the alt
-        // text; the observable fallback rendering above is what is verified.
+        // The `assert_message` WARN ("contents of SVG is empty") is a
+        // render-time diagnostic that this crate performs silently
+        // while falling back to the alt text; the observable fallback
+        // rendering above is what is verified.
         non_normative!(
             r#"
       assert_message @logger, :WARN, '~contents of SVG is empty:'
@@ -5206,8 +5218,8 @@ width="500px" height="500px">
     }
 
     // Remote fetch is a non-goal for this crate — it performs no network reads
-    // (see the crate README), so embedding a remote SVG via `allow-uri-read`, and
-    // the `cache-uri` caching of one, are out of scope.
+    // (see the crate README), so embedding a remote SVG via `allow-uri-read`,
+    // and the `cache-uri` caching of one, are out of scope.
     non_normative!(
         r#"
     test 'embeds remote SVG to inline when inline option is set on block and allow-uri-read is set on document' do
@@ -5288,9 +5300,10 @@ width="500px" height="500px">
         );
         assert_xpath(&html, r#"//span[@class="alt"][text()="Alt Text"]"#, 1);
 
-        // The `assert_message` WARN ("SVG does not exist or cannot be read") is a
-        // render-time diagnostic this crate performs silently while falling back to
-        // the alt text; the observable fallback rendering above is what is verified.
+        // The `assert_message` WARN ("SVG does not exist or cannot be read") is
+        // a render-time diagnostic this crate performs silently while
+        // falling back to the alt text; the observable fallback
+        // rendering above is what is verified.
         non_normative!(
             r#"
       assert_message @logger, :WARN, '~SVG does not exist or cannot be read'
@@ -5315,7 +5328,8 @@ width="500px" height="500px">
         );
 
         // Ruby uses `xmlnodes_at_xpath` to pull the single `<img>` and read its
-        // `alt`; the equivalent assertion is a predicate on the decoded attribute.
+        // `alt`; the equivalent assertion is a predicate on the decoded
+        // attribute.
         let html = convert("image::images/tiger.png[A [Bengal] Tiger]");
         assert_xpath(&html, r#"//img[@alt="A [Bengal] Tiger"]"#, 1);
     }
@@ -5359,9 +5373,10 @@ width="500px" height="500px">
 "#
         );
 
-        // A leading- or trailing-space target no longer satisfies the block-image
-        // macro (asciidoc-parser 0.29.11): the first line becomes a description
-        // list, the second a paragraph — matching Asciidoctor 2.0.26.
+        // A leading- or trailing-space target no longer satisfies the
+        // block-image macro (asciidoc-parser 0.29.11): the first line
+        // becomes a description list, the second a paragraph — matching
+        // Asciidoctor 2.0.26.
         for target in [" tiger.png", "tiger.png "] {
             let html = convert(&format!("image::{target}[Tiger]"));
             assert_xpath(&html, "//img", 0);
@@ -5509,8 +5524,9 @@ width="500px" height="500px">
         );
 
         // Ruby inspects the parsed block: a named `style=value` on an image is
-        // dropped (`img.style` nil, no `style` attribute). Observably, the image
-        // renders as a plain `imageblock` — no `value` class, no `style` attribute.
+        // dropped (`img.style` nil, no `style` attribute). Observably, the
+        // image renders as a plain `imageblock` — no `value` class, no
+        // `style` attribute.
         let html = convert("[style=value]\nimage::images/tiger.png[Tiger]\n");
         assert_css(&html, ".imageblock", 1);
         assert_css(&html, ".imageblock.value", 0);
@@ -5571,8 +5587,9 @@ width="500px" height="500px">
 "#
         );
 
-        // Ruby reads `default-alt` off the parsed block; observably, the auto-alt
-        // (target basename with `_`/`-` turned to spaces) lands in the `<img>`.
+        // Ruby reads `default-alt` off the parsed block; observably, the
+        // auto-alt (target basename with `_`/`-` turned to spaces)
+        // lands in the `<img>`.
         let html = convert("image::images/lions-and-tigers.png[]");
         assert_xpath(
             &html,
@@ -5744,8 +5761,9 @@ width="500px" height="500px">
 "#
         );
 
-        // Ruby also checks the parsed block's `numeral`/`figure-number`; observably
-        // the implicit caption renders as "Figure 1. " before the title.
+        // Ruby also checks the parsed block's `numeral`/`figure-number`;
+        // observably the implicit caption renders as "Figure 1. "
+        // before the title.
         let html = convert(".The AsciiDoc Tiger\nimage::images/tiger.png[Tiger]\n");
         assert_xpath(
             &html,
@@ -5781,8 +5799,9 @@ width="500px" height="500px">
 "#
         );
 
-        // An explicit `caption=` overrides the implicit "Figure N." label (and, in
-        // Ruby, leaves the block un-numbered); the caption prefixes the title.
+        // An explicit `caption=` overrides the implicit "Figure N." label (and,
+        // in Ruby, leaves the block un-numbered); the caption prefixes
+        // the title.
         let html =
             convert("[caption=\"Voila! \"]\n.The AsciiDoc Tiger\nimage::images/tiger.png[Tiger]\n");
         assert_xpath(
@@ -5923,8 +5942,9 @@ width="500px" height="500px">
         let input = ":attribute-missing: drop-line\n\nimage::{bogus}[]\n";
         let html = convert(input);
         assert!(html.trim().is_empty(), "{html}");
-        // Asciidoctor logs an INFO "dropping line ... missing attribute: bogus";
-        // asciidoc-parser surfaces the same as a SkippingReferenceToMissingAttribute.
+        // Asciidoctor logs an INFO "dropping line ... missing attribute:
+        // bogus"; asciidoc-parser surfaces the same as a
+        // SkippingReferenceToMissingAttribute.
         assert!(load(input)
             .warnings()
             .any(|w| w.warning
@@ -6030,9 +6050,9 @@ width="500px" height="500px">
 "#
         );
 
-        // `decode_char 62` is `>`: the XPath compares against the DOM-decoded `src`,
-        // where the emitted `&gt;` reads back as `>`. Spaces become `%20`; `{`, `}`,
-        // and `>` stay literal.
+        // `decode_char 62` is `>`: the XPath compares against the DOM-decoded
+        // `src`, where the emitted `&gt;` reads back as `>`. Spaces
+        // become `%20`; `{`, `}`, and `>` stay literal.
         let html = convert("image::http://example.org/svg?digraph=digraph G { a -> b; }[diagram]");
         assert_xpath(
             &html,
@@ -6148,7 +6168,8 @@ width="500px" height="500px">
                 .safe_mode(SafeMode::Server)
                 .base_dir(fx.dir()),
         );
-        // `starts-with(@src, …)`: an `.svg` embeds with the `image/svg+xml` mimetype.
+        // `starts-with(@src, …)`: an `.svg` embeds with the `image/svg+xml`
+        // mimetype.
         assert!(
             html.contains(r#"src="data:image/svg+xml;base64,"#),
             "{html}"
@@ -6175,16 +6196,17 @@ width="500px" height="500px">
         );
 
         let fx = Fixtures::new();
-        // `unreadable.gif` is never created, so the read fails and the embed is empty.
+        // `unreadable.gif` is never created, so the read fails and the embed is
+        // empty.
         let html = convert_with(
             ":data-uri:\n:imagesdir: fixtures\n\nimage::unreadable.gif[Dot]\n",
             &Options::new().safe_mode(SafeMode::Safe).base_dir(fx.dir()),
         );
         assert_xpath(&html, r#"//img[@src="data:image/gif;base64,"]"#, 1);
 
-        // The `assert_message` WARN ("image to embed not found or not readable") is a
-        // render-time diagnostic this crate performs silently while emitting the empty
-        // `data:` URI above.
+        // The `assert_message` WARN ("image to embed not found or not
+        // readable") is a render-time diagnostic this crate performs
+        // silently while emitting the empty `data:` URI above.
         non_normative!(
             r#"
       assert_message @logger, :WARN, '~image to embed not found or not readable'
@@ -6228,9 +6250,10 @@ width="500px" height="500px">
         );
     }
 
-    // Remote fetch is a non-goal for this crate — it performs no network reads —
-    // so `data-uri` embedding of a remote image (directly, via a URI `imagesdir`,
-    // with `cache-uri`, or falling back when the fetch fails) is out of scope.
+    // Remote fetch is a non-goal for this crate — it performs no network reads
+    // — so `data-uri` embedding of a remote image (directly, via a URI
+    // `imagesdir`, with `cache-uri`, or falling back when the fetch fails)
+    // is out of scope.
     non_normative!(
         r##"
     test 'embeds base64-encoded data uri for remote image when data-uri attribute is set' do
@@ -6345,10 +6368,10 @@ width="500px" height="500px">
 "##
         );
 
-        // `data-uri` is set but the target is a remote URI and `allow-uri-read` is
-        // not, so — this crate never fetches over the network (remote reads are a
-        // non-goal) — the URI passes through as a plain linked image, matching
-        // Asciidoctor's fallback.
+        // `data-uri` is set but the target is a remote URI and `allow-uri-read`
+        // is not, so — this crate never fetches over the network
+        // (remote reads are a non-goal) — the URI passes through as a
+        // plain linked image, matching Asciidoctor's fallback.
         let html = convert_with(
             ":data-uri:\n\nimage::http://example.org/fixtures/dot.gif[Dot]\n",
             &Options::new().safe_mode(SafeMode::Safe),
@@ -6401,8 +6424,8 @@ width="500px" height="500px">
 "#
         );
 
-        // An already-embedded `data:` URI target passes through unchanged even when
-        // `data-uri` is set.
+        // An already-embedded `data:` URI target passes through unchanged even
+        // when `data-uri` is set.
         let html = convert(
             ":data-uri:\n\nimage::data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=[Dot]\n",
         );
@@ -6435,8 +6458,8 @@ width="500px" height="500px">
         );
 
         let fx = Fixtures::new();
-        // `imagesdir` climbs above the jail with `../..`; under `Safe` the read is
-        // recovered back inside, resolving to `fixtures/dot.gif`.
+        // `imagesdir` climbs above the jail with `../..`; under `Safe` the read
+        // is recovered back inside, resolving to `fixtures/dot.gif`.
         let html = convert_with(
             ":data-uri:\n:imagesdir: ../..//fixtures/./../../fixtures\n\nimage::dot.gif[Dot]\n",
             &Options::new().safe_mode(SafeMode::Safe).base_dir(fx.dir()),
@@ -6447,9 +6470,10 @@ width="500px" height="500px">
             1,
         );
 
-        // The `assert_message` WARN ("image has illegal reference to ancestor of
-        // jail; recovering automatically") is a render-time diagnostic this crate
-        // performs silently while recovering the read back inside the jail.
+        // The `assert_message` WARN ("image has illegal reference to ancestor
+        // of jail; recovering automatically") is a render-time
+        // diagnostic this crate performs silently while recovering the
+        // read back inside the jail.
         non_normative!(
             r##"
       assert_message @logger, :WARN, 'image has illegal reference to ancestor of jail; recovering automatically'
@@ -6481,8 +6505,8 @@ width="500px" height="500px">
         );
 
         let fx = Fixtures::new();
-        // The `target` (not `imagesdir`) climbs above the jail; the read is recovered
-        // back inside, again resolving to `fixtures/dot.gif`.
+        // The `target` (not `imagesdir`) climbs above the jail; the read is
+        // recovered back inside, again resolving to `fixtures/dot.gif`.
         let html = convert_with(
             ":data-uri:\n:imagesdir: ./\n\nimage::../..//fixtures/./../../fixtures/dot.gif[Dot]\n",
             &Options::new().safe_mode(SafeMode::Safe).base_dir(fx.dir()),
@@ -6493,8 +6517,8 @@ width="500px" height="500px">
             1,
         );
 
-        // As above, the "illegal reference to ancestor of jail" WARN is a render-time
-        // diagnostic this crate performs silently.
+        // As above, the "illegal reference to ancestor of jail" WARN is a
+        // render-time diagnostic this crate performs silently.
         non_normative!(
             r##"
       assert_message @logger, :WARN, 'image has illegal reference to ancestor of jail; recovering automatically'
@@ -7403,9 +7427,10 @@ mod admonition_icons {
             1,
         );
 
-        // The `assert_message` WARN ("image has illegal reference to ancestor of
-        // jail; recovering automatically") is a render-time diagnostic this crate
-        // performs silently while recovering the read back inside the jail.
+        // The `assert_message` WARN ("image has illegal reference to ancestor
+        // of jail; recovering automatically") is a render-time
+        // diagnostic this crate performs silently while recovering the
+        // read back inside the jail.
         non_normative!(
             r#"
       assert_message @logger, :WARN, 'image has illegal reference to ancestor of jail; recovering automatically'
@@ -7634,10 +7659,11 @@ mod source_code {
         );
 
         // The `block.context`/`style`/`cloaked-context`/`language` checks are
-        // `asciidoc-parser` model state (verified there); here the rendered output
-        // is driven. `asciidoc-parser` does not mark a bare fence's `source` style,
-        // so the renderer promotes it (see `opens_with_backtick_fence`), matching
-        // Asciidoctor's `<pre class="highlight"><code>` (no language).
+        // `asciidoc-parser` model state (verified there); here the rendered
+        // output is driven. `asciidoc-parser` does not mark a bare
+        // fence's `source` style, so the renderer promotes it (see
+        // `opens_with_backtick_fence`), matching Asciidoctor's `<pre
+        // class="highlight"><code>` (no language).
         let output = convert("```\nputs \"Hello, World!\"\n```\n");
         assert_css(&output, ".listingblock", 1);
         assert_css(&output, ".listingblock pre code", 1);
@@ -7702,8 +7728,8 @@ mod source_code {
         );
 
         // The `block.context`/`style`/`cloaked-context`/`language` checks are
-        // `asciidoc-parser` model state (verified there); here the rendered output
-        // is driven.
+        // `asciidoc-parser` model state (verified there); here the rendered
+        // output is driven.
         let output = convert(
             "```ruby\nputs \"Hello, World!\"\n```\n\n``` javascript\nalert(\"Hello, World!\")\n```\n",
         );
@@ -7744,10 +7770,11 @@ mod source_code {
 "#
         );
 
-        // `asciidoc-parser` hands a fence's info string over as a single language
-        // attribute (`ruby,numbered`) rather than splitting it into positional
-        // attributes; the renderer keeps only the language token before the comma
-        // (see `Renderer::source`), so the `data-lang` matches Asciidoctor.
+        // `asciidoc-parser` hands a fence's info string over as a single
+        // language attribute (`ruby,numbered`) rather than splitting it
+        // into positional attributes; the renderer keeps only the
+        // language token before the comma (see `Renderer::source`), so
+        // the `data-lang` matches Asciidoctor.
         let output = convert(
             "```ruby,numbered\nputs \"Hello, World!\"\n```\n\n``` javascript, numbered\nalert(\"Hello, World!\")\n```\n",
         );
@@ -7792,8 +7819,8 @@ mod source_code {
         );
 
         // The `block.context`/`style`/`cloaked-context`/`language` checks are
-        // `asciidoc-parser` model state (verified there); here the rendered output
-        // is driven.
+        // `asciidoc-parser` model state (verified there); here the rendered
+        // output is driven.
         let output = convert("[source]\n....\nconsole.log('Hello, World!')\n....\n");
         assert_css(&output, ".listingblock", 1);
         assert_css(&output, ".listingblock pre", 1);
@@ -7830,8 +7857,8 @@ mod source_code {
         );
 
         // The `block.context`/`style`/`cloaked-context`/`language` checks are
-        // `asciidoc-parser` model state (verified there); here the rendered output
-        // is driven.
+        // `asciidoc-parser` model state (verified there); here the rendered
+        // output is driven.
         let output = convert("[source,js]\n....\nconsole.log('Hello, World!')\n....\n");
         assert_css(&output, ".listingblock", 1);
         assert_css(&output, ".listingblock pre", 1);
@@ -7962,9 +7989,10 @@ mod abstract_and_part_intro {
     }
 
     // This crate does not implement the book-without-doctitle exclusion:
-    // Asciidoctor drops an `[abstract]` used as a direct child of a book document
-    // that has no doctitle (logging a WARN), whereas this crate renders it. The
-    // `.abstract` count therefore does not match, so the test is not verified.
+    // Asciidoctor drops an `[abstract]` used as a direct child of a book
+    // document that has no doctitle (logging a WARN), whereas this crate
+    // renders it. The `.abstract` count therefore does not match, so the
+    // test is not verified.
     non_normative!(
         r#"
     test 'should not allow abstract as direct child of document if doctype is book' do
@@ -8052,12 +8080,13 @@ mod abstract_and_part_intro {
     );
 
     // The partintro tests are non_normative: this crate does not fully support
-    // the book doctype's level-0 part structure (html5 #188) — a valid partintro
-    // renders without its `partintro` class and the crate emits a "level 0
-    // section headings not supported" warning — nor does it validate and exclude
-    // a misplaced partintro the way Asciidoctor does (which logs an ERROR and
-    // drops the block content). The remaining variants also target the DocBook
-    // backend, which this crate does not render.
+    // the book doctype's level-0 part structure (html5 #188) — a valid
+    // partintro renders without its `partintro` class and the crate emits a
+    // "level 0 section headings not supported" warning — nor does it
+    // validate and exclude a misplaced partintro the way Asciidoctor does
+    // (which logs an ERROR and drops the block content). The remaining
+    // variants also target the DocBook backend, which this crate does not
+    // render.
     non_normative!(
         r#"
     # TODO partintro shouldn't be recognized if doctype is not book, should be in proper place
@@ -8317,8 +8346,8 @@ mod substitutions {
 "#
         );
 
-        // `block.subs` is an `asciidoc-parser` model assertion; here the rendered
-        // output is driven.
+        // `block.subs` is an `asciidoc-parser` model assertion; here the
+        // rendered output is driven.
         let result = convert(
             ":application: asciidoctor\n\n[subs=\"attributes+,-verbatim,+specialcharacters,+macros\"]\n....\nhttps://{application}.org[{gt}{gt}] <1>\n....\n",
         );
@@ -8350,8 +8379,8 @@ mod substitutions {
 "#
         );
 
-        // `block.subs` is an `asciidoc-parser` model assertion; here the rendered
-        // output is driven.
+        // `block.subs` is an `asciidoc-parser` model assertion; here the
+        // rendered output is driven.
         let result = convert("[subs=\"verbatim,-callouts\"]\n_hey now_ <1>\n");
         assert!(result.contains("_hey now_ &lt;1&gt;"), "{result}");
     }
@@ -8388,8 +8417,9 @@ mod references {
 "#
         );
 
-        // `block.id`/`block.attr 'reftext'` are `asciidoc-parser` model assertions;
-        // the catalog `refute … key?` is driven here through the document catalog.
+        // `block.id`/`block.attr 'reftext'` are `asciidoc-parser` model
+        // assertions; the catalog `refute … key?` is driven here
+        // through the document catalog.
         let doc = load("[[illegal$id,Reference Text]]\n----\ncontent\n----\n");
         assert!(!doc.catalog().contains_id("illegal$id"));
     }
@@ -8581,9 +8611,9 @@ mod references {
 "##
         );
 
-        // `ref.title` is an `asciidoctor` model assertion (the parser records the
-        // resolved title as the reference's reftext); the reverse lookup and the
-        // rendered output are driven here.
+        // `ref.title` is an `asciidoctor` model assertion (the parser records
+        // the resolved title as the reference's reftext); the reverse
+        // lookup and the rendered output are driven here.
         let input = "= Document Title\n:foo: baz\n\nintro paragraph. see <<free-standing>>.\n\n:foo: bar\n\n.foo is {foo}\n[#formal-para]\nparagraph with title\n\n[discrete#free-standing]\n== foo is still {foo}\n";
         let doc = load(input);
         assert_eq!(

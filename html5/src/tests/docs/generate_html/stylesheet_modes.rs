@@ -224,8 +224,9 @@ broken unless you copy the file yourself.
     assert!(html.contains(r#"<link rel="stylesheet" href="./asciidoctor.css">"#));
     assert!(out_dir.join("asciidoctor.css").is_file());
 
-    // The closing note: under `secure`, `copycss` is off by default, so the same
-    // conversion links the stylesheet but writes nothing to the output directory.
+    // The closing note: under `secure`, `copycss` is off by default, so the
+    // same conversion links the stylesheet but writes nothing to the output
+    // directory.
     let secure_dir = dir.join("secure");
     let mut secure_writer = DirAssetWriter::new(&secure_dir);
     let secure = convert_file_with_writer(

@@ -1701,7 +1701,8 @@ include::pass:example$pass.adoc[tag=backtick-plus]
     );
     assert_css(&output, "code", 2);
 
-    // The attribute reference is not resolved inside the literal monospace span.
+    // The attribute reference is not resolved inside the literal monospace
+    // span.
     assert!(output.contains("<code>{backtick}</code>"));
 }
 

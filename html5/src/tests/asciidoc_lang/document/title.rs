@@ -194,8 +194,8 @@ If neither a level 0 section title or `doctitle` is specified in the header, but
 "#
     );
 
-    // `title` overrides the `<title>` element; the header `<h1>` still shows the
-    // document title.
+    // `title` overrides the `<title>` element; the header `<h1>` still shows
+    // the document title.
     let overridden =
         convert_standalone("= The Intrepid Chronicles\n:title: Custom Tab Title\n\nBody.\n");
     assert!(overridden.contains("<title>Custom Tab Title</title>"));

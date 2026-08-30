@@ -52,8 +52,8 @@ pub(crate) fn encode(bytes: &[u8]) -> String {
 mod tests {
     use super::encode;
 
-    // Empty input yields empty output — the body of a `data:…;base64,` URI for an
-    // unreadable image.
+    // Empty input yields empty output — the body of a `data:…;base64,` URI for
+    // an unreadable image.
     #[test]
     fn empty_input_is_empty() {
         assert_eq!(encode(b""), "");
@@ -71,8 +71,8 @@ mod tests {
         assert_eq!(encode(b"foobar"), "Zm9vYmFy");
     }
 
-    // Bytes across the full 0x00..=0xFF range, so the `+`/`/` alphabet slots and
-    // the high bits are exercised (matches Ruby's `[bytes].pack 'm0'`).
+    // Bytes across the full 0x00..=0xFF range, so the `+`/`/` alphabet slots
+    // and the high bits are exercised (matches Ruby's `[bytes].pack 'm0'`).
     #[test]
     fn full_byte_range_uses_the_whole_alphabet() {
         assert_eq!(encode(&[0x00, 0x10, 0x83]), "ABCD");

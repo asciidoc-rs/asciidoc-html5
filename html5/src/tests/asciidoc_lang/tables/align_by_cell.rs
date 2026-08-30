@@ -100,9 +100,9 @@ Content is aligned to the left side of the cell by default.
     assert_css(&hcenter, "td.tableblock.halign-center.valign-top", 1);
     assert_css(&hcenter, "td.tableblock.halign-left.valign-top", 1);
 
-    // Placing `^` after a span (`2+`) or duplication (`2*`) operator centers the
-    // spanned cell and each duplicated cell: three centered body cells in all,
-    // one of them spanning two columns.
+    // Placing `^` after a span (`2+`) or duplication (`2*`) operator centers
+    // the spanned cell and each duplicated cell: three centered body cells
+    // in all, one of them spanning two columns.
     let factor = convert(
         r#"|===
 |Column Name |Column Name
@@ -282,8 +282,8 @@ include::example$align-cell.adoc[tag=vcenter]
 "#
     );
 
-    // The `.^` operator centers the cell's content vertically; the unmarked cell
-    // keeps the default top alignment.
+    // The `.^` operator centers the cell's content vertically; the unmarked
+    // cell keeps the default top alignment.
     let vcenter = convert(
         r#"|===
 |Column Name |Column Name
