@@ -140,8 +140,8 @@ However, this setting may still be required for other environments, so it's wort
 "#
     );
 
-    // With `relfilesuffix` set to `.adoc`, the inter-document reference points at
-    // the source file rather than the `.html` output.
+    // With `relfilesuffix` set to `.adoc`, the inter-document reference points
+    // at the source file rather than the `.html` output.
     assert!(
         convert(":relfilesuffix: .adoc\n\nSee the xref:README.adoc[README].")
             .contains(r#"<a href="README.adoc">README</a>"#)

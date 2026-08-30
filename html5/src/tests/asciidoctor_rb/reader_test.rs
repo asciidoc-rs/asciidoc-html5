@@ -701,8 +701,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // The preprocessor strips CR (and the CRLF pair) from line ends, so the
-            // rendered paragraph carries none.
+            // The preprocessor strips CR (and the CRLF pair) from line ends, so
+            // the rendered paragraph carries none.
             let html = convert("source\r\nwith\r\nCRLF\r\nline endings\r\n");
             assert!(html.contains("source\nwith\nCRLF\nline endings"), "{html}");
             assert!(!html.contains('\r'), "{html}");
@@ -736,8 +736,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // Without `skip-front-matter`, the front matter is left in the source as
-            // ordinary content rather than being consumed, so its text renders.
+            // Without `skip-front-matter`, the front matter is left in the
+            // source as ordinary content rather than being
+            // consumed, so its text renders.
             let html = convert("---\nlayout: post\ntitle: Document Title\nauthor: username\ntags: [ first, second ]\n---\n= Document Title\nAuthor Name\n\npreamble\n");
             assert!(html.contains("layout: post"), "{html}");
         }
@@ -767,8 +768,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // With no closing `---`, the front matter is not skipped even though
-            // `skip-front-matter` is set, so its text still renders as content.
+            // With no closing `---`, the front matter is not skipped even
+            // though `skip-front-matter` is set, so its text still
+            // renders as content.
             let html = convert_with(
                 "---\ntitle: Document Title\ntags: [ first, second ]\n= Document Title\nAuthor Name\n\npreamble\n",
                 &Options::new().set("skip-front-matter"),
@@ -807,9 +809,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // With `skip-front-matter` set and a closing `---`, the front matter is
-            // consumed: its text does not render, and the body after it (the preamble)
-            // does.
+            // With `skip-front-matter` set and a closing `---`, the front
+            // matter is consumed: its text does not render, and the
+            // body after it (the preamble) does.
             let html = convert_with(
                 "---\nlayout: post\ntitle: Document Title\nauthor: username\ntags: [ first, second ]\n---\n= Document Title\nAuthor Name\n\npreamble\n",
                 &Options::new().set("skip-front-matter"),
@@ -947,9 +949,9 @@ mod preprocessor_reader {
             assert_xpath(&html, r#"//a[@href="include-file.adoc"]"#, 1);
         }
 
-        // Non-normative: compat-mode role handling is permanently out of scope —
-        // this crate will not implement compat mode, so it does not drop the
-        // include role on the replacement link.
+        // Non-normative: compat-mode role handling is permanently out of scope
+        // — this crate will not implement compat mode, so it does not
+        // drop the include role on the replacement link.
         non_normative!(
             r#"
       test 'should not add role to link macro used to replace include directive in compat mode' do
@@ -1000,10 +1002,10 @@ mod preprocessor_reader {
 "#
             );
 
-            // Under a non-secure safe mode a remote target whose `allow-uri-read`
-            // is unset falls back to a link macro carrying the `include` role —
-            // the same rewrite the secure safe mode applies — and raises no
-            // warning.
+            // Under a non-secure safe mode a remote target whose
+            // `allow-uri-read` is unset falls back to a link macro
+            // carrying the `include` role — the same rewrite the
+            // secure safe mode applies — and raises no warning.
             let src = "include::https://example.org/dist/info.adoc[]";
             let html = convert_safe_with_fixtures(src);
             assert_css(&html, "a.include", 1);
@@ -1015,9 +1017,9 @@ mod preprocessor_reader {
             assert!(fixture_warnings(src).is_empty());
         }
 
-        // Non-normative: compat-mode role suppression is permanently out of scope
-        // — this crate does not implement compat mode, so it does not drop the
-        // `include` role from the replacement link.
+        // Non-normative: compat-mode role suppression is permanently out of
+        // scope — this crate does not implement compat mode, so it does
+        // not drop the `include` role from the replacement link.
         non_normative!(
             r#"
       test 'should not add role to link macro that replaces include directive with remote target in compat mode' do
@@ -1044,8 +1046,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // A space in the remote target is wrapped in `pass:c[…]` so it cannot
-            // break the generated link macro; the space survives into the href.
+            // A space in the remote target is wrapped in `pass:c[…]` so it
+            // cannot break the generated link macro; the space
+            // survives into the href.
             let html =
                 convert_safe_with_fixtures("include::https://example.org/no such file.adoc[]");
             assert_css(&html, "a.include", 1);
@@ -1090,8 +1093,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The UTF-8 BOM at the start of the include file is stripped, so the title
-            // heading renders with its first real character.
+            // The UTF-8 BOM at the start of the include file is stripped, so
+            // the title heading renders with its first real
+            // character.
             let html = convert_safe_with_fixtures(
                 ":showtitle:\ninclude::fixtures/file-with-utf8-bom.adoc[]",
             );
@@ -1100,7 +1104,8 @@ mod preprocessor_reader {
             assert!(html.contains("<h1>\u{4eba}</h1>"), "{html}");
         }
 
-        // Non-normative: reads from the JRuby classloader (jruby-only; out of scope).
+        // Non-normative: reads from the JRuby classloader (jruby-only; out of
+        // scope).
         non_normative!(
             r#"
       test 'should include content from a file on the classloader', if: jruby? do
@@ -1133,12 +1138,13 @@ mod preprocessor_reader {
 "#
             );
 
-            // A non-AsciiDoc include is pulled in but not recorded in the document's
-            // include catalog.
+            // A non-AsciiDoc include is pulled in but not recorded in the
+            // document's include catalog.
             let opts = Options::new()
                 .safe_mode(SafeMode::Safe)
                 .base_dir(fixtures_base_dir());
-            // Control: a normal AsciiDoc include *is* tracked (confirms the key form).
+            // Control: a normal AsciiDoc include *is* tracked (confirms the key
+            // form).
             let adoc = load_with("include::fixtures/include-file.adoc[]", &opts);
             assert!(adoc.catalog().was_included("fixtures/include-file"));
             // An .svg pulled into a listing block is not tracked.
@@ -1194,14 +1200,15 @@ mod preprocessor_reader {
 "#
             );
 
-            // `{sp}` in the target resolves to a space, so the spaced file resolves.
+            // `{sp}` in the target resolves to a space, so the spaced file
+            // resolves.
             let dir = temp_include_dir("sp-attr", "include file.adoc", "included content\n");
             let html = convert_safe_in(&dir, "include::include{sp}file.adoc[]");
             assert!(html.contains("included content"), "{html}");
         }
 
-        // Non-normative: asserts the raw reader line for a non-include; there is no
-        // rendered form.
+        // Non-normative: asserts the raw reader line for a non-include; there
+        // is no rendered form.
         non_normative!(
             r#"
       test 'include directive should not match if target is empty or starts or ends with space' do
@@ -1236,8 +1243,8 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: asserts PreprocessorReader internals (file/dir/path/cursor);
-        // no rendered form.
+        // Non-normative: asserts PreprocessorReader internals
+        // (file/dir/path/cursor); no rendered form.
         non_normative!(
             r#"
       test 'include directive should resolve file relative to current include' do
@@ -1344,16 +1351,18 @@ mod preprocessor_reader {
 "#
             );
 
-            // Only trailing newlines are stripped from a non-AsciiDoc include, not
-            // trailing whitespace: the tab ending the third data line survives.
+            // Only trailing newlines are stripped from a non-AsciiDoc include,
+            // not trailing whitespace: the tab ending the third
+            // data line survives.
             let html = convert_safe_with_fixtures("....\ninclude::fixtures/data.tsv[]\n....");
             assert!(html.contains("1\t2\t\n"), "{html:?}");
         }
 
         // Non-normative: Asciidoctor rejects an undeclared non-UTF-8 include by
-        // raising `invalid byte sequence in UTF-8`. This crate's include handlers
-        // cannot raise mid-parse, so it diverges — the include is left unresolved
-        // rather than aborting the parse. That divergent behavior is asserted in
+        // raising `invalid byte sequence in UTF-8`. This crate's include
+        // handlers cannot raise mid-parse, so it diverges — the include
+        // is left unresolved rather than aborting the parse. That
+        // divergent behavior is asserted in
         // `undeclared_non_utf8_include_is_left_unresolved` below.
         non_normative!(
             r#"
@@ -1378,9 +1387,10 @@ mod preprocessor_reader {
         // The divergence documented above, asserted: an undeclared non-UTF-8
         // include cannot be decoded as UTF-8, so it is left unresolved — the
         // ISO-8859-1 content never appears, an "Unresolved directive" message
-        // takes the directive's place, and an include-file-not-decodable warning
-        // is raised (naming the real cause, rather than "not found"). A matching
-        // `encoding` attribute makes the same file resolve; see
+        // takes the directive's place, and an include-file-not-decodable
+        // warning is raised (naming the real cause, rather than "not
+        // found"). A matching `encoding` attribute makes the same file
+        // resolve; see
         // `should_use_encoding_specified_by_encoding_attribute_when_reading_include_file`.
         #[test]
         fn undeclared_non_utf8_include_is_left_unresolved() {
@@ -1419,8 +1429,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The file is UTF-8; an invalid `encoding` value is ignored and it reads
-            // normally (the non-ASCII `romé` tag name resolves too).
+            // The file is UTF-8; an invalid `encoding` value is ignored and it
+            // reads normally (the non-ASCII `romé` tag name
+            // resolves too).
             let html = convert_safe_with_fixtures(
                 "....\ninclude::fixtures/encoding.adoc[tag=rom\u{e9},encoding=iso-1000-1]\n....",
             );
@@ -1431,9 +1442,10 @@ mod preprocessor_reader {
         }
 
         // A non-UTF-8 include named with a matching `encoding` attribute is
-        // transcoded to UTF-8 by the filesystem handler and rendered in place of
-        // the directive. Because the handler reports the content as already
-        // transcoded, the parser raises no non-UTF-8 include-encoding warning.
+        // transcoded to UTF-8 by the filesystem handler and rendered in place
+        // of the directive. Because the handler reports the content as
+        // already transcoded, the parser raises no non-UTF-8
+        // include-encoding warning.
         #[test]
         fn should_use_encoding_specified_by_encoding_attribute_when_reading_include_file() {
             verifies!(
@@ -1491,8 +1503,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // An optional include whose target is unresolved (missing attribute) is
-            // dropped silently; only the trailing content remains.
+            // An optional include whose target is unresolved (missing
+            // attribute) is dropped silently; only the trailing
+            // content remains.
             let html = convert_safe_with_fixtures(
                 "include::fixtures/{no-such-file}[opts=optional]\n\ntrailing content",
             );
@@ -1560,9 +1573,10 @@ mod preprocessor_reader {
 "#
             );
 
-            // A required include of a missing file is replaced with an "Unresolved
-            // directive" message (this crate names the origin "(root file)" rather than
-            // Asciidoctor's "<stdin>"), and an include-file-not-found warning is raised.
+            // A required include of a missing file is replaced with an
+            // "Unresolved directive" message (this crate names the
+            // origin "(root file)" rather than Asciidoctor's
+            // "<stdin>"), and an include-file-not-found warning is raised.
             let src = "include::fixtures/no-such-file.adoc[]\n\ntrailing content";
             let html = convert_safe_with_fixtures(src);
             assert!(html.contains("Unresolved directive"), "{html}");
@@ -1580,11 +1594,12 @@ mod preprocessor_reader {
             );
         }
 
-        // An unreadable include file (present but not readable) is replaced with
-        // the same "Unresolved directive" message as a missing one, but the
-        // parser distinguishes the two, raising an include-file-not-readable
-        // warning rather than not-found (#146). Simulating an unreadable file
-        // relies on Unix permission bits and does not work as root (which
+        // An unreadable include file (present but not readable) is replaced
+        // with the same "Unresolved directive" message as a missing
+        // one, but the parser distinguishes the two, raising an
+        // include-file-not-readable warning rather than not-found
+        // (#146). Simulating an unreadable file relies on Unix
+        // permission bits and does not work as root (which
         // bypasses them), so this is Unix-only and skips under root — mirroring
         // the Ruby test's `unless windows? || Process.euid == 0` gate.
         #[cfg(unix)]
@@ -1622,9 +1637,11 @@ mod preprocessor_reader {
 
             use std::{fs, os::unix::fs::PermissionsExt};
 
-            // Build a throwaway base directory holding `fixtures/chapter-a.adoc`,
-            // then strip its permissions so it exists but cannot be read (rather
-            // than chmod-ing the vendored fixture the Ruby test mutates in place).
+            // Build a throwaway base directory holding
+            // `fixtures/chapter-a.adoc`, then strip its permissions
+            // so it exists but cannot be read (rather
+            // than chmod-ing the vendored fixture the Ruby test mutates in
+            // place).
             let base =
                 std::env::temp_dir().join(format!("ahtml5-unreadable-{}", std::process::id()));
             let fixtures = base.join("fixtures");
@@ -1636,7 +1653,8 @@ mod preprocessor_reader {
                 .expect("chmod include");
 
             // Root bypasses permission bits, so the file stays readable and an
-            // unreadable include cannot be simulated; skip, matching the Ruby gate.
+            // unreadable include cannot be simulated; skip, matching the Ruby
+            // gate.
             if fs::read_to_string(&include_file).is_ok() {
                 let _ = fs::set_permissions(&include_file, fs::Permissions::from_mode(0o644));
                 let _ = fs::remove_dir_all(&base);
@@ -1658,8 +1676,8 @@ mod preprocessor_reader {
             let _ = fs::remove_dir_all(&base);
 
             // The directive is replaced with the same "Unresolved directive"
-            // message a missing file would produce, and trailing content survives
-            // ...
+            // message a missing file would produce, and trailing content
+            // survives ...
             assert!(html.contains("Unresolved directive"), "{html}");
             assert!(
                 html.contains("include::fixtures/chapter-a.adoc[]"),
@@ -1700,12 +1718,13 @@ mod preprocessor_reader {
             );
 
             // The absolute include target points at `fixtures/chapter-a.adoc`
-            // inside the canonicalized fixtures tree, so it lies within the jail.
-            // Build it from the canonical base so its lexical prefix matches the
-            // handler's canonicalized `base_dir`. `:showtitle:` surfaces the
-            // included `= Chapter A` level-0 title as an `<h1>` in embedded output
-            // (the doctitle counterpart), the way `should_strip_bom_from_include_file`
-            // does.
+            // inside the canonicalized fixtures tree, so it lies within the
+            // jail. Build it from the canonical base so its lexical
+            // prefix matches the handler's canonicalized
+            // `base_dir`. `:showtitle:` surfaces the included `=
+            // Chapter A` level-0 title as an `<h1>` in embedded output
+            // (the doctitle counterpart), the way
+            // `should_strip_bom_from_include_file` does.
             let canonical_base = fixtures_base_dir()
                 .canonicalize()
                 .expect("canonicalize fixtures base dir");
@@ -1718,8 +1737,9 @@ mod preprocessor_reader {
             let safe_html = convert_safe_with_fixtures(&src);
             assert!(safe_html.contains("<h1>Chapter A</h1>"), "{safe_html}");
 
-            // Under `unsafe` with an unrelated base directory (`Dir.tmpdir`), the
-            // absolute target is honored freely and still resolves.
+            // Under `unsafe` with an unrelated base directory (`Dir.tmpdir`),
+            // the absolute target is honored freely and still
+            // resolves.
             let unsafe_html = convert_with(
                 &src,
                 &Options::new()
@@ -1729,8 +1749,8 @@ mod preprocessor_reader {
             assert!(unsafe_html.contains("<h1>Chapter A</h1>"), "{unsafe_html}");
         }
 
-        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
-        // (remote-fetch-not-planned).
+        // Non-normative: fetches a remote (URI) include; remote fetch is a
+        // non-goal (remote-fetch-not-planned).
         non_normative!(
             r#"
       test 'include directive can retrieve data from uri' do
@@ -1789,8 +1809,8 @@ mod preprocessor_reader {
             assert!(html.contains(expected), "{html}");
         }
 
-        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
-        // (remote-fetch-not-planned).
+        // Non-normative: fetches a remote (URI) include; remote fetch is a
+        // non-goal (remote-fetch-not-planned).
         non_normative!(
             r#"
       test 'nested remote include directive is resolved relative to uri of current file' do
@@ -1823,8 +1843,8 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
-        // (remote-fetch-not-planned).
+        // Non-normative: fetches a remote (URI) include; remote fetch is a
+        // non-goal (remote-fetch-not-planned).
         non_normative!(
             r#"
       test 'nested remote include directive that cannot be resolved does not crash processor' do
@@ -1851,8 +1871,8 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
-        // (remote-fetch-not-planned).
+        // Non-normative: fetches a remote (URI) include; remote fetch is a
+        // non-goal (remote-fetch-not-planned).
         non_normative!(
             r#"
       test 'should support tag filtering for remote includes' do
@@ -1879,8 +1899,8 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: fetches a remote (URI) include; remote fetch is a non-goal
-        // (remote-fetch-not-planned).
+        // Non-normative: fetches a remote (URI) include; remote fetch is a
+        // non-goal (remote-fetch-not-planned).
         non_normative!(
             r#"
       test 'should not crash if include directive references inaccessible uri' do
@@ -2090,8 +2110,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // An invalid range (start after end) is ignored, so the whole file is
-            // included; the `++++` passthrough block emits it raw.
+            // An invalid range (start after end) is ignored, so the whole file
+            // is included; the `++++` passthrough block emits it
+            // raw.
             let html = convert_safe_with_fixtures(
                 "++++\ninclude::fixtures/include-file.adoc[lines=10..5]\n++++",
             );
@@ -2212,7 +2233,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // Tag selection works against an include file with CRLF line endings.
+            // Tag selection works against an include file with CRLF line
+            // endings.
             let dir = temp_include_dir(
                 "crlf",
                 "include-crlf.adoc",
@@ -2248,8 +2270,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // The closing tag directive on the last line of a file with no trailing
-            // newline is still recognized.
+            // The closing tag directive on the last line of a file with no
+            // trailing newline is still recognized.
             let dir = temp_include_dir(
                 "no-trailing-nl",
                 "include-no-nl.adoc",
@@ -2286,9 +2308,10 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `++++` passthrough block emits the tag-selected include content
-            // raw, so selecting the outer `snippet` tag yields the inner content
-            // without the nested tag directive lines. (This crate appends a
+            // The `++++` passthrough block emits the tag-selected include
+            // content raw, so selecting the outer `snippet` tag
+            // yields the inner content without the nested tag
+            // directive lines. (This crate appends a
             // trailing newline to embedded output that Asciidoctor omits, so it
             // is trimmed for the comparison.)
             let output = convert_safe_with_fixtures(
@@ -3078,8 +3101,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `[indent=0]` attribute removes the two-space block indent from
-            // the tag-selected `bark` region.
+            // The `[indent=0]` attribute removes the two-space block indent
+            // from the tag-selected `bark` region.
             let html = convert_safe_with_fixtures(
                 "[indent=0]\n----\ninclude::fixtures/tagged-class.rb[tags=bark;!bark-other]\n----",
             );
@@ -3257,9 +3280,10 @@ mod preprocessor_reader {
 "#
             );
 
-            // The `++++` passthrough block renders the included line raw, and the
-            // include still preprocesses and warns. (Embedded output carries a
-            // trailing newline this crate adds and Asciidoctor omits.)
+            // The `++++` passthrough block renders the included line raw, and
+            // the include still preprocesses and warns. (Embedded
+            // output carries a trailing newline this crate adds and
+            // Asciidoctor omits.)
             let src = "++++\ninclude::fixtures/unclosed-tag.adoc[tag=a]\n++++";
             assert_eq!(convert_safe_with_fixtures(src).trim_end_matches('\n'), "a");
             let warnings = fixture_warnings(src);
@@ -3368,9 +3392,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // An empty `tag`/`tags` value is ignored, so every line — including the
-            // tag directive lines themselves — is included; the `++++` passthrough
-            // block emits them raw.
+            // An empty `tag`/`tags` value is ignored, so every line — including
+            // the tag directive lines themselves — is included; the
+            // `++++` passthrough block emits them raw.
             for attr_name in ["tag", "tags"] {
                 let src = format!("++++\ninclude::fixtures/include-file.xml[{attr_name}=]\n++++");
                 let html = convert_safe_with_fixtures(&src);
@@ -3455,8 +3479,8 @@ mod preprocessor_reader {
             assert!(!html.contains("included content"), "{html}");
         }
 
-        // Non-normative: requires a custom include processor (the extension mechanism
-        // is out of scope).
+        // Non-normative: requires a custom include processor (the extension
+        // mechanism is out of scope).
         non_normative!(
             r#"
       test 'should fall back to built-in include directive behavior when not handled by include processor' do
@@ -3512,8 +3536,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // The include applies a +1 leveloffset around the child document, so its
-            // `= Chapter A` renders as a nested section, and the main content survives.
+            // The include applies a +1 leveloffset around the child document,
+            // so its `= Chapter A` renders as a nested section, and
+            // the main content survives.
             let html = convert_safe_with_fixtures("include::fixtures/main.adoc[]");
             assert!(html.contains("Chapter A"), "{html}");
             assert!(html.contains("preamble"), "{html}");
@@ -3592,8 +3617,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // Under attribute-missing=drop-line, the whole directive line is removed,
-            // leaving no content.
+            // Under attribute-missing=drop-line, the whole directive line is
+            // removed, leaving no content.
             let html = convert_with(
                 "include::{foodir}/include-file.adoc[]",
                 &Options::new()
@@ -3631,8 +3656,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // Under attribute-missing=warn a missing-attribute include is replaced with
-            // an unresolved-directive message; the following line survives.
+            // Under attribute-missing=warn a missing-attribute include is
+            // replaced with an unresolved-directive message; the
+            // following line survives.
             let src = "include::{foodir}/include-file.adoc[]\nyo";
             let html = convert_with(
                 src,
@@ -3667,8 +3693,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // A backslash-escaped include is emitted as literal text (the backslash
-            // removed) and never resolved.
+            // A backslash-escaped include is emitted as literal text (the
+            // backslash removed) and never resolved.
             let html = convert_safe_with_fixtures(
                 "\\include::fixtures/include-file.adoc[]\n\\escape preserved here",
             );
@@ -3743,7 +3769,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // An API `max-include-depth` of 0 wins over a document `:max-include-depth: 1`.
+            // An API `max-include-depth` of 0 wins over a document
+            // `:max-include-depth: 1`.
             let html = convert_with(
                 ":max-include-depth: 1\n\ninclude::include-file.adoc[]",
                 &Options::new()
@@ -3873,8 +3900,8 @@ mod preprocessor_reader {
 "#
         );
 
-        // Non-normative: these drive PreprocessorReader cursor mechanics (process_line
-        // / peek_line / peek_lines); no rendered form.
+        // Non-normative: these drive PreprocessorReader cursor mechanics
+        // (process_line / peek_line / peek_lines); no rendered form.
         non_normative!(
             r#"
       test 'process_line returns nil if cursor advanced' do
@@ -4078,11 +4105,12 @@ mod preprocessor_reader {
 "#
             );
 
-            // `asciidoctor-version` is always set, so the single-line conditional
-            // holds and its bracketed `include::` body is processed: the selected
-            // tag content is rendered in place of the directive, rather than the
-            // directive text being emitted literally (#133). This crate tests via
-            // `convert` rather than the reader's line stream.
+            // `asciidoctor-version` is always set, so the single-line
+            // conditional holds and its bracketed `include::` body
+            // is processed: the selected tag content is rendered in
+            // place of the directive, rather than the
+            // directive text being emitted literally (#133). This crate tests
+            // via `convert` rather than the reader's line stream.
             let html = convert_safe_with_fixtures(
                 "ifdef::asciidoctor-version[include::fixtures/include-file.adoc[tag=snippetA]]",
             );
@@ -4743,9 +4771,10 @@ mod preprocessor_reader {
             let src = "ifdef::on-quest[]\nOur quest is complete!\nendif::on-journey[]";
             let html = convert_with_attrs(src, &[("on-quest", "")]);
             assert!(html.contains("Our quest is complete!"), "{html}");
-            // The mismatched `endif` closes nothing, so the opening `ifdef` is left
-            // unterminated: both diagnostics are raised. (Line numbers are not asserted;
-            // this crate reports both on the preprocessed span rather than Asciidoctor's
+            // The mismatched `endif` closes nothing, so the opening `ifdef` is
+            // left unterminated: both diagnostics are raised. (Line
+            // numbers are not asserted; this crate reports both on
+            // the preprocessed span rather than Asciidoctor's
             // original 1 / 3.)
             let warnings = conditional_warnings(src, &[("on-quest", "")]);
             assert!(
@@ -5474,8 +5503,9 @@ mod preprocessor_reader {
 "#
             );
 
-            // This crate has a single unterminated-conditional diagnostic (it does not
-            // model Asciidoctor's sourcemap-dependent start/end position choice).
+            // This crate has a single unterminated-conditional diagnostic (it
+            // does not model Asciidoctor's sourcemap-dependent
+            // start/end position choice).
             let src = "before\nifdef::not-set[]\nskip\nthese\nlines\nfin";
             let html = convert(src);
             assert!(html.contains("before"), "{html}");
@@ -5557,8 +5587,8 @@ mod preprocessor_reader {
 "#
             );
 
-            // A large false conditional block is skipped without failure; only the
-            // surrounding paragraphs remain.
+            // A large false conditional block is skipped without failure; only
+            // the surrounding paragraphs remain.
             let big = vec!["data"; 5000].join("\n");
             let src = format!(
                 "before\n\nifdef::attribute-not-set[]\n{big}\nendif::attribute-not-set[]\n\nafter"
@@ -5569,7 +5599,8 @@ mod preprocessor_reader {
             assert!(!html.contains("data"), "large block should be dropped");
         }
 
-        // Non-normative: requires the extension/preprocessor mechanism (out of scope).
+        // Non-normative: requires the extension/preprocessor mechanism (out of
+        // scope).
         non_normative!(
             r#"
       test 'should not fail to process lines if reader contains a nil entry' do

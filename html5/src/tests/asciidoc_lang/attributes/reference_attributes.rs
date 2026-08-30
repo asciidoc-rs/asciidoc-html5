@@ -202,8 +202,8 @@ In the path /items/\{id}, id is a path parameter.
 
         let output = convert("In the path /items/\\{id}, id is a path parameter.");
 
-        // The backslash is removed and the `{id}` expression is passed through as
-        // written rather than treated as an attribute reference.
+        // The backslash is removed and the `{id}` expression is passed through
+        // as written rather than treated as an attribute reference.
         assert_eq!(
             super::first_paragraph(&output),
             "In the path /items/{id}, id is a path parameter.",

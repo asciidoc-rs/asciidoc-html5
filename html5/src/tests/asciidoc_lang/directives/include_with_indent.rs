@@ -139,8 +139,8 @@ end
 "#
     );
 
-    // The indented Ruby lives in the `indented.rb` fixture; the include pulls it
-    // into the `indent=0` source block, which strips the leading indent.
+    // The indented Ruby lives in the `indented.rb` fixture; the include pulls
+    // it into the `indent=0` source block, which strips the leading indent.
     let output = convert_including("[source,ruby,indent=0]\n----\ninclude::indented.rb[]\n----\n");
     assert_eq!(verbatim_text(&output), "def names\n  @name.split ' '\nend");
 }

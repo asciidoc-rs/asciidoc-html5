@@ -158,13 +158,31 @@ Therefore, it sends the converted text to standard output (STDOUT) by default.
     assert!(goes_to_stdout(&["adoc", "-o", "-", "-"]));
 
     // End to end, piping to `-` reads stdin and writes the converted HTML to
-    // stdout — byte-for-byte the same as spelling out the destination `-o - -`.
+    // stdout — the same as spelling out the destination `-o - -`.
     let source = "= Doc\n\nBody.";
     let bare = run_piped(&["adoc", "-"], source);
     let explicit = run_piped(&["adoc", "-o", "-", "-"], source);
     assert!(bare.starts_with("<!DOCTYPE html>"));
     assert!(bare.contains("<p>Body.</p>"));
-    assert_eq!(bare, explicit);
+
+    // The two conversions run moments apart, and the footer's "Last updated"
+    // stamp carries second granularity, so a pair straddling a second
+    // boundary differs in exactly that line. Neutralize the stamp before
+    // comparing: the assertion pins identical *routing*, not identical
+    // clocks.
+    let neutralize_datetime = |html: &str| -> String {
+        html.lines()
+            .map(|line| {
+                if line.starts_with("Last updated ") {
+                    "Last updated <run-dependent>"
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(neutralize_datetime(&bare), neutralize_datetime(&explicit));
 }
 
 // The `-o` flag redirects the full standalone document to a file instead of
@@ -187,7 +205,8 @@ For example, the following command writes a standalone HTML document to [.path]_
         Some(PathBuf::from("output.html"))
     );
 
-    // End to end, `-o <file>` writes the standalone HTML to the file, not stdout.
+    // End to end, `-o <file>` writes the standalone HTML to the file, not
+    // stdout.
     let out = std::env::temp_dir().join(format!(
         "adoc-cli-io-piping-outfile-{}.html",
         std::process::id()
@@ -276,9 +295,9 @@ Try both approaches to determine which one suits your needs better.
     std::fs::write(dir.join("part.adoc"), "Included via docdir.\n").expect("write include");
     let dir_str = dir.to_str().expect("docdir path is UTF-8");
 
-    // Drive the real stdin path: `-a docdir=<dir>` seeds the base directory, so a
-    // relative include sitting inside it resolves — the same outcome `-B <dir>`
-    // produces above.
+    // Drive the real stdin path: `-a docdir=<dir>` seeds the base directory, so
+    // a relative include sitting inside it resolves — the same outcome `-B
+    // <dir>` produces above.
     let html = run_piped(
         &[
             "adoc",
@@ -312,8 +331,8 @@ Or perhaps you want to include the doctitle as well:
 "#
     );
 
-    // `-e` yields the converted body only — no standalone document shell, and no
-    // doctitle `<h1>` unless it is asked for.
+    // `-e` yields the converted body only — no standalone document shell, and
+    // no doctitle `<h1>` unless it is asked for.
     let body = run_piped(&["adoc", "-e", "-"], "= Document Title\n\ncontent");
     assert!(!body.starts_with("<!DOCTYPE html>"));
     assert!(body.contains("<p>content</p>"));

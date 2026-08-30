@@ -3471,8 +3471,9 @@ fn error_about_unresolved_preprocessor_directive_on_first_line_of_an_asciidoc_ta
     );
 
     // Stand in for Ruby's `Tempfile`: a uniquely-named include file in a fresh
-    // temp directory, which becomes the `safe`-mode base directory. Its basename
-    // is the file the cursor and message must name (`tmp_include_path`).
+    // temp directory, which becomes the `safe`-mode base directory. Its
+    // basename is the file the cursor and message must name
+    // (`tmp_include_path`).
     let dir = std::env::temp_dir().join(format!("ahtml5-tables-167-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
@@ -3499,10 +3500,11 @@ fn error_about_unresolved_preprocessor_directive_on_first_line_of_an_asciidoc_ta
     let has_message = output.contains(&format!("Unresolved directive in {tmp_include_path}"));
 
     // The one warning is `include file not found`, and its cursor resolves —
-    // through the document source map — to line 5 of the included temp file (the
-    // cell's first line, where the failing `include::` lives). Asciidoctor's
-    // logged message names the *resolved* absolute path of the missing target;
-    // this crate carries the directive's raw target on the warning instead.
+    // through the document source map — to line 5 of the included temp file
+    // (the cell's first line, where the failing `include::` lives).
+    // Asciidoctor's logged message names the *resolved* absolute path of
+    // the missing target; this crate carries the directive's raw target on
+    // the warning instead.
     let cursors: Vec<_> = doc
         .warnings()
         .filter(|w| matches!(&w.warning, WarningType::IncludeFileNotFound(t) if t == "does-not-exist.adoc"))
@@ -3707,12 +3709,12 @@ fn footnotes_should_not_be_shared_between_an_asciidoc_table_cell_and_the_main_do
     let result = convert_standalone(input);
     assert_css(&result, "#_footnotedef_1", 1);
 
-    // The ported `assert_css '#_footnotedef_1', result, 1` above only counts the
-    // definition somewhere in the document; it would still pass if the cell's
-    // footnote leaked into the document-level registry. Pin down the behavior the
-    // test is named for — the cell keeps its *own* registry — by asserting both
-    // scopes explicitly. The definition renders inside the cell's `#footnotes`
-    // block (a descendant of the `td`) ...
+    // The ported `assert_css '#_footnotedef_1', result, 1` above only counts
+    // the definition somewhere in the document; it would still pass if the
+    // cell's footnote leaked into the document-level registry. Pin down the
+    // behavior the test is named for — the cell keeps its *own* registry —
+    // by asserting both scopes explicitly. The definition renders inside
+    // the cell's `#footnotes` block (a descendant of the `td`) ...
     assert_css(
         &result,
         "td.tableblock div.content div#footnotes div.footnote#_footnotedef_1",

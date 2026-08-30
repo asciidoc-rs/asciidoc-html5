@@ -112,7 +112,8 @@ include::example$source.adoc[tag=src-implied]
 "#
     );
 
-    // The `tag=src-implied` snippet: a language with no explicit `source` style.
+    // The `tag=src-implied` snippet: a language with no explicit `source`
+    // style.
     let output = convert(
         "[,ruby]\n----\nrequire 'sinatra'\n\nget '/hi' do\n  \"Hello World!\"\nend\n----\n",
     );
@@ -160,8 +161,9 @@ include::example$source.adoc[tag=src-inc]
 "#
     );
 
-    // The `tag=src-inc` snippet, displayed by the surrounding `[listing]` block.
-    // The escaped `\include::` is shown literally, its backslash removed.
+    // The `tag=src-inc` snippet, displayed by the surrounding `[listing]`
+    // block. The escaped `\include::` is shown literally, its backslash
+    // removed.
     let output = convert("[listing]\n....\n[,ruby]\n----\n\\include::app.rb[]\n----\n....\n");
 
     assert_css(&output, "div.listingblock > div.content > pre", 1);

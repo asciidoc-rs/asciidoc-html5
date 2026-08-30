@@ -139,9 +139,10 @@ fn convert(el: ElementRef<'_>) -> VirtualNode {
             Node::Text(t) => {
                 text.push_str(t);
 
-                // Keep the run of character data as its own `#text` child so the
-                // `text()` node test on the sibling axes can address it in
-                // document order alongside the element children.
+                // Keep the run of character data as its own `#text` child so
+                // the `text()` node test on the sibling axes
+                // can address it in document order alongside
+                // the element children.
                 let mut text_node = VirtualNode::new("#text");
                 text_node.text = Some(t.to_string());
                 node.children.push(text_node);

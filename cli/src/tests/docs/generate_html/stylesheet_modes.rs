@@ -85,9 +85,9 @@ command line embeds the stylesheet:
     assert!(html.contains("<style>"));
     assert!(!html.contains("./asciidoctor.css"));
 
-    // Only the API example is verified by the `asciidoc-html5` crate against the
-    // API, so it is non-normative here; the `secure` sentence that follows is a
-    // CLI-checkable claim and stays verified below.
+    // Only the API example is verified by the `asciidoc-html5` crate against
+    // the API, so it is non-normative here; the `secure` sentence that
+    // follows is a CLI-checkable claim and stays verified below.
     non_normative!(
         r#"
 Through the API, pass a safe mode below `secure` explicitly:

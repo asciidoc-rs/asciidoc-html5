@@ -160,8 +160,8 @@ directory.
 "#
     );
 
-    // Listing the directory shows the derived _my-document.html_ file, whose name
-    // `adoc` takes from the input by swapping the extension.
+    // Listing the directory shows the derived _my-document.html_ file, whose
+    // name `adoc` takes from the input by swapping the extension.
     verifies!(
         r#"
  $ ls

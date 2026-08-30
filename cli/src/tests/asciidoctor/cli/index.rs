@@ -65,9 +65,9 @@ The runtime environment information varies based on the version of Ruby you're u
 "#
     );
 
-    // clap reports a version request as a `DisplayVersion` "error" whose message
-    // is the version string. `--version` and the short `-V` produce the same
-    // output, `adoc <version>`.
+    // clap reports a version request as a `DisplayVersion` "error" whose
+    // message is the version string. `--version` and the short `-V` produce
+    // the same output, `adoc <version>`.
     let long = Cli::try_parse_from(["adoc", "--version"]).expect_err("--version displays version");
     assert_eq!(long.kind(), clap::error::ErrorKind::DisplayVersion);
     assert!(long.to_string().starts_with("adoc "));
@@ -182,12 +182,12 @@ See xref:man1/asciidoctor.adoc[asciidoctor(1)].
 "#
     );
 
-    // `adoc --help syntax` prints the AsciiDoc syntax crib sheet, and because the
-    // crib sheet is itself AsciiDoc, `adoc --help syntax | adoc -o -` renders it
-    // with this crate's own renderer — the `adoc` counterpart of Asciidoctor's
-    // `--help syntax` and its `| asciidoctor -o syntax.html -` preview. Driven
-    // below through `syntax_help_topic` (the pre-clap topic detector) and the
-    // embedded crib sheet.
+    // `adoc --help syntax` prints the AsciiDoc syntax crib sheet, and because
+    // the crib sheet is itself AsciiDoc, `adoc --help syntax | adoc -o -`
+    // renders it with this crate's own renderer — the `adoc` counterpart of
+    // Asciidoctor's `--help syntax` and its `| asciidoctor -o syntax.html
+    // -` preview. Driven below through `syntax_help_topic` (the pre-clap
+    // topic detector) and the embedded crib sheet.
     verifies!(
         r#"
 You can print an AsciiDoc syntax crib sheet by passing the `syntax` topic to the `--help` option.
@@ -203,9 +203,9 @@ Navigate to the [.path]_syntax.html_ file in your browser to see what the exampl
 "#
     );
 
-    // `adoc --help syntax` is recognized as the syntax topic, and the crib sheet
-    // it prints is valid AsciiDoc this crate renders (the pipe-back-to-render
-    // claim) without any `unsupported` fallback.
+    // `adoc --help syntax` is recognized as the syntax topic, and the crib
+    // sheet it prints is valid AsciiDoc this crate renders (the
+    // pipe-back-to-render claim) without any `unsupported` fallback.
     let syntax_args: Vec<std::ffi::OsString> = ["adoc", "--help", "syntax"]
         .iter()
         .map(std::ffi::OsString::from)

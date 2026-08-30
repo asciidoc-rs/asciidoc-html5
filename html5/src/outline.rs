@@ -168,10 +168,10 @@ fn outline_title(block: &Block<'_>, section: &SectionBlock<'_>, sectnumlevels: u
 
     // A caption (assigned by the parser, e.g. `"Appendix A: "`, already
     // including its separator) wins outright, matching the heading's own
-    // `captioned_title` precedence. Otherwise Asciidoctor's `sectnum` appends the
-    // `.` delimiter after the number, so a level-1 section reads `1.` and a
-    // level-2 section `1.1.`; the parser's `SectionNumber` renders the dotted
-    // components without that trailing `.`, so we add it.
+    // `captioned_title` precedence. Otherwise Asciidoctor's `sectnum` appends
+    // the `.` delimiter after the number, so a level-1 section reads `1.`
+    // and a level-2 section `1.1.`; the parser's `SectionNumber` renders
+    // the dotted components without that trailing `.`, so we add it.
     let title = if let Some(caption) = block.caption() {
         format!("{caption}{title}")
     } else if let Some(number) = section.section_number() {
@@ -245,8 +245,8 @@ fn attribute_usize(document: &Document<'_>, name: &str, default: usize) -> usize
 mod tests {
     use crate::{convert_outline, convert_outline_with, load, OutlineOptions};
 
-    // The document the reference page uses: three top-level sections, the second
-    // carrying one subsection.
+    // The document the reference page uses: three top-level sections, the
+    // second carrying one subsection.
     const SAMPLE: &str = "\
 = Document Title
 
@@ -305,8 +305,8 @@ mod tests {
     fn numbered_sections_carry_their_number() {
         let doc = load("= Title\n:sectnums:\n\n== First\n\n=== Nested\n\n== Second\n");
 
-        // The dotted numbers (with Asciidoctor's trailing `.`) prefix each title,
-        // byte-identical to Asciidoctor's `convert_outline`.
+        // The dotted numbers (with Asciidoctor's trailing `.`) prefix each
+        // title, byte-identical to Asciidoctor's `convert_outline`.
         let expected = "\
 <ul class=\"sectlevel1\">
 <li><a href=\"#_first\">1. First</a>
@@ -324,17 +324,17 @@ mod tests {
         let doc = load("= Title\n\n== See https://example.org[the site]\n");
         let outline = convert_outline(&doc);
 
-        // The section's own anchor remains, but the inline link inside the title
-        // is reduced to its text.
+        // The section's own anchor remains, but the inline link inside the
+        // title is reduced to its text.
         assert!(outline.contains("the site</a></li>"));
         assert!(!outline.contains("https://example.org"));
     }
 
     #[test]
     fn an_appendix_shows_its_caption() {
-        // A captioned section (an appendix) shows its `"Appendix A: "` prefix in
-        // the TOC, taking precedence over any section number — matching
-        // Asciidoctor's `convert_outline`.
+        // A captioned section (an appendix) shows its `"Appendix A: "` prefix
+        // in the TOC, taking precedence over any section number —
+        // matching Asciidoctor's `convert_outline`.
         let doc = load("= Title\n:sectnums:\n\n== First\n\n[appendix]\n== Options\n");
         let outline = convert_outline(&doc);
         assert!(outline.contains(r##"<a href="#_first">1. First</a>"##));

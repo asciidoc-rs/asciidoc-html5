@@ -372,8 +372,8 @@ mod tests {
     #[test]
     fn a_jailed_absolute_target_cannot_escape_the_base() {
         // Under `server`, an absolute target pointing outside the base is
-        // recovered relative to the base (never read as-is), so the outside file
-        // is not reachable.
+        // recovered relative to the base (never read as-is), so the outside
+        // file is not reachable.
         let base = scratch(&[]);
         let other = scratch(&[("secret.svg", "<svg/>")]);
 
@@ -390,8 +390,8 @@ mod tests {
 
     #[test]
     fn an_unsafe_absolute_target_is_honored() {
-        // Without a jail (`unsafe`), an absolute target is used as-is, so a file
-        // outside the base directory is read.
+        // Without a jail (`unsafe`), an absolute target is used as-is, so a
+        // file outside the base directory is read.
         let base = scratch(&[]);
         let other = scratch(&[("secret.svg", "<svg>OUTSIDE</svg>")]);
 
@@ -553,7 +553,8 @@ mod tests {
             // scan runs off the end), so a malformed tag is left intact rather
             // than swallowing the rest of the string.
             assert_eq!(match_dimension_attr(r#" width="unclosed"#, 0), None);
-            // A value character that is not a quote after `name=` does not match.
+            // A value character that is not a quote after `name=` does not
+            // match.
             assert_eq!(match_dimension_attr(r#" width=bare"#, 0), None);
         }
 

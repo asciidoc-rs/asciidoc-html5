@@ -146,8 +146,8 @@ fn renders_nothing(block: &Block<'_>) -> bool {
     }
 
     // A document-attribute entry (`:name: value`) that survives into the block
-    // stream — as happens inside an AsciiDoc table cell's nested document — sets
-    // an attribute and renders nothing, matching Asciidoctor.
+    // stream — as happens inside an AsciiDoc table cell's nested document —
+    // sets an attribute and renders nothing, matching Asciidoctor.
     if block.resolved_context().as_ref() == "attribute" {
         return true;
     }
@@ -155,9 +155,9 @@ fn renders_nothing(block: &Block<'_>) -> bool {
     // A paragraph that is nothing but `//` line comments survives parsing with
     // empty content; Asciidoctor emits no block for it, so drop it. The
     // empty-content guard keeps this from ever dropping a paragraph that
-    // actually renders something, while the source check keeps a paragraph whose
-    // content merely substituted to nothing (an empty passthrough) — which is
-    // not a comment — so it renders as `<p></p>`.
+    // actually renders something, while the source check keeps a paragraph
+    // whose content merely substituted to nothing (an empty passthrough) —
+    // which is not a comment — so it renders as `<p></p>`.
     matches!(block, Block::Simple(simple) if simple.style() == SimpleBlockStyle::Paragraph)
         && block
             .rendered_html_content()
@@ -485,8 +485,8 @@ pub(crate) fn links_stylesheet(document: &Document<'_>) -> bool {
     }
 
     // Unmentioned: link under `Secure` (level 20) or greater, else embed. The
-    // `safe-mode-level` intrinsic attribute is populated by the parser for every
-    // document (its built-in default is `Secure`).
+    // `safe-mode-level` intrinsic attribute is populated by the parser for
+    // every document (its built-in default is `Secure`).
     matches!(attribute_str(document, "safe-mode-level"), Some(level)
         if level.parse::<u32>().is_ok_and(|n| n >= SafeMode::Secure as u32))
 }
@@ -566,21 +566,23 @@ pub(crate) fn normalize_web_path(stylesheet: &str, stylesdir: &str) -> String {
     }
 
     // Posixify (Asciidoctor works in forward-slash web paths) and join with the
-    // styles directory, unless the stylesheet is itself an absolute path — which
-    // ignores `stylesdir`, matching Asciidoctor's web-root check. A trailing
-    // separator on `stylesdir` is dropped so the join never doubles the `/`.
+    // styles directory, unless the stylesheet is itself an absolute path —
+    // which ignores `stylesdir`, matching Asciidoctor's web-root check. A
+    // trailing separator on `stylesdir` is dropped so the join never
+    // doubles the `/`.
     let sheet = stylesheet.replace('\\', "/");
     let dir = stylesdir.replace('\\', "/");
 
     // A URI styles directory joins into a URI href
     // (`https://cdn/css` + `asciidoctor.css` -> `https://cdn/css/asciidoctor.css`)
-    // and is returned as-is rather than run through `web_normalize`, which would
-    // collapse the `//` in the scheme into `./https:/…`. This mirrors
+    // and is returned as-is rather than run through `web_normalize`, which
+    // would collapse the `//` in the scheme into `./https:/…`. This mirrors
     // Asciidoctor's `web_path`, which lifts the URI prefix off before
     // normalizing and restores it after. The resulting non-`./` path is also
-    // what makes `copycss` skip it — a URI stylesheet has no local file to copy,
-    // matching Asciidoctor's URI-`stylesdir` gate. A relative `stylesheet` joins
-    // under the URI; an absolute one still ignores `stylesdir` (handled below).
+    // what makes `copycss` skip it — a URI stylesheet has no local file to
+    // copy, matching Asciidoctor's URI-`stylesdir` gate. A relative
+    // `stylesheet` joins under the URI; an absolute one still ignores
+    // `stylesdir` (handled below).
     if !dir.is_empty() && !sheet.starts_with('/') && looks_like_uri(&dir) {
         return format!("{}/{sheet}", dir.trim_end_matches('/'));
     }
@@ -628,9 +630,10 @@ fn web_normalize(path: &str) -> String {
         }
     }
 
-    // The `./` prefix marks a path that stays at or below the current directory.
-    // A relative result that already climbs (`../…`) is a complete reference on
-    // its own, so it keeps no `./`, matching Asciidoctor.
+    // The `./` prefix marks a path that stays at or below the current
+    // directory. A relative result that already climbs (`../…`) is a
+    // complete reference on its own, so it keeps no `./`, matching
+    // Asciidoctor.
     let prefix = if root == "./" && segments.first() == Some(&"..") {
         ""
     } else {
@@ -701,9 +704,10 @@ fn media_uri(target: &str, imagesdir: &str) -> String {
     // A URI asset directory (e.g. an `imagesdir` set to `https://cdn/images`)
     // joins into a URI reference and is returned as-is rather than run through
     // the segment normalization below, which would collapse the `//` in the
-    // scheme into `https:/…`. This mirrors Asciidoctor's `web_path`, which lifts
-    // the URI prefix off before normalizing and restores it after. A relative
-    // target joins under the URI; a web-absolute one still ignores it (below).
+    // scheme into `https:/…`. This mirrors Asciidoctor's `web_path`, which
+    // lifts the URI prefix off before normalizing and restores it after. A
+    // relative target joins under the URI; a web-absolute one still ignores
+    // it (below).
     if !dir.is_empty() && !target.starts_with('/') && looks_like_uri(&dir) {
         return format!("{}/{target}", dir.trim_end_matches('/')).replace(' ', "%20");
     }
@@ -1259,8 +1263,9 @@ fn restore_list_principal_indent(lines: &mut [String], raw_span: &str, has_inlin
         let raw_indent = leading_whitespace_len(raw);
 
         // The verbatim inline line keeps its indent; a folded line drops the
-        // common indent from the front of its whitespace (clamped so an interior
-        // blank line, which the block indent skips, cannot underflow).
+        // common indent from the front of its whitespace (clamped so an
+        // interior blank line, which the block indent skips, cannot
+        // underflow).
         let start = if i < folded_start {
             0
         } else {
@@ -1487,9 +1492,9 @@ pub(crate) fn render_document<'a>(
     // single site the placement selects. Only the placements that render a TOC
     // in the document flow relative to fixed structure
     // (`auto`/`left`/`right`/`top`/`bottom` near the top, `preamble` below the
-    // preamble) produce one here; the `macro` placement renders at its `toc::[]`
-    // block instead (see [`toc_macro`](Renderer::toc_macro)), and `disabled`
-    // produces none.
+    // preamble) produce one here; the `macro` placement renders at its
+    // `toc::[]` block instead (see [`toc_macro`](Renderer::toc_macro)), and
+    // `disabled` produces none.
     let toc_mode = document.toc_mode();
 
     // Choose the TOC's class once, so the block is built a single time. The
@@ -1497,8 +1502,8 @@ pub(crate) fn render_document<'a>(
     // side-column placements set to `toc2`). The one exception is the leading
     // TOC of *embeddable* output: the side-column layout isn't available there,
     // so it always uses the plain `toc` class, matching Asciidoctor's
-    // `convert_embedded` (its `preamble` placement still honors `toc-class`, via
-    // the same path as standalone output).
+    // `convert_embedded` (its `preamble` placement still honors `toc-class`,
+    // via the same path as standalone output).
     let toc_class = if !standalone
         && matches!(
             toc_mode,
@@ -1963,14 +1968,15 @@ impl Renderer<'_> {
         }
 
         // Document metadata, matching Asciidoctor's `<head>` order: `app-name`
-        // (as `application-name`), then `description` and `keywords`, the joined
-        // `authors`, and finally `copyright`. Every value here except `authors`
-        // comes from an attribute *entry*, so the parser has already applied
-        // header substitutions (special characters escaped) — they are emitted
-        // verbatim except for a final `escape_quote` pass, so an
-        // `app-name`/`copyright` of `<script>` reaches the page as
-        // `&lt;script&gt;`, not as live markup. Only `authors` (built from the
-        // author info line, not an entry) arrives raw and is escaped below.
+        // (as `application-name`), then `description` and `keywords`, the
+        // joined `authors`, and finally `copyright`. Every value here
+        // except `authors` comes from an attribute *entry*, so the
+        // parser has already applied header substitutions (special
+        // characters escaped) — they are emitted verbatim except for a
+        // final `escape_quote` pass, so an `app-name`/`copyright` of
+        // `<script>` reaches the page as `&lt;script&gt;`, not as live
+        // markup. Only `authors` (built from the author info line, not
+        // an entry) arrives raw and is escaped below.
         //
         // `specialcharacters` escapes `&`, `<`, and `>` but — matching
         // Asciidoctor — never a plain double quote, so a value such as
@@ -2033,11 +2039,12 @@ impl Renderer<'_> {
 
         // A `favicon` link sits right after the copyright meta and before the
         // `<title>`, matching Asciidoctor's placement. An unset `favicon`
-        // (including an explicit `:favicon!:`) emits nothing; a bare `:favicon:`
-        // (no value) defaults to `favicon.ico` typed `image/x-icon`; any other
-        // value is used verbatim as the `href`, with the type derived from its
-        // file extension (`.ico` maps to `image/x-icon`; anything else becomes
-        // `image/<ext>`, with no extension also falling back to `image/x-icon`).
+        // (including an explicit `:favicon!:`) emits nothing; a bare
+        // `:favicon:` (no value) defaults to `favicon.ico` typed
+        // `image/x-icon`; any other value is used verbatim as the
+        // `href`, with the type derived from its file extension (`.ico`
+        // maps to `image/x-icon`; anything else becomes `image/<ext>`,
+        // with no extension also falling back to `image/x-icon`).
         // `favicon` is an attribute entry like the metas above, so both `href`
         // and the extension-derived `icon_type` get the same `escape_quote`
         // pass before landing in their double-quoted attributes.
@@ -2082,8 +2089,8 @@ impl Renderer<'_> {
 
         // An explicit id and/or role(s) on the document title (the `[#id.role]`
         // shorthand, or the bracketed `[[id]]` anchor form, above the doctitle)
-        // move onto the standalone `<body>`: the id becomes `id="…"` and each role
-        // is appended to the doctype class, matching Asciidoctor's
+        // move onto the standalone `<body>`: the id becomes `id="…"` and each
+        // role is appended to the doctype class, matching Asciidoctor's
         // `<body id="idname" class="article rolename">`.
         let header = document.header();
         let id_attr = header
@@ -2159,8 +2166,9 @@ impl Renderer<'_> {
             self.line("<div id=\"footer-text\">");
 
             // The version line, gated on `revnumber` like Asciidoctor. The
-            // `version-label` intrinsic defaults to "Version"; a trailing `<br>`
-            // separates it from the "Last updated" line that may follow.
+            // `version-label` intrinsic defaults to "Version"; a trailing
+            // `<br>` separates it from the "Last updated" line that
+            // may follow.
             if let Some(revnumber) = attribute_str(document, "revnumber") {
                 let version_label = attribute_str(document, "version-label").unwrap_or_default();
                 self.line(&format!("{version_label} {revnumber}<br>"));
@@ -2193,8 +2201,9 @@ impl Renderer<'_> {
         // ordering in `convert_document`.
         self.mathjax_footer(document);
 
-        // Footer docinfo is inserted immediately after the footer `<div>`, again
-        // whether or not the footer itself is suppressed by `nofooter`.
+        // Footer docinfo is inserted immediately after the footer `<div>`,
+        // again whether or not the footer itself is suppressed by
+        // `nofooter`.
         self.docinfo(document, DocinfoLocation::Footer);
 
         self.line("</body>");
@@ -2231,8 +2240,8 @@ impl Renderer<'_> {
         // layout needs, so this leading TOC uses the plain `toc` class,
         // regardless of `toc-position` or a custom `toc-class` (matching
         // Asciidoctor's `convert_embedded`, which hardcodes `class="toc"`). The
-        // class was already resolved when `toc_html` was built, so it is emitted
-        // as-is here.
+        // class was already resolved when `toc_html` was built, so it is
+        // emitted as-is here.
         if matches!(
             self.toc_mode,
             TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
@@ -2263,9 +2272,10 @@ impl Renderer<'_> {
             return;
         }
 
-        // The document-level footnotes block picks up the `max-width` constraint
-        // like the other standalone container divs; the cell-local block (which
-        // has no document to read the attribute from) never does.
+        // The document-level footnotes block picks up the `max-width`
+        // constraint like the other standalone container divs; the
+        // cell-local block (which has no document to read the attribute
+        // from) never does.
         self.footnotes_block(footnotes, &max_width_style(document));
     }
 
@@ -2631,12 +2641,13 @@ impl Renderer<'_> {
         //
         // The value is emitted raw into the inline config script, byte for byte
         // as Asciidoctor's `convert_document` does — no escaping. That is not a
-        // distinct injection vector: `eqnums` is set by the document (or the API
-        // caller), and a document that can set it can already emit arbitrary
-        // markup, including `<script>`, through a passthrough (`+++…+++` /
-        // `++++`) in any safe mode — the safe mode gates file and network
-        // access, not HTML output. Escaping here would only break parity with
-        // the oracle without closing that far wider, by-design surface.
+        // distinct injection vector: `eqnums` is set by the document (or the
+        // API caller), and a document that can set it can already emit
+        // arbitrary markup, including `<script>`, through a passthrough
+        // (`+++…+++` / `++++`) in any safe mode — the safe mode gates
+        // file and network access, not HTML output. Escaping here would
+        // only break parity with the oracle without closing that far
+        // wider, by-design surface.
         let eqnums = match document.attribute_value("eqnums") {
             InterpretedValue::Value(value) if !value.is_empty() => value.to_string(),
             InterpretedValue::Unset => "none".to_string(),
@@ -2774,12 +2785,13 @@ impl Renderer<'_> {
             _ => DEFAULT_WEBFONTS.to_string(),
         };
 
-        // The value reaches us with AsciiDoc's specialchars substitution already
-        // applied by the parser, so `&`, `<`, and `>` are escaped — matching
-        // Asciidoctor, which then emits the value as-is. That leaves a literal
-        // `"` free to break out of the `href` (a header-set `webfonts` value
-        // could otherwise inject attributes onto the `<link>`), so we escape the
-        // one remaining special character. This is a no-op for the default and
+        // The value reaches us with AsciiDoc's specialchars substitution
+        // already applied by the parser, so `&`, `<`, and `>` are
+        // escaped — matching Asciidoctor, which then emits the value
+        // as-is. That leaves a literal `"` free to break out of the
+        // `href` (a header-set `webfonts` value could otherwise inject
+        // attributes onto the `<link>`), so we escape the one remaining
+        // special character. This is a no-op for the default and
         // any real font query, which contain no `"`, so output stays
         // byte-identical to Asciidoctor for every valid value.
         let family = family.replace('"', "&quot;");
@@ -2797,9 +2809,10 @@ impl Renderer<'_> {
 
     /// The dispatch point: routes one block to the matching renderer.
     fn block<'src>(&mut self, block: &'src Block<'src>) {
-        // Comment blocks render to nothing in Asciidoctor. This crate drops them
-        // here, in the renderer, rather than in the parser (which preserves them
-        // so other tools can inspect them). See [`renders_nothing`].
+        // Comment blocks render to nothing in Asciidoctor. This crate drops
+        // them here, in the renderer, rather than in the parser (which
+        // preserves them so other tools can inspect them). See
+        // [`renders_nothing`].
         if renders_nothing(block) {
             return;
         }
@@ -3111,9 +3124,10 @@ impl Renderer<'_> {
             equation = rewrite_asciimath_breaks(&equation, open, close);
         }
 
-        // Asciidoctor leaves an equation the author already delimited untouched;
-        // otherwise it wraps it in the notation's delimiter pair (an empty
-        // equation still becomes the bare `open`/`close` pair).
+        // Asciidoctor leaves an equation the author already delimited
+        // untouched; otherwise it wraps it in the notation's delimiter
+        // pair (an empty equation still becomes the bare `open`/`close`
+        // pair).
         if !(equation.starts_with(open) && equation.ends_with(close)) {
             equation = format!("{open}{equation}{close}");
         }
@@ -3136,13 +3150,14 @@ impl Renderer<'_> {
         let content = block.rendered_html_content().unwrap_or_default();
         let mut lines: Vec<String> = content.split('\n').map(str::to_string).collect();
 
-        // An *implicit* literal paragraph — one detected from indentation rather
-        // than an explicit `[literal]`/`[source]`/`[listing]` style — is the one
-        // verbatim shape Asciidoctor reindents by common (minimum) indent even
-        // without an `indent` attribute. The parser instead flattens it,
-        // stripping the first line's indent from every line before the renderer
-        // sees it (#168); restore each line's true leading whitespace from the
-        // raw span so the common-indent removal below can match Asciidoctor. A
+        // An *implicit* literal paragraph — one detected from indentation
+        // rather than an explicit `[literal]`/`[source]`/`[listing]`
+        // style — is the one verbatim shape Asciidoctor reindents by
+        // common (minimum) indent even without an `indent` attribute.
+        // The parser instead flattens it, stripping the first line's
+        // indent from every line before the renderer sees it (#168);
+        // restore each line's true leading whitespace from the raw span
+        // so the common-indent removal below can match Asciidoctor. A
         // delimited or explicitly-styled block preserves its indentation as-is,
         // so it is left untouched.
         let is_implicit_literal_paragraph = matches!(block, Block::Simple(simple)
@@ -3169,8 +3184,8 @@ impl Renderer<'_> {
 
         // Asciidoctor reindents when an indent is in force, when an implicit
         // literal paragraph has its common indent removed (indent 0, which also
-        // expands tabs), or (to expand tabs only) when a positive tabsize is set
-        // with the indentation otherwise preserved.
+        // expands tabs), or (to expand tabs only) when a positive tabsize is
+        // set with the indentation otherwise preserved.
         match indent_size {
             Some(indent) => adjust_indentation(&mut lines, indent, tab_size),
             None if is_implicit_literal_paragraph => adjust_indentation(&mut lines, 0, tab_size),
@@ -3424,10 +3439,11 @@ impl Renderer<'_> {
     fn ulist<'src>(&mut self, block: &'src Block<'src>, list: &'src ListBlock<'src>) {
         let checklist = list.is_checklist();
 
-        // Use the *resolved* style (Asciidoctor's `node.style`): a top-level list
-        // inside a `[bibliography]` section inherits the `bibliography` style even
-        // though it carries no declared style of its own, so it renders `<div
-        // class="ulist bibliography">` / `<ul class="bibliography">`.
+        // Use the *resolved* style (Asciidoctor's `node.style`): a top-level
+        // list inside a `[bibliography]` section inherits the
+        // `bibliography` style even though it carries no declared style
+        // of its own, so it renders `<div class="ulist bibliography">`
+        // / `<ul class="bibliography">`.
         let style = block.resolved_style();
 
         // `['ulist', ('checklist')?, style, *roles]` — the checklist class sits
@@ -3502,8 +3518,9 @@ impl Renderer<'_> {
             ""
         };
 
-        // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor emits
-        // its value verbatim (an explicit first marker like `7.` does not).
+        // Only an explicit `[start=N]` attribute sets `start`; Asciidoctor
+        // emits its value verbatim (an explicit first marker like `7.`
+        // does not).
         let start_attr = list
             .attrlist()
             .and_then(|attrlist| attrlist.named_attribute("start"))
@@ -3575,12 +3592,13 @@ impl Renderer<'_> {
     fn colist_row<'src>(&mut self, list_item: &'src ListItem<'src>, num: usize) {
         // The Font Awesome pair carries the number in `<b>`; the image form
         // points at `{iconsdir}/callouts/{num}.{icontype}` — a port of
-        // Asciidoctor's `icon_uri "callouts/#{num}"`, so under `data-uri` (below
-        // `Secure`) the callout icon is embedded as a `data:` URI too (see
-        // [`image_uri`](Self::image_uri)). The path is attribute-escaped so a
-        // hostile `iconsdir`/`icontype` cannot break out of the quoted `src`
-        // (Asciidoctor leaves it raw; we harden it, which only diverges when
-        // those attributes contain `& < > "`).
+        // Asciidoctor's `icon_uri "callouts/#{num}"`, so under `data-uri`
+        // (below `Secure`) the callout icon is embedded as a `data:`
+        // URI too (see [`image_uri`](Self::image_uri)). The path is
+        // attribute-escaped so a hostile `iconsdir`/`icontype` cannot
+        // break out of the quoted `src` (Asciidoctor leaves it raw; we
+        // harden it, which only diverges when those attributes contain
+        // `& < > "`).
         let num_label = if self.icons_font {
             format!("<i class=\"conum\" data-value=\"{num}\"></i><b>{num}</b>")
         } else {
@@ -3662,8 +3680,8 @@ impl Renderer<'_> {
         style: Option<&str>,
         entries: &[DlistEntry<'_>],
     ) {
-        // `['dlist', style, *roles]` — the style (when present) sits right after
-        // `dlist`, ahead of the roles.
+        // `['dlist', style, *roles]` — the style (when present) sits right
+        // after `dlist`, ahead of the roles.
         let mut base = String::from("dlist");
         if let Some(style) = style {
             base.push(' ');
@@ -3803,9 +3821,9 @@ impl Renderer<'_> {
 
         // The first block folds into the principal text only when it is a
         // paragraph the term did not attach with a `+` continuation. An entry
-        // reaching here always has at least one block (it is why the entry has a
-        // description at all), so `first` drives the decision without a separate
-        // empty case.
+        // reaching here always has at least one block (it is why the entry has
+        // a description at all), so `first` drives the decision without
+        // a separate empty case.
         let foldable = blocks.first().is_some_and(|first| {
             first.resolved_context().as_ref() == "paragraph"
                 && !continuation_before_first_child(description, first)
@@ -3839,8 +3857,9 @@ impl Renderer<'_> {
             return;
         };
 
-        // `<li id="…" class="…">`, `<li class="…">`, or a bare `<li>`, following
-        // Asciidoctor: the id (if any) comes first, then the item's roles.
+        // `<li id="…" class="…">`, `<li class="…">`, or a bare `<li>`,
+        // following Asciidoctor: the id (if any) comes first, then the
+        // item's roles.
         let li_open = if let Some(id) = item.id() {
             format!(
                 "<li id=\"{}\"{}>",
@@ -3908,8 +3927,8 @@ impl Renderer<'_> {
     fn table<'src>(&mut self, block: &'src Block<'src>, table: &'src TableBlock<'src>) {
         // The class list follows Asciidoctor's order exactly: `tableblock`, the
         // frame and grid classes, an optional stripes class, then the
-        // width-driven class (`fit-content`/`stretch`) or an inline width style,
-        // then an optional float class, then the block's roles.
+        // width-driven class (`fit-content`/`stretch`) or an inline width
+        // style, then an optional float class, then the block's roles.
         let frame = match table.frame() {
             Frame::All => "all",
             Frame::Ends => "ends",
@@ -4048,8 +4067,8 @@ impl Renderer<'_> {
         // The content variant follows the cell's style: an AsciiDoc (`a`) cell
         // carries block content, every other style carries inline `Simple`
         // content. Matching the variant (rather than the style) keeps the two
-        // impossible pairings — an AsciiDoc-content header cell, a Simple-content
-        // AsciiDoc cell — off the map entirely.
+        // impossible pairings — an AsciiDoc-content header cell, a
+        // Simple-content AsciiDoc cell — off the map entirely.
         let content = match cell.content() {
             // An AsciiDoc cell never appears in the header row (the header is
             // forced to the default style), so this is always a body cell.
@@ -4155,10 +4174,11 @@ impl Renderer<'_> {
         // the `cellbgcolor` document attribute is set, reading its value as it
         // renders each cell. This crate honors the document-attribute form
         // (uniform across the table); see the `cellbgcolor` field for why the
-        // inline per-cell form is out of scope. The value is document-controlled
-        // and lands inside a quoted attribute, so escape it to keep a stray `"`
-        // from breaking out and injecting markup (as we do for author fields).
-        // This is a deliberate divergence: Asciidoctor interpolates the value
+        // inline per-cell form is out of scope. The value is
+        // document-controlled and lands inside a quoted attribute, so
+        // escape it to keep a stray `"` from breaking out and injecting
+        // markup (as we do for author fields). This is a deliberate
+        // divergence: Asciidoctor interpolates the value
         // raw, but escaping only differs for values that would be malformed
         // anyway, never for a real color.
         let style = match &self.cellbgcolor {
@@ -4192,8 +4212,9 @@ impl Renderer<'_> {
         let level = section.level();
         let heading_level = (level + 1).min(6);
 
-        // `Block::id()` now surfaces a section's auto-generated id (it delegates
-        // to the `SectionBlock` override), so the block-level accessor is enough.
+        // `Block::id()` now surfaces a section's auto-generated id (it
+        // delegates to the `SectionBlock` override), so the block-level
+        // accessor is enough.
         let id = block.id();
         let title = self.section_heading_title(block, section);
 
@@ -4414,8 +4435,9 @@ impl Renderer<'_> {
 
         // The role can arrive two ways: as a `role=` attribute inside the macro
         // (`toc::[role=…]`) or as the block's role shorthand on the line above
-        // (`[.role]`). Asciidoctor folds both into `node.role`, with the macro's
-        // own `role=` winning; an absent role falls back to `toc-class`.
+        // (`[.role]`). Asciidoctor folds both into `node.role`, with the
+        // macro's own `role=` winning; an absent role falls back to
+        // `toc-class`.
         let class = toc
             .macro_attrlist()
             .named_attribute("role")
@@ -4461,10 +4483,11 @@ impl Renderer<'_> {
     /// target resolves against — `imagesdir` for an image, `iconsdir` for
     /// an icon.
     fn image_uri(&self, target: &str, asset_dir: &str) -> String {
-        // `data-uri` embedding applies only below `Secure` (the same gate as the
-        // SVG modes), and never to a URI target or under a URI asset directory —
-        // those would need a network read this crate does not perform, so they
-        // pass through unchanged (Asciidoctor's no-`allow-uri-read` behavior).
+        // `data-uri` embedding applies only below `Secure` (the same gate as
+        // the SVG modes), and never to a URI target or under a URI
+        // asset directory — those would need a network read this crate
+        // does not perform, so they pass through unchanged
+        // (Asciidoctor's no-`allow-uri-read` behavior).
         if self.data_uri
             && self.svg_below_secure
             && !looks_like_uri(target)
@@ -4542,8 +4565,8 @@ impl Renderer<'_> {
         // attribute list into one set, with the macro list winning. Named
         // lookups therefore try the macro list first and fall back to the block
         // list; the positional `alt`/`width`/`height` live only in the macro
-        // list (the block line has no positional slots), so those fall back to a
-        // same-named attribute there.
+        // list (the block line has no positional slots), so those fall back to
+        // a same-named attribute there.
         let named = |name: &str| -> Option<&str> {
             macro_attrs
                 .named_attribute(name)
@@ -4561,15 +4584,17 @@ impl Renderer<'_> {
         let target = media.resolved_target();
         let src = self.image_uri(target, &self.imagesdir);
 
-        // Asciidoctor's `attributes['alt'] ||= style || default-alt`: an explicit
-        // alt from the macro (or block attribute line) wins; failing that, the
-        // block attribute line's *style* (its first positional, e.g. `[Tiger]`)
-        // stands in as the alt; failing that, the alt is auto-derived from the
-        // target's basename. [`subbed_alt`] applies the special-character (and,
+        // Asciidoctor's `attributes['alt'] ||= style || default-alt`: an
+        // explicit alt from the macro (or block attribute line) wins;
+        // failing that, the block attribute line's *style* (its first
+        // positional, e.g. `[Tiger]`) stands in as the alt; failing
+        // that, the alt is auto-derived from the target's basename.
+        // [`subbed_alt`] applies the special-character (and,
         // for an explicit alt, replacement) substitutions; `alt_attr`
-        // additionally attribute-encodes the `"` for use inside `alt="…"`, while
-        // `alt_span` stays raw for a `<span class="alt">` (matching
-        // Asciidoctor's `encode_attribute_value node.alt` vs. bare `node.alt`).
+        // additionally attribute-encodes the `"` for use inside `alt="…"`,
+        // while `alt_span` stays raw for a `<span class="alt">`
+        // (matching Asciidoctor's `encode_attribute_value node.alt` vs.
+        // bare `node.alt`).
         let explicit_alt = positional("alt", 1).or_else(|| block.declared_style());
         let alt_span = subbed_alt(explicit_alt, target);
         let alt_attr = alt_span.replace('"', "&quot;");
@@ -4589,21 +4614,23 @@ impl Renderer<'_> {
         // `Secure` safe mode (at `Secure` or above — the API default — it falls
         // through to a plain `<img>`), matching Asciidoctor's `convert_image`:
         //
-        // * `opts=inline` embeds the SVG *file's contents* directly as an `<svg>`
-        //   element (read through [`SvgSource`], prepared by
-        //   [`svg_file_handler::prepare_inline_svg`]); when the file cannot be read it
-        //   falls back to a `<span class="alt">`, as Asciidoctor does.
-        // * `opts=interactive` embeds a live `<object>` so its scripting and links stay
-        //   active, with a `fallback` image (or the alt text) nested.
+        // * `opts=inline` embeds the SVG *file's contents* directly as an
+        //   `<svg>` element (read through [`SvgSource`], prepared by
+        //   [`svg_file_handler::prepare_inline_svg`]); when the file cannot be
+        //   read it falls back to a `<span class="alt">`, as Asciidoctor does.
+        // * `opts=interactive` embeds a live `<object>` so its scripting and
+        //   links stay active, with a `fallback` image (or the alt text)
+        //   nested.
         //
         // `inline` takes precedence over `interactive`, matching Asciidoctor's
         // `if node.option? 'inline' … elsif node.option? 'interactive'`.
         //
         // The target test is a deliberate port of Asciidoctor's case-sensitive
         // substring check (`target.include? '.svg'`), quirks included: a
-        // `.contains` (not an extension match) treats `chart.svg.png` as an SVG,
-        // and an uppercase `.SVG` is *not* matched. Both are verified to match
-        // Asciidoctor 2.0.26, so they are kept rather than "corrected".
+        // `.contains` (not an extension match) treats `chart.svg.png` as an
+        // SVG, and an uppercase `.SVG` is *not* matched. Both are
+        // verified to match Asciidoctor 2.0.26, so they are kept rather
+        // than "corrected".
         let is_svg = named("format") == Some("svg") || target.contains(".svg");
 
         let has_option = |name: &str| {
@@ -4614,10 +4641,11 @@ impl Renderer<'_> {
         let interactive = has_option("interactive");
 
         let mut img = if is_svg && self.svg_below_secure && inline {
-            // Embed the SVG file's contents as an `<svg>`. The file is read from
-            // its plain web path (`media_uri`), *not* `src`: under `data-uri`,
-            // `src` is a `data:` URI, but `opts=inline` embeds the file contents
-            // regardless (Asciidoctor reads the file for inline SVG independent
+            // Embed the SVG file's contents as an `<svg>`. The file is read
+            // from its plain web path (`media_uri`), *not* `src`:
+            // under `data-uri`, `src` is a `data:` URI, but
+            // `opts=inline` embeds the file contents regardless
+            // (Asciidoctor reads the file for inline SVG independent
             // of `data-uri`). When it can't be read (no base directory, a
             // missing/unreadable file, or empty contents), fall back to the alt
             // text — raw, as Asciidoctor emits it.
@@ -4668,9 +4696,10 @@ impl Renderer<'_> {
             );
         }
 
-        // The wrapper classes follow Asciidoctor's order: `imageblock`, then the
-        // `float` role, then a `text-<align>` class, then the block's roles
-        // (a macro `role=` overrides the block line's roles — see `media_roles`).
+        // The wrapper classes follow Asciidoctor's order: `imageblock`, then
+        // the `float` role, then a `text-<align>` class, then the
+        // block's roles (a macro `role=` overrides the block line's
+        // roles — see `media_roles`).
         let mut classes = String::from("imageblock");
 
         if let Some(float) = named("float") {
@@ -4794,11 +4823,12 @@ impl Renderer<'_> {
 
         // The media target and the attribute values below (`width`/`height`/
         // `poster`/`preload`, and the embed query parameters) are interpolated
-        // *verbatim*, not run through [`escape_attribute`] the way the wrapper's
-        // id/roles are. This matches Asciidoctor's `convert_video`/
-        // `convert_audio`, which emit these raw — so, as with Asciidoctor, a
-        // document built from untrusted input must be sanitized downstream. The
-        // choice keeps output byte-identical to the parity oracle (a real target
+        // *verbatim*, not run through [`escape_attribute`] the way the
+        // wrapper's id/roles are. This matches Asciidoctor's
+        // `convert_video`/ `convert_audio`, which emit these raw — so,
+        // as with Asciidoctor, a document built from untrusted input
+        // must be sanitized downstream. The choice keeps output
+        // byte-identical to the parity oracle (a real target
         // or dimension never carries an HTML delimiter).
 
         // `width`/`height` are shared by the self-hosted and embed forms
@@ -5115,8 +5145,8 @@ fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
     let n = columns.len();
 
     // Autowidth (`~`) columns carry no proportional width; `width_base` is the
-    // sum of the remaining columns' widths (matching Asciidoctor, which excludes
-    // the `-1` autowidth widths from the base).
+    // sum of the remaining columns' widths (matching Asciidoctor, which
+    // excludes the `-1` autowidth widths from the base).
     let autowidth_count = columns.iter().filter(|c| c.is_autowidth()).count();
     let width_base: f64 = columns
         .iter()
@@ -5124,10 +5154,10 @@ fn column_pcwidths(columns: &[TableColumn]) -> Vec<String> {
         .map(|c| c.width() as f64)
         .sum();
 
-    // The autowidth columns absorb whatever the fixed columns leave of the 100%,
-    // split evenly; the base then becomes the full 100. With any fixed column
-    // `width_base` is already positive, and an all-autowidth table lands here,
-    // so `base` is never zero.
+    // The autowidth columns absorb whatever the fixed columns leave of the
+    // 100%, split evenly; the base then becomes the full 100. With any
+    // fixed column `width_base` is already positive, and an all-autowidth
+    // table lands here, so `base` is never zero.
     let mut base = width_base;
     let mut autowidth_value = 0.0;
     if autowidth_count > 0 && width_base <= 100.0 {
@@ -5212,8 +5242,8 @@ fn cell_paragraphs(cell: &TableCell<'_>, content: &str) -> String {
         }
     };
 
-    // The split decision keys off the raw (untrimmed, but stripped) cell source,
-    // matching Asciidoctor's `@text.include? DOUBLE_LF`.
+    // The split decision keys off the raw (untrimmed, but stripped) cell
+    // source, matching Asciidoctor's `@text.include? DOUBLE_LF`.
     let raw = cell.span().data().trim();
     let paragraphs: Vec<String> = if raw.contains("\n\n") {
         split_blank_lines(content).map(wrap).collect()
@@ -5283,8 +5313,8 @@ fn render_cell_document<'s>(
 ) -> String {
     if inline {
         // The inline doctype renders the first block's inline content; skip any
-        // leading attribute-entry blocks (which carry no rendered content) so the
-        // real first paragraph is what shows.
+        // leading attribute-entry blocks (which carry no rendered content) so
+        // the real first paragraph is what shows.
         return blocks
             .iter()
             .find_map(|block| block.rendered_html_content())
@@ -5296,9 +5326,9 @@ fn render_cell_document<'s>(
     // `auto`/`left`/`right`/`top`/`bottom` placement is built here and emitted
     // ahead of the content (like embedded output); a `macro` placement is built
     // at its `toc::[]` block from the cell blocks carried in `cell_toc`. As in
-    // embedded output, a leading TOC uses the plain `toc` class (the side-column
-    // layout the other classes drive isn't available), while `toc-class` still
-    // rides through `cell_toc` for the macro form.
+    // embedded output, a leading TOC uses the plain `toc` class (the
+    // side-column layout the other classes drive isn't available), while
+    // `toc-class` still rides through `cell_toc` for the macro form.
     let leading_toc = matches!(
         toc.mode,
         TocMode::Auto | TocMode::Left | TocMode::Right | TocMode::Top | TocMode::Bottom
@@ -5389,10 +5419,11 @@ mod tests {
     use crate::{Options, ReferenceTime, SafeMode};
 
     // These renderer tests assert the standalone document shell (the
-    // `<!DOCTYPE>`/`<head>`/`<body>` frame, the header, and the footer), so they
-    // render in standalone mode explicitly. The string entry points now default
-    // to embedded, body-only output, so `convert`/`convert_with` are shadowed
-    // here to force `standalone(true)`; the handful of embedded-output checks
+    // `<!DOCTYPE>`/`<head>`/`<body>` frame, the header, and the footer), so
+    // they render in standalone mode explicitly. The string entry points
+    // now default to embedded, body-only output, so
+    // `convert`/`convert_with` are shadowed here to force
+    // `standalone(true)`; the handful of embedded-output checks
     // call `crate::convert_with` directly instead.
 
     /// Converts `source` to a standalone document under the default safe mode —
@@ -5663,7 +5694,8 @@ mod tests {
 
     #[test]
     fn embedded_auto_toc_leads_the_body() {
-        // In embedded output an `auto` TOC leads the body, ahead of the content.
+        // In embedded output an `auto` TOC leads the body, ahead of the
+        // content.
         let html = crate::convert_with(
             "= Doc\n:toc:\n\nIntro.\n\n== Section One\n\nx\n\n== Section Two\n\ny",
             &Options::new(),
@@ -5717,8 +5749,8 @@ mod tests {
 
     #[test]
     fn toc_needs_sections() {
-        // With no sections the outline is empty, so Asciidoctor (and this crate)
-        // emit no TOC even when `:toc:` is set.
+        // With no sections the outline is empty, so Asciidoctor (and this
+        // crate) emit no TOC even when `:toc:` is set.
         let html = convert("= Doc\n:toc:\n\nJust a paragraph, no sections.");
         assert!(!html.contains("<div id=\"toc\""));
     }
@@ -5785,9 +5817,9 @@ mod tests {
 
     #[test]
     fn asciidoc_cell_toc_numbers_sections() {
-        // With `:sectnums:`, the cell's TOC entries carry their section numbers,
-        // resolved from the cell's own nested document, matching Asciidoctor
-        // 2.0.26.
+        // With `:sectnums:`, the cell's TOC entries carry their section
+        // numbers, resolved from the cell's own nested document,
+        // matching Asciidoctor 2.0.26.
         let html = crate::convert_with(
             "|===\na|\n:toc:\n:sectnums:\n\n== Alpha\n\n== Bravo\n\nx\n|===\n",
             &Options::new(),
@@ -5814,8 +5846,8 @@ mod tests {
 
     #[test]
     fn asciidoc_cell_macro_toc_honors_levels_override() {
-        // A `levels=` attribute on the cell's `toc::[]` macro caps the depth for
-        // that TOC only: `levels=1` drops the nested level-2 entry.
+        // A `levels=` attribute on the cell's `toc::[]` macro caps the depth
+        // for that TOC only: `levels=1` drops the nested level-2 entry.
         let html = crate::convert_with(
             "|===\na|\n:toc: macro\n\ntoc::[levels=1]\n\n== Alpha\n\n=== Beta\n\nx\n|===\n",
             &Options::new(),
@@ -5896,9 +5928,10 @@ mod tests {
 
     #[test]
     fn image_block_style_stands_in_as_alt() {
-        // Asciidoctor's `attributes['alt'] ||= style`: the block attribute line's
-        // style (its first positional) becomes the alt when the macro carries
-        // none — and as an explicit alt it, too, gets the replacement subs.
+        // Asciidoctor's `attributes['alt'] ||= style`: the block attribute
+        // line's style (its first positional) becomes the alt when the
+        // macro carries none — and as an explicit alt it, too, gets the
+        // replacement subs.
         let html = convert("[Tiger]\nimage::images/tiger.png[]\n");
         assert!(
             html.contains("<img src=\"images/tiger.png\" alt=\"Tiger\">"),
@@ -5908,8 +5941,8 @@ mod tests {
 
     #[test]
     fn image_block_title_is_a_captioned_figure_after_content() {
-        // A titled image gains a `Figure N.` caption in a title div placed after
-        // the content div.
+        // A titled image gains a `Figure N.` caption in a title div placed
+        // after the content div.
         let html = convert(".A caption\nimage::b.png[Alt Text]");
         assert!(content(&html).contains(
             "<img src=\"b.png\" alt=\"Alt Text\">\n\
@@ -5997,11 +6030,12 @@ mod tests {
     #[test]
     fn image_block_svg_inline_without_a_base_dir_falls_back_to_alt() {
         // The `inline` (embedded `<svg>`) referencing reads the SVG file's
-        // contents; the plain string entry point has no base directory to anchor
-        // that read (`convert_with` sets no `input_file`), so — like Asciidoctor
-        // when it cannot read the file — an `opts=inline` block image below
-        // `Secure` falls back to a `<span class="alt">` rather than an `<img>`.
-        // (Reading a real on-disk SVG is exercised via `convert_file_with` in the
+        // contents; the plain string entry point has no base directory to
+        // anchor that read (`convert_with` sets no `input_file`), so —
+        // like Asciidoctor when it cannot read the file — an
+        // `opts=inline` block image below `Secure` falls back to a
+        // `<span class="alt">` rather than an `<img>`. (Reading a real
+        // on-disk SVG is exercised via `convert_file_with` in the
         // SVG Images page coverage.)
         let html = convert_with(
             "image::diagram.svg[Diagram,opts=inline]",
@@ -6016,8 +6050,9 @@ mod tests {
     #[test]
     fn image_svg_interactive_in_asciidoc_table_cell() {
         // An interactive SVG inside an AsciiDoc (`a|`) table cell renders as an
-        // `<object>`: the cell's document-less sub-renderer inherits the enclosing
-        // document's below-`Secure` safe mode through `CellRenderConfig`.
+        // `<object>`: the cell's document-less sub-renderer inherits the
+        // enclosing document's below-`Secure` safe mode through
+        // `CellRenderConfig`.
         let html = convert_with(
             "|===\na|image::diagram.svg[Diagram,opts=interactive]\n|===",
             &Options::new().safe_mode(SafeMode::Unsafe),
@@ -6080,9 +6115,9 @@ mod tests {
 
     #[test]
     fn image_block_svg_inline_in_asciidoc_table_cell() {
-        // An `opts=inline` block image inside an AsciiDoc (`a|`) cell embeds the
-        // SVG too: the cell's document-less sub-renderer inherits the base
-        // directory and safe mode through `CellRenderConfig`.
+        // An `opts=inline` block image inside an AsciiDoc (`a|`) cell embeds
+        // the SVG too: the cell's document-less sub-renderer inherits
+        // the base directory and safe mode through `CellRenderConfig`.
         let html = with_svg(
             "inline-cell",
             SafeMode::Unsafe,
@@ -6100,8 +6135,9 @@ mod tests {
     #[test]
     fn image_block_svg_inline_is_plain_img_at_secure() {
         // The inline embedding is security-sensitive: at `Secure` the same
-        // `opts=inline` block image renders a plain `<img>` (its width preserved
-        // as an attribute), never reading the file — matching Asciidoctor.
+        // `opts=inline` block image renders a plain `<img>` (its width
+        // preserved as an attribute), never reading the file — matching
+        // Asciidoctor.
         let html = with_svg(
             "inline-secure",
             SafeMode::Secure,
@@ -6116,9 +6152,10 @@ mod tests {
 
     #[test]
     fn image_block_svg_inline_missing_file_falls_back_to_alt() {
-        // When the `opts=inline` target cannot be read (here it does not exist),
-        // the block image falls back to a `<span class="alt">`, as Asciidoctor
-        // does — not a broken `<img>` or an empty `<svg>`.
+        // When the `opts=inline` target cannot be read (here it does not
+        // exist), the block image falls back to a `<span class="alt">`,
+        // as Asciidoctor does — not a broken `<img>` or an empty
+        // `<svg>`.
         let html = with_svg(
             "inline-missing",
             SafeMode::Unsafe,
@@ -6283,10 +6320,11 @@ mod tests {
         }
 
         // A target with no usable extension gets the generic
-        // `application/octet-stream` MIME type — both when the target simply has
-        // no dot, and when its only dot lies in a *directory* component (so the
-        // file name itself has no extension), matching Asciidoctor's
-        // `Helpers.extname` (a dot with a `/` after it is not an extension).
+        // `application/octet-stream` MIME type — both when the target simply
+        // has no dot, and when its only dot lies in a *directory*
+        // component (so the file name itself has no extension),
+        // matching Asciidoctor's `Helpers.extname` (a dot with a `/`
+        // after it is not an extension).
         #[test]
         fn an_extensionless_target_is_application_octet_stream() {
             // No dot anywhere in the target.
@@ -6355,8 +6393,8 @@ mod tests {
             );
         }
 
-        // The image target resolves against `imagesdir` before it is read, so an
-        // image in a subdirectory is found and embedded.
+        // The image target resolves against `imagesdir` before it is read, so
+        // an image in a subdirectory is found and embedded.
         #[test]
         fn resolves_the_target_against_imagesdir() {
             let html = convert_data_uri(
@@ -6370,14 +6408,15 @@ mod tests {
             );
         }
 
-        // Under a jailed safe mode (`safe`/`server`), a target that climbs out of
-        // the base directory cannot be read, so it embeds as an empty data URI —
-        // the read is confined to the jail. (`Unsafe` would follow it.)
+        // Under a jailed safe mode (`safe`/`server`), a target that climbs out
+        // of the base directory cannot be read, so it embeds as an
+        // empty data URI — the read is confined to the jail. (`Unsafe`
+        // would follow it.)
         #[test]
         fn a_jailed_read_refuses_to_escape_the_base_directory() {
             // The image sits one level *above* the base directory. `resolve` is
-            // relative to `base_dir`, so put the base a level down and reference
-            // `../secret.png`.
+            // relative to `base_dir`, so put the base a level down and
+            // reference `../secret.png`.
             let root = scratch(&[("secret.png", GIF), ("base/doc.txt", b"x")]);
             let base = root.join("base");
 
@@ -6509,9 +6548,10 @@ mod tests {
         assert_eq!(media_uri("movie.mp4", "media/"), "media/movie.mp4");
         assert_eq!(media_uri("movie.mp4", "./media"), "./media/movie.mp4");
 
-        // A web-absolute target ignores `imagesdir`; `.`/`..` segments collapse,
-        // and a leading `..` at the web root is dropped — but a leading `..` on
-        // a bare relative path is kept as a relative step.
+        // A web-absolute target ignores `imagesdir`; `.`/`..` segments
+        // collapse, and a leading `..` at the web root is dropped — but
+        // a leading `..` on a bare relative path is kept as a relative
+        // step.
         assert_eq!(media_uri("/abs.mp4", "media"), "/abs.mp4");
         assert_eq!(media_uri("sub/../c.mp4", "media"), "media/c.mp4");
         assert_eq!(media_uri("/x/../../y.mp4", ""), "/y.mp4");
@@ -6743,8 +6783,8 @@ mod tests {
     #[test]
     fn ordered_list_honors_an_explicit_numbering_style() {
         // An explicit `[loweralpha]` overrides the marker-derived style (the
-        // marker here is a plain `.`, which alone would be arabic), driving both
-        // the wrapper/`<ol>` class and the HTML `type`.
+        // marker here is a plain `.`, which alone would be arabic), driving
+        // both the wrapper/`<ol>` class and the HTML `type`.
         let html = convert("[loweralpha]\n. one\n. two");
         assert!(
             html.contains("<div class=\"olist loweralpha\">\n<ol class=\"loweralpha\" type=\"a\">")
@@ -6795,10 +6835,10 @@ mod tests {
     #[test]
     fn callout_icon_src_escapes_hostile_iconsdir() {
         // A double quote in `iconsdir` must not break out of the callout list's
-        // `src` attribute: the path is attribute-escaped (`"` -> `&quot;`), so no
-        // raw event-handler markup reaches the `<td>` image. (The image the
-        // parser substitutes into the preceding `<pre>` is rendered by
-        // `asciidoc-parser`, not here.)
+        // `src` attribute: the path is attribute-escaped (`"` -> `&quot;`), so
+        // no raw event-handler markup reaches the `<td>` image. (The
+        // image the parser substitutes into the preceding `<pre>` is
+        // rendered by `asciidoc-parser`, not here.)
         let html = crate::convert_with(
             "----\ncode <1>\n----\n\n<1> first",
             &Options::new()
@@ -6843,9 +6883,10 @@ mod tests {
     #[test]
     fn checklist_renders_default_ballot_markers() {
         // An unordered list with any checkbox item becomes a checklist: the
-        // wrapper and `<ul>` gain the `checklist` class, and each checkbox item's
-        // text is prefixed with the ballot-box entity — `&#10063;` unchecked,
-        // `&#10003;` checked. A plain item in the same list keeps a bare `<p>`.
+        // wrapper and `<ul>` gain the `checklist` class, and each checkbox
+        // item's text is prefixed with the ballot-box entity —
+        // `&#10063;` unchecked, `&#10003;` checked. A plain item in the
+        // same list keeps a bare `<p>`.
         let html = convert("* [ ] todo\n* [x] done\n* plain");
         assert!(html.contains("<div class=\"ulist checklist\">"));
         assert!(html.contains("<ul class=\"checklist\">"));
@@ -6879,10 +6920,11 @@ mod tests {
 
     #[test]
     fn list_item_id_and_role_decorate_the_li() {
-        // When the parser attaches an id and/or roles to a list item (here via a
-        // block anchor / shorthand before the item), the renderer places them on
-        // the `<li>`, matching Asciidoctor's `convert_ulist` item loop: id first,
-        // then the item's roles as its class.
+        // When the parser attaches an id and/or roles to a list item (here via
+        // a block anchor / shorthand before the item), the renderer
+        // places them on the `<li>`, matching Asciidoctor's
+        // `convert_ulist` item loop: id first, then the item's roles as
+        // its class.
         let id_only = convert("* one\n[[second]]\n* two");
         assert!(id_only.contains("<li id=\"second\">\n<p>two</p>"));
 
@@ -6897,7 +6939,8 @@ mod tests {
     fn description_list_renders_dlist() {
         // A plain description list is `<div class="dlist"><dl>`, each term a
         // `<dt class="hdlist1">` and each description a `<dd>` holding the
-        // principal text as a bare `<p>`, matching Asciidoctor's `convert_dlist`.
+        // principal text as a bare `<p>`, matching Asciidoctor's
+        // `convert_dlist`.
         let html = convert("CPU:: The brain\nRAM:: The memory");
         assert!(html.contains(
             "<div class=\"dlist\">\n<dl>\n\
@@ -6921,7 +6964,8 @@ mod tests {
     #[test]
     fn description_list_groups_multiple_terms_with_one_description() {
         // Consecutive terms with no description of their own share the next
-        // term's `<dd>`: each becomes its own `<dt>` ahead of the single `<dd>`.
+        // term's `<dd>`: each becomes its own `<dt>` ahead of the single
+        // `<dd>`.
         let html = convert("term1::\nterm2:: shared");
         assert!(html.contains(
             "<dt class=\"hdlist1\">term1</dt>\n\
@@ -6966,26 +7010,28 @@ mod tests {
 
     #[test]
     fn horizontal_description_list_with_one_column_width_leaves_the_other_bare() {
-        // With only `labelwidth` set, Asciidoctor still emits both `<col>`s: the
-        // label column carries its width, the item column is a bare `<col>`.
+        // With only `labelwidth` set, Asciidoctor still emits both `<col>`s:
+        // the label column carries its width, the item column is a bare
+        // `<col>`.
         let html = convert("[horizontal,labelwidth=30%]\nCPU:: brain");
         assert!(html.contains("<colgroup>\n<col style=\"width: 30%;\">\n<col>\n</colgroup>"));
     }
 
     #[test]
     fn dlist_narrowing_helpers_handle_both_arms() {
-        // `dlist_entries` narrows through these helpers on the assumption that a
-        // description list only holds `DefinedTerm` list items. That always
-        // holds during rendering, so exercise both arms directly here: a
-        // non-list block and a non-description marker take the `None` paths a
-        // real document never reaches.
+        // `dlist_entries` narrows through these helpers on the assumption that
+        // a description list only holds `DefinedTerm` list items. That
+        // always holds during rendering, so exercise both arms directly
+        // here: a non-list block and a non-description marker take the
+        // `None` paths a real document never reaches.
         use asciidoc_parser::{blocks::FindBlocks, Parser};
 
         use super::{as_list_item, dlist_term_text};
 
         // A bullet list: the `<ul>` block is not a list item, its child is, and
-        // that child's marker is not a description term. `child_blocks()` on the
-        // `&Block` descends into the list's items without a narrowing branch.
+        // that child's marker is not a description term. `child_blocks()` on
+        // the `&Block` descends into the list's items without a
+        // narrowing branch.
         let mut parser = Parser::default();
         let ulist = parser.parse("* bullet\n");
         let list_block = ulist.child_blocks().next().unwrap();
@@ -7044,8 +7090,8 @@ mod tests {
 
     #[test]
     fn adjacent_line_comment_is_stripped_within_a_paragraph() {
-        // A `//` line between two content lines is stripped, joining them into a
-        // single paragraph rather than dropping the whole block.
+        // A `//` line between two content lines is stripped, joining them into
+        // a single paragraph rather than dropping the whole block.
         let html = crate::convert("first line\n// line comment\nsecond line");
         assert!(!html.contains("line comment"));
         assert!(html.contains("<p>first line\nsecond line</p>"));
@@ -7132,10 +7178,11 @@ mod tests {
 
     #[test]
     fn doctype_drives_body_class() {
-        // `article` is the only doctype this renderer models, so `Options::apply`
-        // pins `doctype` to `article` and locks it against the document. A
-        // document `:doctype: book` is therefore dropped and the `<body class>`
-        // stays `article` (see the pin and its unit tests in `options.rs`).
+        // `article` is the only doctype this renderer models, so
+        // `Options::apply` pins `doctype` to `article` and locks it
+        // against the document. A document `:doctype: book` is
+        // therefore dropped and the `<body class>` stays `article` (see
+        // the pin and its unit tests in `options.rs`).
         let html = convert("= Doc\n:doctype: book\n\nBody.");
         assert!(html.contains("<body class=\"article\">"));
     }
@@ -7164,8 +7211,8 @@ mod tests {
     #[test]
     fn footer_stamps_last_updated_docdatetime() {
         // A standalone document's footer stamps "{last-update-label}
-        // {docdatetime}". A pinned reference time makes the stamp deterministic:
-        // 2019-01-02 03:04:05 at a +06:00 offset.
+        // {docdatetime}". A pinned reference time makes the stamp
+        // deterministic: 2019-01-02 03:04:05 at a +06:00 offset.
         let html = convert_with(
             "= Doc\n\nBody.",
             &Options::new().reference_time(ReferenceTime::from_local(
@@ -7187,9 +7234,10 @@ mod tests {
 
     #[test]
     fn input_mtime_drives_the_footer_stamp_over_the_reference_time() {
-        // The footer's docdatetime belongs to the `doc*` family, which follows a
-        // pinned input mtime even as the reference time ("now", the `local*`
-        // family) differs — mirroring Asciidoctor's `input_mtime`.
+        // The footer's docdatetime belongs to the `doc*` family, which follows
+        // a pinned input mtime even as the reference time ("now", the
+        // `local*` family) differs — mirroring Asciidoctor's
+        // `input_mtime`.
         let html = convert_with(
             "= Doc\n\nBody.",
             &Options::new()
@@ -7270,8 +7318,8 @@ mod tests {
     // output); because `asciidoc-parser` links `showtitle` and `notitle` as
     // inverse spellings of it, unsetting `notitle` enables the title too, and
     // when both are given the last assignment wins. These call
-    // `crate::convert_with` directly — the module's `convert`/`convert_with` are
-    // shadowed to force standalone output.
+    // `crate::convert_with` directly — the module's `convert`/`convert_with`
+    // are shadowed to force standalone output.
 
     /// Whether embedded output for `source` emits the doctitle `<h1>`,
     /// asserting along the way that neither the header nor the footer frame
@@ -7346,9 +7394,9 @@ mod tests {
 
     #[test]
     fn byline_author_name_gets_replacements() {
-        // Asciidoctor runs the replacements step on the byline author name, so a
-        // typewriter apostrophe becomes typographic and `(C)` the copyright
-        // sign — matching `asciidoctor`'s output exactly.
+        // Asciidoctor runs the replacements step on the byline author name, so
+        // a typewriter apostrophe becomes typographic and `(C)` the
+        // copyright sign — matching `asciidoctor`'s output exactly.
         let html = convert("= Doc\nJoan O'Brien (C)\n\nBody.");
         assert!(
             html.contains("<span id=\"author\" class=\"author\">Joan O&#8217;Brien &#169;</span>")
@@ -7357,12 +7405,14 @@ mod tests {
 
     #[test]
     fn author_meta_joins_and_escapes_the_authors() {
-        // The head `<meta name="author">` carries the comma-joined author names.
+        // The head `<meta name="author">` carries the comma-joined author
+        // names.
         let html = convert("= Doc\nKismet Lee; Pax Draeke\n\nBody.");
         assert!(html.contains("<meta name=\"author\" content=\"Kismet Lee, Pax Draeke\">"));
 
         // The joined value is raw, so the renderer escapes it for the attribute
-        // context — Asciidoctor escapes (rather than strips) any angle brackets.
+        // context — Asciidoctor escapes (rather than strips) any angle
+        // brackets.
         let html = convert("= Doc\n:author: Foo <bar> Baz\n\nBody.");
         assert!(html.contains("<meta name=\"author\" content=\"Foo &lt;bar&gt; Baz\">"));
     }
@@ -7499,8 +7549,9 @@ mod tests {
 
     #[test]
     fn numbered_sections_prefix_the_heading_with_the_section_number() {
-        // With `:sectnums:` each heading carries its dotted section number and a
-        // trailing separator ahead of the title, matching Asciidoctor.
+        // With `:sectnums:` each heading carries its dotted section number and
+        // a trailing separator ahead of the title, matching
+        // Asciidoctor.
         let html = convert("= Doc\n:sectnums:\n\n== One\n\ntext\n\n=== One One\n\n== Two");
         let body = content(&html);
         assert!(body.contains("<h2 id=\"_one\">1. One</h2>"), "{body}");
@@ -7615,9 +7666,9 @@ mod tests {
 
     #[test]
     fn pass_style_paragraph_emits_raw_content() {
-        // A `[pass]` style over a paragraph emits its content unescaped, with no
-        // paragraph wrapper, just like a delimited `++++` block — matching
-        // Asciidoctor's `convert_pass`.
+        // A `[pass]` style over a paragraph emits its content unescaped, with
+        // no paragraph wrapper, just like a delimited `++++` block —
+        // matching Asciidoctor's `convert_pass`.
         let html = crate::convert("[pass]\n<b>raw</b>\n");
         assert!(html.contains("<b>raw</b>"));
         assert!(!html.contains("&lt;b&gt;"));
@@ -7683,7 +7734,8 @@ mod tests {
     #[test]
     fn asciimath_block_breaks_multiple_equations_with_br() {
         // AsciiMath keeps blank-line-separated equations distinct, closing and
-        // reopening the delimiter around a `<br>` (Asciidoctor's `StemBreakRx`).
+        // reopening the delimiter around a `<br>` (Asciidoctor's
+        // `StemBreakRx`).
         let html = convert("[asciimath]\n++++\ns = ut\n\nv = u + at\n++++\n");
         assert!(
             html.contains("<div class=\"content\">\n\\$s = ut\\$\n<br>\n\\$v = u + at\\$\n</div>"),
@@ -7772,10 +7824,11 @@ mod tests {
     #[test]
     fn delimited_source_block_wraps_code_in_a_highlight_pre() {
         // A `[source,<lang>]` *delimited* (`----`) listing must render the same
-        // `<pre class="highlight"><code …>` wrapper as the paragraph form, not a
-        // bare `<pre>` listing block (see #159). The delimited form resolves to
-        // the `listing` context with `declared_style() == Some("source")`, so it
-        // is routed to `source()` rather than the plain verbatim path.
+        // `<pre class="highlight"><code …>` wrapper as the paragraph form, not
+        // a bare `<pre>` listing block (see #159). The delimited form
+        // resolves to the `listing` context with `declared_style() ==
+        // Some("source")`, so it is routed to `source()` rather than
+        // the plain verbatim path.
         let html = convert("[source,ruby]\n----\ndef x\nend\n----\n");
         assert!(
             html.contains(
@@ -7790,8 +7843,8 @@ mod tests {
 
     #[test]
     fn comma_shorthand_listing_renders_as_a_source_block() {
-        // The `[,<lang>]` comma shorthand is equivalent to `[source,<lang>]`, so
-        // a `----` listing declared that way must render the same
+        // The `[,<lang>]` comma shorthand is equivalent to `[source,<lang>]`,
+        // so a `----` listing declared that way must render the same
         // `<pre class="highlight"><code …>` wrapper, not a bare `<pre>` listing
         // block (see #207). Here the declared style is absent and the language
         // sits in the second positional attribute, so the block is promoted to
@@ -7810,11 +7863,12 @@ mod tests {
 
     #[test]
     fn plain_style_listing_stays_a_verbatim_listing() {
-        // A first-positional style that is *not* a language (`[ruby]`) leaves the
-        // block a plain listing with a bare `<pre>` — Asciidoctor only promotes a
-        // listing to `source` when the block style is absent and a language sits
-        // in the second position, so a single positional attribute is a style,
-        // not a comma-shorthand language.
+        // A first-positional style that is *not* a language (`[ruby]`) leaves
+        // the block a plain listing with a bare `<pre>` — Asciidoctor
+        // only promotes a listing to `source` when the block style is
+        // absent and a language sits in the second position, so a
+        // single positional attribute is a style, not a comma-shorthand
+        // language.
         let html = convert("[ruby]\n----\nputs 1\n----\n");
         assert!(
             html.contains(
@@ -7840,8 +7894,8 @@ mod tests {
     // The client-side syntax highlighters (`highlightjs`, `prettify`) reshape
     // the source block's `<pre>`/`<code>` and add a CDN `<link>`/`<script>` to
     // the document shell. Each fragment below is byte-checked against
-    // Asciidoctor 2.0.26 with the matching `-a source-highlighter=…` (the parity
-    // oracle). See #215.
+    // Asciidoctor 2.0.26 with the matching `-a source-highlighter=…` (the
+    // parity oracle). See #215.
     //
     // These set `source-highlighter` through the API (Asciidoctor's `-a
     // source-highlighter=…`), the trusted opt-in honored even under the default
@@ -7862,8 +7916,8 @@ mod tests {
     #[test]
     fn highlightjs_shapes_the_source_pre_and_code() {
         // The `<pre>` gains the `highlightjs` class before `highlight`, and the
-        // `<code>` names the language with the trailing `hljs` class Asciidoctor
-        // adds for the browser-side highlighter.
+        // `<code>` names the language with the trailing `hljs` class
+        // Asciidoctor adds for the browser-side highlighter.
         let html = convert_hl("highlightjs", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -7949,8 +8003,8 @@ mod tests {
 
     #[test]
     fn prettify_shapes_the_source_pre_and_code() {
-        // Prettify prepends `prettyprint` and leaves the `<code>` in its default
-        // shape — a bare `data-lang`, no class.
+        // Prettify prepends `prettyprint` and leaves the `<code>` in its
+        // default shape — a bare `data-lang`, no class.
         let html = convert_hl("prettify", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -8006,9 +8060,9 @@ mod tests {
         // syntax highlighting is not planned — so `source-highlighter=coderay`
         // behaves like any unknown highlighter: the source block keeps its
         // default unhighlighted shape, no CDN assets are added, and no CodeRay
-        // stylesheet is linked or embedded (a divergence from Asciidoctor, which
-        // links `coderay-asciidoctor.css` for the spans it emits and this crate
-        // does not).
+        // stylesheet is linked or embedded (a divergence from Asciidoctor,
+        // which links `coderay-asciidoctor.css` for the spans it emits
+        // and this crate does not).
         let html = convert_hl("coderay", "[source,ruby]\n----\nputs 1\n----");
         assert!(
             html.contains(
@@ -8024,8 +8078,8 @@ mod tests {
 
     #[test]
     fn highlighter_reaches_a_source_block_in_a_table_cell() {
-        // The highlighter is a document-level property, so a source block nested
-        // in an AsciiDoc table cell is highlighted too.
+        // The highlighter is a document-level property, so a source block
+        // nested in an AsciiDoc table cell is highlighted too.
         let html = convert_hl(
             "highlightjs",
             "|===\na|\n[source,ruby]\n----\nputs 1\n----\n|===",
@@ -8044,8 +8098,9 @@ mod tests {
         // `asset-uri-scheme` sets the scheme of the CDN base URL: an explicit
         // empty value (Asciidoctor's `-a asset-uri-scheme=`) yields a
         // protocol-relative `//…`, and any other value is used as-is. (A *bare*
-        // `:asset-uri-scheme:` resolves to the `https` default in the parser, so
-        // the protocol-relative form is reached through an empty value.)
+        // `:asset-uri-scheme:` resolves to the `https` default in the parser,
+        // so the protocol-relative form is reached through an empty
+        // value.)
         let relative = convert_with(
             "[source,ruby]\n----\nputs 1\n----",
             &Options::new()
@@ -8123,8 +8178,8 @@ mod tests {
 
     #[test]
     fn prettify_uses_a_bare_code_without_a_language() {
-        // With no declared language prettify leaves the `<code>` bare (no class,
-        // no `data-lang`).
+        // With no declared language prettify leaves the `<code>` bare (no
+        // class, no `data-lang`).
         let html = convert_hl("prettify", "[source]\n----\nplain\n----");
         assert!(
             html.contains("<pre class=\"prettyprint highlight\"><code>plain</code></pre>"),
@@ -8140,10 +8195,10 @@ mod tests {
 
     #[test]
     fn document_set_source_highlighter_is_ignored_at_server_and_above() {
-        // A document that both enables a highlighter and points its asset dir at
-        // an attacker origin must render neither the highlighter nor the script
-        // when converted under `Server` or `Secure` — it falls back to the plain
-        // unhighlighted shape.
+        // A document that both enables a highlighter and points its asset dir
+        // at an attacker origin must render neither the highlighter nor
+        // the script when converted under `Server` or `Secure` — it
+        // falls back to the plain unhighlighted shape.
         for mode in [SafeMode::Server, SafeMode::Secure] {
             let html = convert_with(
                 ":source-highlighter: highlightjs\n\
@@ -8246,9 +8301,10 @@ mod tests {
 
     #[test]
     fn restore_literal_paragraph_indent_is_a_no_op_when_the_raw_span_is_short() {
-        // Defensive guard: a raw span with fewer lines than the rendered content
-        // (which should not happen — verbatim substitutions never drop lines)
-        // leaves the lines untouched rather than underflowing the line offset.
+        // Defensive guard: a raw span with fewer lines than the rendered
+        // content (which should not happen — verbatim substitutions
+        // never drop lines) leaves the lines untouched rather than
+        // underflowing the line offset.
         let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         super::restore_literal_paragraph_indent(&mut lines, "only one line");
         assert_eq!(lines, ["a", "b", "c"]);
@@ -8256,9 +8312,10 @@ mod tests {
 
     #[test]
     fn restore_literal_paragraph_indent_ignores_a_trailing_newline_in_the_raw_span() {
-        // A raw span ending in a newline must not shift the suffix alignment: the
-        // first rendered line still pairs with the first raw line, so the leading
-        // indent lands on `literal` rather than being lost to a phantom line.
+        // A raw span ending in a newline must not shift the suffix alignment:
+        // the first rendered line still pairs with the first raw line,
+        // so the leading indent lands on `literal` rather than being
+        // lost to a phantom line.
         let mut lines = vec!["literal".to_string(), "next".to_string()];
         super::restore_literal_paragraph_indent(&mut lines, "  literal\nnext\n");
         assert_eq!(lines, ["  literal", "next"]);
@@ -8266,17 +8323,19 @@ mod tests {
 
     #[test]
     fn verbatim_restores_indent_for_a_titled_literal_paragraph() {
-        // An implicit literal paragraph's raw span carries its `.title` ahead of
-        // the content, so indent restoration must align to the trailing content
-        // lines; the common indent (2) is then removed, matching Asciidoctor.
+        // An implicit literal paragraph's raw span carries its `.title` ahead
+        // of the content, so indent restoration must align to the
+        // trailing content lines; the common indent (2) is then
+        // removed, matching Asciidoctor.
         let html = convert(".Cap\n    x\n  y\n");
         assert!(html.contains("<pre>  x\ny</pre>"), "{html}");
     }
 
     #[test]
     fn restore_list_principal_indent_keeps_inline_text_and_dedents_wrapped_lines() {
-        // With inline text the first line is kept verbatim and the common indent
-        // (2) of the two continuation lines is removed — Asciidoctor's dedent.
+        // With inline text the first line is kept verbatim and the common
+        // indent (2) of the two continuation lines is removed —
+        // Asciidoctor's dedent.
         let mut lines = vec!["Foo".to_string(), "five".to_string(), "two".to_string()];
         super::restore_list_principal_indent(&mut lines, "Foo\n     five\n  two", true);
         assert_eq!(lines, ["Foo", "   five", "two"]);
@@ -8284,9 +8343,9 @@ mod tests {
 
     #[test]
     fn restore_list_principal_indent_keeps_indent_when_a_wrapped_line_is_flush_left() {
-        // A flush-left continuation line (`second`) zeroes the common indent, so
-        // the indented `// ...` line keeps its two spaces (the hanging-indent
-        // shape this fix restores).
+        // A flush-left continuation line (`second`) zeroes the common indent,
+        // so the indented `// ...` line keeps its two spaces (the
+        // hanging-indent shape this fix restores).
         let mut lines = vec![
             "list item 1".to_string(),
             "// not line comment".to_string(),
@@ -8321,9 +8380,9 @@ mod tests {
 
     #[test]
     fn restore_list_principal_indent_drops_interior_comment_lines_before_aligning() {
-        // The parser strips a column-0 line comment from the rendered content; it
-        // must be filtered from the raw span too, or the surviving lines pair with
-        // the wrong raw line and the dedent misfires.
+        // The parser strips a column-0 line comment from the rendered content;
+        // it must be filtered from the raw span too, or the surviving
+        // lines pair with the wrong raw line and the dedent misfires.
         let mut lines = vec!["def2".to_string(), "def2 continued".to_string()];
 
         super::restore_list_principal_indent(
@@ -8337,9 +8396,9 @@ mod tests {
 
     #[test]
     fn restore_list_principal_indent_is_a_no_op_when_the_raw_span_is_short() {
-        // Defensive guard: a raw span with fewer lines than the rendered content
-        // (which should not happen) leaves the lines untouched rather than
-        // underflowing the suffix offset.
+        // Defensive guard: a raw span with fewer lines than the rendered
+        // content (which should not happen) leaves the lines untouched
+        // rather than underflowing the suffix offset.
         let mut lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         super::restore_list_principal_indent(&mut lines, "only one line", true);
         assert_eq!(lines, ["a", "b", "c"]);
@@ -8348,8 +8407,8 @@ mod tests {
     #[test]
     fn common_leading_indent_skips_empty_lines_and_finds_the_minimum() {
         // An empty line is skipped (Asciidoctor's `next if line.empty?`), so it
-        // does not count as a flush-left line that would force `None`; the common
-        // indent is the minimum of the two non-empty lines.
+        // does not count as a flush-left line that would force `None`; the
+        // common indent is the minimum of the two non-empty lines.
         assert_eq!(super::common_leading_indent(&["    a", "", "  b"]), Some(2));
 
         // A genuinely flush-left non-empty line does force `None` (no dedent).
@@ -8390,8 +8449,8 @@ mod tests {
 
     #[test]
     fn verbatim_clamps_a_pathological_tabsize() {
-        // Likewise for a huge `tabsize`: a single leading tab expands to at most
-        // the tab-size clamp, not gigabytes of spaces.
+        // Likewise for a huge `tabsize`: a single leading tab expands to at
+        // most the tab-size clamp, not gigabytes of spaces.
         let html = convert(":tabsize: 999999999999\n\n----\n\tx\n----");
         assert_eq!(pre_leading_spaces(&html), super::MAX_TAB_SIZE as usize);
     }
@@ -8507,8 +8566,8 @@ mod tests {
         // In image-icon mode, a per-block `icon` value that already has a file
         // extension is used verbatim under `iconsdir` (Asciidoctor's `icon_uri`
         // appends the `icontype` only when the value has no extension). A
-        // document-set `:icons:` only takes effect below `Secure` (#50), so this
-        // converts under `Server`.
+        // document-set `:icons:` only takes effect below `Secure` (#50), so
+        // this converts under `Server`.
         let html = convert_with(
             ":icons:\n\n[NOTE,icon=tip.png]\nSave often.",
             &Options::new().safe_mode(SafeMode::Server),
@@ -8522,8 +8581,8 @@ mod tests {
     #[test]
     fn admonition_custom_icon_without_extension_gets_icontype() {
         // A per-block `icon` value with no extension gains the document's
-        // `icontype` extension. A document-set `:icons:` only takes effect below
-        // `Secure` (#50), so this converts under `Server`.
+        // `icontype` extension. A document-set `:icons:` only takes effect
+        // below `Secure` (#50), so this converts under `Server`.
         let html = convert_with(
             ":icons:\n:icontype: svg\n\n[NOTE,icon=hint]\nSave often.",
             &Options::new().safe_mode(SafeMode::Server),
@@ -8715,8 +8774,9 @@ mod tests {
     #[test]
     fn webfonts_value_double_quote_cannot_break_out_of_the_href() {
         // The parser escapes `&`/`<`/`>` in the value, but not `"`. An
-        // unescaped `"` would close the `href` and let a header-set value inject
-        // attributes onto the `<link>`; we escape it so the value stays inside.
+        // unescaped `"` would close the `href` and let a header-set value
+        // inject attributes onto the `<link>`; we escape it so the
+        // value stays inside.
         let html = convert("= Doc\n:webfonts: x\" onmouseover=\"y\n\nBody.");
         assert!(html.contains(
             "<link rel=\"stylesheet\" href=\"https://fonts.googleapis.com/css?family=x&quot; onmouseover=&quot;y\">"
@@ -8756,8 +8816,8 @@ mod tests {
     }
 
     // A custom `stylesheet` under the default (`Secure`) safe mode links to it
-    // at its normalized web path, and — unlike the default stylesheet — emits no
-    // web-font `<link>`.
+    // at its normalized web path, and — unlike the default stylesheet — emits
+    // no web-font `<link>`.
     #[test]
     fn custom_stylesheet_links_under_the_secure_default() {
         let html = convert("= Doc\n:stylesheet: my-theme.css\n\nBody.");
@@ -8787,8 +8847,8 @@ mod tests {
         assert!(html.contains("<link rel=\"stylesheet\" href=\"file:///home/user/custom.css\">"));
     }
 
-    // Under an embedding safe mode, a custom stylesheet embeds the CSS the caller
-    // supplied through `Options::stylesheet_content`.
+    // Under an embedding safe mode, a custom stylesheet embeds the CSS the
+    // caller supplied through `Options::stylesheet_content`.
     #[test]
     fn custom_stylesheet_embeds_supplied_content() {
         let html = convert_with(
@@ -8805,8 +8865,8 @@ mod tests {
     }
 
     // When embedding is requested for a custom stylesheet but no content was
-    // supplied (the string-only `convert` path cannot read a file), the block is
-    // omitted rather than guessed at.
+    // supplied (the string-only `convert` path cannot read a file), the block
+    // is omitted rather than guessed at.
     #[test]
     fn custom_stylesheet_without_content_emits_nothing_when_embedding() {
         let html = convert_with(
@@ -8879,8 +8939,9 @@ mod tests {
         // Asciidoctor's `web_path` treats the segment after `//` as an ordinary
         // path segment, not an RFC-3986 authority: a `..` deeper in the path
         // pops the segment before it and keeps the host, but a `..` right after
-        // the authority pops the host itself. We match Asciidoctor 2.0.26, which
-        // emits `//cdn.example.com/theme.css` and `//theme.css` respectively.
+        // the authority pops the host itself. We match Asciidoctor 2.0.26,
+        // which emits `//cdn.example.com/theme.css` and `//theme.css`
+        // respectively.
         assert_eq!(
             normalize_web_path("//cdn.example.com/a/../theme.css", ""),
             "//cdn.example.com/theme.css"
@@ -8905,9 +8966,9 @@ mod tests {
         );
 
         // A URI `stylesdir` joins with a relative stylesheet into a URI href,
-        // preserving the scheme's `//` rather than collapsing it to `./https:/…`
-        // — matching Asciidoctor 2.0.26, which lifts the URI prefix off before
-        // normalizing and restores it afterward.
+        // preserving the scheme's `//` rather than collapsing it to
+        // `./https:/…` — matching Asciidoctor 2.0.26, which lifts the
+        // URI prefix off before normalizing and restores it afterward.
         assert_eq!(
             normalize_web_path("asciidoctor.css", "https://cdn.example.com/css"),
             "https://cdn.example.com/css/asciidoctor.css"
@@ -8956,8 +9017,9 @@ mod tests {
         html
     }
 
-    // Under an embedding safe mode with a base directory, a custom stylesheet is
-    // read from disk and embedded — the `adoc` default and the API's file path.
+    // Under an embedding safe mode with a base directory, a custom stylesheet
+    // is read from disk and embedded — the `adoc` default and the API's
+    // file path.
     #[test]
     fn custom_stylesheet_is_read_from_disk_and_embedded() {
         let html = with_files(
@@ -8972,7 +9034,8 @@ mod tests {
         assert!(!html.contains("fonts.googleapis.com"));
     }
 
-    // `stylesdir` relocates the on-disk lookup, just as it does the linked path.
+    // `stylesdir` relocates the on-disk lookup, just as it does the linked
+    // path.
     #[test]
     fn custom_stylesheet_read_honors_stylesdir() {
         let html = with_files(
@@ -9158,9 +9221,9 @@ mod tests {
     }
 
     // Table rendering is verified end-to-end by the `tables_test.rb` port
-    // (`tests::asciidoctor_rb::tables_test`); these unit tests cover the handful
-    // of attribute-value branches that suite does not exercise, each checked
-    // against Asciidoctor 2.0.26's `html5` output.
+    // (`tests::asciidoctor_rb::tables_test`); these unit tests cover the
+    // handful of attribute-value branches that suite does not exercise,
+    // each checked against Asciidoctor 2.0.26's `html5` output.
 
     #[test]
     fn table_frame_and_grid_values_map_to_classes() {
@@ -9182,7 +9245,8 @@ mod tests {
 
     #[test]
     fn table_stripes_value_adds_a_class() {
-        // A `stripes` value — including an explicit `none` — adds `stripes-<v>`.
+        // A `stripes` value — including an explicit `none` — adds
+        // `stripes-<v>`.
         for value in ["even", "all", "hover", "none"] {
             let html = crate::convert(&format!("[stripes={value}]\n|===\n|a |b\n|===\n"));
             assert!(
@@ -9264,8 +9328,9 @@ mod tests {
 
     #[test]
     fn zero_width_column_specifier_keeps_the_default_width() {
-        // `asciidoc-parser` clamps a `0` width specifier to the default width of
-        // 1, so `cols="0,0"` behaves like `cols="1,1"` — an even 50/50 split.
+        // `asciidoc-parser` clamps a `0` width specifier to the default width
+        // of 1, so `cols="0,0"` behaves like `cols="1,1"` — an even
+        // 50/50 split.
         let html = crate::convert("[cols=\"0,0\"]\n|===\n|a |b\n|===\n");
         assert_eq!(html.matches("<col style=\"width: 50%;\">").count(), 2);
     }
@@ -9334,8 +9399,8 @@ mod tests {
         // `unsupported` is the documented forward-compat fallback for a
         // construct the baseline does not yet render (see ARCHITECTURE.md). No
         // document currently reaches it — every parser block context is either
-        // handled or dropped — so its contract is pinned here directly: a single
-        // well-formed HTML comment naming the offending context.
+        // handled or dropped — so its contract is pinned here directly: a
+        // single well-formed HTML comment naming the offending context.
         let mut renderer = bare_renderer();
         renderer.unsupported("mystery");
         assert_eq!(
@@ -9348,8 +9413,9 @@ mod tests {
     fn dispatching_a_bare_list_item_takes_the_unsupported_fallback() {
         // `block`'s final `other =>` arm is the forward-compat fallback for a
         // block variant with no dedicated renderer. A document never presents
-        // one at top level — a `ListItem`, for instance, is only reached through
-        // its parent list — so dispatch one directly to exercise the arm, the
+        // one at top level — a `ListItem`, for instance, is only reached
+        // through its parent list — so dispatch one directly to
+        // exercise the arm, the
         // same way `dlist_narrowing_helpers_handle_both_arms` drives a path a
         // real document never reaches.
         use asciidoc_parser::{blocks::FindBlocks, Parser};

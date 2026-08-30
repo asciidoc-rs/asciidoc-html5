@@ -171,8 +171,8 @@ WARNING: If you include a file extension in the image target, the icon macro wil
     assert!(convert(":icons: font\n\nicon:heart[]")
         .contains(r#"<span class="icon"><i class="fa fa-heart"></i></span>"#));
 
-    // WARNING: a file extension in the target breaks font icon mode, because the
-    // extension is carried into the glyph class (`fa-heart.png`).
+    // WARNING: a file extension in the target breaks font icon mode, because
+    // the extension is carried into the glyph class (`fa-heart.png`).
     assert!(convert(":icons: font\n\nicon:heart.png[]")
         .contains(r#"<span class="icon"><i class="fa fa-heart.png"></i></span>"#));
 }

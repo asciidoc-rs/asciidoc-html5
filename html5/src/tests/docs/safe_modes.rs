@@ -75,7 +75,8 @@ defaults differ to match Asciidoctor: the API defaults to `secure`, while the
     assert_eq!(SafeMode::Server as u8, 10);
     assert_eq!(SafeMode::Secure as u8, 20);
 
-    // The API default (no safe mode set) is `secure`, which links the stylesheet.
+    // The API default (no safe mode set) is `secure`, which links the
+    // stylesheet.
     assert!(convert("= Doc\n\nBody.").contains("./asciidoctor.css"));
 }
 
@@ -152,7 +153,8 @@ endif::safe-mode-secure[]
     assert!(secure.contains("level=20"));
     assert!(secure.contains("name=secure"));
 
-    // `safe-mode-<name>` is set only for the active mode, so `ifdef` gates on it.
+    // `safe-mode-<name>` is set only for the active mode, so `ifdef` gates on
+    // it.
     let gated =
         "= Doc\n\nifdef::safe-mode-secure[]\nRunning securely.\nendif::safe-mode-secure[]\n";
     assert!(convert(gated).contains("Running securely."));

@@ -169,8 +169,8 @@ fn resolve_free(base_dir: &Path, start: &str, target: &str) -> PathBuf {
     // An absolute `start` is a native path (the including file's own location),
     // so it is kept verbatim — posixifying it would corrupt a Windows path such
     // as a drive prefix or a `\\?\` verbatim path. A relative `start` is a
-    // `/`-separated document path, joined onto the base directory a segment at a
-    // time.
+    // `/`-separated document path, joined onto the base directory a segment at
+    // a time.
     let anchor = if is_absolute(start) {
         PathBuf::from(start)
     } else {
@@ -200,11 +200,12 @@ fn resolve_jailed(base_dir: &Path, start: &str, target: &str) -> PathBuf {
     }
 
     // An absolute target replaces any starting segments. When it already lies
-    // inside the jail it is honored in place (keeping only the portion below the
-    // base directory); otherwise it is recovered to the jail root by
+    // inside the jail it is honored in place (keeping only the portion below
+    // the base directory); otherwise it is recovered to the jail root by
     // reinterpreting it relative to the base directory. This matches
-    // Asciidoctor's `PathResolver#system_path`, which returns an absolute target
-    // as-is when it descends from the jail and only recovers one that escapes it.
+    // Asciidoctor's `PathResolver#system_path`, which returns an absolute
+    // target as-is when it descends from the jail and only recovers one
+    // that escapes it.
     if is_absolute(target) {
         segments.clear();
         match strip_base_prefix(base_dir, target) {
@@ -316,12 +317,13 @@ fn confined_target(base_dir: &Path, safe: SafeMode, path: &Path) -> Option<PathB
     }
 
     // Lexical resolution keeps the *path* inside the base directory, but a
-    // symlink under the base directory could still point outside it. Resolve the
-    // real path (following symlinks) and refuse the read when it escapes the base
-    // directory. This is stricter than Asciidoctor, whose jail is purely lexical
-    // (see the module docs); canonicalization also fails for a path the recovery
-    // relocated to somewhere that does not exist. Either way the resource is
-    // unavailable, which reads as "not found".
+    // symlink under the base directory could still point outside it. Resolve
+    // the real path (following symlinks) and refuse the read when it
+    // escapes the base directory. This is stricter than Asciidoctor, whose
+    // jail is purely lexical (see the module docs); canonicalization also
+    // fails for a path the recovery relocated to somewhere that does not
+    // exist. Either way the resource is unavailable, which reads as "not
+    // found".
     let real = path.canonicalize().ok()?;
     real.starts_with(base_dir).then_some(real)
 }
@@ -362,10 +364,10 @@ fn read_file_bytes(path: &Path) -> ReadBytesOutcome {
         return ReadBytesOutcome::NotFound;
     }
 
-    // The `is_file` gate already reports a missing or non-regular target as "not
-    // found", so any failure reading a path that just passed it is a genuine read
-    // failure — typically a permission error, or the rare race where the file is
-    // removed in between — and reads as "not readable".
+    // The `is_file` gate already reports a missing or non-regular target as
+    // "not found", so any failure reading a path that just passed it is a
+    // genuine read failure — typically a permission error, or the rare race
+    // where the file is removed in between — and reads as "not readable".
     match fs::read(path) {
         Ok(bytes) => ReadBytesOutcome::Read(bytes),
         Err(_) => ReadBytesOutcome::NotReadable,
@@ -463,11 +465,12 @@ impl IncludeFileHandler for FsIncludeFileHandler {
         // Asciidoctor ignores) — falls back to reading the file as UTF-8 and
         // returning it via `IncludeContent::new`. A missing/non-regular file
         // maps to `NotFound` and an unreadable one to `NotReadable` in both
-        // paths; on the UTF-8 path a file whose bytes are not valid UTF-8 maps to
-        // `NotDecodable`. The parser can thus distinguish Asciidoctor's `include
-        // file not found`, `include file not readable`, and `invalid byte
-        // sequence in UTF-8` conditions. (The transcoding path never yields
-        // `NotDecodable`: a recognized single-byte encoding always decodes.)
+        // paths; on the UTF-8 path a file whose bytes are not valid UTF-8 maps
+        // to `NotDecodable`. The parser can thus distinguish
+        // Asciidoctor's `include file not found`, `include file not
+        // readable`, and `invalid byte sequence in UTF-8` conditions.
+        // (The transcoding path never yields `NotDecodable`: a
+        // recognized single-byte encoding always decodes.)
         match legacy_encoding(attrlist) {
             Some(encoding) => match read_confined_bytes(&self.base_dir, self.safe, &path) {
                 ReadBytesOutcome::Read(bytes) => {
@@ -696,13 +699,14 @@ mod tests {
         );
     }
 
-    // windows-1252 agrees with ISO-8859-1 outside 0x80..=0x9F but carries mostly
-    // printable characters within it. The whole 0x80..=0x9F range is checked
-    // against an independent transcription of the WHATWG windows-1252 glyphs
-    // (written as literal characters here, not the `\u{…}` escapes of the
-    // `WINDOWS_1252_C1` table itself), so a transcription slip in that table
-    // cannot pass unnoticed. The five positions WHATWG leaves undefined (0x81,
-    // 0x8D, 0x8F, 0x90, 0x9D) map to the C1 control of the same value.
+    // windows-1252 agrees with ISO-8859-1 outside 0x80..=0x9F but carries
+    // mostly printable characters within it. The whole 0x80..=0x9F range is
+    // checked against an independent transcription of the WHATWG
+    // windows-1252 glyphs (written as literal characters here, not the
+    // `\u{…}` escapes of the `WINDOWS_1252_C1` table itself), so a
+    // transcription slip in that table cannot pass unnoticed. The five
+    // positions WHATWG leaves undefined (0x81, 0x8D, 0x8F, 0x90, 0x9D) map
+    // to the C1 control of the same value.
     #[test]
     fn windows_1252_decodes_the_entire_c1_range() {
         let bytes: Vec<u8> = (0x80u8..=0x9f).collect();
@@ -1122,7 +1126,8 @@ mod tests {
         fn a_non_utf8_file_is_not_decodable() {
             let dir = scratch();
             let file = dir.join("latin1.adoc");
-            // `0xFF` is not a valid UTF-8 lead byte, so the read fails to decode.
+            // `0xFF` is not a valid UTF-8 lead byte, so the read fails to
+            // decode.
             fs::write(&file, [b'A', 0xff, b'B']).expect("write non-utf8 file");
 
             assert!(matches!(
@@ -1134,8 +1139,9 @@ mod tests {
         }
 
         // The raw-byte read returns the same non-UTF-8 file's bytes verbatim
-        // (rather than folding it into `NotFound` as the UTF-8 read does), so the
-        // transcoding path can decode them per the `encoding` attribute.
+        // (rather than folding it into `NotFound` as the UTF-8 read does), so
+        // the transcoding path can decode them per the `encoding`
+        // attribute.
         #[test]
         fn a_non_utf8_file_is_read_as_raw_bytes() {
             let dir = scratch();
@@ -1165,9 +1171,10 @@ mod tests {
             let _ = fs::remove_dir_all(&dir);
         }
 
-        // A regular file that exists but cannot be read (permission stripped) is
-        // "not readable", distinct from "not found". Permission bits only bite on
-        // Unix and not as root, mirroring the reader-test gate.
+        // A regular file that exists but cannot be read (permission stripped)
+        // is "not readable", distinct from "not found". Permission bits
+        // only bite on Unix and not as root, mirroring the reader-test
+        // gate.
         #[cfg(unix)]
         #[test]
         fn an_unreadable_file_is_not_readable() {
@@ -1300,8 +1307,8 @@ mod tests {
             assert!(!html.contains("Included from secret."));
         }
 
-        // Under `secure` (the API default), the parser converts the include to a
-        // link without ever reading the file.
+        // Under `secure` (the API default), the parser converts the include to
+        // a link without ever reading the file.
         #[test]
         fn secure_turns_the_include_into_a_link() {
             let main = project("secure");
@@ -1392,10 +1399,10 @@ mod tests {
         }
 
         // An `encoding` include of a present-but-unreadable file is left
-        // unresolved via the "not readable" outcome (distinct from "not found"),
-        // just like a UTF-8 include. Simulating an unreadable file relies on Unix
-        // permission bits and does not work as root, so this is Unix-only and
-        // skips under root.
+        // unresolved via the "not readable" outcome (distinct from "not
+        // found"), just like a UTF-8 include. Simulating an unreadable
+        // file relies on Unix permission bits and does not work as
+        // root, so this is Unix-only and skips under root.
         #[cfg(unix)]
         #[test]
         fn encoding_include_of_an_unreadable_file_is_unresolved() {
@@ -1404,8 +1411,8 @@ mod tests {
             let main = project("encoding-unreadable");
             let base = main.parent().expect("base dir");
 
-            // ISO-8859-1 bytes (`Où`), then strip permissions so the file exists
-            // but cannot be read.
+            // ISO-8859-1 bytes (`Où`), then strip permissions so the file
+            // exists but cannot be read.
             let locked = base.join("locked.txt");
             fs::write(&locked, [0x4f, 0xf9, 0x0a]).expect("write locked file");
             fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).expect("chmod");

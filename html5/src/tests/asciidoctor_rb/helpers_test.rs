@@ -93,9 +93,9 @@ mod uri_encoding {
         );
 
         // A `mailto:` macro's second positional attribute (the subject) is
-        // URI-encoded via `encode_uri_component`. The characters `-` and `.` are
-        // among the select non-word characters it leaves untouched, so they
-        // survive verbatim in the rendered query string.
+        // URI-encoded via `encode_uri_component`. The characters `-` and `.`
+        // are among the select non-word characters it leaves untouched,
+        // so they survive verbatim in the rendered query string.
         let html = convert("mailto:doc@example.org[Doc,-.]");
 
         assert_xpath(

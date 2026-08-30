@@ -53,8 +53,9 @@ fn main() {
         for entry in collect_files(root, ".rs") {
             let path = entry.path();
             if let Some((spec_path, cov)) = parse_rs_file(path) {
-                // The same spec file may be tracked from more than one test file
-                // (for example, covered from both workspace crates). Merge rather
+                // The same spec file may be tracked from more than one test
+                // file (for example, covered from both
+                // workspace crates). Merge rather
                 // than overwrite, so no crate's coverage is silently dropped.
                 spec_coverage
                     .entry(spec_path)
@@ -80,8 +81,9 @@ fn main() {
         }
     }
 
-    // `saturating_sub` guards the empty case (e.g. `ref/` not present): the loop
-    // below then simply doesn't run, emitting a valid empty coverage object.
+    // `saturating_sub` guards the empty case (e.g. `ref/` not present): the
+    // loop below then simply doesn't run, emitting a valid empty coverage
+    // object.
     let last_index = spec_files.len().saturating_sub(1);
 
     for (count, entry) in spec_files.into_iter().enumerate() {

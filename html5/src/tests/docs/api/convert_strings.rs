@@ -241,7 +241,8 @@ assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(standalone_file.starts_with("<!DOCTYPE html>"));
     assert!(standalone_file.contains(FRAGMENT));
 
-    // The exact example from the page: `standalone(true)` forces a full document.
+    // The exact example from the page: `standalone(true)` forces a full
+    // document.
     let opts = Options::new().standalone(true);
     let html = convert_with(SAMPLE, &opts);
     assert!(html.starts_with("<!DOCTYPE html>"));

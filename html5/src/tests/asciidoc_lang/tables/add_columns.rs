@@ -268,9 +268,9 @@ The table in <<ex-implicit>> has three columns since its first row contains thre
 "#
     );
 
-    // With no `cols` attribute and an empty line before the first row, the count
-    // is derived from the first row's three cells; no header is designated, so
-    // both rows land in the body.
+    // With no `cols` attribute and an empty line before the first row, the
+    // count is derived from the first row's three cells; no header is
+    // designated, so both rows land in the body.
     let output = convert(
         "|===\n\n|Cell in column 1, row 1 |Cell in column 2, row 1 |Cell in column 3, row 1\n\n|Cell in column 1, row 2 |Cell in column 2, row 2 |Cell in column 3, row 2\n|===",
     );

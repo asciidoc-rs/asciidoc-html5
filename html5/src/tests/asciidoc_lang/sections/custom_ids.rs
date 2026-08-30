@@ -72,8 +72,8 @@ include::example$section.adoc[tag=with-anchor-and-reftext-shorthand]
 "#
     );
 
-    // A preceding unlabeled xref resolves to the section's reference text, so the
-    // link's visible text is "Subspecies", not the section title.
+    // A preceding unlabeled xref resolves to the section's reference text, so
+    // the link's visible text is "Subspecies", not the section title.
     let html = convert(
         "See <<tigers-subspecies>>.\n\n[#tigers-subspecies,reftext=Subspecies]\n=== Subspecies of Tiger",
     );

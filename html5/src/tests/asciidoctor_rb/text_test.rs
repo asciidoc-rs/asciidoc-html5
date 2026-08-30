@@ -194,8 +194,8 @@ fn proper_encoding_to_handle_utf8_characters_from_included_file() {
 "#
     );
 
-    // `testdir` is Asciidoctor's `ref/asciidoctor/test`; this crate resolves the
-    // include relative to it under the `safe` jail.
+    // `testdir` is Asciidoctor's `ref/asciidoctor/test`; this crate resolves
+    // the include relative to it under the `safe` jail.
     let base_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ref/asciidoctor/test");
     let html = convert_with(
         "include::fixtures/encoding.adoc[tags=romé]",
@@ -288,8 +288,8 @@ fn multiple_double_quoted_text_on_a_single_line() {
     );
 
     // Compat mode is permanently out of scope — this crate will not implement
-    // it, so the first `assert_equal` stays non-normative rather than counted as
-    // verified.
+    // it, so the first `assert_equal` stays non-normative rather than counted
+    // as verified.
     non_normative!(
         r#"
     assert_equal '&#8220;Our business is constantly changing&#8221; or &#8220;We need faster time to market.&#8221;',
@@ -306,9 +306,9 @@ fn multiple_double_quoted_text_on_a_single_line() {
 "#
     );
 
-    // Only the modern (second) form is driven here. The inline doctype emits the
-    // fragment with the single trailing newline this crate — matching the
-    // `asciidoctor` CLI — always appends.
+    // Only the modern (second) form is driven here. The inline doctype emits
+    // the fragment with the single trailing newline this crate — matching
+    // the `asciidoctor` CLI — always appends.
     let output = convert_with(
         r#""`Our business is constantly changing`" or "`We need faster time to market.`""#,
         &Options::new().doctype("inline"),
@@ -378,9 +378,10 @@ fn markdown_horizontal_rules() {
     // This crate intentionally diverges on the leading offset: Asciidoctor
     // tolerates 0–3 leading spaces, while an indented marker here becomes a
     // literal paragraph. So the three leading-space offsets are *not* verified
-    // as thematic breaks — they are tracked non-normatively here (and covered as
-    // producing *no* break by `markdown_horizontal_rules_negative_case`), and
-    // only the zero-offset entry above is driven.
+    // as thematic breaks — they are tracked non-normatively here (and covered
+    // as producing *no* break by
+    // `markdown_horizontal_rules_negative_case`), and only the zero-offset
+    // entry above is driven.
     non_normative!(
         r#"
       ' ',
@@ -563,8 +564,8 @@ fn emphasized_text_with_single_quote_using_apostrophe_characters() {
 "#
     );
 
-    // Only the modern (second) assertion is driven. `#{rsquo}` decodes to U+2019
-    // (right single quotation mark).
+    // Only the modern (second) assertion is driven. `#{rsquo}` decodes to
+    // U+2019 (right single quotation mark).
     let html = convert_with("It's 'Johnny's' phone", &Options::new().standalone(true));
     assert_xpath(
         &html,
@@ -652,8 +653,8 @@ fn unescape_escaped_single_quote_emphasis_in_compat_mode_only() {
 "#
     );
 
-    // Only the two modern assertions are driven. Outside compat mode the leading
-    // escaped apostrophe keeps its backslash.
+    // Only the two modern assertions are driven. Outside compat mode the
+    // leading escaped apostrophe keeps its backslash.
     let html = convert("A \\'single quoted string' example");
     assert_xpath(
         &html,
@@ -900,9 +901,9 @@ mod basic_styling {
 "#
         );
 
-        // The second assertion is compat-mode, which is permanently out of scope
-        // — this crate will not implement it, so it stays non-normative rather
-        // than counted as verified.
+        // The second assertion is compat-mode, which is permanently out of
+        // scope — this crate will not implement it, so it stays
+        // non-normative rather than counted as verified.
         non_normative!(
             r#"
       assert_xpath "//code", convert_string("This is +passed through and monospaced+.", attributes: { 'compat-mode' => '' }), 1
@@ -1007,10 +1008,10 @@ mod basic_styling {
         assert_xpath(&html, "//em", 1);
         assert_xpath(&html, "//code[@class=\"role\"]", 1);
 
-        // The test xpath engine has no `not(@class)`, so the Ruby assertion that
-        // exactly one `<code>` has no class is instead pinned by asserting the
-        // full rendered paragraph (which also subsumes the `//code[@class="role"]`
-        // check above).
+        // The test xpath engine has no `not(@class)`, so the Ruby assertion
+        // that exactly one `<code>` has no class is instead pinned by
+        // asserting the full rendered paragraph (which also subsumes
+        // the `//code[@class="role"]` check above).
         assert!(html
             .contains(r#"<strong>B</strong><em>I</em><code>M</code><code class="role">M</code>"#));
     }

@@ -93,7 +93,8 @@ It's now possible to override the value of the `imagesdir` attribute from within
         );
 
         // The API soft-sets `imagesdir` (the `@` form), so the document's own
-        // assignment takes precedence and the image path uses the document value.
+        // assignment takes precedence and the image path uses the document
+        // value.
         let src = "= Document Title\n:imagesdir: new/path/to/images\n\nimage::a.png[X]";
         let output = convert_with(
             src,

@@ -212,8 +212,8 @@ warning without printing anything:
     assert!(failed);
     assert!(stderr.is_empty(), "{stderr}");
 
-    // Without `--failure-level`, the default is never reached by the warning, so
-    // the exit status stays successful.
+    // Without `--failure-level`, the default is never reached by the warning,
+    // so the exit status stays successful.
     let (failed, _stdout, _stderr) = run_piped(&["-o", "-"], source);
     assert!(!failed);
 }

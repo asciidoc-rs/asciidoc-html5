@@ -78,7 +78,8 @@ include::example$image.adoc[tag=in-float]
             .contains(r#"<div class="imageblock right text-center">"#)
     );
 
-    // The `tag=in-float` inline image: `float="right"` becomes the `right` class.
+    // The `tag=in-float` inline image: `float="right"` becomes the `right`
+    // class.
     assert!(convert(
         "image:linux.png[Linux,150,150,float=\"right\"]\nYou can find Linux everywhere these days!"
     )

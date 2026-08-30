@@ -74,11 +74,12 @@ Asciidoctor.convert_file \
 "#
     );
 
-    // Drive the closest equivalent of `Asciidoctor.convert_file 'document.adoc'`:
-    // read an AsciiDoc file from disk and render it to a complete, standalone
-    // HTML5 document in one call — matching what a standalone string conversion
-    // produces for the same source. (The plain string `convert` is embedded by
-    // default, so we compare against a standalone one.)
+    // Drive the closest equivalent of `Asciidoctor.convert_file
+    // 'document.adoc'`: read an AsciiDoc file from disk and render it to a
+    // complete, standalone HTML5 document in one call — matching what a
+    // standalone string conversion produces for the same source. (The plain
+    // string `convert` is embedded by default, so we compare against a
+    // standalone one.)
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "asciidoc-html5-asciidoctor-index-{}.adoc",

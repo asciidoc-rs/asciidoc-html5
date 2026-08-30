@@ -314,8 +314,9 @@ This is necessary since the `.` character in the shorthand syntax is the delimit
         let anchor = convert("[[classname.propertyname]]\nprop");
         assert_css(&anchor, r#"div.paragraph[id="classname.propertyname"]"#, 1);
 
-        // In the shorthand form the `.` is misinterpreted as the role delimiter:
-        // the ID becomes `classname` and `propertyname` becomes a role (class).
+        // In the shorthand form the `.` is misinterpreted as the role
+        // delimiter: the ID becomes `classname` and `propertyname`
+        // becomes a role (class).
         let shorthand = convert("[#classname.propertyname]\nprop");
         assert_css(&shorthand, "div.paragraph.propertyname#classname", 1);
     }
@@ -531,7 +532,8 @@ include::example$id.adoc[tag=anchor-shorthand]
         );
 
         // example$id.adoc[tag=anchor-shorthand]:
-        //   [#bookmark-b]#Inline anchors can be applied to a phrase like this one.#
+        //   [#bookmark-b]#Inline anchors can be applied to a phrase like this
+        // one.#
         let output =
             convert("[#bookmark-b]#Inline anchors can be applied to a phrase like this one.#");
 
@@ -663,11 +665,12 @@ You can add multiple anchors to a list item or description list term.
     }
 
     // The "only the first anchor is registered for use as an xref" distinction
-    // produces no distinct HTML5 rendering: both anchor points carry an `id` and
-    // are equally addressable as URL fragments, and a cross reference to either
-    // resolves identically (`<<a2>>` renders the same `<a href="#a2">` link as
-    // `<<a1>>`), matching the Asciidoctor 2.0.26 oracle. The registration
-    // distinction is a catalog-level fact, verified in `asciidoc-parser`.
+    // produces no distinct HTML5 rendering: both anchor points carry an `id`
+    // and are equally addressable as URL fragments, and a cross reference
+    // to either resolves identically (`<<a2>>` renders the same `<a
+    // href="#a2">` link as `<<a1>>`), matching the Asciidoctor 2.0.26
+    // oracle. The registration distinction is a catalog-level fact,
+    // verified in `asciidoc-parser`.
     non_normative!(
         r#"
 However, only the first anchor is registered for use as an xref within the document.

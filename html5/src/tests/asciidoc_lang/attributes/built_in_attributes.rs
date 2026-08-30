@@ -56,8 +56,9 @@ In the example above, the default value of `auto` will be assigned to `toc` sinc
 "#
         );
 
-        // Setting `toc` with an empty value activates it with its default `auto`
-        // value, rendering the Table of Contents with an entry per section.
+        // Setting `toc` with an empty value activates it with its default
+        // `auto` value, rendering the Table of Contents with an entry
+        // per section.
         let output = convert("= Title of Document\n:toc:\n\n== One\n\nText.\n\n== Two\n\nText.");
         assert_css(&output, "div#toc.toc", 1);
         assert_css(&output, "#toc ul.sectlevel1 > li > a", 2);

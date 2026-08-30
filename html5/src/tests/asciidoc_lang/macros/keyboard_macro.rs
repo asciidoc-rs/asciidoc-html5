@@ -124,8 +124,8 @@ include::example$ui.adoc[tag=key]
 "#
     );
 
-    // The `tag=key` snippet from `example$ui.adoc`, rendered with `:experimental:`
-    // set and the `%autowidth` table option from the page.
+    // The `tag=key` snippet from `example$ui.adoc`, rendered with
+    // `:experimental:` set and the `%autowidth` table option from the page.
     let source = ":experimental:\n\n[%autowidth]\n\
         |===\n\
         |Shortcut |Purpose\n\n\

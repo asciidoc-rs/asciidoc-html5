@@ -143,8 +143,8 @@ Note that the style applied to each column doesn't affect the xref:add-header-ro
     assert_css(&output, "tbody td > p.tableblock > em", 2);
 
     // The column style doesn't override inline formatting: the inline monospace
-    // markup on the `e` column's `e` still renders as `<code>` within the italic
-    // paragraph.
+    // markup on the `e` column's `e` still renders as `<code>` within the
+    // italic paragraph.
     assert_css(&output, "tbody td > p.tableblock > em > code", 2);
 }
 

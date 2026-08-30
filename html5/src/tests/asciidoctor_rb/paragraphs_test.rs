@@ -688,8 +688,9 @@ mod literal {
 "#
         );
 
-        // The `block_from_string` parser-model assertions test `asciidoc-parser`
-        // internals, not this crate; only the HTML output is re-expressed here.
+        // The `block_from_string` parser-model assertions test
+        // `asciidoc-parser` internals, not this crate; only the HTML
+        // output is re-expressed here.
         let html = convert("[source]\nuse the source, luke!\n");
         assert_xpath(
             &html,

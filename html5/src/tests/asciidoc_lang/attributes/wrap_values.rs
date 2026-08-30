@@ -68,7 +68,8 @@ If the line continuation is missing, the processor will assume it has found the 
             ":description: If you have a very long line of text \\\nthat you need to substitute regularly in a document, \\\nyou may find it easier to split the value neatly in the header \\\nso it remains readable to folks looking at the AsciiDoc source.\n\n{description}",
         );
 
-        // The line continuations and following newlines fold into single spaces.
+        // The line continuations and following newlines fold into single
+        // spaces.
         assert_eq!(
             first_paragraph(&output),
             "If you have a very long line of text that you need to substitute regularly in a document, you may find it easier to split the value neatly in the header so it remains readable to folks looking at the AsciiDoc source.",

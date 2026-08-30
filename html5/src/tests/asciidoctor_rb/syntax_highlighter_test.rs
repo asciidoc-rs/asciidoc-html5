@@ -381,10 +381,11 @@ mod code_ray {
     use super::*;
 
     // CodeRay is a build-time (server-side) syntax highlighter: it tokenizes
-    // source into `<span>` markup during conversion by invoking an external Ruby
-    // gem. Server-side highlighting is a settled non-goal for this crate's 1.0, so
-    // the whole context - activation, line numbering, callout restoration, inline
-    // vs. linked CSS, and the bundled stylesheet - is tracked as non-normative.
+    // source into `<span>` markup during conversion by invoking an external
+    // Ruby gem. Server-side highlighting is a settled non-goal for this
+    // crate's 1.0, so the whole context - activation, line numbering,
+    // callout restoration, inline vs. linked CSS, and the bundled
+    // stylesheet - is tracked as non-normative.
     non_normative!(
         r#"
   context 'CodeRay' do
@@ -941,8 +942,8 @@ mod prettify {
 mod html_pipeline {
     use super::*;
 
-    // The `html-pipeline` highlighter is not implemented here: a `[source]` block
-    // falls back to this crate's default language-tagged shape
+    // The `html-pipeline` highlighter is not implemented here: a `[source]`
+    // block falls back to this crate's default language-tagged shape
     // (`pre.highlight > code.language-*`) rather than the bare `pre[lang]` /
     // class-free output this test asserts, so it is tracked as non-normative.
     non_normative!(
@@ -979,8 +980,9 @@ mod rouge {
 
     // Rouge is a build-time (server-side) syntax highlighter that emits
     // `<span>`-tokenized markup during conversion - a settled non-goal for this
-    // crate's 1.0. Its highlighting, mixed lexers, cgi-style lexer options, line
-    // numbering, line highlighting, and callout restoration are not produced here.
+    // crate's 1.0. Its highlighting, mixed lexers, cgi-style lexer options,
+    // line numbering, line highlighting, and callout restoration are not
+    // produced here.
     non_normative!(
         r#"
   context 'Rouge' do
@@ -1428,8 +1430,9 @@ mod rouge {
         );
     }
 
-    // More Rouge (reading a named stylesheet, and loading the gem via the CLI) -
-    // build-time server-side highlighting, a non-goal, so tracked non-normative.
+    // More Rouge (reading a named stylesheet, and loading the gem via the CLI)
+    // - build-time server-side highlighting, a non-goal, so tracked
+    // non-normative.
     non_normative!(
         r#"
     test 'should read stylesheet for specified style' do
@@ -1453,10 +1456,11 @@ mod pygments {
     use super::*;
 
     // Pygments is a build-time (server-side) syntax highlighter invoking an
-    // external Python library - a settled non-goal for this crate's 1.0 (the whole
-    // context is even ENV-gated in the Ruby suite). Its highlighting, stylesheet
-    // embedding, line numbering, callout restoration, and line highlighting are
-    // not produced here, so the context is tracked as non-normative.
+    // external Python library - a settled non-goal for this crate's 1.0 (the
+    // whole context is even ENV-gated in the Ruby suite). Its highlighting,
+    // stylesheet embedding, line numbering, callout restoration, and line
+    // highlighting are not produced here, so the context is tracked as
+    // non-normative.
     non_normative!(
         r#"
   context 'Pygments', if: ENV['PYGMENTS_VERSION'] do

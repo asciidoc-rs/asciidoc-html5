@@ -270,8 +270,8 @@ Only one such attribute is set at time.
     );
 
     // For each of those families a convenience attribute `<family>-<value>` is
-    // set (to an empty value) for the *active* value, so a reference resolves to
-    // the empty string; a reference to an inactive one is left untouched
+    // set (to an empty value) for the *active* value, so a reference resolves
+    // to the empty string; a reference to an inactive one is left untouched
     // (`attribute-missing` defaults to `skip`). `doctype-<doctype>` behaves the
     // same way for the (pinned) `article` doctype.
     assert_eq!(
@@ -293,8 +293,8 @@ Only one such attribute is set at time.
 
     // The `doc*` path family is derived from the input file. Under Unsafe the
     // full path is exposed, so `docdir` and `docfile` resolve to the scratch
-    // directory and file, while `docname` (stem) and `docfilesuffix` (extension)
-    // carry no location.
+    // directory and file, while `docname` (stem) and `docfilesuffix`
+    // (extension) carry no location.
     let (dir, file) = scratch_file("v1");
     let with_file = Options::new()
         .safe_mode(SafeMode::Unsafe)
@@ -309,10 +309,10 @@ Only one such attribute is set at time.
     );
     let _ = std::fs::remove_dir_all(&dir);
 
-    // `embedded` is only ever set when converting an embedded document, so it is
-    // unset for this standalone conversion and the reference is left untouched.
-    // (This renderer does not populate the attribute even in embedded mode, so
-    // only the unset case is checked.)
+    // `embedded` is only ever set when converting an embedded document, so it
+    // is unset for this standalone conversion and the reference is left
+    // untouched. (This renderer does not populate the attribute even in
+    // embedded mode, so only the unset case is checked.)
     assert_eq!(para("[{embedded}]"), "[{embedded}]");
 }
 
@@ -366,9 +366,9 @@ _ex._ {localyear}
 "#
     );
 
-    // The `local*` family records when the document was converted ("now"), which
-    // a pinned reference time makes deterministic. A zero UTC offset is reported
-    // as `UTC`.
+    // The `local*` family records when the document was converted ("now"),
+    // which a pinned reference time makes deterministic. A zero UTC offset
+    // is reported as `UTC`.
     let pinned =
         Options::new().reference_time(ReferenceTime::from_local(2019, 2, 17, 19, 31, 5, 0));
     assert_eq!(
@@ -487,8 +487,8 @@ Masked as `.` if the safe mode is SERVER or SECURE.
     assert_eq!(mode(SafeMode::Server), "server|10");
     assert_eq!(mode(SafeMode::Secure), "secure|20");
 
-    // Exactly the `safe-mode-<name>` convenience attribute for the active mode is
-    // set; the others are left unresolved.
+    // Exactly the `safe-mode-<name>` convenience attribute for the active mode
+    // is set; the others are left unresolved.
     assert_eq!(
         para_with(
             "[{safe-mode-unsafe}][{safe-mode-secure}]",
@@ -909,9 +909,10 @@ _Book doctype only_.
     // (article-doctype) conversion, so a reference to it is left untouched
     // (`attribute-missing` defaults to `skip`). This covers the numbering seeds
     // (`*-number`), the caption/title/signifier rows that opt out by default
-    // (`listing-caption`, `chapter-signifier`, `part-signifier`, `preface-title`),
-    // and the localization toggles whose rendered effect lives elsewhere (`lang`,
-    // `nolang`, and the manpage-only `manname-title`).
+    // (`listing-caption`, `chapter-signifier`, `part-signifier`,
+    // `preface-title`), and the localization toggles whose rendered effect
+    // lives elsewhere (`lang`, `nolang`, and the manpage-only
+    // `manname-title`).
     assert_eq!(
         para(
             "[{appendix-number}][{chapter-number}][{chapter-signifier}][{example-number}]\
@@ -1540,8 +1541,9 @@ _ex._ .html
             .contains(r#"<div id="footer">"#)
     );
 
-    // `outfilesuffix` is the output file extension (default `.html`); it is also
-    // what a relative inter-document xref uses for its target by default.
+    // `outfilesuffix` is the output file extension (default `.html`); it is
+    // also what a relative inter-document xref uses for its target by
+    // default.
     assert_eq!(para("{outfilesuffix}"), ".html");
     assert!(convert("= T\n\nxref:other.adoc[go]").contains(r#"<a href="other.html">go</a>"#));
 }
@@ -1629,8 +1631,8 @@ Mutually exclusive with the `notitle` attribute.
 "#
     );
 
-    // `showtitle` shows the doctitle heading in embedded output (hidden there by
-    // default); it is the inverse of `notitle`.
+    // `showtitle` shows the doctitle heading in embedded output (hidden there
+    // by default); it is the inverse of `notitle`.
     assert!(convert("= The Title\n:showtitle:\n\nbody").contains("<h1>The Title</h1>"));
     assert!(!convert("= The Title\n\nbody").contains("<h1>The Title</h1>"));
 }
@@ -2196,8 +2198,8 @@ An empty value tells the converter to use the default stylesheet.
 "#
     );
 
-    // `stylesdir` (default `.`) and `stylesheet` set the directory and file name
-    // of the linked stylesheet.
+    // `stylesdir` (default `.`) and `stylesheet` set the directory and file
+    // name of the linked stylesheet.
     let custom = convert_with(
         "= T\n:linkcss:\n:stylesdir: css\n:stylesheet: custom.css\n\nbody",
         &Options::new().standalone(true),

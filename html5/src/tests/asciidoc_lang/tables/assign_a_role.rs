@@ -38,9 +38,9 @@ include::example$table.adoc[tag=base]
 "#
     );
 
-    // The `.name-of-role` shorthand assigns the `role` attribute, which the HTML
-    // backend renders as an extra CSS class on the `<table>` element. The
-    // `include::` directive above resolves to the `base` table snippet.
+    // The `.name-of-role` shorthand assigns the `role` attribute, which the
+    // HTML backend renders as an extra CSS class on the `<table>` element.
+    // The `include::` directive above resolves to the `base` table snippet.
     let output = convert(
         "[.name-of-role]\n|===\n|Cell in column 1, row 1\n|Cell in column 2, row 1\n\n|Cell in column 1, row 2\n|Cell in column 2, row 2\n|===",
     );

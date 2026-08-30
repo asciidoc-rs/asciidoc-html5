@@ -89,8 +89,9 @@ But since the author has specified `format=svg`, the converter can recognize thi
     )
     .contains(r#"<object type="image/svg+xml" data="https://example.org/avatar">"#));
 
-    // Without `format=svg`, the same extensionless target is not recognized as an
-    // SVG, so it renders as a plain `<img>` even with `opts=interactive`.
+    // Without `format=svg`, the same extensionless target is not recognized as
+    // an SVG, so it renders as a plain `<img>` even with
+    // `opts=interactive`.
     assert!(
         convert_unsafe("image::https://example.org/avatar[Avatar,opts=interactive]")
             .contains(r#"<img src="https://example.org/avatar" alt="Avatar">"#)

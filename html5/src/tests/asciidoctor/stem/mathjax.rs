@@ -70,9 +70,10 @@ You may notice a brief flash of the expression in source form while this is happ
 
     let html = convert_stem("= Doc\n:stem:\n\nstem:[x]\n");
 
-    // The MathJax loader is emitted from the same host, path, and pinned version
-    // the page's listing shows (the `?config=` bundle is the converter's
-    // `TeX-MML-AM_CHTML`, not the page's illustrative `TeX-MML-AM_HTMLorMML`).
+    // The MathJax loader is emitted from the same host, path, and pinned
+    // version the page's listing shows (the `?config=` bundle is the
+    // converter's `TeX-MML-AM_CHTML`, not the page's illustrative
+    // `TeX-MML-AM_HTMLorMML`).
     assert!(html.contains(
         "<script src=\"https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML\"></script>"
     ));

@@ -89,9 +89,9 @@ let html =
     );
 
     // Drive the exact command shown on the page — `adoc document.adoc` — and
-    // check that a complete HTML5 document is written to the derived output file
-    // (input name with its extension swapped for `.html`), as the CLI column of
-    // the table describes.
+    // check that a complete HTML5 document is written to the derived output
+    // file (input name with its extension swapped for `.html`), as the CLI
+    // column of the table describes.
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!("adoc-introduction-{}.adoc", std::process::id()));
     let derived = path.with_extension("html");

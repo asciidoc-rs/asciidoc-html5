@@ -134,8 +134,9 @@ Notice that the pipe character appears without the leading backslash (i.e., unes
 "#
     );
 
-    // The escaped separator `\|` is emitted as a plain pipe in the cell content:
-    // the table has one row of two cells, each containing an unescaped `|`.
+    // The escaped separator `\|` is emitted as a plain pipe in the cell
+    // content: the table has one row of two cells, each containing an
+    // unescaped `|`.
     let output = convert(
         "[cols=2*]\n|===\n|The default separator in PSV tables is the \\| character.\n|The \\| character is often referred to as a \"`pipe`\".\n|===",
     );
@@ -207,8 +208,8 @@ You can safely use the original cell separator in the cell content and not worry
 "#
     );
 
-    // With the broken bar as the separator, an unescaped `|` in the cell content
-    // is treated as ordinary text rather than a cell boundary.
+    // With the broken bar as the separator, an unescaped `|` in the cell
+    // content is treated as ordinary text rather than a cell boundary.
     let output = convert(
         "[cols=2*,separator=¦]\n|===\n¦The default separator in PSV tables is the | character.\n¦The | character is often referred to as a \"`pipe`\".\n|===",
     );
@@ -278,8 +279,8 @@ include::example$data.adoc[tag=csv]
 "#
     );
 
-    // The `csv` snippet (with the header option) yields a three-column header row
-    // and two body rows of three comma-separated cells each.
+    // The `csv` snippet (with the header option) yields a three-column header
+    // row and two body rows of three comma-separated cells each.
     let output = convert(
         "[%header,format=csv]\n|===\nArtist,Track,Genre\nBaauer,Harlem Shake,Hip Hop\nThe Lumineers,Ho Hey,Folk Rock\n|===",
     );
@@ -553,8 +554,9 @@ Forest,image::forest.jpg[]
     );
 
     // The `cols` spec applies per-column formatting to the data cells: the `h`
-    // style makes the first column header cells (`<th>`) and the `a` style parses
-    // the second column as AsciiDoc, rendering the image macros as image blocks.
+    // style makes the first column header cells (`<th>`) and the `a` style
+    // parses the second column as AsciiDoc, rendering the image macros as
+    // image blocks.
     let output = convert(
         "[format=csv,cols=\"1h,1a\"]\n|===\nSky,image::sky.jpg[]\nForest,image::forest.jpg[]\n|===",
     );

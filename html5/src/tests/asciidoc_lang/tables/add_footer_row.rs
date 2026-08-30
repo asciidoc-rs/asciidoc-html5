@@ -85,9 +85,9 @@ The table from <<ex-short>> is displayed below.
     );
 
     // The `%header%footer` shorthand promotes the first row to a `<thead>` and
-    // the last row to a `<tfoot>`, leaving the middle row in the `<tbody>`: three
-    // columns (40%, 40%, 20%), with three cells in each of the head, body, and
-    // foot rows.
+    // the last row to a `<tfoot>`, leaving the middle row in the `<tbody>`:
+    // three columns (40%, 40%, 20%), with three cells in each of the head,
+    // body, and foot rows.
     let output = convert(
         "[%header%footer,cols=\"2,2,1\"]\n|===\n|Column 1, header row\n|Column 2, header row\n|Column 3, header row\n\n|Cell in column 1, row 2\n|Cell in column 2, row 2\n|Cell in column 3, row 2\n\n|Column 1, footer row\n|Column 2, footer row\n|Column 3, footer row\n|===",
     );
@@ -120,10 +120,10 @@ include::example$row.adoc[tag=opt-f]
 "#
     );
 
-    // The formal `options="footer"` syntax promotes the last row to a `<tfoot>`.
-    // Here the table's layout also implies a header row, so the first row renders
-    // as a `<thead>`, the two middle rows as the `<tbody>`, and the final row as
-    // the `<tfoot>`.
+    // The formal `options="footer"` syntax promotes the last row to a
+    // `<tfoot>`. Here the table's layout also implies a header row, so the
+    // first row renders as a `<thead>`, the two middle rows as the
+    // `<tbody>`, and the final row as the `<tfoot>`.
     let output = convert(
         "[options=\"footer\"]\n|===\n|Column 1, header row |Column 2, header row\n\n|Cell in column 1, row 2\n|Cell in column 2, row 2\n\n|Cell in column 1, row 3\n|Cell in column 2, row 3\n\n|Column 1, footer row\n|Column 2, footer row\n|===",
     );

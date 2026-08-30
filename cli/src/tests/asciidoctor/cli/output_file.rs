@@ -90,8 +90,8 @@ If an output file is not specified, the name of the output file is derived from 
         Some(PathBuf::from("sub/mydoc.html"))
     );
 
-    // End to end: with no `-o`, the HTML lands beside the input under the derived
-    // name, and nothing goes to stdout.
+    // End to end: with no `-o`, the HTML lands beside the input under the
+    // derived name, and nothing goes to stdout.
     let dir = sandbox("default");
     let input = dir.join("mydoc.adoc");
     std::fs::write(&input, "= Doc\n\nBody.\n").expect("write input");
@@ -239,8 +239,8 @@ If you only want to specify the output directory, but let the filename be defaul
         Some(PathBuf::from("build/mydoc.html"))
     );
 
-    // End to end: the destination directory does not exist yet; `adoc` creates it
-    // and writes the derived name inside.
+    // End to end: the destination directory does not exist yet; `adoc` creates
+    // it and writes the derived name inside.
     let dir = sandbox("destination-dir");
     let input = dir.join("mydoc.adoc");
     std::fs::write(&input, "= Doc\n\nBody.\n").expect("write input");
@@ -284,8 +284,8 @@ The `-D` option can also be used when processing multiple input files:
         Some(PathBuf::from("build/b.html"))
     );
 
-    // End to end, converting several files at once with `-D` writes each derived
-    // name into the destination directory.
+    // End to end, converting several files at once with `-D` writes each
+    // derived name into the destination directory.
     let dir = sandbox("destination-dir-multi");
     std::fs::write(dir.join("a.adoc"), "= A\n\nAlpha.\n").expect("write a");
     std::fs::write(dir.join("b.adoc"), "= B\n\nBravo.\n").expect("write b");

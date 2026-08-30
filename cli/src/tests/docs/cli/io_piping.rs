@@ -153,8 +153,8 @@ waiting on standard input, so a bare `adoc` does not appear to hang. An explicit
 "#
     );
 
-    // No input argument + a terminal reports usage; piped input (not a terminal)
-    // and an explicit `-` still read standard input.
+    // No input argument + a terminal reports usage; piped input (not a
+    // terminal) and an explicit `-` still read standard input.
     assert!(should_report_usage(&Cli::parse_from(["adoc"]).inputs, true));
     assert!(!should_report_usage(
         &Cli::parse_from(["adoc"]).inputs,
@@ -194,7 +194,8 @@ output, name it with `-o`:
         Some(PathBuf::from("output.html"))
     );
 
-    // End to end, `-o <file>` writes the standalone HTML to the file, not stdout.
+    // End to end, `-o <file>` writes the standalone HTML to the file, not
+    // stdout.
     let out = std::env::temp_dir().join(format!(
         "adoc-docs-io-piping-outfile-{}.html",
         std::process::id()
@@ -241,8 +242,8 @@ against it:
 
     // The stdout branch of `run` converts piped source with
     // `convert_with(&source, &options)`, where `-B` sets `options.base_dir`.
-    // Drive that same path: a piped document resolves a relative include sitting
-    // inside the base directory.
+    // Drive that same path: a piped document resolves a relative include
+    // sitting inside the base directory.
     let dir = std::env::temp_dir().join(format!(
         "adoc-docs-io-piping-basedir-{}",
         std::process::id()
@@ -305,8 +306,9 @@ When you pass both, `-B` wins: it sets the base directory, and an explicit
     );
     assert!(html.contains("Body via docdir."), "{html}");
 
-    // When both are given, `-B` wins: with `-B` pointed at a directory holding a
-    // different include, that copy resolves and the `docdir` copy does not.
+    // When both are given, `-B` wins: with `-B` pointed at a directory holding
+    // a different include, that copy resolves and the `docdir` copy does
+    // not.
     let base = std::env::temp_dir().join(format!(
         "adoc-docs-io-piping-docdir-base-{}",
         std::process::id()
@@ -361,8 +363,8 @@ command, which is standalone even when piping.
 "#
     );
 
-    // `-e` yields the converted body only — no standalone shell, and no doctitle
-    // `<h1>` unless it is asked for.
+    // `-e` yields the converted body only — no standalone shell, and no
+    // doctitle `<h1>` unless it is asked for.
     let body = run_piped(&["adoc", "-e", "-"], "= Document Title\n\ncontent");
     assert!(!body.starts_with("<!DOCTYPE html>"));
     assert!(body.contains("<p>content</p>"));

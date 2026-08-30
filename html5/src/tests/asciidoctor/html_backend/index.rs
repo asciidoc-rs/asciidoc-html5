@@ -127,7 +127,8 @@ fn converts_a_file_to_html5() {
     // of paragraphs, and a section. Reading it from disk with `convert_file`
     // yields a complete, standalone HTML5 document — the same one a standalone
     // string conversion produces for the same source. (The plain string
-    // `convert` is embedded by default, so we compare against a standalone one.)
+    // `convert` is embedded by default, so we compare against a standalone
+    // one.)
     let source = "= The Dangers of Wolpertingers\n\
         :url-wolpertinger: https://en.wikipedia.org/wiki/Wolpertinger\n\n\
         Don't worry about gumberoos or splintercats.\n\

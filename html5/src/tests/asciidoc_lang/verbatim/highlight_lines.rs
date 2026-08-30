@@ -143,9 +143,9 @@ ORDERED_LIST_KEYWORDS = {
     assert!(display.contains(":source-highlighter: coderay"));
     assert!(display.contains("[%linenums,ruby,highlight=2..5]"));
 
-    // The documented limitation: the `highlight` attribute is accepted, but with
-    // no server-side highlighter this crate renders a plain `ruby` source block —
-    // no CodeRay line-number table, no emphasized lines.
+    // The documented limitation: the `highlight` attribute is accepted, but
+    // with no server-side highlighter this crate renders a plain `ruby`
+    // source block — no CodeRay line-number table, no emphasized lines.
     let rendered = convert(
         "= Document Title\n:source-highlighter: coderay\n\n[%linenums,ruby,highlight=2..5]\n----\nORDERED_LIST_KEYWORDS = {\n  'loweralpha' => 'a',\n}\n----\n",
     );

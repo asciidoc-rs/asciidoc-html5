@@ -77,8 +77,8 @@ impl DocinfoFileHandler for FsDocinfoFileHandler {
         // Asciidoctor normalizes docinfo content, dropping a single trailing
         // newline so the injected fragment sits flush against the element that
         // follows it in the output. Docinfo does not distinguish a missing file
-        // from an unreadable or non-UTF-8 one, so every failure reason collapses
-        // to `None`.
+        // from an unreadable or non-UTF-8 one, so every failure reason
+        // collapses to `None`.
         match read_confined(&self.base_dir, self.safe, &path) {
             ReadOutcome::Read(content) => Some(chomp_trailing_newline(&content)),
             ReadOutcome::NotFound | ReadOutcome::NotReadable | ReadOutcome::NotDecodable => None,
@@ -181,8 +181,9 @@ mod tests {
     #[test]
     fn a_jailed_climbing_docinfodir_is_clamped_to_the_base() {
         // Under `server`, a `docinfodir` that tries to climb out with `..` has
-        // the climb clamped at the base directory: `../../docinfo.html` folds to
-        // `docinfo.html` inside the base, so the in-base file is read.
+        // the climb clamped at the base directory: `../../docinfo.html` folds
+        // to `docinfo.html` inside the base, so the in-base file is
+        // read.
         let dir = scratch(&[("docinfo.html", "IN-BASE")]);
 
         let got = handler(&dir, SafeMode::Server).resolve_docinfo(
@@ -198,8 +199,8 @@ mod tests {
     #[test]
     fn a_jailed_absolute_docinfodir_cannot_escape_the_base() {
         // Under `server`, an absolute `docinfodir` pointing outside the base is
-        // recovered relative to the base (never read as-is), so the outside file
-        // is not reachable.
+        // recovered relative to the base (never read as-is), so the outside
+        // file is not reachable.
         let base = scratch(&[]);
         let other = scratch(&[("docinfo.html", "OUTSIDE")]);
 

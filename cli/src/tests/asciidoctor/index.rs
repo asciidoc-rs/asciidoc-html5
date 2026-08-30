@@ -65,8 +65,9 @@ a|
     );
 
     // Drive the closest equivalent of `asciidoctor document.adoc`: hand the
-    // `adoc` CLI a document file and confirm it writes a complete HTML5 document
-    // to a file whose name it derives from the input (as `asciidoctor` does).
+    // `adoc` CLI a document file and confirm it writes a complete HTML5
+    // document to a file whose name it derives from the input (as
+    // `asciidoctor` does).
     let source = "= Hello\n\nWorld.";
     let path = std::env::temp_dir().join(format!(
         "adoc-asciidoctor-index-{}.adoc",

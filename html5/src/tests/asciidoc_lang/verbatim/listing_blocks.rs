@@ -207,7 +207,8 @@ value when rendered.
 
     assert_css(&output, "div.listingblock > div.content > pre", 1);
 
-    // The attribute reference is resolved by the added `attributes` substitution.
+    // The attribute reference is resolved by the added `attributes`
+    // substitution.
     assert!(output.contains("I've been replaced!"));
     assert!(!output.contains("{replace-me}"));
 

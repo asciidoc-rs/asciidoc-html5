@@ -59,8 +59,8 @@ The inline pass macro (`++pass:[]++`) accepts the shorthand values in addition t
 
     // Spot-check that the shorthands actually perform their step. (The `p`
     // shorthand's effect is checked directly: matching Asciidoctor 2.0.26, the
-    // inline pass macro honors only the `p` shorthand for post replacements, not
-    // the `post_replacements` longhand.)
+    // inline pass macro honors only the `p` shorthand for post replacements,
+    // not the `post_replacements` longhand.)
     assert!(convert("pass:c[<x>]\n").contains("&lt;x&gt;"));
     assert!(convert("pass:q[*b*]\n").contains("<strong>b</strong>"));
     assert!(convert("pass:p[a +\nb]\n").contains("a<br>\nb"));

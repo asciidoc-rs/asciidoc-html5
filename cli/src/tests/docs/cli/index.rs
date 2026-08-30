@@ -62,8 +62,8 @@ runtime-environment line.
     );
 
     // Both `--version` and the short `-V` print `adoc <version>` and nothing
-    // else. clap surfaces the request as a `DisplayVersion` "error" carrying the
-    // version string.
+    // else. clap surfaces the request as a `DisplayVersion` "error" carrying
+    // the version string.
     let long = Cli::try_parse_from(["adoc", "--version"]).expect_err("--version displays version");
     assert_eq!(long.kind(), clap::error::ErrorKind::DisplayVersion);
     assert!(long.to_string().starts_with("adoc "));
@@ -271,8 +271,8 @@ the `-v` used by `asciidoctor`.
     );
 
     // The `syntax` topic (`adoc --help syntax`) is recognized before clap, and
-    // the crib sheet it prints is valid AsciiDoc this crate renders back to HTML5
-    // (the pipe-to-preview claim) with no `unsupported` fallback.
+    // the crib sheet it prints is valid AsciiDoc this crate renders back to
+    // HTML5 (the pipe-to-preview claim) with no `unsupported` fallback.
     let syntax_args: Vec<std::ffi::OsString> = ["adoc", "--help", "syntax"]
         .iter()
         .map(std::ffi::OsString::from)

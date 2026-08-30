@@ -204,8 +204,8 @@ include::example$xref.adoc[tag=xref-title]
 "#
     );
 
-    // The `tag=xref-title` snippet: the reference resolves through the section's
-    // title to its auto-generated ID.
+    // The `tag=xref-title` snippet: the reference resolves through the
+    // section's title to its auto-generated ID.
     let output =
         convert("Refer to <<Internal Cross References>>.\n\n== Internal Cross References\n\nBody.");
     assert!(

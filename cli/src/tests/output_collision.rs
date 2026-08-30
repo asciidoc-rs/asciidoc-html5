@@ -250,7 +250,8 @@ fn write_output_uses_frozen_input_identity_when_the_input_path_is_swapped() {
     let input = dir.join("doc.adoc");
     std::fs::write(&input, "= Doc\n\nOriginal source.\n").expect("write input");
 
-    // Capture the input's identity up front, as `run` does before any conversion.
+    // Capture the input's identity up front, as `run` does before any
+    // conversion.
     let input_id = crate::FileId::from_path(&input).expect("capture input identity");
 
     // Keep the original file alive through `out.html`, then swap the `doc.adoc`

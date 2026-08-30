@@ -68,8 +68,8 @@ To make a reference to a previously defined footnote, you specify the ID in the 
     assert_css(&doc, "div.footnote", 1);
     assert!(doc.contains(r##"<a href="#_footnoteref_1">1</a>. Shared text."##));
 
-    // If both an ID and text are given but the ID was already defined, the later
-    // text is ignored: the original text is kept.
+    // If both an ID and text are given but the ID was already defined, the
+    // later text is ignored: the original text is kept.
     let doc = convert("First.footnote:fn1[Original.] Again.footnote:fn1[Ignored.]");
     assert_css(&doc, "div.footnote", 1);
     assert!(doc.contains("Original."));
@@ -109,7 +109,8 @@ If both the ID and text are specified, and the ID has already been defined by an
          Another outrageous statement.footnote:disclaimer[]",
     );
 
-    // Two footnotes are defined; the third occurrence only references the second.
+    // Two footnotes are defined; the third occurrence only references the
+    // second.
     assert_css(&doc, "div.footnote", 2);
     assert_css(&doc, "sup.footnote", 2);
     assert_css(&doc, "sup.footnoteref", 1);
@@ -198,7 +199,8 @@ include::example$footnote.adoc[tag=externalized]
     );
 
     // The `externalized` region: the footnote macros live in header attributes
-    // and are inserted with plain attribute references, still producing footnotes.
+    // and are inserted with plain attribute references, still producing
+    // footnotes.
     let doc = convert(
         ":fn-hail-and-rainbow: footnote:[The double hail-and-rainbow level makes my toes tingle.]\n\
          :fn-disclaimer: footnote:disclaimer[Opinions are my own.]\n\n\

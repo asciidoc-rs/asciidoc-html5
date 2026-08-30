@@ -431,8 +431,8 @@ mod assignment {
 "#
         );
 
-        // Ruby passes { 'frog' => nil }; this crate's `unset` expresses the same
-        // delete.
+        // Ruby passes { 'frog' => nil }; this crate's `unset` expresses the
+        // same delete.
         let doc = load_with(":frog: Tanglefoot", &Options::new().unset("frog"));
         assert_eq!(doc.attribute_value("frog"), InterpretedValue::Unset);
     }
@@ -505,9 +505,10 @@ mod assignment {
             ":release: Asciidoctor {version}",
             &Options::new().attribute("attribute-missing", "drop-line"),
         );
-        // Asciidoctor logs an INFO "dropping line ... missing attribute: version";
-        // asciidoc-parser surfaces the same as a SkippingReferenceToMissingAttribute
-        // warning (asciidoc-parser 0.29.1, #1011).
+        // Asciidoctor logs an INFO "dropping line ... missing attribute:
+        // version"; asciidoc-parser surfaces the same as a
+        // SkippingReferenceToMissingAttribute warning (asciidoc-parser
+        // 0.29.1, #1011).
         assert!(doc.warnings().any(|w| w.warning
             == WarningType::SkippingReferenceToMissingAttribute("version".to_string())));
     }
@@ -691,7 +692,8 @@ mod assignment {
 
         let big = "a".repeat(5000);
         let src = format!(":name: {big}\n\n{{name}}\n");
-        // Ruby passes max-attribute-value-size => nil; an empty value disables the cap.
+        // Ruby passes max-attribute-value-size => nil; an empty value disables
+        // the cap.
         let doc = load_with(
             &src,
             &Options::new().attribute("max-attribute-value-size", ""),
@@ -717,9 +719,10 @@ mod assignment {
         );
 
         // Below SERVER, `{user-home}` resolves to the user's home directory —
-        // the counterpart of Ruby's `Asciidoctor::USER_HOME`, which this crate's
-        // parser resolves from the same environment via `std::env::home_dir`
-        // (matching asciidoc-parser's own port of this test).
+        // the counterpart of Ruby's `Asciidoctor::USER_HOME`, which this
+        // crate's parser resolves from the same environment via
+        // `std::env::home_dir` (matching asciidoc-parser's own port of
+        // this test).
         let home = std::env::home_dir()
             .expect("home directory should resolve in the test environment")
             .to_string_lossy()
@@ -971,8 +974,9 @@ mod assignment {
 "#
         );
 
-        // Ruby spells the soft default with a value-side `@` (`heroes@`); this crate's
-        // soft-default option expresses the same override-me-in-document semantics.
+        // Ruby spells the soft default with a value-side `@` (`heroes@`); this
+        // crate's soft-default option expresses the same
+        // override-me-in-document semantics.
         let doc = load_with(
             ":cash: money",
             &Options::new().attribute_default("cash", "heroes"),
@@ -1514,8 +1518,8 @@ mod interpolation {
 
         // Asciidoctor's input frames the doctitle with a setext (underlined)
         // header, which is out of scope for this crate; an ATX-style `= Main
-        // Header` exercises the same behavior under test — collapsing the spaces
-        // in the attribute name `:My frog:` down to `myfrog`.
+        // Header` exercises the same behavior under test — collapsing the
+        // spaces in the attribute name `:My frog:` down to `myfrog`.
         let output = convert_standalone("= Main Header\n:My frog: Tanglefoot\n\nYo, {myfrog}!\n");
         assert_xpath(&output, r#"(//p)[1][text()="Yo, Tanglefoot!"]"#, 1);
     }
@@ -1544,9 +1548,9 @@ mod interpolation {
         let input =
             ":attribute-missing: drop-line\n\nThis is\nblah blah {foobarbaz}\nall there is.\n";
         let output = convert(input);
-        // The line referencing the missing attribute is dropped, and asciidoc-parser
-        // records the same diagnostic Asciidoctor logs at INFO level
-        // (asciidoc-parser 0.29.1, #1011).
+        // The line referencing the missing attribute is dropped, and
+        // asciidoc-parser records the same diagnostic Asciidoctor logs
+        // at INFO level (asciidoc-parser 0.29.1, #1011).
         refute_includes(&output, "blah blah");
         assert!(load(input).warnings().any(|w| w.warning
             == WarningType::SkippingReferenceToMissingAttribute("foobarbaz".to_string())));
@@ -1875,8 +1879,9 @@ mod interpolation {
         let input = "= Document Title\n:foo: bar\n////\n:hey: there\n\ncontent\n";
         let doc = load(input);
         assert!(!doc.is_attribute_set("hey"));
-        // Asciidoctor logs "unterminated comment block"; asciidoc-parser reports the
-        // same condition as an UnterminatedDelimitedBlock warning.
+        // Asciidoctor logs "unterminated comment block"; asciidoc-parser
+        // reports the same condition as an UnterminatedDelimitedBlock
+        // warning.
         assert!(doc
             .warnings()
             .any(|w| w.warning == WarningType::UnterminatedDelimitedBlock));
@@ -1885,9 +1890,9 @@ mod interpolation {
     #[test]
     fn substitutes_inside_block_title() {
         // The first form frames the attribute reference with the compat-mode
-        // passthrough (`+{gem_name}+`), which this crate does not render (compat
-        // mode is a permanent non-goal); the modern backtick form below is
-        // verified.
+        // passthrough (`+{gem_name}+`), which this crate does not render
+        // (compat mode is a permanent non-goal); the modern backtick
+        // form below is verified.
         non_normative!(
             r#"
     test 'substitutes inside block title' do

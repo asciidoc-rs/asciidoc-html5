@@ -153,9 +153,9 @@ You'll need to adjoin it to the nearest content to avoid this side effect.
 
     let output = convert("{counter2:seq1}\n\n{seq1}");
 
-    // The `counter2` reference on its own line advances the counter but displays
-    // nothing, leaving an empty paragraph; the later plain reference shows the
-    // value it advanced to (1).
+    // The `counter2` reference on its own line advances the counter but
+    // displays nothing, leaving an empty paragraph; the later plain
+    // reference shows the value it advanced to (1).
     assert_css(&output, "div.paragraph", 2);
     assert_xpath(&output, "//p[text()=\"1\"]", 1);
 }

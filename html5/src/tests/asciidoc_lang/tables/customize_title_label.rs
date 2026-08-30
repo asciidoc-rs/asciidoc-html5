@@ -276,8 +276,9 @@ include::example$table.adoc[tag=b-col-h]
     );
 
     // Emptying `caption` suppresses the automatic label prefix, and setting
-    // `title` to `{table-caption} {counter:table-number}` makes the whole caption
-    // read as just the label and its number, `Data Set 1`, with no title text.
+    // `title` to `{table-caption} {counter:table-number}` makes the whole
+    // caption read as just the label and its number, `Data Set 1`, with no
+    // title text.
     let output = convert(
         r#"= Document Title
 :table-caption: Data Set
@@ -321,8 +322,8 @@ include::example$table.adoc[tag=b-col-h]
     );
 
     // The other way around: an empty block title (`.{empty}`) leaves no title
-    // text, and `caption` supplies the label and number directly, so the caption
-    // again reads as just `Data Set 1`.
+    // text, and `caption` supplies the label and number directly, so the
+    // caption again reads as just `Data Set 1`.
     let output = convert(
         r#"= Document Title
 :table-caption: Data Set

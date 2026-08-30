@@ -524,8 +524,8 @@ mod ids {
         assert_xpath(&out, r#"//h2[@id="one"][text()="Section One"]"#, 1);
     }
 
-    // Not verified: setext (two-line/underlined) titles are intentionally out of
-    // scope for this project.
+    // Not verified: setext (two-line/underlined) titles are intentionally out
+    // of scope for this project.
     non_normative!(
         r#"
     test 'explicit id can be defined using an embedded anchor when using setext section titles' do
@@ -582,8 +582,9 @@ mod ids {
 
         let src = r#"== Section One [["one","Section Uno"]] =="#;
         let out = convert(src);
-        // The quoted anchor is not processed: no id "one", and the title (with the
-        // literal `[["one","Section Uno"]]`) drives a synthetic id instead.
+        // The quoted anchor is not processed: no id "one", and the title (with
+        // the literal `[["one","Section Uno"]]`) drives a synthetic id
+        // instead.
         assert_xpath(&out, r#"//h2[@id="one"]"#, 0);
         assert_xpath(&out, r#"//h2[@id="_section_one_onesection_uno"]"#, 1);
     }
@@ -626,8 +627,8 @@ mod ids {
         );
 
         let out = convert("== Section One \\[[one]] ==");
-        // The escaped inline anchor is unescaped but not processed: id "one" is not
-        // assigned, and the literal `[[one]]` remains in the title.
+        // The escaped inline anchor is unescaped but not processed: id "one" is
+        // not assigned, and the literal `[[one]]` remains in the title.
         assert_xpath(&out, r#"//h2[@id="one"]"#, 0);
         assert_xpath(
             &out,
@@ -650,7 +651,8 @@ mod ids {
         );
 
         let out = convert("[#sect-one]\n== Section One [[one]]");
-        // The explicit ID wins; the inline anchor is emitted verbatim as a child <a>.
+        // The explicit ID wins; the inline anchor is emitted verbatim as a
+        // child <a>.
         assert_xpath(&out, r#"//h2[@id="sect-one"]"#, 1);
         assert_xpath(&out, r#"//h2[@id="sect-one"]/a[@id="one"]"#, 1);
     }
@@ -797,8 +799,8 @@ mod ids {
 "#
     );
 
-    // Not verified: relies on the Compliance.unique_id_start_index global, which
-    // has no equivalent here.
+    // Not verified: relies on the Compliance.unique_id_start_index global,
+    // which has no equivalent here.
     non_normative!(
         r#"
     test 'can set start index of synthetic ids' do
@@ -1089,7 +1091,8 @@ mod ids {
             ),
             1
         );
-        // Both sections still render with the id (the duplicate is not dropped).
+        // Both sections still render with the id (the duplicate is not
+        // dropped).
         let out = convert(input);
         assert_eq!(out.matches(r#"id="_do_not_repeat_yourself""#).count(), 2);
     }
@@ -1127,8 +1130,8 @@ mod ids {
             "[#install]\ncontent\n"
         );
         let doc = load(input);
-        // The section's id entry is kept; the duplicate block id raises a warning
-        // rather than overwriting it.
+        // The section's id entry is kept; the duplicate block id raises a
+        // warning rather than overwriting it.
         assert!(doc.catalog().get_ref("install").is_some());
         assert_eq!(
             count_warnings(
@@ -1165,8 +1168,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax" do
@@ -1179,8 +1182,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax, give a char" do
@@ -1193,8 +1196,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "document title with multiline syntax, take a char" do
@@ -1207,8 +1210,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test 'document title with multiline syntax and unicode characters' do
@@ -1228,9 +1231,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project; the length-mismatch warning is likewise not
-        // produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project; the length-mismatch warning is
+        // likewise not produced.
         non_normative!(
             r#"
       test "not enough chars for a multiline document title" do
@@ -1250,9 +1253,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project; the length-mismatch warning is likewise not
-        // produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project; the length-mismatch warning is
+        // likewise not produced.
         non_normative!(
             r#"
       test "too many chars for a multiline document title" do
@@ -1272,9 +1275,9 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project; the leading-dot warning is likewise not
-        // produced.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project; the leading-dot warning is
+        // likewise not produced.
         non_normative!(
             r#"
       test "document title with multiline syntax cannot begin with a dot" do
@@ -1337,8 +1340,8 @@ mod levels {
 "#
             );
 
-            // A `:leveloffset: -1` entry shifts the `== Document Title` (level 1)
-            // to level 0, which is coerced to the doctitle.
+            // A `:leveloffset: -1` entry shifts the `== Document Title` (level
+            // 1) to level 0, which is coerced to the doctitle.
             assert_xpath(
                 &convert_standalone(":leveloffset: -1\n== Document Title"),
                 r#"//h1[not(@id)][text()="Document Title"]"#,
@@ -1357,9 +1360,10 @@ mod levels {
 "#
             );
 
-            // The API `leveloffset` value carries a trailing `@` soft-set modifier;
-            // it is stripped, leaving `-1`, which shifts the `== Document Title`
-            // (level 1) to level 0 and coerces it to the doctitle.
+            // The API `leveloffset` value carries a trailing `@` soft-set
+            // modifier; it is stripped, leaving `-1`, which shifts
+            // the `== Document Title` (level 1) to level 0 and
+            // coerces it to the doctitle.
             let opts = Options::new()
                 .standalone(true)
                 .attribute("leveloffset", "-1@");
@@ -1389,9 +1393,10 @@ mod levels {
 "#
             );
 
-            // The bracketed block-anchor form `[[idname]]` above the document title
-            // is recognized, so its id lands on the `<body>` just like the
-            // `[#idname]` shorthand verified just below.
+            // The bracketed block-anchor form `[[idname]]` above the document
+            // title is recognized, so its id lands on the `<body>`
+            // just like the `[#idname]` shorthand verified just
+            // below.
             let output = convert_standalone("[[idname]]\n= Document Title\n\ncontent\n");
             assert_css(&output, "body#idname", 1);
         }
@@ -1464,9 +1469,10 @@ mod levels {
 "#
             );
 
-            // The bracketed block-anchor form `[[reference]]` above the document
-            // title is recognized: the id reaches the document header and the
-            // `<body>`, and the attribute entry below the title still applies.
+            // The bracketed block-anchor form `[[reference]]` above the
+            // document title is recognized: the id reaches the
+            // document header and the `<body>`, and the attribute
+            // entry below the title still applies.
             let input = "[[reference]]\n= Reference Manual\n:css-signature: refguide\n\npreamble\n";
             let doc = load(input);
             assert_eq!(doc.header().id(), Some("reference"));
@@ -1501,8 +1507,8 @@ mod levels {
 
             let input = "[[manual,Manual]]\n= Reference Manual\n\npreamble\n";
             let doc = load(input);
-            // The document title is registered in the catalog under its id, with the
-            // explicit reftext from the block anchor.
+            // The document title is registered in the catalog under its id,
+            // with the explicit reftext from the block anchor.
             assert_eq!(
                 doc.catalog()
                     .get_ref("manual")
@@ -1559,8 +1565,9 @@ mod levels {
 "#
             );
 
-            // The style (`style`) and options (`%optionname`) shorthand are discarded;
-            // only the id and role survive, landing on the `<body>` element.
+            // The style (`style`) and options (`%optionname`) shorthand are
+            // discarded; only the id and role survive, landing on
+            // the `<body>` element.
             let output = convert_standalone(
                 "[style#idname.rolename%optionname]\n= Document Title\n\ncontent\n",
             );
@@ -1587,8 +1594,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1617,8 +1624,8 @@ mod levels {
             );
 
             let result = convert("My Section\n----^^----\n");
-            // A mixed-character underline is not a setext title: no heading, and the
-            // underline survives as literal text.
+            // A mixed-character underline is not a setext title: no heading,
+            // and the underline survives as literal text.
             assert_xpath(
                 &result,
                 r#"//h2[@id="_my_section"][text()="My Section"]"#,
@@ -1647,7 +1654,8 @@ mod levels {
             );
 
             let result = convert("!@#$\n----\n");
-            // A title with no alphanumeric character is not recognized as a heading.
+            // A title with no alphanumeric character is not recognized as a
+            // heading.
             assert_css(&result, "h2", 0);
         }
 
@@ -1671,12 +1679,13 @@ mod levels {
             );
 
             let result = convert("____\n----\n");
-            // A title consisting only of underscores is not recognized as a heading.
+            // A title consisting only of underscores is not recognized as a
+            // heading.
             assert_css(&result, "h2", 0);
         }
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test 'should preprocess second line of setext section title' do
@@ -1693,8 +1702,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "heading title with multiline syntax cannot begin with a dot" do
@@ -1911,8 +1920,8 @@ mod levels {
             assert_xpath(&output, r#"//h2[@id="_视图"][text()="视图"]"#, 1);
         }
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test 'multiline syntax with only multibyte characters' do
@@ -1951,8 +1960,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -1996,8 +2005,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -2041,8 +2050,8 @@ mod levels {
 "#
         );
 
-        // Not verified: setext (two-line/underlined) titles are intentionally out of
-        // scope for this project.
+        // Not verified: setext (two-line/underlined) titles are intentionally
+        // out of scope for this project.
         non_normative!(
             r#"
       test "with multiline syntax" do
@@ -2160,7 +2169,8 @@ mod substitutions {
         );
         assert_css(&output, "h2", 1);
         assert_css(&output, r#"h2 a[href="https://acme.com"]"#, 1);
-        // The `{tm}` substitution yields the trademark sign in the heading text.
+        // The `{tm}` substitution yields the trademark sign in the heading
+        // text.
         assert_xpath(&output, "//h2[contains(text(),\"\u{2122}\")]", 1);
     }
 
@@ -2277,7 +2287,8 @@ mod nesting {
 
         let opts = Options::new().attribute("fragment", "");
         let input = "= Document Title\n\n=== First Section\n\ncontent\n";
-        // The `fragment` attribute silences the top-level out-of-sequence warning.
+        // The `fragment` attribute silences the top-level out-of-sequence
+        // warning.
         assert_eq!(load_with(input, &opts).warnings().count(), 0);
         let _ = convert_with(input, &opts);
     }
@@ -2873,8 +2884,8 @@ mod discrete_heading {
 "#
     );
 
-    // Not verified: setext (two-line/underlined) titles are intentionally out of
-    // scope for this project.
+    // Not verified: setext (two-line/underlined) titles are intentionally out
+    // of scope for this project.
     non_normative!(
         r#"
     test 'should preprocess second line of setext discrete heading' do
@@ -2982,7 +2993,8 @@ mod discrete_heading {
 "#
         );
 
-        // Unsetting sectids drops the auto-generated id from the discrete heading.
+        // Unsetting sectids drops the auto-generated id from the discrete
+        // heading.
         let output = convert(":!sectids:\n\n[float]\n=== Independent Heading!\n\nnot in section\n");
         assert_xpath(&output, "/h3", 1);
         assert_xpath(&output, r#"/h3[@id="_independent_heading"]"#, 0);
@@ -3066,8 +3078,8 @@ mod discrete_heading {
 "#
         );
 
-        // A `title=` attribute on a discrete heading is ignored: the heading text is
-        // the title, and no separate block title is emitted.
+        // A `title=` attribute on a discrete heading is ignored: the heading
+        // text is the title, and no separate block title is emitted.
         let output =
             convert("[discrete,title=\"Captured!\"]\n== Independent Heading!\n\nnot in section\n");
         assert_xpath(&output, r#"//h2[text()="Independent Heading!"]"#, 1);
@@ -3165,7 +3177,8 @@ mod discrete_heading {
 "#
         );
 
-        // The explicit ID wins; the inline anchor is emitted verbatim as a child <a>.
+        // The explicit ID wins; the inline anchor is emitted verbatim as a
+        // child <a>.
         let output = convert("[discrete#install]\n== Install [[installation]]\n\ncontent\n");
         assert_xpath(&output, r#"//h2[@id="install"]"#, 1);
         assert_xpath(&output, r#"//h2[@id="install"]/a[@id="installation"]"#, 1);
@@ -3188,8 +3201,8 @@ mod level_offset {
 "#
     );
 
-    // Not verified: the parser emits no level-0-section error for this simulated
-    // include (parser).
+    // Not verified: the parser emits no level-0-section error for this
+    // simulated include (parser).
     non_normative!(
         r#"
     test 'should print error if standalone document is included without level offset' do
@@ -3449,8 +3462,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form.
+    // Not verified: builds sections via the Section.new API and checks sectnum
+    // — parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with one entry for level 1' do
@@ -3463,8 +3476,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form.
+    // Not verified: builds sections via the Section.new API and checks sectnum
+    // — parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with two entries for level 2' do
@@ -3479,8 +3492,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form.
+    // Not verified: builds sections via the Section.new API and checks sectnum
+    // — parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number with three entries for level 3' do
@@ -3497,8 +3510,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: builds sections via the Section.new API and checks sectnum —
-    // parser-model, no rendered form.
+    // Not verified: builds sections via the Section.new API and checks sectnum
+    // — parser-model, no rendered form.
     non_normative!(
         r#"
     test 'should create section number for second section in level' do
@@ -3515,8 +3528,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: checks Section#sectnum delimiter/append options — parser-model,
-    // no rendered form.
+    // Not verified: checks Section#sectnum delimiter/append options —
+    // parser-model, no rendered form.
     non_normative!(
         r#"
     test 'sectnum should use specified delimiter and append string' do
@@ -4131,8 +4144,8 @@ mod section_numbering {
         );
     }
 
-    // Not verified: an API-level `numbered!` lock is not honored here, so numbering
-    // is not forced off.
+    // Not verified: an API-level `numbered!` lock is not honored here, so
+    // numbering is not forced off.
     non_normative!(
         r#"
     test 'section numbers cannot be toggled even if numbered attribute is disabled via the API' do
@@ -4428,8 +4441,8 @@ mod section_numbering {
 "#
     );
 
-    // Not verified: mutates the parser numeral/number properties, a parser API with
-    // no rendered form.
+    // Not verified: mutates the parser numeral/number properties, a parser API
+    // with no rendered form.
     non_normative!(
         r#"
     test 'should allow sections to be renumbered using numeral or deprecated number property' do
@@ -4795,9 +4808,10 @@ mod special_sections {
 "#
         );
 
-        // The Ruby test reads the parser fields directly; the caption ("Appendix A: ")
-        // and numeral ("A") both surface in the rendered heading, so parse the output
-        // to confirm them. (`sectname == "appendix"` and `numbered == true` have no
+        // The Ruby test reads the parser fields directly; the caption
+        // ("Appendix A: ") and numeral ("A") both surface in the
+        // rendered heading, so parse the output to confirm them.
+        // (`sectname == "appendix"` and `numbered == true` have no
         // rendered form and are the parser's own concern.)
         let output = convert("[appendix]\n== Attribute Options\n\nDetails\n");
         assert_xpath(
@@ -4981,8 +4995,8 @@ mod special_sections {
 "#
         );
 
-        // With numbering on and no appendix caption, only the letter prefixes the
-        // title.
+        // With numbering on and no appendix caption, only the letter prefixes
+        // the title.
         let output = convert(
             ":numbered:\n:!appendix-caption:\n\n[appendix]\n== Attribute Options\n\nDetails\n",
         );
@@ -5811,8 +5825,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2, which is intentionally out of scope for
-    // this project.
+    // Not verified: asserts a setext //h2, which is intentionally out of scope
+    // for this project.
     non_normative!(
         r#"
     test "should not interpret a listing block as a heading" do
@@ -5833,8 +5847,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2, which is intentionally out of scope for
-    // this project.
+    // Not verified: asserts a setext //h2, which is intentionally out of scope
+    // for this project.
     non_normative!(
         r#"
     test "should not interpret an open block as a heading" do
@@ -5878,8 +5892,9 @@ mod heading_patterns_in_blocks {
 "#
         );
 
-        // The `[TIP]` admonition renders with its content intact; the descendant axis
-        // finds it regardless of the surrounding block structure.
+        // The `[TIP]` admonition renders with its content intact; the
+        // descendant axis finds it regardless of the surrounding block
+        // structure.
         let output = convert_standalone("Section\n=======\n\npreamble\n\n[TIP]\n====\nThis should be a tip, not a heading.\n====\n");
         assert_xpath(
             &output,
@@ -5888,8 +5903,8 @@ mod heading_patterns_in_blocks {
         );
     }
 
-    // Not verified: asserts a setext //h2, which is intentionally out of scope for
-    // this project.
+    // Not verified: asserts a setext //h2, which is intentionally out of scope
+    // for this project.
     non_normative!(
         r#"
     test "should not match a heading in a description list" do
@@ -5918,8 +5933,8 @@ mod heading_patterns_in_blocks {
 "#
     );
 
-    // Not verified: asserts a setext //h2, which is intentionally out of scope for
-    // this project.
+    // Not verified: asserts a setext //h2, which is intentionally out of scope
+    // for this project.
     non_normative!(
         r#"
     test "should not match a heading in a bulleted list" do
@@ -5966,7 +5981,8 @@ mod heading_patterns_in_blocks {
 "#
         );
 
-        // A `==` line inside a delimited block is literal content, not a section.
+        // A `==` line inside a delimited block is literal content, not a
+        // section.
         let output = convert_standalone("====\n\n== not a heading\n\n====\n");
         assert_xpath(&output, "//h2", 0);
         assert_xpath(
@@ -6578,8 +6594,8 @@ mod table_of_contents {
         );
     }
 
-    // Not verified: this exercises book-doctype parts (`sectlevel0` in the TOC),
-    // and non-article doctypes are out of scope for 1.0.
+    // Not verified: this exercises book-doctype parts (`sectlevel0` in the
+    // TOC), and non-article doctypes are out of scope for 1.0.
     non_normative!(
         r##"
     test 'should only show parts in toc if toclevels is 0' do
@@ -6658,8 +6674,8 @@ mod table_of_contents {
 "#
         );
 
-        // An unset `toc-placement!` with `toc` set defers the TOC to a `toc::[]`
-        // macro; with no macro present, nothing is emitted.
+        // An unset `toc-placement!` with `toc` set defers the TOC to a
+        // `toc::[]` macro; with no macro present, nothing is emitted.
         let output = convert_standalone(
             "= Article\n:toc:\n:toc-placement!:\n\n== Section One\n\nIt was a dark and stormy night...\n\n== Section Two\n\nThey couldn't believe their eyes when...\n",
         );
@@ -7160,9 +7176,9 @@ mod table_of_contents {
         assert_xpath(&output, r#"/*[@id="toc"]//li"#, 3);
 
         // Each entry is exactly its own `<a>` with the section title as plain
-        // text — the supplemental `[[un]]`/`[[two]]` anchors and the inline link
-        // in the third heading are dropped, leaving no `<a>` with an id nested in
-        // the TOC.
+        // text — the supplemental `[[un]]`/`[[two]]` anchors and the inline
+        // link in the third heading are dropped, leaving no `<a>` with
+        // an id nested in the TOC.
         assert_xpath(
             &output,
             r##"/*[@id="toc"]//li/a[@href="#_section_one"][text()="Section One"]"##,
@@ -7223,8 +7239,8 @@ mod table_of_contents {
         assert_xpath(&output, r#"/*[@id="toc"]//li"#, 3);
 
         // Non-anchor inline markup in a heading — the monospaced `<code>`, the
-        // Font Awesome icon `<span>`/`<i>`, and the `<em>` — survives in the TOC
-        // entry (only `<a>` tags are dropped).
+        // Font Awesome icon `<span>`/`<i>`, and the `<em>` — survives in the
+        // TOC entry (only `<a>` tags are dropped).
         assert_xpath(
             &output,
             r##"/*[@id="toc"]//li/a[@href="#_run_command"]/code[text()="run"]"##,
@@ -7399,8 +7415,8 @@ mod book_doctype {
 "#
         );
 
-        // In the (default) article doctype, a level-0 section after a nested section is
-        // an error.
+        // In the (default) article doctype, a level-0 section after a nested
+        // section is an error.
         let input =
             "= Document Title\n\n== Level 1 Section\n\n=== Level 2 Section\n\n= Level 0 Section\n";
         assert_eq!(
@@ -7443,8 +7459,9 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser sectname for each section type — parser-model
-    // plus non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser sectname for each section type —
+    // parser-model plus non-article (book) doctypes are out of scope for
+    // 1.0.
     non_normative!(
         r#"
     test 'should assign appropriate sectname for section type' do
@@ -7514,8 +7531,8 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser partintro style/context — parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should add partintro style to child paragraph of part' do
@@ -7545,8 +7562,8 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser partintro style/context — parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should preserve title on partintro defined as partintro paragraph' do
@@ -7572,8 +7589,8 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser partintro style/context — parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should not promote title on partintro defined as normal paragraph' do
@@ -7599,8 +7616,8 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser partintro style/context — parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should add partintro style to child open block of part' do
@@ -7628,8 +7645,8 @@ mod book_doctype {
 "#
     );
 
-    // Not verified: checks the parser partintro style/context — parser-model plus
-    // non-article (book) doctypes are out of scope for 1.0.
+    // Not verified: checks the parser partintro style/context — parser-model
+    // plus non-article (book) doctypes are out of scope for 1.0.
     non_normative!(
         r#"
     test 'should wrap child paragraphs of part in partintro open block' do
