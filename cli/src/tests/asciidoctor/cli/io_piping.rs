@@ -158,13 +158,31 @@ Therefore, it sends the converted text to standard output (STDOUT) by default.
     assert!(goes_to_stdout(&["adoc", "-o", "-", "-"]));
 
     // End to end, piping to `-` reads stdin and writes the converted HTML to
-    // stdout — byte-for-byte the same as spelling out the destination `-o - -`.
+    // stdout — the same as spelling out the destination `-o - -`.
     let source = "= Doc\n\nBody.";
     let bare = run_piped(&["adoc", "-"], source);
     let explicit = run_piped(&["adoc", "-o", "-", "-"], source);
     assert!(bare.starts_with("<!DOCTYPE html>"));
     assert!(bare.contains("<p>Body.</p>"));
-    assert_eq!(bare, explicit);
+
+    // The two conversions run moments apart, and the footer's "Last updated"
+    // stamp carries second granularity, so a pair straddling a second
+    // boundary differs in exactly that line. Neutralize the stamp before
+    // comparing: the assertion pins identical *routing*, not identical
+    // clocks.
+    let neutralize_datetime = |html: &str| -> String {
+        html.lines()
+            .map(|line| {
+                if line.starts_with("Last updated ") {
+                    "Last updated <run-dependent>"
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(neutralize_datetime(&bare), neutralize_datetime(&explicit));
 }
 
 // The `-o` flag redirects the full standalone document to a file instead of
