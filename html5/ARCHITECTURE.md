@@ -17,13 +17,16 @@ The single most important architectural fact is this:
 
 > **The parser does inline. This crate does blocks.**
 
-`asciidoc-parser` applies *inline* substitutions eagerly, at parse time, through
-its default [`HtmlSubstitutionRenderer`]. By the time we hold a [`Document`],
+`asciidoc-parser` builds a structured **inline AST** for each block's content at
+parse time, then immediately folds it to HTML through its default
+[`HtmlInlineRenderer`] and caches the result. By the time we hold a [`Document`],
 every block's content and every title is **already an Asciidoctor-compatible
 inline HTML fragment** — `<strong>`, `<em>`, `<code>`, `<a href>`, `<mark>`,
-resolved cross references, escaped special characters, and so on. There is no
-inline AST to walk; inline content is delivered as a finished `&str`
-([`Content::rendered`], surfaced on blocks as [`IsBlock::rendered_content`]).
+resolved cross references, escaped special characters, and so on — delivered as
+a finished `&str` ([`Content::rendered_html`], surfaced on blocks as
+[`IsBlock::rendered_html_content`]). The inline AST itself exists inside the
+parser ([`Content::inlines`]); this crate never walks it directly, only the
+HTML it folds to.
 
 So this crate never parses or formats inline markup. Its whole job is to emit the
 **block-level scaffolding** — the nested `<div class="…">` structure Asciidoctor
@@ -32,9 +35,9 @@ wraps around those fragments — by visiting the document's blocks in order.
 Two consequences:
 
 - If we ever want a non-HTML backend (DocBook, a diffing renderer, …), the lever
-  is the parser's [`InlineSubstitutionRenderer`] trait, set *before* parsing via
-  `Parser::with_inline_substitution_renderer`. It is not something this crate can
-  retrofit onto an already-parsed `Document`.
+  is the parser's [`InlineRenderer`] trait, set *before* parsing via
+  `Parser::with_inline_renderer`. It is not something this crate can retrofit
+  onto an already-parsed `Document`.
 - We must still HTML-escape the few strings *we* place into markup ourselves —
   attribute values like ids, roles, and image `alt`/`src`. Block content and
   titles are already escaped by the parser and are emitted verbatim.
@@ -198,7 +201,7 @@ footnote, each linking back to its inline reference — whenever the document ha
 footnotes and they are not suppressed by `nofootnotes`. It runs in *both* the
 standalone (between `#content` and the footer) and embedded paths, matching
 Asciidoctor's `convert_string_to_embedded`. The inline `<sup>` references
-themselves are produced by the parser's inline substitution pass; the footnote
+themselves are produced by the parser's inline HTML fold; the footnote
 definitions come from `Document::catalog().footnotes()`, whose `text` is an
 already-substituted (and, once references resolve, cross-reference-resolved)
 inline fragment emitted verbatim.
@@ -228,7 +231,7 @@ standalone even when piping. Embedded output emits no stylesheet, so the
 ## Content models, ids, roles, titles
 
 - **Content models.** [`ContentModel`] tells us *how* a block carries content:
-  `Simple`/`Verbatim`/`Raw` blocks expose text via `rendered_content()`;
+  `Simple`/`Verbatim`/`Raw` blocks expose text via `rendered_html_content()`;
   `Compound` blocks expose children via `nested_blocks()`; `Empty` blocks
   (images, breaks) carry neither; `Table` is its own fixed structure. The
   renderer keys most leaf-vs-container decisions off the variant, but the content
@@ -245,8 +248,8 @@ standalone even when piping. Embedded output emits no stylesheet, so the
 
 ## Escaping model
 
-- Block **content** (`rendered_content()`) and **titles** (`title()`) are already
-  HTML with substitutions applied — emitted verbatim.
+- Block **content** (`rendered_html_content()`) and **titles** (`title()`) are
+  already HTML with substitutions applied — emitted verbatim.
 - Values **this crate** injects into attributes — ids, roles, and a block image's
   `src`/`alt`/dimensions and link `href` — are escaped with
   `html::escape_attribute`.
@@ -448,12 +451,13 @@ depends on:
 [`IsBlock::title`]: asciidoc_parser::blocks::IsBlock::title
 [`IsBlock::caption`]: asciidoc_parser::blocks::IsBlock::caption
 [`IsBlock::number`]: asciidoc_parser::blocks::IsBlock::number
-[`IsBlock::rendered_content`]: asciidoc_parser::blocks::IsBlock::rendered_content
+[`IsBlock::rendered_html_content`]: asciidoc_parser::blocks::IsBlock::rendered_html_content
 [`IsBlock::resolved_context`]: asciidoc_parser::blocks::IsBlock::resolved_context
 [`IsBlock::nested_blocks`]: asciidoc_parser::blocks::IsBlock::nested_blocks
 [`SectionBlock::id`]: asciidoc_parser::blocks::SectionBlock
 [`SectionType::Discrete`]: asciidoc_parser::blocks::SectionType
-[`Content::rendered`]: asciidoc_parser::content::Content::rendered
+[`Content::rendered_html`]: asciidoc_parser::content::Content::rendered_html
+[`Content::inlines`]: asciidoc_parser::content::Content::inlines
 [`Catalog`]: asciidoc_parser::document::Catalog
-[`HtmlSubstitutionRenderer`]: asciidoc_parser::parser::HtmlSubstitutionRenderer
-[`InlineSubstitutionRenderer`]: asciidoc_parser::parser::InlineSubstitutionRenderer
+[`HtmlInlineRenderer`]: asciidoc_parser::parser::HtmlInlineRenderer
+[`InlineRenderer`]: asciidoc_parser::parser::InlineRenderer

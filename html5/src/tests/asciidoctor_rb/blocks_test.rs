@@ -3775,7 +3775,7 @@ mod math_blocks {
         for input in ["++++\n++++", "[stem]\n++++\n++++"] {
             let doc = load(input);
             let block = doc.child_blocks().next().expect("one top-level block");
-            assert_eq!(block.rendered_content(), Some(""), "{input}");
+            assert_eq!(block.rendered_html_content(), Some(""), "{input}");
         }
     }
 
