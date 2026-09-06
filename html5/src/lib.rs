@@ -40,8 +40,6 @@
 
 use std::{fs, io, path::Path};
 
-use asciidoc_parser::Parser;
-
 mod asset_writer;
 mod base64;
 mod copycss;
@@ -53,7 +51,7 @@ mod outline;
 mod renderer;
 mod svg_file_handler;
 
-pub use asciidoc_parser::{Document, ReferenceTime, SafeMode};
+pub use asciidoc_parser::{Document, Parser, ReferenceTime, SafeMode};
 pub use asset_writer::{AssetWriter, DirAssetWriter};
 pub use options::Options;
 pub use outline::OutlineOptions;
@@ -357,6 +355,76 @@ pub fn load(source: &str) -> Document<'static> {
 pub fn load_with(source: &str, options: &Options) -> Document<'static> {
     let mut parser = options.apply(Parser::default());
     parser.parse(source)
+}
+
+/// Parses `source` as AsciiDoc into a [`Document`] with cross-references left
+/// **unresolved**, applying `options` like [`load_with`] — the *deferred*
+/// counterpart to [`load_with`] for multi-document pipelines.
+///
+/// [`load_with`] (and [`load`]) resolve cross-references (`<<id>>`,
+/// `xref:id[…]`) against the document's own catalog as part of parsing —
+/// exactly right for a single, self-contained document, but too early for a
+/// site-wide pipeline (e.g. an Antora-style generator, per
+/// `html5/ARCHITECTURE.md`'s multi-document story) that needs to parse every
+/// page first, build a combined cross-reference index, and only then resolve
+/// each page against it. `load_deferred` applies the same [`Options`] bundle
+/// `load_with` does — attributes, safe mode, and the include/docinfo/SVG
+/// handlers it installs — but calls `asciidoc-parser`'s
+/// [`Parser::parse_deferred`] instead of [`Parser::parse`], so the returned
+/// [`Document`] carries its cross-references unresolved.
+///
+/// Alongside the [`Document`], this also returns the [`Parser`] that parsed
+/// it: resolving a cross-reference re-renders the content around it, which
+/// needs the same parse-wide configuration (the path resolver and the
+/// image/SVG file handlers) [`Document::resolve_references`] takes as its
+/// `parser` argument. Building that `Parser` yourself — rather than getting it
+/// back from this function — would silently forgo everything [`Options::apply`]
+/// seeds (safe-mode attribute locks, the version intrinsics, the doctype pin,
+/// and so on), so `load_deferred` is the only supported way to get an
+/// `Options`-configured `Parser` for later resolution.
+///
+/// The typical flow: call `load_deferred` for every page, merge the pages'
+/// [`catalog`](Document::catalog)s into a combined index, then for each page
+/// call `document.resolve_references(&resolver, &renderer, &parser)` with a
+/// resolver backed by that index (and an [`HtmlInlineRenderer`], the
+/// [`InlineRenderer`] this crate always parses with) before rendering with
+/// [`convert_document_with`].
+///
+/// `load_deferred` plus resolving with a default,
+/// [`CatalogResolver`] backed by the document's own catalog reproduces
+/// [`load_with`]'s auto-resolution — `load_deferred` is a strict superset of
+/// what `load_with` does, deferring only the resolution step.
+///
+/// # Examples
+///
+/// ```
+/// use asciidoc_html5::{convert_document_with, Options};
+/// use asciidoc_parser::parser::{CatalogResolver, HtmlInlineRenderer};
+///
+/// let (mut doc, parser) = asciidoc_html5::load_deferred(
+///     "[#target]\n== Section\n\nSee <<target>>.",
+///     &Options::default(),
+/// );
+///
+/// // Resolve against this document's own catalog, standing in for a
+/// // site-wide index in a real multi-document pipeline.
+/// let catalog = doc.catalog().clone();
+/// let resolver = CatalogResolver::new(&catalog);
+/// doc.resolve_references(&resolver, &HtmlInlineRenderer {}, &parser);
+///
+/// let html = convert_document_with(&doc, &Options::default());
+/// assert!(html.contains("<a href=\"#target\">Section</a>"));
+/// ```
+///
+/// [`Parser::parse_deferred`]: asciidoc_parser::Parser::parse_deferred
+/// [`Document::resolve_references`]: asciidoc_parser::Document::resolve_references
+/// [`CatalogResolver`]: asciidoc_parser::parser::CatalogResolver
+/// [`HtmlInlineRenderer`]: asciidoc_parser::parser::HtmlInlineRenderer
+/// [`InlineRenderer`]: asciidoc_parser::parser::InlineRenderer
+pub fn load_deferred(source: &str, options: &Options) -> (Document<'static>, Parser) {
+    let mut parser = options.apply(Parser::default());
+    let document = parser.parse_deferred(source);
+    (document, parser)
 }
 
 /// Reads the AsciiDoc file at `path` and parses it into a [`Document`] — the
@@ -747,8 +815,8 @@ mod load_tests {
     use asciidoc_parser::{blocks::FindBlocks as _, document::InterpretedValue};
 
     use crate::{
-        convert, convert_document, convert_document_with, convert_with, load, load_file,
-        load_file_with, load_with, Options, SafeMode,
+        convert, convert_document, convert_document_with, convert_with, load, load_deferred,
+        load_file, load_file_with, load_with, Options, SafeMode,
     };
 
     // `load` returns the parsed document, and rendering it with
@@ -942,5 +1010,47 @@ mod load_tests {
             doc.attribute_value("docfile"),
             InterpretedValue::Value(_)
         ));
+    }
+
+    // `load_deferred` applies `Options` exactly like `load_with` — the same
+    // document attributes land in the parsed document — differing only in
+    // leaving cross-references unresolved.
+    #[test]
+    fn load_deferred_applies_options_like_load_with() {
+        let source = "= Doc\n\nBody.";
+        let opts = Options::new()
+            .safe_mode(SafeMode::Server)
+            .attribute("author", "Ada Lovelace");
+
+        let (doc, _parser) = load_deferred(source, &opts);
+        assert_eq!(
+            doc.attribute_value("author"),
+            InterpretedValue::Value("Ada Lovelace".to_string())
+        );
+        assert_eq!(doc.doctitle(), load_with(source, &opts).doctitle());
+    }
+
+    // A same-document cross-reference is left unresolved by `load_deferred`.
+    // Resolving it back against the document's own catalog — using the
+    // returned `Parser`, the seam `Document::resolve_references` needs since
+    // asciidoc-parser 0.31 — with the default `CatalogResolver` reproduces
+    // `load`'s auto-resolved output. This is the equivalence the deferred
+    // path promises: `load_deferred` + default-resolver `resolve_references`
+    // equals `load`.
+    #[test]
+    fn load_deferred_plus_default_resolver_matches_load() {
+        use asciidoc_parser::parser::{CatalogResolver, HtmlInlineRenderer};
+
+        let source = "[#target]\n== Section\n\nSee <<target>>.";
+
+        let (mut deferred_doc, parser) = load_deferred(source, &Options::default());
+        let catalog = deferred_doc.catalog().clone();
+        let resolver = CatalogResolver::new(&catalog);
+        deferred_doc.resolve_references(&resolver, &HtmlInlineRenderer {}, &parser);
+
+        assert_eq!(
+            convert_document(&deferred_doc),
+            convert_document(&load(source))
+        );
     }
 }

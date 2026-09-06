@@ -64,6 +64,14 @@ source ──► Parser::parse ──► Document ──► convert_document ─
   builder methods; `load`/`load_with` apply the whole `Options` bundle in one
   call, the same seeding [`convert`]/[`convert_with`] perform. By construction
   `convert_document(&load(source))` equals `convert(source)`.
+- [`load_deferred`] is the *load* half for a multi-document pipeline (e.g. that
+  future Antora-style generator): it applies the same `Options` bundle as
+  `load_with` but parses with `Parser::parse_deferred`, so the returned
+  `Document` leaves cross-references unresolved, and hands back the `Parser`
+  that parsed it — `Document::resolve_references` needs that same parser to
+  re-render an affected block's images and paths. Building that `Parser`
+  by hand instead (as a caller could before this existed) silently drops
+  everything `Options::apply` seeds, so `load_deferred` is the supported seam.
 
 ## The walker
 
@@ -360,7 +368,9 @@ returned HTML is byte-identical to the writer-less path.
 
 - **Cross references** are resolved by `Parser::parse` for single documents; the
   rendered content already contains the resolved `<a href="#id">`. Multi-document
-  pipelines use `parse_deferred` + `Document::resolve_references`.
+  pipelines use [`load_deferred`] + `Document::resolve_references` (with a
+  caller-supplied `ReferenceResolver` backed by a combined index) before
+  rendering with `convert_document_with`.
 - **Footnotes** accumulate in the [`Catalog`]; the renderer will emit the
   `<div id="footnotes">` section from `catalog().footnotes()` after the body.
 - **TOC** rendering is wired up for every placement, keyed off
@@ -436,6 +446,7 @@ depends on:
 [`convert_document`]: crate::convert_document
 [`load`]: crate::load
 [`load_file`]: crate::load_file
+[`load_deferred`]: crate::load_deferred
 [`Options`]: crate::Options
 [`Document`]: asciidoc_parser::Document
 [`Document::attribute_value`]: asciidoc_parser::Document::attribute_value
