@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.2.0...asciidoc-html5-v0.2.1)
+_06 September 2026_
+
+### Added
+
+* *(html5)* Add load_deferred for multi-document reference resolution ([#332](https://github.com/asciidoc-rs/asciidoc-html5/pull/332))
+
+### Documented
+
+* *(html5)* Escape literal <<id>> example in catalog-assets.adoc ([#335](https://github.com/asciidoc-rs/asciidoc-html5/pull/335))
+
+### Fixed
+
+* *(html5)* Neutralize the clock in the get-started file/string comparison ([#333](https://github.com/asciidoc-rs/asciidoc-html5/pull/333))
+
+### Other
+
+* *(html5)* Verify forward xref freezing in section titles now that asciidoc-parser 0.31.0 ships it ([#336](https://github.com/asciidoc-rs/asciidoc-html5/pull/336))
+
 ## [0.2.0](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.1.8...asciidoc-html5-v0.2.0)
 _06 September 2026_
 
