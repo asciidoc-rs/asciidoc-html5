@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adoc"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "asciidoc-html5",
  "asciidoc-parser",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "asciidoc-html5"
-version = "0.1.8"
+version = "0.2.0"
 dependencies = [
  "asciidoc-parser",
  "codspeed-criterion-compat",
