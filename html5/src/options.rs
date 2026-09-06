@@ -151,6 +151,12 @@ pub struct Options {
     /// `catalog_assets` API option. `None` leaves it at the parser's default
     /// (disabled). See [`catalog_assets`](Self::catalog_assets).
     catalog_assets: Option<bool>,
+
+    /// Whether to annotate each block's outermost container element with a
+    /// `data-source-line` attribute. `None` defaults to off, keeping output
+    /// parity with Asciidoctor untouched. See
+    /// [`source_locations`](Self::source_locations).
+    source_locations: Option<bool>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -474,6 +480,39 @@ impl Options {
     /// ```
     pub fn catalog_assets(mut self, yes: bool) -> Self {
         self.catalog_assets = Some(yes);
+        self
+    }
+
+    /// Enables `data-source-line` annotations on the rendered output.
+    ///
+    /// With this on, every block's outermost container element (a paragraph's
+    /// `<div class="paragraph">`, a section's `<div class="sectN">`, a table's
+    /// `<table>`, and so on) carries a `data-source-line="<n>"` attribute
+    /// naming the line — in the *preprocessed* source, the same numbering
+    /// [`Span::line`](asciidoc_parser::Span::line) reports — where the block's
+    /// content begins. A caller working from the original, unpreprocessed
+    /// source (before `include::` expansion, conditional resolution, and the
+    /// like) translates through
+    /// [`Document::source_map`](asciidoc_parser::Document::source_map) to
+    /// recover the original file and line.
+    ///
+    /// This is off by default, so it never affects output parity with
+    /// Asciidoctor — Asciidoctor's own converters have no such attribute — and
+    /// it is meant for tooling that maps rendered blocks back to source
+    /// locations (for example, a spec-coverage overlay or a "jump to source"
+    /// editor feature), not for the default rendering path.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asciidoc_html5::{convert_with, Options};
+    ///
+    /// let opts = Options::new().source_locations(true);
+    /// let html = convert_with("= Doc\n\nFirst paragraph.", &opts);
+    /// assert!(html.contains(r#"<div class="paragraph" data-source-line="3">"#));
+    /// ```
+    pub fn source_locations(mut self, yes: bool) -> Self {
+        self.source_locations = Some(yes);
         self
     }
 
@@ -944,6 +983,12 @@ impl Options {
     /// (Asciidoctor's API default) when the caller left it unset.
     pub(crate) fn safe_mode_or_default(&self) -> SafeMode {
         self.safe_mode.unwrap_or(SafeMode::Secure)
+    }
+
+    /// Whether to annotate rendered output with `data-source-line`
+    /// attributes, defaulting to `false` (off) when the caller left it unset.
+    pub(crate) fn source_locations_enabled(&self) -> bool {
+        self.source_locations.unwrap_or(false)
     }
 
     /// Whether to render a standalone document, resolving the unset default to

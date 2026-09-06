@@ -262,7 +262,8 @@ Many Asciidoctor API options do not apply to this library:
 * *Backend and doctype.* `asciidoc_html5` always renders the `html5` backend and
   the `article` doctype, so `:backend` and `:doctype` are fixed.
 * *Source mapping.* `:sourcemap` has no toggle because source locations are
-  always tracked; see xref:sourcemap.adoc[Source Locations].
+  always tracked; an opt-in `source_locations` additionally embeds them into
+  the rendered HTML. See xref:sourcemap.adoc[Source Locations].
 * *Ruby and template machinery.* `:converter`, `:eruby`, `:extensions`,
   `:extension_registry`, `:logger`, the `:template_*` options, and `:timings`
   are specific to Asciidoctor's Ruby runtime and template engines.

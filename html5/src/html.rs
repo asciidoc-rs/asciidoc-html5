@@ -53,6 +53,19 @@ pub(crate) fn id_attribute(id: Option<&str>) -> String {
     }
 }
 
+/// Builds the ` data-source-line="…"` fragment for a block wrapper, or an empty
+/// string when source-location annotation is disabled
+/// ([`Options::source_locations`](crate::Options::source_locations), off by
+/// default) or the caller passes `None`. The leading space is included so call
+/// sites can splice the result directly into an opening tag, matching
+/// [`id_attribute`].
+pub(crate) fn source_line_attribute(line: Option<usize>) -> String {
+    match line {
+        Some(line) => format!(" data-source-line=\"{line}\""),
+        None => String::new(),
+    }
+}
+
 /// Builds the ` class="…"` fragment from a base class plus any author-supplied
 /// roles, matching Asciidoctor's convention of appending roles as extra
 /// classes (e.g. `class="paragraph lead"`). Passing no base and no roles yields
@@ -78,7 +91,9 @@ pub(crate) fn class_attribute(base: &str, roles: &[&str]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{class_attribute, escape_attribute, escape_quote, id_attribute};
+    use super::{
+        class_attribute, escape_attribute, escape_quote, id_attribute, source_line_attribute,
+    };
 
     #[test]
     fn escape_attribute_escapes_markup_characters() {
@@ -102,6 +117,12 @@ mod tests {
     fn id_attribute_formats_present_and_absent() {
         assert_eq!(id_attribute(Some("goals")), " id=\"goals\"");
         assert_eq!(id_attribute(None), "");
+    }
+
+    #[test]
+    fn source_line_attribute_formats_present_and_absent() {
+        assert_eq!(source_line_attribute(Some(42)), " data-source-line=\"42\"");
+        assert_eq!(source_line_attribute(None), "");
     }
 
     #[test]

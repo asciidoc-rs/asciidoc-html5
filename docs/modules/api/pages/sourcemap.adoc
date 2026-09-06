@@ -128,6 +128,32 @@ assert_eq!(
 The paragraph's location follows it into the include file, just as Asciidoctor's
 sourcemap reports `partials/section.adoc`, line 3.
 
+== Emit source locations in the rendered HTML
+
+Reading a block's span from the parsed `Document` is one way to map a rendered
+block back to its source; another is to have the *rendered HTML itself* carry
+the location, so a tool working from the HTML alone -- without walking the
+parse tree -- can still make the connection. `Options::source_locations(true)`
+turns this on: every block's outermost container element gains a
+`data-source-line="<n>"` attribute naming the same preprocessed-source line
+`Span::line` reports elsewhere on this page. It defaults to off, so it never
+affects output parity with Asciidoctor, whose own converters have no such
+attribute.
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().source_locations(true);
+let html = convert_with("= Doc\n\nFirst paragraph.\n\nSecond paragraph.", &opts);
+assert!(html.contains(r#"<div class="paragraph" data-source-line="3">"#));
+assert!(html.contains(r#"<div class="paragraph" data-source-line="5">"#));
+----
+
+As with a bare `span()`, the line is in the *preprocessed* source; translate it
+through `Document::source_map` the same way as above to recover the original
+file and line for a document built from `include::` directives.
+
 == Known limitations
 
 A block's span begins at the first line of the block, *including* any block
@@ -140,5 +166,11 @@ the content line, advance past the metadata lines yourself.
 Source locations are not available for inline elements. As in Asciidoctor, you can
 read the source location of the enclosing block, which at least gets you close to
 the element.
+
+`data-source-line` inherits the same metadata-line quirk described above, and
+is emitted only for the outermost container of a top-level block -- a list's
+`<li>` items, a table's `<tr>`/`<td>` cells, and a description list's `<dt>`/
+`<dd>` entries do not carry their own attribute, matching how Asciidoctor's own
+tooling anchors at block granularity.
 
 That covers reading the source location of blocks in a loaded document.
