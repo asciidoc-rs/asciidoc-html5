@@ -83,7 +83,26 @@ fn converts_a_file_to_html5() {
     let html = convert_file(&path).expect("convert_file reads and renders");
     let _ = fs::remove_file(&path);
 
-    assert_eq!(html, convert_with(source, &Options::new().standalone(true)));
+    let standalone = convert_with(source, &Options::new().standalone(true));
+
+    // `convert_file` and `convert_with` each independently read the real
+    // wall clock to stamp the footer's "Last updated" line, so a pair of
+    // conversions straddling a second boundary differs in exactly that
+    // line. Neutralize it before comparing: the assertion pins identical
+    // *rendering*, not identical clocks.
+    let neutralize_datetime = |html: &str| -> String {
+        html.lines()
+            .map(|line| {
+                if line.starts_with("Last updated ") {
+                    "Last updated <run-dependent>"
+                } else {
+                    line
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_eq!(neutralize_datetime(&html), neutralize_datetime(&standalone));
     assert!(html.starts_with("<!DOCTYPE html>"));
     assert!(html.contains("<title>The Dangers of Wolpertingers</title>"));
     assert!(html.trim_end().ends_with("</body>\n</html>"));
