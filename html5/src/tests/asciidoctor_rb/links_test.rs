@@ -34,11 +34,9 @@
 //! defines the referenced fragment.
 //!
 //! Kept `non_normative!` are the tests this crate's stack cannot satisfy: the
-//! DocBook-backend tests (this crate targets only the `html5` backend); the
-//! compat-mode xref-target tests, which are permanently out of scope — this
-//! crate will not implement compat mode; and other inline behavior
-//! `asciidoc-parser` diverges on (not resolving a forward xref during
-//! parsing — #128).
+//! DocBook-backend tests (this crate targets only the `html5` backend), and
+//! the compat-mode xref-target tests, which are permanently out of scope —
+//! this crate will not implement compat mode.
 
 use std::{
     fs,
@@ -4084,12 +4082,10 @@ fn should_drop_nested_anchor_in_xreftext() {
     );
 }
 
-// Asciidoctor leaves an xref evaluated during parsing (a forward reference
-// in a section title) unresolved; `asciidoc-parser` resolves it, so this
-// crate emits the link the test asserts is absent — a divergence. Tracked by
-// #128.
-non_normative!(
-    r###"
+#[test]
+fn should_not_resolve_forward_xref_evaluated_during_parsing() {
+    verifies!(
+        r###"
   test 'should not resolve forward xref evaluated during parsing' do
     input = <<~'EOS'
     [#s1]
@@ -4106,14 +4102,21 @@ non_normative!(
   end
 
 "###
-);
+    );
 
-// Asciidoctor leaves an xref evaluated during parsing (a forward reference
-// in a section title) unresolved; `asciidoc-parser` resolves it, so this
-// crate emits the link the test asserts is absent — a divergence. Tracked by
-// #128.
-non_normative!(
-    r###"
+    let input = "[#s1]\n== <<forward>>\n\n== <<s1>>\n\n[#forward]\n== Forward\n";
+    let output = convert(input);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#forward"][text()="Forward"]"####,
+        0,
+    );
+}
+
+#[test]
+fn should_not_resolve_forward_natural_xref_evaluated_during_parsing() {
+    verifies!(
+        r###"
   test 'should not resolve forward natural xref evaluated during parsing' do
     input = <<~'EOS'
     :idprefix:
@@ -4131,7 +4134,16 @@ non_normative!(
   end
 
 "###
-);
+    );
+
+    let input = ":idprefix:\n\n[#s1]\n== <<Forward>>\n\n== <<s1>>\n\n== Forward\n";
+    let output = convert(input);
+    assert_xpath(
+        &output,
+        r####"//a[@href="#forward"][text()="Forward"]"####,
+        0,
+    );
+}
 
 #[test]
 fn should_resolve_first_matching_natural_xref() {
