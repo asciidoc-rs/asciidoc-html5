@@ -52,11 +52,15 @@
 
 use std::{
     path::{Path, PathBuf},
-    rc::Rc,
+    sync::Arc,
 };
 
 use asciidoc_parser::{
-    parser::{DocinfoFileHandler, IncludeFileHandler, ModificationContext, SvgFileHandler},
+    attributes::Attrlist,
+    parser::{
+        DocinfoFileHandler, IncludeFileHandler, IncludeResolution, ModificationContext,
+        RenderContext, SvgFileHandler,
+    },
     Parser, ReferenceTime, SafeMode,
 };
 
@@ -163,21 +167,32 @@ pub struct Options {
     /// would otherwise install. `None` leaves `include::` resolution to the
     /// filesystem handler (or unresolved, absent a base directory). See
     /// [`include_file_handler`](Self::include_file_handler).
-    include_file_handler: Option<Rc<dyn IncludeFileHandler>>,
+    ///
+    /// Stored behind an `Arc` (rather than a cheaper `Rc`) — and bounded by
+    /// `Send + Sync` — so that `Options` itself stays `Send + Sync`: every
+    /// other field is plain data, so without this bound a single trait-object
+    /// field would silently strip those auto traits from the whole type,
+    /// breaking a caller who moves an `Options` into a worker thread (e.g. to
+    /// convert several documents in parallel).
+    include_file_handler: Option<Arc<dyn IncludeFileHandler + Send + Sync>>,
 
     /// A caller-supplied [`DocinfoFileHandler`], taking precedence over the
     /// filesystem handler [`effective_base_dir`](Self::effective_base_dir)
     /// would otherwise install. `None` leaves docinfo resolution to the
     /// filesystem handler (or unresolved, absent a base directory). See
-    /// [`docinfo_file_handler`](Self::docinfo_file_handler).
-    docinfo_file_handler: Option<Rc<dyn DocinfoFileHandler>>,
+    /// [`docinfo_file_handler`](Self::docinfo_file_handler) and the `Arc`/
+    /// `Send + Sync` note on
+    /// [`include_file_handler`](Self::include_file_handler).
+    docinfo_file_handler: Option<Arc<dyn DocinfoFileHandler + Send + Sync>>,
 
     /// A caller-supplied [`SvgFileHandler`], taking precedence over the
     /// filesystem handler [`effective_base_dir`](Self::effective_base_dir)
     /// would otherwise install. `None` leaves inline-SVG resolution to the
     /// filesystem handler (or undegraded to alt text, absent a base
-    /// directory). See [`svg_file_handler`](Self::svg_file_handler).
-    svg_file_handler: Option<Rc<dyn SvgFileHandler>>,
+    /// directory). See [`svg_file_handler`](Self::svg_file_handler) and the
+    /// `Arc`/`Send + Sync` note on
+    /// [`include_file_handler`](Self::include_file_handler).
+    svg_file_handler: Option<Arc<dyn SvgFileHandler + Send + Sync>>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -228,6 +243,61 @@ impl Precedence {
             Precedence::Override => ModificationContext::ApiOnly,
             Precedence::Default => ModificationContext::Anywhere,
         }
+    }
+}
+
+// `Parser::with_include_file_handler` (and its docinfo/SVG counterparts) are
+// generic over a `Sized` handler type, which it wraps in its own `Rc`.
+// `asciidoc-parser` supplies a blanket `impl<T: Trait + ?Sized> Trait for
+// Rc<T>` (see asciidoc-rs/asciidoc-parser#1391), but not one for `Arc<T>` —
+// and `Options` stores its caller-supplied handlers behind `Arc`, not `Rc`,
+// specifically so `Options` itself stays `Send + Sync` (see the field-level
+// note on `Options::include_file_handler`). Each wrapper below is a local,
+// `Sized` type that holds the `Arc<dyn Trait>` and delegates to it, satisfying
+// `Parser`'s `Sized` bound while keeping the handler behind the one `Arc`
+// `Options` can cheaply clone.
+
+/// Delegates to a caller-supplied [`IncludeFileHandler`] trait object stored in
+/// [`Options`]. See the module note above [`DynIncludeFileHandler`] itself.
+#[derive(Clone, Debug)]
+struct DynIncludeFileHandler(Arc<dyn IncludeFileHandler + Send + Sync>);
+
+impl IncludeFileHandler for DynIncludeFileHandler {
+    fn resolve_target<'src>(
+        &self,
+        source: Option<&str>,
+        target: &str,
+        attrlist: &Attrlist<'src>,
+        parser: &Parser,
+    ) -> IncludeResolution {
+        self.0.resolve_target(source, target, attrlist, parser)
+    }
+}
+
+/// Delegates to a caller-supplied [`DocinfoFileHandler`] trait object stored in
+/// [`Options`]. See the note above [`DynIncludeFileHandler`].
+#[derive(Clone, Debug)]
+struct DynDocinfoFileHandler(Arc<dyn DocinfoFileHandler + Send + Sync>);
+
+impl DocinfoFileHandler for DynDocinfoFileHandler {
+    fn resolve_docinfo(
+        &self,
+        docinfodir: Option<&str>,
+        file_name: &str,
+        parser: &Parser,
+    ) -> Option<String> {
+        self.0.resolve_docinfo(docinfodir, file_name, parser)
+    }
+}
+
+/// Delegates to a caller-supplied [`SvgFileHandler`] trait object stored in
+/// [`Options`]. See the note above [`DynIncludeFileHandler`].
+#[derive(Clone, Debug)]
+struct DynSvgFileHandler(Arc<dyn SvgFileHandler + Send + Sync>);
+
+impl SvgFileHandler for DynSvgFileHandler {
+    fn resolve_svg(&self, target: &str, context: &RenderContext) -> Option<String> {
+        self.0.resolve_svg(target, context)
     }
 }
 
@@ -526,8 +596,14 @@ impl Options {
     /// consulting any handler) under [`SafeMode::Secure`] and above, so a
     /// handler installed here is only ever asked to resolve a target under
     /// `unsafe`, `safe`, or `server`.
-    pub fn include_file_handler<H: IncludeFileHandler + 'static>(mut self, handler: H) -> Self {
-        let handler: Rc<dyn IncludeFileHandler> = Rc::new(handler);
+    ///
+    /// The handler must be `Send + Sync` so that `Options` itself stays
+    /// `Send + Sync` — see the field-level note on why that matters.
+    pub fn include_file_handler<H: IncludeFileHandler + Send + Sync + 'static>(
+        mut self,
+        handler: H,
+    ) -> Self {
+        let handler: Arc<dyn IncludeFileHandler + Send + Sync> = Arc::new(handler);
         self.include_file_handler = Some(handler);
         self
     }
@@ -546,8 +622,14 @@ impl Options {
     /// ever asked to resolve a file under `unsafe`, `safe`, or `server`.
     ///
     /// [docinfo]: https://docs.asciidoctor.org/asciidoc/latest/docinfo/
-    pub fn docinfo_file_handler<H: DocinfoFileHandler + 'static>(mut self, handler: H) -> Self {
-        let handler: Rc<dyn DocinfoFileHandler> = Rc::new(handler);
+    ///
+    /// The handler must be `Send + Sync` — see the note on
+    /// [`include_file_handler`](Self::include_file_handler).
+    pub fn docinfo_file_handler<H: DocinfoFileHandler + Send + Sync + 'static>(
+        mut self,
+        handler: H,
+    ) -> Self {
+        let handler: Arc<dyn DocinfoFileHandler + Send + Sync> = Arc::new(handler);
         self.docinfo_file_handler = Some(handler);
         self
     }
@@ -566,8 +648,14 @@ impl Options {
     /// ordinary `<img>` without consulting any handler, so a handler
     /// installed here is only ever asked to resolve a target under `unsafe`,
     /// `safe`, or `server`.
-    pub fn svg_file_handler<H: SvgFileHandler + 'static>(mut self, handler: H) -> Self {
-        let handler: Rc<dyn SvgFileHandler> = Rc::new(handler);
+    ///
+    /// The handler must be `Send + Sync` — see the note on
+    /// [`include_file_handler`](Self::include_file_handler).
+    pub fn svg_file_handler<H: SvgFileHandler + Send + Sync + 'static>(
+        mut self,
+        handler: H,
+    ) -> Self {
+        let handler: Arc<dyn SvgFileHandler + Send + Sync> = Arc::new(handler);
         self.svg_file_handler = Some(handler);
         self
     }
@@ -967,7 +1055,7 @@ impl Options {
         let base_dir = self.effective_base_dir();
         match (&self.include_file_handler, &base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_include_file_handler(handler.clone());
+                parser = parser.with_include_file_handler(DynIncludeFileHandler(handler.clone()));
             }
             (None, Some(base)) => {
                 parser =
@@ -977,7 +1065,7 @@ impl Options {
         }
         match (&self.docinfo_file_handler, &base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_docinfo_file_handler(handler.clone());
+                parser = parser.with_docinfo_file_handler(DynDocinfoFileHandler(handler.clone()));
             }
             (None, Some(base)) => {
                 parser =
@@ -987,7 +1075,7 @@ impl Options {
         }
         match (&self.svg_file_handler, base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_svg_file_handler(handler.clone());
+                parser = parser.with_svg_file_handler(DynSvgFileHandler(handler.clone()));
             }
             (None, Some(base)) => {
                 parser = parser.with_svg_file_handler(FsSvgFileHandler::new(base, mode));
@@ -1195,6 +1283,35 @@ fn absolutize(path: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use crate::{Options, SafeMode};
+
+    // `Options` must stay `Send + Sync` even with a custom handler installed,
+    // so a caller can build one on one thread and move it into others (e.g. to
+    // convert several documents in parallel) — every other field is plain
+    // data, so a handler field that dropped this bound would silently strip
+    // both auto traits from the whole type. This is a compile-time check: it
+    // does nothing at runtime, but fails to compile if the bound regresses.
+    #[test]
+    fn options_stays_send_and_sync_with_a_handler_installed() {
+        fn assert_send_sync<T: Send + Sync>(_: &T) {}
+
+        #[derive(Debug)]
+        struct NoopHandler;
+
+        impl asciidoc_parser::parser::IncludeFileHandler for NoopHandler {
+            fn resolve_target<'src>(
+                &self,
+                _source: Option<&str>,
+                _target: &str,
+                _attrlist: &asciidoc_parser::attributes::Attrlist<'src>,
+                _parser: &asciidoc_parser::Parser,
+            ) -> asciidoc_parser::parser::IncludeResolution {
+                asciidoc_parser::parser::IncludeResolution::NotFound
+            }
+        }
+
+        let opts = Options::new().include_file_handler(NoopHandler);
+        assert_send_sync(&opts);
+    }
 
     // These option tests assert the standalone document shell (its stylesheet
     // and web-font links, the header, and the footer), so they render in
