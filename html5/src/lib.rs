@@ -1053,4 +1053,71 @@ mod load_tests {
             convert_document(&load(source))
         );
     }
+
+    // The `Parser` `load_deferred` hands back is not a formality: resolving a
+    // cross-reference re-renders the whole content it appears in (a *refold*
+    // of the inline tree), and that refold consults the file handlers of
+    // *whichever* `Parser` is passed to `resolve_references` —
+    // `asciidoc-parser`'s `Content::refold` rebuilds its `RenderContext` from
+    // that argument, not from whatever parsed the document originally. A
+    // paragraph mixing an inline `opts=inline` SVG image with a
+    // cross-reference exercises exactly that: resolving the reference forces
+    // the paragraph to refold, so only a `Parser` still carrying the SVG
+    // handler `Options::apply` installed reproduces the embedded `<svg>`;
+    // this locks in why `load_deferred` returns its own `Parser` rather than
+    // leaving the caller to build one (see `load_deferred`'s docs).
+    #[test]
+    fn load_deferred_resolution_reembeds_svg_through_the_returned_parser() {
+        use asciidoc_parser::{
+            parser::{CatalogResolver, HtmlInlineRenderer},
+            Parser,
+        };
+
+        let dir =
+            std::env::temp_dir().join(format!("adoc-load-deferred-svg-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create dir");
+        std::fs::write(
+            dir.join("sample.svg"),
+            "<svg viewBox=\"0 0 4 4\"><circle/></svg>\n",
+        )
+        .expect("write svg");
+        let main = dir.join("main.adoc");
+        let source =
+            "[#target]\n== Section\n\nimage:sample.svg[Diagram,opts=inline] see <<target>>.\n";
+        std::fs::write(&main, source).expect("write main");
+
+        let opts = Options::new().safe_mode(SafeMode::Unsafe).input_file(&main);
+
+        // Resolving with the `Parser` `load_deferred` itself hands back keeps
+        // the SVG handler `Options::apply` installed from the same
+        // `input_file`, so the paragraph's refold re-embeds the file.
+        let (mut doc, parser) = load_deferred(source, &opts);
+        let catalog = doc.catalog().clone();
+        let resolver = CatalogResolver::new(&catalog);
+        doc.resolve_references(&resolver, &HtmlInlineRenderer {}, &parser);
+        let html = convert_document(&doc);
+        assert!(
+            html.contains("<svg viewBox=\"0 0 4 4\"><circle/></svg>"),
+            "{html}"
+        );
+
+        // Resolving the *same* deferred parse with a hand-built, unconfigured
+        // `Parser` instead — the workaround `load_deferred` exists to make
+        // unnecessary — silently degrades the already-embedded SVG to its
+        // alt-text fallback on refold, since that bare parser carries no SVG
+        // handler.
+        let (mut bare_doc, _configured_parser) = load_deferred(source, &opts);
+        let bare_catalog = bare_doc.catalog().clone();
+        let bare_resolver = CatalogResolver::new(&bare_catalog);
+        let bare_parser = Parser::default();
+        bare_doc.resolve_references(&bare_resolver, &HtmlInlineRenderer {}, &bare_parser);
+        let degraded_html = convert_document(&bare_doc);
+        assert!(!degraded_html.contains("<svg"), "{degraded_html}");
+        assert!(
+            degraded_html.contains("<span class=\"alt\">Diagram</span>"),
+            "{degraded_html}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
