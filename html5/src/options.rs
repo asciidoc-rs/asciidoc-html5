@@ -50,9 +50,19 @@
 //! [`convert_with`]: crate::convert_with
 //! [`convert_file_with`]: crate::convert_file_with
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
-use asciidoc_parser::{parser::ModificationContext, Parser, ReferenceTime, SafeMode};
+use asciidoc_parser::{
+    attributes::Attrlist,
+    parser::{
+        DocinfoFileHandler, IncludeFileHandler, IncludeResolution, ModificationContext,
+        RenderContext, SvgFileHandler,
+    },
+    Parser, ReferenceTime, SafeMode,
+};
 
 use crate::{
     docinfo_handler::FsDocinfoFileHandler, include_handler::FsIncludeFileHandler,
@@ -151,6 +161,27 @@ pub struct Options {
     /// `catalog_assets` API option. `None` leaves it at the parser's default
     /// (disabled). See [`catalog_assets`](Self::catalog_assets).
     catalog_assets: Option<bool>,
+
+    /// A caller-supplied [`IncludeFileHandler`], taking precedence over the
+    /// filesystem handler [`effective_base_dir`](Self::effective_base_dir)
+    /// would otherwise install. `None` leaves `include::` resolution to the
+    /// filesystem handler (or unresolved, absent a base directory). See
+    /// [`include_file_handler`](Self::include_file_handler).
+    include_file_handler: Option<Rc<dyn IncludeFileHandler>>,
+
+    /// A caller-supplied [`DocinfoFileHandler`], taking precedence over the
+    /// filesystem handler [`effective_base_dir`](Self::effective_base_dir)
+    /// would otherwise install. `None` leaves docinfo resolution to the
+    /// filesystem handler (or unresolved, absent a base directory). See
+    /// [`docinfo_file_handler`](Self::docinfo_file_handler).
+    docinfo_file_handler: Option<Rc<dyn DocinfoFileHandler>>,
+
+    /// A caller-supplied [`SvgFileHandler`], taking precedence over the
+    /// filesystem handler [`effective_base_dir`](Self::effective_base_dir)
+    /// would otherwise install. `None` leaves inline-SVG resolution to the
+    /// filesystem handler (or undegraded to alt text, absent a base
+    /// directory). See [`svg_file_handler`](Self::svg_file_handler).
+    svg_file_handler: Option<Rc<dyn SvgFileHandler>>,
 }
 
 /// One recorded attribute directive: a name, what to do with it, and whether
@@ -201,6 +232,58 @@ impl Precedence {
             Precedence::Override => ModificationContext::ApiOnly,
             Precedence::Default => ModificationContext::Anywhere,
         }
+    }
+}
+
+// `Parser::with_include_file_handler` (and its docinfo/SVG counterparts) are
+// generic over a `Sized` handler type, which it wraps in its own `Rc`; there is
+// no blanket implementation of these traits for `Rc<dyn Trait>` upstream, so a
+// trait object stored in `Options` cannot be handed to them directly. Each
+// wrapper below is a local, `Sized` type that holds the trait object and
+// delegates to it, satisfying that bound while keeping the handler behind one
+// `Rc` `Options` can cheaply clone.
+
+/// Delegates to a caller-supplied [`IncludeFileHandler`] trait object stored in
+/// [`Options`]. See the module note above [`DynIncludeFileHandler`] itself.
+#[derive(Clone, Debug)]
+struct DynIncludeFileHandler(Rc<dyn IncludeFileHandler>);
+
+impl IncludeFileHandler for DynIncludeFileHandler {
+    fn resolve_target<'src>(
+        &self,
+        source: Option<&str>,
+        target: &str,
+        attrlist: &Attrlist<'src>,
+        parser: &Parser,
+    ) -> IncludeResolution {
+        self.0.resolve_target(source, target, attrlist, parser)
+    }
+}
+
+/// Delegates to a caller-supplied [`DocinfoFileHandler`] trait object stored in
+/// [`Options`]. See the note above [`DynIncludeFileHandler`].
+#[derive(Clone, Debug)]
+struct DynDocinfoFileHandler(Rc<dyn DocinfoFileHandler>);
+
+impl DocinfoFileHandler for DynDocinfoFileHandler {
+    fn resolve_docinfo(
+        &self,
+        docinfodir: Option<&str>,
+        file_name: &str,
+        parser: &Parser,
+    ) -> Option<String> {
+        self.0.resolve_docinfo(docinfodir, file_name, parser)
+    }
+}
+
+/// Delegates to a caller-supplied [`SvgFileHandler`] trait object stored in
+/// [`Options`]. See the note above [`DynIncludeFileHandler`].
+#[derive(Clone, Debug)]
+struct DynSvgFileHandler(Rc<dyn SvgFileHandler>);
+
+impl SvgFileHandler for DynSvgFileHandler {
+    fn resolve_svg(&self, target: &str, context: &RenderContext) -> Option<String> {
+        self.0.resolve_svg(target, context)
     }
 }
 
@@ -474,6 +557,74 @@ impl Options {
     /// ```
     pub fn catalog_assets(mut self, yes: bool) -> Self {
         self.catalog_assets = Some(yes);
+        self
+    }
+
+    /// Supplies a custom [`IncludeFileHandler`] to resolve `include::`
+    /// directives, taking precedence over the filesystem handler this crate
+    /// would otherwise install from [`base_dir`](Self::base_dir)/
+    /// [`input_file`](Self::input_file).
+    ///
+    /// The filesystem handler this crate installs by default only ever reads
+    /// from local disk. A caller resolving `include::` targets some other way
+    /// — for example an Antora-style generator resolving resource IDs
+    /// (`partial$note.adoc`) through a content catalog — can install its own
+    /// [`IncludeFileHandler`] here instead, without losing the rest of what
+    /// [`Options`] seeds (the safe-mode attribute locks, the version
+    /// intrinsics, and so on). Setting this leaves
+    /// [`base_dir`](Self::base_dir) free to keep anchoring the base
+    /// directory the other handlers
+    /// ([`docinfo_file_handler`](Self::docinfo_file_handler),
+    /// [`svg_file_handler`](Self::svg_file_handler)) install unless those are
+    /// likewise overridden.
+    ///
+    /// The parser converts `include::` directives to links (without
+    /// consulting any handler) under [`SafeMode::Secure`] and above, so a
+    /// handler installed here is only ever asked to resolve a target under
+    /// `unsafe`, `safe`, or `server`.
+    pub fn include_file_handler<H: IncludeFileHandler + 'static>(mut self, handler: H) -> Self {
+        let handler: Rc<dyn IncludeFileHandler> = Rc::new(handler);
+        self.include_file_handler = Some(handler);
+        self
+    }
+
+    /// Supplies a custom [`DocinfoFileHandler`] to resolve [docinfo] files,
+    /// taking precedence over the filesystem handler this crate would
+    /// otherwise install from [`base_dir`](Self::base_dir)/
+    /// [`input_file`](Self::input_file).
+    ///
+    /// See [`include_file_handler`](Self::include_file_handler) for why a
+    /// caller might replace the default filesystem-backed resolution — the
+    /// same reasoning applies here for docinfo files.
+    ///
+    /// The parser drops docinfo entirely under [`SafeMode::Secure`] and above
+    /// (without consulting any handler), so a handler installed here is only
+    /// ever asked to resolve a file under `unsafe`, `safe`, or `server`.
+    ///
+    /// [docinfo]: https://docs.asciidoctor.org/asciidoc/latest/docinfo/
+    pub fn docinfo_file_handler<H: DocinfoFileHandler + 'static>(mut self, handler: H) -> Self {
+        let handler: Rc<dyn DocinfoFileHandler> = Rc::new(handler);
+        self.docinfo_file_handler = Some(handler);
+        self
+    }
+
+    /// Supplies a custom [`SvgFileHandler`] to resolve inline SVG images
+    /// (`opts=inline`), taking precedence over the filesystem handler this
+    /// crate would otherwise install from [`base_dir`](Self::base_dir)/
+    /// [`input_file`](Self::input_file).
+    ///
+    /// See [`include_file_handler`](Self::include_file_handler) for why a
+    /// caller might replace the default filesystem-backed resolution — the
+    /// same reasoning applies here for inline SVG images.
+    ///
+    /// The parser only renders the `inline` (and `interactive`) SVG modes
+    /// below [`SafeMode::Secure`]; at `secure` an SVG image renders as an
+    /// ordinary `<img>` without consulting any handler, so a handler
+    /// installed here is only ever asked to resolve a target under `unsafe`,
+    /// `safe`, or `server`.
+    pub fn svg_file_handler<H: SvgFileHandler + 'static>(mut self, handler: H) -> Self {
+        let handler: Rc<dyn SvgFileHandler> = Rc::new(handler);
+        self.svg_file_handler = Some(handler);
         self
     }
 
@@ -858,14 +1009,46 @@ impl Options {
         // drops docinfo, and renders SVG images as plain `<img>`
         // without consulting any handler, so installing them there is
         // harmless.
+        //
+        // A caller-supplied handler
+        // ([`include_file_handler`](Self::include_file_handler) and its
+        // docinfo/SVG counterparts) takes precedence over the
+        // filesystem handler for that resource, independently of the other
+        // two — a caller resolving includes through, say, a content catalog
+        // can still get filesystem-backed docinfo and SVG resolution from a
+        // base directory, or replace any subset of the three.
         if let Some(primary) = &self.primary_file {
             parser = parser.with_primary_file_name(canonicalize_or(primary).to_string_lossy());
         }
-        if let Some(base) = self.effective_base_dir() {
-            parser = parser
-                .with_include_file_handler(FsIncludeFileHandler::new(base.clone(), mode))
-                .with_docinfo_file_handler(FsDocinfoFileHandler::new(base.clone(), mode))
-                .with_svg_file_handler(FsSvgFileHandler::new(base, mode));
+        let base_dir = self.effective_base_dir();
+        match (&self.include_file_handler, &base_dir) {
+            (Some(handler), _) => {
+                parser = parser.with_include_file_handler(DynIncludeFileHandler(handler.clone()));
+            }
+            (None, Some(base)) => {
+                parser =
+                    parser.with_include_file_handler(FsIncludeFileHandler::new(base.clone(), mode));
+            }
+            (None, None) => {}
+        }
+        match (&self.docinfo_file_handler, &base_dir) {
+            (Some(handler), _) => {
+                parser = parser.with_docinfo_file_handler(DynDocinfoFileHandler(handler.clone()));
+            }
+            (None, Some(base)) => {
+                parser =
+                    parser.with_docinfo_file_handler(FsDocinfoFileHandler::new(base.clone(), mode));
+            }
+            (None, None) => {}
+        }
+        match (&self.svg_file_handler, base_dir) {
+            (Some(handler), _) => {
+                parser = parser.with_svg_file_handler(DynSvgFileHandler(handler.clone()));
+            }
+            (None, Some(base)) => {
+                parser = parser.with_svg_file_handler(FsSvgFileHandler::new(base, mode));
+            }
+            (None, None) => {}
         }
 
         // Pin the clock that drives the time-dependent document attributes, if
@@ -2193,5 +2376,124 @@ mod tests {
             doc.catalog().links(),
             ["https://example.org", "https://docs.example.org"]
         );
+    }
+
+    // A custom `IncludeFileHandler`/`DocinfoFileHandler`/`SvgFileHandler`
+    // supplied through `Options` resolves the corresponding resource without
+    // ever touching the filesystem — the seam #337 asks for, so a caller such
+    // as an Antora-style generator can resolve through its own content catalog
+    // instead of a base directory.
+    mod custom_handlers {
+        use std::fmt::Debug;
+
+        use asciidoc_parser::{
+            attributes::Attrlist,
+            parser::{
+                DocinfoFileHandler, IncludeContent, IncludeFileHandler, IncludeResolution,
+                RenderContext, SvgFileHandler,
+            },
+            Parser, SafeMode,
+        };
+
+        use crate::Options;
+
+        #[derive(Debug)]
+        struct CatalogIncludeHandler;
+
+        impl IncludeFileHandler for CatalogIncludeHandler {
+            fn resolve_target<'src>(
+                &self,
+                _source: Option<&str>,
+                target: &str,
+                _attrlist: &Attrlist<'src>,
+                _parser: &Parser,
+            ) -> IncludeResolution {
+                if target == "partial$note.adoc" {
+                    IncludeResolution::Found(IncludeContent::new("Included from catalog."))
+                } else {
+                    IncludeResolution::NotFound
+                }
+            }
+        }
+
+        #[test]
+        fn a_custom_include_handler_resolves_with_no_base_directory() {
+            // No `base_dir`/`input_file` at all -- the filesystem handler is
+            // never installed, so only the custom handler could have resolved
+            // this.
+            let html = crate::convert_with(
+                "= Doc\n\ninclude::partial$note.adoc[]",
+                &Options::new()
+                    .safe_mode(SafeMode::Unsafe)
+                    .include_file_handler(CatalogIncludeHandler),
+            );
+            assert!(html.contains("Included from catalog."), "{html}");
+        }
+
+        #[test]
+        fn a_custom_include_handler_takes_precedence_over_the_filesystem_handler() {
+            let dir = super::docinfo_scratch("include-precedence", &[]);
+
+            // A base directory is also supplied, which would otherwise install
+            // the filesystem handler; the custom handler wins and the
+            // filesystem is never consulted (there is no
+            // `partial$note.adoc` file in `dir`).
+            let html = crate::convert_with(
+                "= Doc\n\ninclude::partial$note.adoc[]",
+                &Options::new()
+                    .safe_mode(SafeMode::Unsafe)
+                    .base_dir(dir.clone())
+                    .include_file_handler(CatalogIncludeHandler),
+            );
+            assert!(html.contains("Included from catalog."), "{html}");
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+
+        #[derive(Debug)]
+        struct MapDocinfoHandler;
+
+        impl DocinfoFileHandler for MapDocinfoHandler {
+            fn resolve_docinfo(
+                &self,
+                _docinfodir: Option<&str>,
+                file_name: &str,
+                _parser: &Parser,
+            ) -> Option<String> {
+                (file_name == "docinfo.html").then(|| "<meta name=\"catalog\">".to_owned())
+            }
+        }
+
+        #[test]
+        fn a_custom_docinfo_handler_resolves_with_no_base_directory() {
+            let html = crate::convert_with(
+                "= Doc\n:docinfo: shared\n\nBody.",
+                &Options::new()
+                    .standalone(true)
+                    .safe_mode(SafeMode::Safe)
+                    .docinfo_file_handler(MapDocinfoHandler),
+            );
+            assert!(html.contains("<meta name=\"catalog\">\n</head>"), "{html}");
+        }
+
+        #[derive(Debug)]
+        struct FixedSvgHandler;
+
+        impl SvgFileHandler for FixedSvgHandler {
+            fn resolve_svg(&self, target: &str, _context: &RenderContext) -> Option<String> {
+                (target == "diagram.svg")
+                    .then(|| "<svg><title>from catalog</title></svg>".to_owned())
+            }
+        }
+
+        #[test]
+        fn a_custom_svg_handler_resolves_with_no_base_directory() {
+            let html = crate::convert_with(
+                "image:diagram.svg[opts=inline]",
+                &Options::new()
+                    .safe_mode(SafeMode::Unsafe)
+                    .svg_file_handler(FixedSvgHandler),
+            );
+            assert!(html.contains("<title>from catalog</title>"), "{html}");
+        }
     }
 }
