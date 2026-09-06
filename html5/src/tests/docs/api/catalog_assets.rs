@@ -174,10 +174,23 @@ assert_eq!(
     );
 }
 
-non_normative!(
-    r#"
+// A cross-reference target is never recorded as a link.
+#[test]
+fn cross_reference_targets_are_not_recorded_as_links() {
+    verifies!(
+        r#"
 A cross-reference target (`\<<id>>`) is never recorded as a link.
 
+"#
+    );
+
+    let opts = Options::new().catalog_assets(true);
+    let doc = load_with("[#target]\n== A Section\n\nSee <<target>>.", &opts);
+    assert!(doc.catalog().links().is_empty());
+}
+
+non_normative!(
+    r#"
 == Read referenceable IDs
 
 IDs are always cataloged, so this works with or without `catalog_assets`. Look
