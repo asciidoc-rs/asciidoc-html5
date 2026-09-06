@@ -56,11 +56,7 @@ use std::{
 };
 
 use asciidoc_parser::{
-    attributes::Attrlist,
-    parser::{
-        DocinfoFileHandler, IncludeFileHandler, IncludeResolution, ModificationContext,
-        RenderContext, SvgFileHandler,
-    },
+    parser::{DocinfoFileHandler, IncludeFileHandler, ModificationContext, SvgFileHandler},
     Parser, ReferenceTime, SafeMode,
 };
 
@@ -232,58 +228,6 @@ impl Precedence {
             Precedence::Override => ModificationContext::ApiOnly,
             Precedence::Default => ModificationContext::Anywhere,
         }
-    }
-}
-
-// `Parser::with_include_file_handler` (and its docinfo/SVG counterparts) are
-// generic over a `Sized` handler type, which it wraps in its own `Rc`; there is
-// no blanket implementation of these traits for `Rc<dyn Trait>` upstream, so a
-// trait object stored in `Options` cannot be handed to them directly. Each
-// wrapper below is a local, `Sized` type that holds the trait object and
-// delegates to it, satisfying that bound while keeping the handler behind one
-// `Rc` `Options` can cheaply clone.
-
-/// Delegates to a caller-supplied [`IncludeFileHandler`] trait object stored in
-/// [`Options`]. See the module note above [`DynIncludeFileHandler`] itself.
-#[derive(Clone, Debug)]
-struct DynIncludeFileHandler(Rc<dyn IncludeFileHandler>);
-
-impl IncludeFileHandler for DynIncludeFileHandler {
-    fn resolve_target<'src>(
-        &self,
-        source: Option<&str>,
-        target: &str,
-        attrlist: &Attrlist<'src>,
-        parser: &Parser,
-    ) -> IncludeResolution {
-        self.0.resolve_target(source, target, attrlist, parser)
-    }
-}
-
-/// Delegates to a caller-supplied [`DocinfoFileHandler`] trait object stored in
-/// [`Options`]. See the note above [`DynIncludeFileHandler`].
-#[derive(Clone, Debug)]
-struct DynDocinfoFileHandler(Rc<dyn DocinfoFileHandler>);
-
-impl DocinfoFileHandler for DynDocinfoFileHandler {
-    fn resolve_docinfo(
-        &self,
-        docinfodir: Option<&str>,
-        file_name: &str,
-        parser: &Parser,
-    ) -> Option<String> {
-        self.0.resolve_docinfo(docinfodir, file_name, parser)
-    }
-}
-
-/// Delegates to a caller-supplied [`SvgFileHandler`] trait object stored in
-/// [`Options`]. See the note above [`DynIncludeFileHandler`].
-#[derive(Clone, Debug)]
-struct DynSvgFileHandler(Rc<dyn SvgFileHandler>);
-
-impl SvgFileHandler for DynSvgFileHandler {
-    fn resolve_svg(&self, target: &str, context: &RenderContext) -> Option<String> {
-        self.0.resolve_svg(target, context)
     }
 }
 
@@ -1023,7 +967,7 @@ impl Options {
         let base_dir = self.effective_base_dir();
         match (&self.include_file_handler, &base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_include_file_handler(DynIncludeFileHandler(handler.clone()));
+                parser = parser.with_include_file_handler(handler.clone());
             }
             (None, Some(base)) => {
                 parser =
@@ -1033,7 +977,7 @@ impl Options {
         }
         match (&self.docinfo_file_handler, &base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_docinfo_file_handler(DynDocinfoFileHandler(handler.clone()));
+                parser = parser.with_docinfo_file_handler(handler.clone());
             }
             (None, Some(base)) => {
                 parser =
@@ -1043,7 +987,7 @@ impl Options {
         }
         match (&self.svg_file_handler, base_dir) {
             (Some(handler), _) => {
-                parser = parser.with_svg_file_handler(DynSvgFileHandler(handler.clone()));
+                parser = parser.with_svg_file_handler(handler.clone());
             }
             (None, Some(base)) => {
                 parser = parser.with_svg_file_handler(FsSvgFileHandler::new(base, mode));
