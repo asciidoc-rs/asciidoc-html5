@@ -1,4 +1,4 @@
-use crate::{load, load_with, tests::sdd::*, Options};
+use crate::{convert, load, load_with, tests::sdd::*, Options};
 
 track_file!("docs/modules/api/pages/catalog-assets.adoc");
 
@@ -174,10 +174,40 @@ assert_eq!(
     );
 }
 
+// A cross-reference target is never recorded as a link, and this page's
+// escaped `\<<id>>` example renders as literal text rather than the broken
+// reference an unescaped `<<id>>` produces for a nonexistent `id` anchor.
+#[test]
+fn cross_reference_targets_are_not_recorded_as_links() {
+    verifies!(
+        r#"
+A cross-reference target (`\<<id>>`) is never recorded as a link.
+
+"#
+    );
+
+    let opts = Options::new().catalog_assets(true);
+    let doc = load_with("[#target]\n== A Section\n\nSee <<target>>.", &opts);
+    assert!(doc.catalog().links().is_empty());
+
+    // The page's escaped `\<<id>>` renders as literal monospace text...
+    let escaped = convert(r"A cross-reference target (`\<<id>>`) is never recorded as a link.");
+    assert!(
+        escaped.contains("<code>&lt;&lt;id&gt;&gt;</code>"),
+        "{escaped}"
+    );
+
+    // ...unlike an unescaped `<<id>>`, which substitutes as a real
+    // cross-reference and, since `id` is never defined, renders broken.
+    let unescaped = convert(r"A cross-reference target (`<<id>>`) is never recorded as a link.");
+    assert!(
+        unescaped.contains(r##"<code><a href="#id">[id]</a></code>"##),
+        "{unescaped}"
+    );
+}
+
 non_normative!(
     r#"
-A cross-reference target (`<<id>>`) is never recorded as a link.
-
 == Read referenceable IDs
 
 IDs are always cataloged, so this works with or without `catalog_assets`. Look
