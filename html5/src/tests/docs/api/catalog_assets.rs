@@ -176,7 +176,7 @@ assert_eq!(
 
 non_normative!(
     r#"
-A cross-reference target (`<<id>>`) is never recorded as a link.
+A cross-reference target (`\<<id>>`) is never recorded as a link.
 
 == Read referenceable IDs
 
