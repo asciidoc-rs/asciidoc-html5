@@ -182,6 +182,7 @@ fn render(document: &Document<'_>, options: &Options) -> String {
         stylesheet.as_deref(),
         options.is_standalone(),
         svg_source,
+        options.source_locations_enabled(),
     )
 }
 
@@ -537,7 +538,7 @@ pub fn load_file_with<P: AsRef<Path>>(path: P, options: &Options) -> io::Result<
 /// [`rendered_html_content`]: asciidoc_parser::blocks::IsBlock::rendered_html_content
 /// [`title`]: asciidoc_parser::blocks::IsBlock::title
 pub fn convert_document(document: &Document<'_>) -> String {
-    renderer::render_document(document, None, false, None)
+    renderer::render_document(document, None, false, None, false)
 }
 
 /// Renders an already-parsed [`Document`] to HTML5 under `options` — the

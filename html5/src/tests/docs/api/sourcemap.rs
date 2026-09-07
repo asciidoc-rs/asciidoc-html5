@@ -236,6 +236,48 @@ sourcemap reports `partials/section.adoc`, line 3.
     let _ = fs::remove_dir_all(&dir);
 }
 
+// The "Emit source locations in the rendered HTML" worked example:
+// `Options::source_locations(true)` puts a `data-source-line` attribute on each
+// block's outermost container element.
+#[test]
+fn emits_source_locations_in_rendered_html() {
+    verifies!(
+        r##"
+== Emit source locations in the rendered HTML
+
+Reading a block's span from the parsed `Document` is one way to map a rendered
+block back to its source; another is to have the *rendered HTML itself* carry
+the location, so a tool working from the HTML alone -- without walking the
+parse tree -- can still make the connection. `Options::source_locations(true)`
+turns this on: every block's outermost container element gains a
+`data-source-line="<n>"` attribute naming the same preprocessed-source line
+`Span::line` reports elsewhere on this page. It defaults to off, so it never
+affects output parity with Asciidoctor, whose own converters have no such
+attribute.
+
+[,rust]
+----
+use asciidoc_html5::{convert_with, Options};
+
+let opts = Options::new().source_locations(true);
+let html = convert_with("= Doc\n\nFirst paragraph.\n\nSecond paragraph.", &opts);
+assert!(html.contains(r#"<div class="paragraph" data-source-line="3">"#));
+assert!(html.contains(r#"<div class="paragraph" data-source-line="5">"#));
+----
+
+As with a bare `span()`, the line is in the *preprocessed* source; translate it
+through `Document::source_map` the same way as above to recover the original
+file and line for a document built from `include::` directives.
+
+"##
+    );
+
+    let opts = Options::new().source_locations(true);
+    let html = crate::convert_with("= Doc\n\nFirst paragraph.\n\nSecond paragraph.", &opts);
+    assert!(html.contains(r#"<div class="paragraph" data-source-line="3">"#));
+    assert!(html.contains(r#"<div class="paragraph" data-source-line="5">"#));
+}
+
 // The first limitation: a block's span begins at its first metadata line, not
 // at the first content line as Asciidoctor's sourcemap reports. Loading a
 // paragraph carrying a `[#p1]` anchor shows the span starting on the metadata
@@ -270,6 +312,14 @@ non_normative!(
 Source locations are not available for inline elements. As in Asciidoctor, you can
 read the source location of the enclosing block, which at least gets you close to
 the element.
+
+`data-source-line` inherits the same metadata-line quirk described above. It
+is emitted on every block's own outermost container, however deeply nested --
+a paragraph inside a sidebar inside a section still gets its own attribute --
+but not on the finer-grained pieces *within* a single block construct: a
+list's `<li>` items, a table's `<tr>`/`<td>` cells, and a description list's
+`<dt>`/`<dd>` entries do not carry their own attribute, matching how
+Asciidoctor's own tooling anchors at block granularity.
 
 That covers reading the source location of blocks in a loaded document.
 "#

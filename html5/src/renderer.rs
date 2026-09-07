@@ -44,7 +44,7 @@ use asciidoc_parser::{
 };
 
 use crate::{
-    html::{class_attribute, escape_attribute, escape_quote, id_attribute},
+    html::{class_attribute, escape_attribute, escape_quote, id_attribute, source_line_attribute},
     svg_file_handler,
 };
 
@@ -1487,6 +1487,7 @@ pub(crate) fn render_document<'a>(
     custom_stylesheet: Option<&'a str>,
     standalone: bool,
     svg_source: Option<SvgSource>,
+    source_locations: bool,
 ) -> String {
     // Build the header/preamble TOC block once, up front — it is emitted at the
     // single site the placement selects. Only the placements that render a TOC
@@ -1559,6 +1560,7 @@ pub(crate) fn render_document<'a>(
         svg_below_secure: safe_mode_below_secure(document),
         data_uri: document.is_attribute_set("data-uri"),
         svg_source,
+        source_locations,
     };
     renderer.document(document);
     renderer.out
@@ -1727,6 +1729,11 @@ struct CellRenderConfig {
     /// URIs — from the same anchored, jailed base directory (see
     /// [`Renderer::svg_source`]).
     svg_source: Option<SvgSource>,
+
+    /// Inherited from the enclosing document so an AsciiDoc cell's blocks carry
+    /// the same `data-source-line` annotation as the rest of the document (see
+    /// [`Renderer::source_locations`]).
+    source_locations: bool,
 }
 
 /// The table-of-contents settings a nested AsciiDoc table cell resolves from
@@ -1792,6 +1799,13 @@ struct Renderer<'a> {
     /// Whether to emit the standalone document shell (`true`) or embedded,
     /// body-only output (`false`).
     standalone: bool,
+
+    /// Whether to annotate each block's outermost container element with a
+    /// `data-source-line="<n>"` attribute naming the line its
+    /// [`Span`](asciidoc_parser::Span) reports
+    /// ([`Options::source_locations`](crate::Options::source_locations)).
+    /// `false` by default, so output parity with Asciidoctor is untouched.
+    source_locations: bool,
 
     /// Where the document's table of contents is placed, or
     /// [`TocMode::Disabled`] when none is generated. Selects which placement
@@ -3276,9 +3290,10 @@ impl Renderer<'_> {
             ""
         };
         self.line(&format!(
-            "<details{}{}{open}>",
+            "<details{}{}{}{open}>",
             id_attribute(block.id()),
-            class_attribute("", &block.roles())
+            class_attribute("", &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         let summary = block.title().unwrap_or("Details");
         self.line(&format!("<summary class=\"title\">{summary}</summary>"));
@@ -3365,12 +3380,13 @@ impl Renderer<'_> {
         admonition: &'src AdmonitionBlock<'src>,
     ) {
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
             class_attribute(
                 &format!("admonitionblock {}", admonition.name()),
                 &block.roles()
-            )
+            ),
+            source_line_attribute(self.source_line(block))
         ));
         self.line("<table>");
         self.line("<tr>");
@@ -3458,9 +3474,10 @@ impl Renderer<'_> {
         }
 
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute(&base, &block.roles())
+            class_attribute(&base, &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
 
@@ -3497,9 +3514,10 @@ impl Renderer<'_> {
         let style = olist_style(block, list);
 
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute(&format!("olist {style}"), &block.roles())
+            class_attribute(&format!("olist {style}"), &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
 
@@ -3562,9 +3580,10 @@ impl Renderer<'_> {
         // Asciidoctor's classes are `['colist', node.style, node.role]`; a
         // callout list's style is always `arabic`.
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute("colist arabic", &block.roles())
+            class_attribute("colist arabic", &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
 
@@ -3689,9 +3708,10 @@ impl Renderer<'_> {
         }
 
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute(&base, &block.roles())
+            class_attribute(&base, &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
         self.line("<dl>");
@@ -3723,9 +3743,10 @@ impl Renderer<'_> {
     /// questions ahead of the description, matching Asciidoctor.
     fn dlist_qanda(&mut self, block: &Block<'_>, entries: &[DlistEntry<'_>]) {
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute("qlist qanda", &block.roles())
+            class_attribute("qlist qanda", &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
         self.line("<ol>");
@@ -3757,9 +3778,10 @@ impl Renderer<'_> {
         entries: &[DlistEntry<'_>],
     ) {
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute("hdlist", &block.roles())
+            class_attribute("hdlist", &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
         self.line("<table>");
@@ -3980,10 +4002,11 @@ impl Renderer<'_> {
         }
 
         self.line(&format!(
-            "<table{}{}{}>",
+            "<table{}{}{}{}>",
             id_attribute(block.id()),
             class_attribute(&classes, &[]),
-            style_attr
+            style_attr,
+            source_line_attribute(self.source_line(block))
         ));
 
         // A titled table is captioned: the ready-made caption prefix
@@ -4125,6 +4148,7 @@ impl Renderer<'_> {
                         svg_below_secure: self.svg_below_secure,
                         data_uri: self.data_uri,
                         svg_source: self.svg_source.clone(),
+                        source_locations: self.source_locations,
                     },
                 )
             ),
@@ -4226,9 +4250,10 @@ impl Renderer<'_> {
             // defaults to `discrete` for the rare case one is not recorded.
             let style = block.declared_style().unwrap_or("discrete");
             self.line(&format!(
-                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                "<h{heading_level}{}{}{}>{title}</h{heading_level}>",
                 id_attribute(id),
-                class_attribute(style, &block.roles())
+                class_attribute(style, &block.roles()),
+                source_line_attribute(self.source_line(block))
             ));
             return;
         }
@@ -4244,17 +4269,19 @@ impl Renderer<'_> {
             // the section's blocks directly after it, with no wrapping `<div>`
             // and no `sectionbody`.
             self.line(&format!(
-                "<h{heading_level}{}{}>{title}</h{heading_level}>",
+                "<h{heading_level}{}{}{}>{title}</h{heading_level}>",
                 id_attribute(id),
-                class_attribute("sect0", &block.roles())
+                class_attribute("sect0", &block.roles()),
+                source_line_attribute(self.source_line(block))
             ));
             self.blocks(block.child_blocks());
             return;
         }
 
         self.line(&format!(
-            "<div{}>",
-            class_attribute(&format!("sect{level}"), &block.roles())
+            "<div{}{}>",
+            class_attribute(&format!("sect{level}"), &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
         self.line(&format!(
             "<h{heading_level}{}>{title}</h{heading_level}>",
@@ -4340,7 +4367,10 @@ impl Renderer<'_> {
     /// wrapped as `<div id="preamble"><div
     /// class="sectionbody">…</div></div>`.
     fn preamble<'src>(&mut self, block: &'src Block<'src>) {
-        self.line("<div id=\"preamble\">");
+        self.line(&format!(
+            "<div id=\"preamble\"{}>",
+            source_line_attribute(self.source_line(block))
+        ));
         self.line("<div class=\"sectionbody\">");
         self.blocks(block.child_blocks());
         self.line("</div>");
@@ -4449,8 +4479,9 @@ impl Renderer<'_> {
             .unwrap_or(default_class);
 
         self.line(&format!(
-            "<div{id_attr} class=\"{}\">",
-            escape_attribute(&class)
+            "<div{id_attr} class=\"{}\"{}>",
+            escape_attribute(&class),
+            source_line_attribute(self.source_line(block))
         ));
         self.line(&format!(
             "<div{title_id_attr} class=\"title\">{title}</div>"
@@ -4462,9 +4493,12 @@ impl Renderer<'_> {
     /// A break: `<hr>` for a thematic break, or Asciidoctor's page-break
     /// `<div>` for a page break.
     fn break_block(&mut self, brk: &Break<'_>) {
+        let source_line = source_line_attribute(self.source_locations.then(|| brk.span().line()));
         match brk.type_() {
-            BreakType::Thematic => self.line("<hr>"),
-            BreakType::Page => self.line("<div style=\"page-break-after: always;\"></div>"),
+            BreakType::Thematic => self.line(&format!("<hr{source_line}>")),
+            BreakType::Page => self.line(&format!(
+                "<div style=\"page-break-after: always;\"{source_line}></div>"
+            )),
         }
     }
 
@@ -4717,8 +4751,9 @@ impl Renderer<'_> {
         }
 
         self.line(&format!(
-            "<div{} class=\"{classes}\">",
-            id_attribute(block.id())
+            "<div{} class=\"{classes}\"{}>",
+            id_attribute(block.id()),
+            source_line_attribute(self.source_line(block))
         ));
         self.line("<div class=\"content\">");
         self.line(&img);
@@ -4814,9 +4849,10 @@ impl Renderer<'_> {
         }
 
         self.line(&format!(
-            "<div{} class=\"{}\">",
+            "<div{} class=\"{}\"{}>",
             id_attribute(block.id()),
-            classes.join(" ")
+            classes.join(" "),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
         self.line("<div class=\"content\">");
@@ -5025,9 +5061,10 @@ impl Renderer<'_> {
         let attrs = media.macro_attrlist();
 
         self.line(&format!(
-            "<div{} class=\"{}\">",
+            "<div{} class=\"{}\"{}>",
             id_attribute(block.id()),
             class_list("audioblock", &self.media_roles(block, media)),
+            source_line_attribute(self.source_line(block))
         ));
         self.block_title(block);
         self.line("<div class=\"content\">");
@@ -5055,10 +5092,19 @@ impl Renderer<'_> {
     /// Opens `<div id=… class="<base> <roles>">` for a leaf block wrapper.
     fn open_block_wrapper<'src>(&mut self, block: &'src Block<'src>, base_class: &str) {
         self.line(&format!(
-            "<div{}{}>",
+            "<div{}{}{}>",
             id_attribute(block.id()),
-            class_attribute(base_class, &block.roles())
+            class_attribute(base_class, &block.roles()),
+            source_line_attribute(self.source_line(block))
         ));
+    }
+
+    /// The block's source line, when
+    /// [`source_locations`](Self::source_locations) is enabled — the
+    /// `data-source-line` value for its outermost container. `None` when the
+    /// feature is off, so call sites splice nothing.
+    fn source_line<'src>(&self, block: &'src Block<'src>) -> Option<usize> {
+        self.source_locations.then(|| block.span().line())
     }
 
     /// Emits the block's `<div class="title">…</div>`, if it has a title. The
@@ -5383,6 +5429,7 @@ fn render_cell_document<'s>(
         svg_below_secure: config.svg_below_secure,
         data_uri: config.data_uri,
         svg_source: config.svg_source,
+        source_locations: config.source_locations,
     };
     if let Some(title) = title {
         renderer.line(&format!("<h1>{title}</h1>"));
@@ -9391,6 +9438,7 @@ mod tests {
             svg_below_secure: false,
             data_uri: false,
             svg_source: None,
+            source_locations: false,
         }
     }
 
@@ -9450,5 +9498,205 @@ mod tests {
         let mut renderer = bare_renderer();
         renderer.list_item(paragraph, false, false);
         assert!(renderer.out.is_empty(), "{}", renderer.out);
+    }
+
+    // `Options::source_locations` (#339): opt-in `data-source-line` attributes
+    // on each block's outermost container element. Kept as plain functions in
+    // this module (not a nested `mod source_locations`) so the CI coverage
+    // tooling, which recognizes test code per-file by this module, excludes
+    // them the same way it does every other test here.
+
+    fn with_source_locations(source: &str) -> String {
+        convert_with(source, &Options::new().source_locations(true))
+    }
+
+    #[test]
+    fn source_locations_off_by_default() {
+        let html = convert("= Doc\n\nHello world.");
+        assert!(!html.contains("data-source-line"), "{html}");
+    }
+
+    /// One case per block-wrapper kind `Options::source_locations` touches:
+    /// the AsciiDoc `source` and a snippet the rendered `content()` must
+    /// contain when the flag is on. Kept as table-driven data (rather than
+    /// one `#[test]` per case) so covering every call site doesn't multiply
+    /// the number of test functions -- see
+    /// [`every_wrapper_carries_its_source_line`].
+    const SOURCE_LOCATION_WRAPPER_CASES: &[(&str, &str, &str)] = &[
+        (
+            "paragraph (first)",
+            "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+            "<div class=\"paragraph\" data-source-line=\"3\">\n<p>First paragraph.</p>\n</div>",
+        ),
+        (
+            "paragraph (second)",
+            "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+            "<div class=\"paragraph\" data-source-line=\"5\">\n<p>Second paragraph.</p>\n</div>",
+        ),
+        (
+            "id and role precede the source line",
+            "[#p1.lead]\nA paragraph.",
+            "<div id=\"p1\" class=\"paragraph lead\" data-source-line=\"1\">",
+        ),
+        (
+            "discrete heading (no wrapping div)",
+            "= Doc\n\n[discrete]\n== Discrete Heading",
+            "<h2 id=\"_discrete_heading\" class=\"discrete\" data-source-line=\"3\">Discrete Heading</h2>",
+        ),
+        (
+            "preamble",
+            "= Doc\n\nPreamble text.\n\n== Section\n\nBody.",
+            "<div id=\"preamble\" data-source-line=\"3\">",
+        ),
+        ("ulist", "* one\n* two", "<div class=\"ulist\" data-source-line=\"1\">"),
+        (
+            "olist",
+            ". one\n. two",
+            "<div class=\"olist arabic\" data-source-line=\"1\">",
+        ),
+        (
+            "colist",
+            "----\ncode <1>\n----\n\n<1> first",
+            "<div class=\"colist arabic\" data-source-line=\"5\">",
+        ),
+        (
+            "dlist (labeled)",
+            "CPU:: brain",
+            "<div class=\"dlist\" data-source-line=\"1\">",
+        ),
+        (
+            "dlist (qanda)",
+            "[qanda]\nWhat?:: This.",
+            "<div class=\"qlist qanda\" data-source-line=\"1\">",
+        ),
+        (
+            "dlist (horizontal)",
+            "[horizontal]\nCPU:: brain",
+            "<div class=\"hdlist\" data-source-line=\"1\">",
+        ),
+        (
+            "table",
+            "|===\n|a |b\n|===",
+            "<table class=\"tableblock frame-all grid-all stretch\" data-source-line=\"1\">",
+        ),
+        (
+            "admonition",
+            "NOTE: A note.",
+            "<div class=\"admonitionblock note\" data-source-line=\"1\">",
+        ),
+        (
+            "image",
+            "image::photo.png[]",
+            "<div class=\"imageblock\" data-source-line=\"1\">",
+        ),
+        (
+            "video",
+            "video::movie.mp4[width=640]",
+            "<div class=\"videoblock\" data-source-line=\"1\">",
+        ),
+        (
+            "audio",
+            "audio::podcast.mp3[]",
+            "<div class=\"audioblock\" data-source-line=\"1\">",
+        ),
+        (
+            "toc::[] macro",
+            "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
+            "<div id=\"toc\" class=\"toc\" data-source-line=\"6\">",
+        ),
+        (
+            "thematic break",
+            "before\n\n'''\n\nafter",
+            "<hr data-source-line=\"3\">",
+        ),
+        (
+            "page break",
+            "before\n\n<<<\n\nafter",
+            "<div style=\"page-break-after: always;\" data-source-line=\"3\"></div>",
+        ),
+        (
+            "AsciiDoc table cell inherits the setting",
+            "|===\na|\nCell paragraph.\n|===",
+            "<div class=\"paragraph\" data-source-line=\"3\">\n<p>Cell paragraph.</p>\n</div>",
+        ),
+        (
+            "open block",
+            "--\ntext in open block\n--",
+            "<div class=\"openblock\" data-source-line=\"1\">",
+        ),
+        (
+            "sidebar",
+            "****\nContent here.\n****",
+            "<div class=\"sidebarblock\" data-source-line=\"1\">",
+        ),
+        (
+            "example",
+            "====\nContent here.\n====",
+            "<div class=\"exampleblock\" data-source-line=\"1\">",
+        ),
+        (
+            "collapsible example (<details>)",
+            "[%collapsible]\n====\nContent here.\n====",
+            "<details data-source-line=\"1\">",
+        ),
+        (
+            "quote",
+            "[quote]\nFamous quote.",
+            "<div class=\"quoteblock\" data-source-line=\"1\">",
+        ),
+        (
+            "verse",
+            "[verse]\nFamous verse.",
+            "<div class=\"verseblock\" data-source-line=\"1\">",
+        ),
+        (
+            "abstract",
+            "[abstract]\nA concise overview.",
+            "<div class=\"quoteblock abstract\" data-source-line=\"1\">",
+        ),
+        (
+            "listing block",
+            "----\ncode\n----",
+            "<div class=\"listingblock\" data-source-line=\"1\">",
+        ),
+        (
+            "literal block",
+            "....\nlit\n....",
+            "<div class=\"literalblock\" data-source-line=\"1\">",
+        ),
+        (
+            "source block",
+            "[source,ruby]\n----\ndef x\nend\n----\n",
+            "<div class=\"listingblock\" data-source-line=\"1\">",
+        ),
+        (
+            "stem block",
+            "[stem]\n++++\nx = y^2\n++++\n",
+            "<div class=\"stemblock\" data-source-line=\"1\">",
+        ),
+    ];
+
+    #[test]
+    fn every_wrapper_carries_its_source_line() {
+        for (name, source, expected) in SOURCE_LOCATION_WRAPPER_CASES {
+            let html = with_source_locations(source);
+            assert!(
+                content(&html).contains(expected),
+                "case {name:?}: expected {expected:?} in {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn section_wrapper_carries_the_line_but_not_the_heading() {
+        let html = with_source_locations("= Doc\n\n== Section\n\nBody.");
+        let body = content(&html);
+        assert!(
+            body.contains("<div class=\"sect1\" data-source-line=\"3\">"),
+            "{body}"
+        );
+        // The heading itself keeps only its id -- no `data-source-line` --
+        // since the wrapping `<div>` is the section's outermost container.
+        assert!(body.contains("<h2 id=\"_section\">Section</h2>"), "{body}");
     }
 }

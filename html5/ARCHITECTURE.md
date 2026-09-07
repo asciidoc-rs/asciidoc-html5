@@ -253,6 +253,15 @@ standalone even when piping. Embedded output emits no stylesheet, so the
   `"Example 1. "`) and [`IsBlock::number`]. Title placement differs by block:
   inside the wrapper before `<p>`/`<pre>` for paragraphs and verbatim blocks;
   after `<div class="content">` for images; first child for example/sidebar/open.
+- **Source locations (opt-in).** With [`Options::source_locations`] enabled,
+  every block's outermost container element additionally carries a
+  `data-source-line="<n>"` attribute, taken from
+  [`HasSpan::span`]`.line()`. This is off by default (Asciidoctor's own
+  converters carry no such attribute), so it never affects output parity; it
+  exists for tooling that maps rendered blocks back to their source line (see
+  [#339](https://github.com/asciidoc-rs/asciidoc-html5/issues/339)). Assembled
+  by `html::source_line_attribute` and threaded through `Renderer` (and, for a
+  nested AsciiDoc table cell, `CellRenderConfig`) as `source_locations`.
 
 ## Escaping model
 
@@ -448,6 +457,7 @@ depends on:
 [`load_file`]: crate::load_file
 [`load_deferred`]: crate::load_deferred
 [`Options`]: crate::Options
+[`Options::source_locations`]: crate::Options::source_locations
 [`Document`]: asciidoc_parser::Document
 [`Document::attribute_value`]: asciidoc_parser::Document::attribute_value
 [`Document::has_attribute`]: asciidoc_parser::Document::has_attribute
@@ -472,3 +482,4 @@ depends on:
 [`Catalog`]: asciidoc_parser::document::Catalog
 [`HtmlInlineRenderer`]: asciidoc_parser::parser::HtmlInlineRenderer
 [`InlineRenderer`]: asciidoc_parser::parser::InlineRenderer
+[`HasSpan::span`]: asciidoc_parser::HasSpan::span
