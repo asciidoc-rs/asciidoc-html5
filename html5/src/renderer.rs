@@ -9516,33 +9516,175 @@ mod tests {
             assert!(!html.contains("data-source-line"), "{html}");
         }
 
-        #[test]
-        fn paragraph_carries_its_line() {
-            let html = with_source_locations("= Doc\n\nFirst paragraph.\n\nSecond paragraph.");
-            assert!(
-                content(&html).contains(
-                    "<div class=\"paragraph\" data-source-line=\"3\">\n<p>First paragraph.</p>\n</div>"
-                ),
-                "{html}"
-            );
-            assert!(
-                content(&html).contains(
-                    "<div class=\"paragraph\" data-source-line=\"5\">\n<p>Second paragraph.</p>\n</div>"
-                ),
-                "{html}"
-            );
-        }
+        /// One case per block-wrapper kind `Options::source_locations` touches:
+        /// the AsciiDoc `source` and a snippet the rendered `content()` must
+        /// contain when the flag is on. Kept as table-driven data (rather than
+        /// one `#[test]` per case) so covering every call site doesn't multiply
+        /// the number of test functions -- see
+        /// [`every_wrapper_carries_its_source_line`].
+        const WRAPPER_CASES: &[(&str, &str, &str)] = &[
+            (
+                "paragraph (first)",
+                "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+                "<div class=\"paragraph\" data-source-line=\"3\">\n<p>First paragraph.</p>\n</div>",
+            ),
+            (
+                "paragraph (second)",
+                "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+                "<div class=\"paragraph\" data-source-line=\"5\">\n<p>Second paragraph.</p>\n</div>",
+            ),
+            (
+                "id and role precede the source line",
+                "[#p1.lead]\nA paragraph.",
+                "<div id=\"p1\" class=\"paragraph lead\" data-source-line=\"1\">",
+            ),
+            (
+                "discrete heading (no wrapping div)",
+                "= Doc\n\n[discrete]\n== Discrete Heading",
+                "<h2 id=\"_discrete_heading\" class=\"discrete\" data-source-line=\"3\">Discrete Heading</h2>",
+            ),
+            (
+                "preamble",
+                "= Doc\n\nPreamble text.\n\n== Section\n\nBody.",
+                "<div id=\"preamble\" data-source-line=\"3\">",
+            ),
+            ("ulist", "* one\n* two", "<div class=\"ulist\" data-source-line=\"1\">"),
+            (
+                "olist",
+                ". one\n. two",
+                "<div class=\"olist arabic\" data-source-line=\"1\">",
+            ),
+            (
+                "colist",
+                "----\ncode <1>\n----\n\n<1> first",
+                "<div class=\"colist arabic\" data-source-line=\"5\">",
+            ),
+            (
+                "dlist (labeled)",
+                "CPU:: brain",
+                "<div class=\"dlist\" data-source-line=\"1\">",
+            ),
+            (
+                "dlist (qanda)",
+                "[qanda]\nWhat?:: This.",
+                "<div class=\"qlist qanda\" data-source-line=\"1\">",
+            ),
+            (
+                "dlist (horizontal)",
+                "[horizontal]\nCPU:: brain",
+                "<div class=\"hdlist\" data-source-line=\"1\">",
+            ),
+            (
+                "table",
+                "|===\n|a |b\n|===",
+                "<table class=\"tableblock frame-all grid-all stretch\" data-source-line=\"1\">",
+            ),
+            (
+                "admonition",
+                "NOTE: A note.",
+                "<div class=\"admonitionblock note\" data-source-line=\"1\">",
+            ),
+            (
+                "image",
+                "image::photo.png[]",
+                "<div class=\"imageblock\" data-source-line=\"1\">",
+            ),
+            (
+                "video",
+                "video::movie.mp4[width=640]",
+                "<div class=\"videoblock\" data-source-line=\"1\">",
+            ),
+            (
+                "audio",
+                "audio::podcast.mp3[]",
+                "<div class=\"audioblock\" data-source-line=\"1\">",
+            ),
+            (
+                "toc::[] macro",
+                "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
+                "<div id=\"toc\" class=\"toc\" data-source-line=\"6\">",
+            ),
+            (
+                "thematic break",
+                "before\n\n'''\n\nafter",
+                "<hr data-source-line=\"3\">",
+            ),
+            (
+                "page break",
+                "before\n\n<<<\n\nafter",
+                "<div style=\"page-break-after: always;\" data-source-line=\"3\"></div>",
+            ),
+            (
+                "AsciiDoc table cell inherits the setting",
+                "|===\na|\nCell paragraph.\n|===",
+                "<div class=\"paragraph\" data-source-line=\"3\">\n<p>Cell paragraph.</p>\n</div>",
+            ),
+            (
+                "open block",
+                "--\ntext in open block\n--",
+                "<div class=\"openblock\" data-source-line=\"1\">",
+            ),
+            (
+                "sidebar",
+                "****\nContent here.\n****",
+                "<div class=\"sidebarblock\" data-source-line=\"1\">",
+            ),
+            (
+                "example",
+                "====\nContent here.\n====",
+                "<div class=\"exampleblock\" data-source-line=\"1\">",
+            ),
+            (
+                "collapsible example (<details>)",
+                "[%collapsible]\n====\nContent here.\n====",
+                "<details data-source-line=\"1\">",
+            ),
+            (
+                "quote",
+                "[quote]\nFamous quote.",
+                "<div class=\"quoteblock\" data-source-line=\"1\">",
+            ),
+            (
+                "verse",
+                "[verse]\nFamous verse.",
+                "<div class=\"verseblock\" data-source-line=\"1\">",
+            ),
+            (
+                "abstract",
+                "[abstract]\nA concise overview.",
+                "<div class=\"quoteblock abstract\" data-source-line=\"1\">",
+            ),
+            (
+                "listing block",
+                "----\ncode\n----",
+                "<div class=\"listingblock\" data-source-line=\"1\">",
+            ),
+            (
+                "literal block",
+                "....\nlit\n....",
+                "<div class=\"literalblock\" data-source-line=\"1\">",
+            ),
+            (
+                "source block",
+                "[source,ruby]\n----\ndef x\nend\n----\n",
+                "<div class=\"listingblock\" data-source-line=\"1\">",
+            ),
+            (
+                "stem block",
+                "[stem]\n++++\nx = y^2\n++++\n",
+                "<div class=\"stemblock\" data-source-line=\"1\">",
+            ),
+        ];
 
         #[test]
-        fn id_and_role_still_precede_the_source_line() {
-            // `data-source-line` is appended after any `id`/`class`, matching
-            // every other wrapper attribute's fixed order.
-            let html = with_source_locations("[#p1.lead]\nA paragraph.");
-            assert!(
-                content(&html)
-                    .starts_with("<div id=\"p1\" class=\"paragraph lead\" data-source-line=\"1\">"),
-                "{html}"
-            );
+        fn every_wrapper_carries_its_source_line() {
+            for (name, source, expected) in WRAPPER_CASES {
+                let html = with_source_locations(source);
+                assert!(
+                    content(&html).contains(expected),
+                    "case {name:?}: expected {expected:?} in {html}"
+                );
+            }
         }
 
         #[test]
@@ -9557,281 +9699,6 @@ mod tests {
             // since the wrapping `<div>` is the section's outermost
             // container.
             assert!(body.contains("<h2 id=\"_section\">Section</h2>"), "{body}");
-        }
-
-        #[test]
-        fn discrete_heading_carries_the_line_on_the_heading_itself() {
-            // A discrete heading has no wrapping `<div>`, so the `<hN>` is its
-            // own outermost container.
-            let html = with_source_locations("= Doc\n\n[discrete]\n== Discrete Heading");
-            assert!(
-                content(&html).contains(
-                    "<h2 id=\"_discrete_heading\" class=\"discrete\" data-source-line=\"3\">Discrete Heading</h2>"
-                ),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn preamble_carries_its_line() {
-            let html = with_source_locations("= Doc\n\nPreamble text.\n\n== Section\n\nBody.");
-            assert!(
-                content(&html).starts_with("<div id=\"preamble\" data-source-line=\"3\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn list_carries_its_line() {
-            let html = with_source_locations("* one\n* two");
-            assert!(
-                content(&html).starts_with("<div class=\"ulist\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn table_carries_its_line() {
-            let html = with_source_locations("|===\n|a |b\n|===");
-            assert!(
-                content(&html).starts_with(
-                    "<table class=\"tableblock frame-all grid-all stretch\" data-source-line=\"1\">"
-                ),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn admonition_carries_its_line() {
-            let html = with_source_locations("NOTE: A note.");
-            assert!(
-                content(&html)
-                    .starts_with("<div class=\"admonitionblock note\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn image_carries_its_line() {
-            let html = with_source_locations("image::photo.png[]");
-            assert!(
-                content(&html).starts_with("<div class=\"imageblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn thematic_break_carries_its_line() {
-            let html = with_source_locations("before\n\n'''\n\nafter");
-            assert!(
-                content(&html).contains("<hr data-source-line=\"3\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn page_break_carries_its_line() {
-            let html = with_source_locations("before\n\n<<<\n\nafter");
-            assert!(
-                content(&html).contains(
-                    "<div style=\"page-break-after: always;\" data-source-line=\"3\"></div>"
-                ),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn asciidoc_table_cell_inherits_the_setting() {
-            // A nested AsciiDoc (`a`) cell is rendered by its own
-            // sub-`Renderer` (see `CellRenderConfig`); it should
-            // inherit the parent's `source_locations` setting
-            // rather than silently dropping it.
-            let html = with_source_locations("|===\na|\nCell paragraph.\n|===");
-            assert!(
-                content(&html).contains(
-                    "<div class=\"paragraph\" data-source-line=\"3\">\n<p>Cell paragraph.</p>\n</div>"
-                ),
-                "{html}"
-            );
-        }
-
-        // The remaining tests each cover one more `open_block_wrapper` caller,
-        // or another wrapper site entirely, so every touched call site is
-        // exercised with the flag on (not just relying on an unrelated test
-        // happening to render the same markup).
-
-        #[test]
-        fn open_block_carries_its_line() {
-            let html = with_source_locations("--\ntext in open block\n--");
-            assert!(
-                content(&html).starts_with("<div class=\"openblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn sidebar_carries_its_line() {
-            let html = with_source_locations("****\nContent here.\n****");
-            assert!(
-                content(&html).starts_with("<div class=\"sidebarblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn example_carries_its_line() {
-            let html = with_source_locations("====\nContent here.\n====");
-            assert!(
-                content(&html).starts_with("<div class=\"exampleblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn collapsible_example_carries_its_line() {
-            let html = with_source_locations("[%collapsible]\n====\nContent here.\n====");
-            assert!(
-                content(&html).starts_with("<details data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn quote_carries_its_line() {
-            let html = with_source_locations("[quote]\nFamous quote.");
-            assert!(
-                content(&html).starts_with("<div class=\"quoteblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn verse_carries_its_line() {
-            let html = with_source_locations("[verse]\nFamous verse.");
-            assert!(
-                content(&html).starts_with("<div class=\"verseblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn abstract_block_carries_its_line() {
-            let html = with_source_locations("[abstract]\nA concise overview.");
-            assert!(
-                content(&html)
-                    .starts_with("<div class=\"quoteblock abstract\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn listing_block_carries_its_line() {
-            let html = with_source_locations("----\ncode\n----");
-            assert!(
-                content(&html).starts_with("<div class=\"listingblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn literal_block_carries_its_line() {
-            let html = with_source_locations("....\nlit\n....");
-            assert!(
-                content(&html).starts_with("<div class=\"literalblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn source_block_carries_its_line() {
-            let html = with_source_locations("[source,ruby]\n----\ndef x\nend\n----\n");
-            assert!(
-                content(&html).starts_with("<div class=\"listingblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn stem_block_carries_its_line() {
-            let html = with_source_locations("[stem]\n++++\nx = y^2\n++++\n");
-            assert!(
-                content(&html).starts_with("<div class=\"stemblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn olist_carries_its_line() {
-            let html = with_source_locations(". one\n. two");
-            assert!(
-                content(&html).starts_with("<div class=\"olist arabic\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn colist_carries_its_line() {
-            let html = with_source_locations("----\ncode <1>\n----\n\n<1> first");
-            assert!(
-                content(&html).contains("<div class=\"colist arabic\" data-source-line=\"5\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn dlist_labeled_carries_its_line() {
-            let html = with_source_locations("CPU:: brain");
-            assert!(
-                content(&html).starts_with("<div class=\"dlist\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn dlist_qanda_carries_its_line() {
-            let html = with_source_locations("[qanda]\nWhat?:: This.");
-            assert!(
-                content(&html).starts_with("<div class=\"qlist qanda\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn dlist_horizontal_carries_its_line() {
-            let html = with_source_locations("[horizontal]\nCPU:: brain");
-            assert!(
-                content(&html).starts_with("<div class=\"hdlist\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn video_carries_its_line() {
-            let html = with_source_locations("video::movie.mp4[width=640]");
-            assert!(
-                content(&html).starts_with("<div class=\"videoblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn audio_carries_its_line() {
-            let html = with_source_locations("audio::podcast.mp3[]");
-            assert!(
-                content(&html).starts_with("<div class=\"audioblock\" data-source-line=\"1\">"),
-                "{html}"
-            );
-        }
-
-        #[test]
-        fn toc_macro_carries_its_line() {
-            let html = with_source_locations(
-                "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
-            );
-            assert!(
-                content(&html).contains("<div id=\"toc\" class=\"toc\" data-source-line=\"6\">"),
-                "{html}"
-            );
         }
     }
 }
