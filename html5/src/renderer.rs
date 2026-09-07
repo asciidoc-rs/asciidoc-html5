@@ -9654,5 +9654,184 @@ mod tests {
                 "{html}"
             );
         }
+
+        // The remaining tests each cover one more `open_block_wrapper` caller,
+        // or another wrapper site entirely, so every touched call site is
+        // exercised with the flag on (not just relying on an unrelated test
+        // happening to render the same markup).
+
+        #[test]
+        fn open_block_carries_its_line() {
+            let html = with_source_locations("--\ntext in open block\n--");
+            assert!(
+                content(&html).starts_with("<div class=\"openblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn sidebar_carries_its_line() {
+            let html = with_source_locations("****\nContent here.\n****");
+            assert!(
+                content(&html).starts_with("<div class=\"sidebarblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn example_carries_its_line() {
+            let html = with_source_locations("====\nContent here.\n====");
+            assert!(
+                content(&html).starts_with("<div class=\"exampleblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn collapsible_example_carries_its_line() {
+            let html = with_source_locations("[%collapsible]\n====\nContent here.\n====");
+            assert!(
+                content(&html).starts_with("<details data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn quote_carries_its_line() {
+            let html = with_source_locations("[quote]\nFamous quote.");
+            assert!(
+                content(&html).starts_with("<div class=\"quoteblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn verse_carries_its_line() {
+            let html = with_source_locations("[verse]\nFamous verse.");
+            assert!(
+                content(&html).starts_with("<div class=\"verseblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn abstract_block_carries_its_line() {
+            let html = with_source_locations("[abstract]\nA concise overview.");
+            assert!(
+                content(&html)
+                    .starts_with("<div class=\"quoteblock abstract\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn listing_block_carries_its_line() {
+            let html = with_source_locations("----\ncode\n----");
+            assert!(
+                content(&html).starts_with("<div class=\"listingblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn literal_block_carries_its_line() {
+            let html = with_source_locations("....\nlit\n....");
+            assert!(
+                content(&html).starts_with("<div class=\"literalblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn source_block_carries_its_line() {
+            let html = with_source_locations("[source,ruby]\n----\ndef x\nend\n----\n");
+            assert!(
+                content(&html).starts_with("<div class=\"listingblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn stem_block_carries_its_line() {
+            let html = with_source_locations("[stem]\n++++\nx = y^2\n++++\n");
+            assert!(
+                content(&html).starts_with("<div class=\"stemblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn olist_carries_its_line() {
+            let html = with_source_locations(". one\n. two");
+            assert!(
+                content(&html).starts_with("<div class=\"olist arabic\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn colist_carries_its_line() {
+            let html = with_source_locations("----\ncode <1>\n----\n\n<1> first");
+            assert!(
+                content(&html).contains("<div class=\"colist arabic\" data-source-line=\"5\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn dlist_labeled_carries_its_line() {
+            let html = with_source_locations("CPU:: brain");
+            assert!(
+                content(&html).starts_with("<div class=\"dlist\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn dlist_qanda_carries_its_line() {
+            let html = with_source_locations("[qanda]\nWhat?:: This.");
+            assert!(
+                content(&html).starts_with("<div class=\"qlist qanda\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn dlist_horizontal_carries_its_line() {
+            let html = with_source_locations("[horizontal]\nCPU:: brain");
+            assert!(
+                content(&html).starts_with("<div class=\"hdlist\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn video_carries_its_line() {
+            let html = with_source_locations("video::movie.mp4[width=640]");
+            assert!(
+                content(&html).starts_with("<div class=\"videoblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn audio_carries_its_line() {
+            let html = with_source_locations("audio::podcast.mp3[]");
+            assert!(
+                content(&html).starts_with("<div class=\"audioblock\" data-source-line=\"1\">"),
+                "{html}"
+            );
+        }
+
+        #[test]
+        fn toc_macro_carries_its_line() {
+            let html = with_source_locations(
+                "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
+            );
+            assert!(
+                content(&html).contains("<div id=\"toc\" class=\"toc\" data-source-line=\"6\">"),
+                "{html}"
+            );
+        }
     }
 }
