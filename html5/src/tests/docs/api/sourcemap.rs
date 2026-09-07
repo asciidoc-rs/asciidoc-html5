@@ -313,11 +313,13 @@ Source locations are not available for inline elements. As in Asciidoctor, you c
 read the source location of the enclosing block, which at least gets you close to
 the element.
 
-`data-source-line` inherits the same metadata-line quirk described above, and
-is emitted only for the outermost container of a top-level block -- a list's
-`<li>` items, a table's `<tr>`/`<td>` cells, and a description list's `<dt>`/
-`<dd>` entries do not carry their own attribute, matching how Asciidoctor's own
-tooling anchors at block granularity.
+`data-source-line` inherits the same metadata-line quirk described above. It
+is emitted on every block's own outermost container, however deeply nested --
+a paragraph inside a sidebar inside a section still gets its own attribute --
+but not on the finer-grained pieces *within* a single block construct: a
+list's `<li>` items, a table's `<tr>`/`<td>` cells, and a description list's
+`<dt>`/`<dd>` entries do not carry their own attribute, matching how
+Asciidoctor's own tooling anchors at block granularity.
 
 That covers reading the source location of blocks in a loaded document.
 "#
