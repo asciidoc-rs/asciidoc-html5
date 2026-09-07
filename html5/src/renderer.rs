@@ -9501,204 +9501,202 @@ mod tests {
     }
 
     // `Options::source_locations` (#339): opt-in `data-source-line` attributes
-    // on each block's outermost container element.
-    mod source_locations {
-        use super::{content, convert, convert_with};
-        use crate::Options;
+    // on each block's outermost container element. Kept as plain functions in
+    // this module (not a nested `mod source_locations`) so the CI coverage
+    // tooling, which recognizes test code per-file by this module, excludes
+    // them the same way it does every other test here.
 
-        fn with_source_locations(source: &str) -> String {
-            convert_with(source, &Options::new().source_locations(true))
-        }
+    fn with_source_locations(source: &str) -> String {
+        convert_with(source, &Options::new().source_locations(true))
+    }
 
-        #[test]
-        fn off_by_default() {
-            let html = convert("= Doc\n\nHello world.");
-            assert!(!html.contains("data-source-line"), "{html}");
-        }
+    #[test]
+    fn source_locations_off_by_default() {
+        let html = convert("= Doc\n\nHello world.");
+        assert!(!html.contains("data-source-line"), "{html}");
+    }
 
-        /// One case per block-wrapper kind `Options::source_locations` touches:
-        /// the AsciiDoc `source` and a snippet the rendered `content()` must
-        /// contain when the flag is on. Kept as table-driven data (rather than
-        /// one `#[test]` per case) so covering every call site doesn't multiply
-        /// the number of test functions -- see
-        /// [`every_wrapper_carries_its_source_line`].
-        const WRAPPER_CASES: &[(&str, &str, &str)] = &[
-            (
-                "paragraph (first)",
-                "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
-                "<div class=\"paragraph\" data-source-line=\"3\">\n<p>First paragraph.</p>\n</div>",
-            ),
-            (
-                "paragraph (second)",
-                "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
-                "<div class=\"paragraph\" data-source-line=\"5\">\n<p>Second paragraph.</p>\n</div>",
-            ),
-            (
-                "id and role precede the source line",
-                "[#p1.lead]\nA paragraph.",
-                "<div id=\"p1\" class=\"paragraph lead\" data-source-line=\"1\">",
-            ),
-            (
-                "discrete heading (no wrapping div)",
-                "= Doc\n\n[discrete]\n== Discrete Heading",
-                "<h2 id=\"_discrete_heading\" class=\"discrete\" data-source-line=\"3\">Discrete Heading</h2>",
-            ),
-            (
-                "preamble",
-                "= Doc\n\nPreamble text.\n\n== Section\n\nBody.",
-                "<div id=\"preamble\" data-source-line=\"3\">",
-            ),
-            ("ulist", "* one\n* two", "<div class=\"ulist\" data-source-line=\"1\">"),
-            (
-                "olist",
-                ". one\n. two",
-                "<div class=\"olist arabic\" data-source-line=\"1\">",
-            ),
-            (
-                "colist",
-                "----\ncode <1>\n----\n\n<1> first",
-                "<div class=\"colist arabic\" data-source-line=\"5\">",
-            ),
-            (
-                "dlist (labeled)",
-                "CPU:: brain",
-                "<div class=\"dlist\" data-source-line=\"1\">",
-            ),
-            (
-                "dlist (qanda)",
-                "[qanda]\nWhat?:: This.",
-                "<div class=\"qlist qanda\" data-source-line=\"1\">",
-            ),
-            (
-                "dlist (horizontal)",
-                "[horizontal]\nCPU:: brain",
-                "<div class=\"hdlist\" data-source-line=\"1\">",
-            ),
-            (
-                "table",
-                "|===\n|a |b\n|===",
-                "<table class=\"tableblock frame-all grid-all stretch\" data-source-line=\"1\">",
-            ),
-            (
-                "admonition",
-                "NOTE: A note.",
-                "<div class=\"admonitionblock note\" data-source-line=\"1\">",
-            ),
-            (
-                "image",
-                "image::photo.png[]",
-                "<div class=\"imageblock\" data-source-line=\"1\">",
-            ),
-            (
-                "video",
-                "video::movie.mp4[width=640]",
-                "<div class=\"videoblock\" data-source-line=\"1\">",
-            ),
-            (
-                "audio",
-                "audio::podcast.mp3[]",
-                "<div class=\"audioblock\" data-source-line=\"1\">",
-            ),
-            (
-                "toc::[] macro",
-                "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
-                "<div id=\"toc\" class=\"toc\" data-source-line=\"6\">",
-            ),
-            (
-                "thematic break",
-                "before\n\n'''\n\nafter",
-                "<hr data-source-line=\"3\">",
-            ),
-            (
-                "page break",
-                "before\n\n<<<\n\nafter",
-                "<div style=\"page-break-after: always;\" data-source-line=\"3\"></div>",
-            ),
-            (
-                "AsciiDoc table cell inherits the setting",
-                "|===\na|\nCell paragraph.\n|===",
-                "<div class=\"paragraph\" data-source-line=\"3\">\n<p>Cell paragraph.</p>\n</div>",
-            ),
-            (
-                "open block",
-                "--\ntext in open block\n--",
-                "<div class=\"openblock\" data-source-line=\"1\">",
-            ),
-            (
-                "sidebar",
-                "****\nContent here.\n****",
-                "<div class=\"sidebarblock\" data-source-line=\"1\">",
-            ),
-            (
-                "example",
-                "====\nContent here.\n====",
-                "<div class=\"exampleblock\" data-source-line=\"1\">",
-            ),
-            (
-                "collapsible example (<details>)",
-                "[%collapsible]\n====\nContent here.\n====",
-                "<details data-source-line=\"1\">",
-            ),
-            (
-                "quote",
-                "[quote]\nFamous quote.",
-                "<div class=\"quoteblock\" data-source-line=\"1\">",
-            ),
-            (
-                "verse",
-                "[verse]\nFamous verse.",
-                "<div class=\"verseblock\" data-source-line=\"1\">",
-            ),
-            (
-                "abstract",
-                "[abstract]\nA concise overview.",
-                "<div class=\"quoteblock abstract\" data-source-line=\"1\">",
-            ),
-            (
-                "listing block",
-                "----\ncode\n----",
-                "<div class=\"listingblock\" data-source-line=\"1\">",
-            ),
-            (
-                "literal block",
-                "....\nlit\n....",
-                "<div class=\"literalblock\" data-source-line=\"1\">",
-            ),
-            (
-                "source block",
-                "[source,ruby]\n----\ndef x\nend\n----\n",
-                "<div class=\"listingblock\" data-source-line=\"1\">",
-            ),
-            (
-                "stem block",
-                "[stem]\n++++\nx = y^2\n++++\n",
-                "<div class=\"stemblock\" data-source-line=\"1\">",
-            ),
-        ];
+    /// One case per block-wrapper kind `Options::source_locations` touches:
+    /// the AsciiDoc `source` and a snippet the rendered `content()` must
+    /// contain when the flag is on. Kept as table-driven data (rather than
+    /// one `#[test]` per case) so covering every call site doesn't multiply
+    /// the number of test functions -- see
+    /// [`every_wrapper_carries_its_source_line`].
+    const SOURCE_LOCATION_WRAPPER_CASES: &[(&str, &str, &str)] = &[
+        (
+            "paragraph (first)",
+            "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+            "<div class=\"paragraph\" data-source-line=\"3\">\n<p>First paragraph.</p>\n</div>",
+        ),
+        (
+            "paragraph (second)",
+            "= Doc\n\nFirst paragraph.\n\nSecond paragraph.",
+            "<div class=\"paragraph\" data-source-line=\"5\">\n<p>Second paragraph.</p>\n</div>",
+        ),
+        (
+            "id and role precede the source line",
+            "[#p1.lead]\nA paragraph.",
+            "<div id=\"p1\" class=\"paragraph lead\" data-source-line=\"1\">",
+        ),
+        (
+            "discrete heading (no wrapping div)",
+            "= Doc\n\n[discrete]\n== Discrete Heading",
+            "<h2 id=\"_discrete_heading\" class=\"discrete\" data-source-line=\"3\">Discrete Heading</h2>",
+        ),
+        (
+            "preamble",
+            "= Doc\n\nPreamble text.\n\n== Section\n\nBody.",
+            "<div id=\"preamble\" data-source-line=\"3\">",
+        ),
+        ("ulist", "* one\n* two", "<div class=\"ulist\" data-source-line=\"1\">"),
+        (
+            "olist",
+            ". one\n. two",
+            "<div class=\"olist arabic\" data-source-line=\"1\">",
+        ),
+        (
+            "colist",
+            "----\ncode <1>\n----\n\n<1> first",
+            "<div class=\"colist arabic\" data-source-line=\"5\">",
+        ),
+        (
+            "dlist (labeled)",
+            "CPU:: brain",
+            "<div class=\"dlist\" data-source-line=\"1\">",
+        ),
+        (
+            "dlist (qanda)",
+            "[qanda]\nWhat?:: This.",
+            "<div class=\"qlist qanda\" data-source-line=\"1\">",
+        ),
+        (
+            "dlist (horizontal)",
+            "[horizontal]\nCPU:: brain",
+            "<div class=\"hdlist\" data-source-line=\"1\">",
+        ),
+        (
+            "table",
+            "|===\n|a |b\n|===",
+            "<table class=\"tableblock frame-all grid-all stretch\" data-source-line=\"1\">",
+        ),
+        (
+            "admonition",
+            "NOTE: A note.",
+            "<div class=\"admonitionblock note\" data-source-line=\"1\">",
+        ),
+        (
+            "image",
+            "image::photo.png[]",
+            "<div class=\"imageblock\" data-source-line=\"1\">",
+        ),
+        (
+            "video",
+            "video::movie.mp4[width=640]",
+            "<div class=\"videoblock\" data-source-line=\"1\">",
+        ),
+        (
+            "audio",
+            "audio::podcast.mp3[]",
+            "<div class=\"audioblock\" data-source-line=\"1\">",
+        ),
+        (
+            "toc::[] macro",
+            "= Doc\n:toc: macro\n\nIntro.\n\ntoc::[]\n\n== Section One\n\nx",
+            "<div id=\"toc\" class=\"toc\" data-source-line=\"6\">",
+        ),
+        (
+            "thematic break",
+            "before\n\n'''\n\nafter",
+            "<hr data-source-line=\"3\">",
+        ),
+        (
+            "page break",
+            "before\n\n<<<\n\nafter",
+            "<div style=\"page-break-after: always;\" data-source-line=\"3\"></div>",
+        ),
+        (
+            "AsciiDoc table cell inherits the setting",
+            "|===\na|\nCell paragraph.\n|===",
+            "<div class=\"paragraph\" data-source-line=\"3\">\n<p>Cell paragraph.</p>\n</div>",
+        ),
+        (
+            "open block",
+            "--\ntext in open block\n--",
+            "<div class=\"openblock\" data-source-line=\"1\">",
+        ),
+        (
+            "sidebar",
+            "****\nContent here.\n****",
+            "<div class=\"sidebarblock\" data-source-line=\"1\">",
+        ),
+        (
+            "example",
+            "====\nContent here.\n====",
+            "<div class=\"exampleblock\" data-source-line=\"1\">",
+        ),
+        (
+            "collapsible example (<details>)",
+            "[%collapsible]\n====\nContent here.\n====",
+            "<details data-source-line=\"1\">",
+        ),
+        (
+            "quote",
+            "[quote]\nFamous quote.",
+            "<div class=\"quoteblock\" data-source-line=\"1\">",
+        ),
+        (
+            "verse",
+            "[verse]\nFamous verse.",
+            "<div class=\"verseblock\" data-source-line=\"1\">",
+        ),
+        (
+            "abstract",
+            "[abstract]\nA concise overview.",
+            "<div class=\"quoteblock abstract\" data-source-line=\"1\">",
+        ),
+        (
+            "listing block",
+            "----\ncode\n----",
+            "<div class=\"listingblock\" data-source-line=\"1\">",
+        ),
+        (
+            "literal block",
+            "....\nlit\n....",
+            "<div class=\"literalblock\" data-source-line=\"1\">",
+        ),
+        (
+            "source block",
+            "[source,ruby]\n----\ndef x\nend\n----\n",
+            "<div class=\"listingblock\" data-source-line=\"1\">",
+        ),
+        (
+            "stem block",
+            "[stem]\n++++\nx = y^2\n++++\n",
+            "<div class=\"stemblock\" data-source-line=\"1\">",
+        ),
+    ];
 
-        #[test]
-        fn every_wrapper_carries_its_source_line() {
-            for (name, source, expected) in WRAPPER_CASES {
-                let html = with_source_locations(source);
-                assert!(
-                    content(&html).contains(expected),
-                    "case {name:?}: expected {expected:?} in {html}"
-                );
-            }
-        }
-
-        #[test]
-        fn section_wrapper_carries_the_line_but_not_the_heading() {
-            let html = with_source_locations("= Doc\n\n== Section\n\nBody.");
-            let body = content(&html);
+    #[test]
+    fn every_wrapper_carries_its_source_line() {
+        for (name, source, expected) in SOURCE_LOCATION_WRAPPER_CASES {
+            let html = with_source_locations(source);
             assert!(
-                body.contains("<div class=\"sect1\" data-source-line=\"3\">"),
-                "{body}"
+                content(&html).contains(expected),
+                "case {name:?}: expected {expected:?} in {html}"
             );
-            // The heading itself keeps only its id -- no `data-source-line` --
-            // since the wrapping `<div>` is the section's outermost
-            // container.
-            assert!(body.contains("<h2 id=\"_section\">Section</h2>"), "{body}");
         }
+    }
+
+    #[test]
+    fn section_wrapper_carries_the_line_but_not_the_heading() {
+        let html = with_source_locations("= Doc\n\n== Section\n\nBody.");
+        let body = content(&html);
+        assert!(
+            body.contains("<div class=\"sect1\" data-source-line=\"3\">"),
+            "{body}"
+        );
+        // The heading itself keeps only its id -- no `data-source-line` --
+        // since the wrapping `<div>` is the section's outermost container.
+        assert!(body.contains("<h2 id=\"_section\">Section</h2>"), "{body}");
     }
 }
