@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.2.2...asciidoc-html5-v0.2.3)
+_13 September 2026_
+
+### Fixed
+
+* *(html5)* Pin the reference time in options equivalence tests ([#344](https://github.com/asciidoc-rs/asciidoc-html5/pull/344))
+
 ## [0.2.2](https://github.com/asciidoc-rs/asciidoc-html5/compare/asciidoc-html5-v0.2.1...asciidoc-html5-v0.2.2)
 _07 September 2026_
 
