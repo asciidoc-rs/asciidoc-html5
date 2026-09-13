@@ -1327,7 +1327,7 @@ fn absolutize(path: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Options, SafeMode};
+    use crate::{Options, ReferenceTime, SafeMode};
 
     // `Options` must stay `Send + Sync` even with a custom handler installed,
     // so a caller can build one on one thread and move it into others (e.g. to
@@ -1364,17 +1364,34 @@ mod tests {
     // embedded output, so `convert`/`convert_with` are shadowed here to force
     // `standalone(true)`, keeping these tests focused on attribute and
     // safe-mode behavior.
+    //
+    // The footer's "Last updated" stamp otherwise falls back to the real
+    // clock, which would make an equality assertion between two separate
+    // conversions (see `empty_options_match_plain_convert`) flaky whenever
+    // they straddle a second boundary. Pinning a reference time here keeps
+    // it deterministic.
 
     /// Converts `source` to a standalone document under the default safe mode —
     /// the standalone counterpart of [`crate::convert`].
     fn convert(source: &str) -> String {
-        crate::convert_with(source, &Options::new().standalone(true))
+        crate::convert_with(
+            source,
+            &Options::new()
+                .standalone(true)
+                .reference_time(ReferenceTime::from_unix_timestamp(0)),
+        )
     }
 
     /// Converts `source` to a standalone document under `options` — the
     /// standalone counterpart of [`crate::convert_with`].
     fn convert_with(source: &str, options: &Options) -> String {
-        crate::convert_with(source, &options.clone().standalone(true))
+        crate::convert_with(
+            source,
+            &options
+                .clone()
+                .standalone(true)
+                .reference_time(ReferenceTime::from_unix_timestamp(0)),
+        )
     }
 
     // The default web-font family, present when `webfonts` is set with no
